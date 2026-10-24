@@ -296,10 +296,10 @@ export interface DurablePrpCheckpoint {
   readonly runId: string;
   readonly predecessor: { readonly runId: string; readonly normalizedSessionId: string } | null;
   readonly records: ReadonlyMap<string, string>;
-  /** Atomic write set relative to the preceding callback for this run. */
+  /** Atomic write set relative to the last successful callback for this run. */
   readonly changedRecords: ReadonlyMap<string, string>;
   readonly removedRecords: readonly string[];
-  /** First write for a run replaces any older checkpoint atomically. */
+  /** First write for a run, or retry after a failed write, replaces the checkpoint atomically. */
   readonly reset: boolean;
   readonly workCommandIds: readonly string[];
   restoreSessionDirectory(root: string): void;
@@ -333,10 +333,17 @@ function evictionCandidate(state: StoredCoreState): number {
   return state.committedEvents.findIndex(event => latest.get(event.eventType) !== event && !unsettledSemanticInput(event, state));
 }
 
-function captureCheckpoint(state: StoredCoreState, runnerVersion: string, runnerDigest: string,
-  previous?: DurablePrpCheckpoint): DurablePrpCheckpoint {
-  const runId = checkpointRunId(state);
+function checkpointChanges(records: ReadonlyMap<string, string>, runId: string, previous?: DurablePrpCheckpoint) {
   const reset = !previous || previous.runId !== runId;
+  return {
+    changedRecords: new Map([...records].filter(([key, value]) => reset || previous.records.get(key) !== value)),
+    removedRecords: reset ? [] : [...previous.records.keys()].filter(key => !records.has(key)),
+    reset,
+  };
+}
+
+function captureCheckpoint(state: StoredCoreState, runnerVersion: string, runnerDigest: string): DurablePrpCheckpoint {
+  const runId = checkpointRunId(state);
   const records = new Map<string, string>();
   const { commands, committedEvents, ackedSourceSeq: _cursor, replayDeliveries: _replays, ...metadata } = state;
   const latestUsage = committedEvents.findLast(event => event.eventType === "usage.reported");
@@ -348,11 +355,9 @@ function captureCheckpoint(state: StoredCoreState, runnerVersion: string, runner
   records.set("header", JSON.stringify(header));
   records.set("cursor", JSON.stringify({ ackedSourceSeq: state.ackedSourceSeq, replayDeliveries: state.replayDeliveries,
     commandCount: commands.length, eventCount: recoveryEvents.length }));
-  const changedRecords = new Map([...records].filter(([key, value]) => reset || previous.records.get(key) !== value));
-  const removedRecords = reset ? [] : [...previous.records.keys()].filter(key => !records.has(key));
   const maintenance = new Set(["runner.drain", "runner.suspend", "session.snapshot", "session.close"]);
   return {
-    runnerVersion, runnerDigest, runId, records, changedRecords, removedRecords, reset,
+    runnerVersion, runnerDigest, runId, records, ...checkpointChanges(records, runId),
     recoveryEvidence: { runnerInstanceId: state.identity.runnerInstanceId, normalizedSessionId: state.identity.normalizedSessionId,
       authenticatedConnectionCount: state.connectionCount,
       highestRecordedSourceSeq: state.committedEvents.reduce((highest, event) => Math.max(highest, event.sourceSeq), state.ackedSourceSeq) },
@@ -1687,7 +1692,9 @@ export class DurablePrpControlPlane {
   #connectionLeaseTtlMs: number;
   #persistCheckpoint: ((checkpoint: DurablePrpCheckpoint) => Promise<void>) | null = null;
   #persistedRevision = -1;
+  #queuedRevision = -1;
   #lastCheckpoint?: DurablePrpCheckpoint;
+  #checkpointPersistenceFailed = false;
   #persistenceTail = Promise.resolve();
   #sendQueues = new Map<AuthorityConnection, Promise<void>>();
   #recoveredCursor: { runId: string; sourceSeq: number } | null = null;
@@ -1753,17 +1760,38 @@ export class DurablePrpControlPlane {
   }
 
   flushCheckpoint(): Promise<void> {
-    if (!this.#persistCheckpoint || this.#persistedRevision === this.#store.revision) {
+    if (!this.#persistCheckpoint || this.#persistedRevision === this.#store.revision
+      || this.#queuedRevision === this.#store.revision) {
       return this.#persistenceTail;
     }
-    const checkpoint = captureCheckpoint(this.#store.state,
-      this.#expectedRunnerVersion, this.#expectedRunnerDigest, this.#lastCheckpoint);
-    this.#lastCheckpoint = checkpoint;
-    this.#persistedRevision = this.#store.revision;
+    const snapshot = captureCheckpoint(this.#store.state,
+      this.#expectedRunnerVersion, this.#expectedRunnerDigest);
+    const revision = this.#store.revision;
+    this.#queuedRevision = revision;
     const persist = this.#persistCheckpoint;
-    this.#persistenceTail = this.#persistenceTail.then(() => persist(checkpoint));
-    void this.#persistenceTail.catch(() => this.disconnectActiveRunner());
-    return this.#persistenceTail;
+    const pending = this.#persistenceTail.catch(() => undefined).then(async () => {
+      // The previous write may have failed after committing. Rebuild the delta
+      // at execution time, and reset after uncertainty instead of assuming it failed.
+      const checkpoint = { ...snapshot, ...checkpointChanges(snapshot.records, snapshot.runId,
+        this.#checkpointPersistenceFailed ? undefined : this.#lastCheckpoint) };
+      try {
+        await persist(checkpoint);
+        this.#lastCheckpoint = checkpoint;
+        this.#persistedRevision = revision;
+        this.#checkpointPersistenceFailed = false;
+      } catch (error) {
+        this.#checkpointPersistenceFailed = true;
+        throw error;
+      }
+    });
+    this.#persistenceTail = pending;
+    void pending.then(() => {
+      if (this.#persistenceTail === pending) this.#queuedRevision = -1;
+    }, () => {
+      if (this.#persistenceTail === pending) this.#queuedRevision = -1;
+      this.disconnectActiveRunner();
+    });
+    return pending;
   }
 
   #sendJson(connection: AuthorityConnection, value: unknown): void {

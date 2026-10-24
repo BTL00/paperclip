@@ -14,6 +14,7 @@ export interface RunnerExecutionDriver {
   /** Reauthorize retained resources before adoption without preparing them again.
    * The ID is bound to the exact execution in the durable controller checkpoint.
    * Omission preserves prepareLaunch's existing recovery/authorization path.
+   * Adoption with this hook requires prepareLaunch and its retained configuration binding.
    */
   authorizeRunnerAdoption?: (configurationId: string, identity: DurableRecoveryIdentity) => Promise<void>;
   /** Prepare resources and register or acquire the connection before launch. */

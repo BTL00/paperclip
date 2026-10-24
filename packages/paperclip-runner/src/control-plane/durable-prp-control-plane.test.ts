@@ -320,6 +320,81 @@ it("does not dispatch a semantic effect when external journal persistence fails"
   }
 });
 
+it.each([false, true])("recovers checkpoint persistence and the same connection lease after a failed write (committed=%s)", async committed => {
+  const root = mkdtempSync(resolve(tmpdir(), "runner-checkpoint-retry-"));
+  const core = new DurablePrpControlPlane({ stateDirectory: root, identity, expectedRunnerVersion, expectedRunnerDigest });
+  const stored = new Map<string, string>();
+  const attempts: DurablePrpCheckpoint[] = [];
+  let fail = false;
+  core.setCheckpointPersistence(async snapshot => {
+    attempts.push(snapshot);
+    if (!fail || committed) {
+      if (snapshot.reset) stored.clear();
+      for (const key of snapshot.removedRecords) stored.delete(key);
+      for (const [key, value] of snapshot.changedRecords) stored.set(key, value);
+    }
+    if (fail) throw new Error("checkpoint response lost");
+  });
+  try {
+    await core.start();
+    const client = (await authenticate(core, core.issueBootstrapTicket()))!;
+    fail = true;
+    core.queueCommand("session.snapshot", {}, "retry-command", true);
+    await expect(core.flushCheckpoint()).rejects.toThrow("checkpoint response lost");
+    expect(await receiveSecure(client)).toBeNull();
+    fail = false;
+    await core.flushCheckpoint();
+    expect(attempts.at(-1)!.reset).toBe(true);
+    expect(stored).toEqual(attempts.at(-1)!.records);
+    const settledAttempts = attempts.length;
+    await core.flushCheckpoint();
+    expect(attempts).toHaveLength(settledAttempts);
+    const resumed = (await authenticate(core, client.leaseToken!))!;
+    expect(resumed).not.toBeNull();
+    expect(resumed.welcome.payload).toMatchObject({ pendingCommands: [{ commandId: "retry-command" }] });
+    expect(attempts.at(-1)!.reset).toBe(false);
+    expect(stored).toEqual(attempts.at(-1)!.records);
+    resumed.socket.destroy();
+    client.socket.destroy();
+  } finally {
+    await core.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("rebuilds a queued checkpoint after the preceding write fails", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "runner-checkpoint-queued-retry-"));
+  const core = new DurablePrpControlPlane({ stateDirectory: root, identity, expectedRunnerVersion, expectedRunnerDigest });
+  let reject!: (error: Error) => void;
+  let pending: Promise<void> = Promise.resolve();
+  const snapshots: DurablePrpCheckpoint[] = [];
+  core.setCheckpointPersistence(async snapshot => { await pending; snapshots.push(snapshot); });
+  try {
+    await core.flushCheckpoint();
+    pending = new Promise<void>((_resolve, rejectWrite) => { reject = rejectWrite; });
+    core.queueCommand("session.snapshot", {}, "first-command");
+    const first = core.flushCheckpoint();
+    await new Promise<void>(resolveTurn => setImmediate(resolveTurn));
+    core.queueCommand("session.snapshot", {}, "second-command");
+    const second = core.flushCheckpoint();
+    const failed = expect(first).rejects.toThrow("first write failed");
+    reject(new Error("first write failed"));
+    pending = Promise.resolve();
+    await failed;
+    await second;
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.at(-1)).toMatchObject({ reset: true });
+    expect([...snapshots.at(-1)!.changedRecords.values()].join("\n")).toContain("first-command");
+    expect([...snapshots.at(-1)!.changedRecords.values()].join("\n")).toContain("second-command");
+    await core.flushCheckpoint();
+    expect(snapshots).toHaveLength(2);
+  } finally {
+    reject?.(new Error("cleanup"));
+    await core.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it.each([true, false])("reconciles a saved semantic input only from an authoritative outcome (known=%s)", async known => {
   const root = mkdtempSync(resolve(tmpdir(), "runner-recovered-semantic-"));
   const dispatch = vi.fn(() => new Promise<{ result: unknown }>(() => undefined));

@@ -65,6 +65,12 @@ coalesced into the next control checkpoint. Authentication, command intents and
 outcomes, semantic inputs, lifecycle and result events retain commit barriers.
 Priority-zero and unknown event kinds are never treated as disposable output.
 
+A rejected persistence callback closes the current connection and keeps the last
+successful revision. A later flush or reconnect retries from a complete checkpoint,
+including when the failed response hid a successful commit. Queued writes also
+rebuild their delta against the last successful callback. Commit barriers remain
+in force, and no retry timer runs when the controller is idle.
+
 Supporting runners advertise `recoveryCursorVersion: 1` in `auth_hello`. The core
 includes that capability and `recoveryAckedSourceSeq` in both authentication
 proofs. The runner verifies the cursor equals its persisted acknowledgement.
@@ -90,6 +96,9 @@ account rules. Missing bindings and rejected checks fail closed. Without this
 optional hook, adoption retains the existing `prepareLaunch` recovery callback
 and requires its controller-local preparation cache. Older checkpoints without
 a configuration binding cannot use the cache-independent adoption path.
+Supplying the hook for adoption without `prepareLaunch` is rejected at construction;
+the transport must not silently skip a requested authority check. Drivers that do
+not use prepared environments keep their existing adoption contract.
 
 ## Connection and authentication
 
