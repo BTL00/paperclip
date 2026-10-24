@@ -162,6 +162,8 @@ interface StoredCoreState {
    * reconstruct another warm attachment.
    */
   runAttachTemplate?: Record<string, unknown> | null;
+  /** Opaque environment configuration bindings; bounded across a warm handoff. */
+  preparedLaunchConfigurations?: Array<{ identity: DurableRecoveryIdentity; configurationId: string }>;
   tickets: Record<string, BootstrapTicketRecord>;
   leases: Record<string, ConnectionLeaseRecord>;
   commands: DurableRecoveryCoreCommand[];
@@ -840,6 +842,13 @@ function isStoredCoreState(
   ) {
     return false;
   }
+  if (value.preparedLaunchConfigurations !== undefined && (
+    !Array.isArray(value.preparedLaunchConfigurations) || value.preparedLaunchConfigurations.length > 2 ||
+    !value.preparedLaunchConfigurations.every(binding => isRecord(binding) && exactIdentity(binding.identity)
+      && typeof binding.configurationId === "string" && binding.configurationId.trim().length > 0
+      && binding.configurationId.length <= 1024) ||
+    new Set(value.preparedLaunchConfigurations.map(binding => canonicalJson(binding.identity))).size !== value.preparedLaunchConfigurations.length
+  )) return false;
   if (
     !commands.every(
       (command, index) =>
@@ -2078,6 +2087,28 @@ export class DurablePrpControlPlane {
     this.#store.save();
   }
 
+  preparedLaunchConfigurationId(identity: DurableRecoveryIdentity): string | undefined {
+    return this.#store.state.preparedLaunchConfigurations?.find(binding =>
+      canonicalJson(binding.identity) === canonicalJson(identity))?.configurationId;
+  }
+
+  /** Called only after the environment has validated a prepared launch. */
+  persistPreparedLaunchConfiguration(identity: DurableRecoveryIdentity, configurationId: string): void {
+    this.#store.assertWritable();
+    if (!exactIdentity(identity) || typeof configurationId !== "string" || !configurationId.trim() || configurationId.length > 1024) {
+      throw new Error("runner_prepared_launch_configuration_invalid");
+    }
+    const existing = this.preparedLaunchConfigurationId(identity);
+    if (existing !== undefined) {
+      if (existing !== configurationId) throw new Error("runner_prepared_launch_configuration_changed");
+      return;
+    }
+    const current = this.#store.state.preparedLaunchConfigurations?.filter(binding =>
+      canonicalJson(binding.identity) === canonicalJson(this.#identity)) ?? [];
+    this.#store.state.preparedLaunchConfigurations = [...current, { identity: structuredClone(identity), configurationId }];
+    this.#store.save();
+  }
+
   issueBootstrapTicket(ttlMs = 5_000): string {
     this.#store.assertWritable();
     if (this.#store.state.warmTransition) {
@@ -2986,6 +3017,7 @@ export class DurablePrpControlPlane {
       }
       if (transition.phase === "prepared") {
         const candidate = initialCoreState(transition.receipt.newIdentity);
+        candidate.preparedLaunchConfigurations = structuredClone(this.#store.state.preparedLaunchConfigurations);
         candidate.schema = transitionCoreStateSchema;
         candidate.warmTransition = {
           ...structuredClone(transition),

@@ -80,6 +80,17 @@ callbacks, the bounded runner outbox, and backpressure remain. Losing the
 controller before acknowledged display output reaches its application log can
 leave a display tail gap; this must not trigger provider or tool reexecution.
 
+Prepared environments retain at most two opaque configuration IDs, each bound to
+its exact execution identity across a warm handoff. They are captured with control
+state, never output, and do not duplicate instructions or preparation requirements.
+An execution driver can provide `authorizeRunnerAdoption(configurationId, identity)`
+to recheck current authority before registering a surviving runner, without
+preparing its resources again. The driver owns policy; Runner knows no project or
+account rules. Missing bindings and rejected checks fail closed. Without this
+optional hook, adoption retains the existing `prepareLaunch` recovery callback
+and requires its controller-local preparation cache. Older checkpoints without
+a configuration binding cannot use the cache-independent adoption path.
+
 ## Connection and authentication
 
 The connection starts in this order:

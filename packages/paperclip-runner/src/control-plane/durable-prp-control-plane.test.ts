@@ -60,12 +60,16 @@ it("restores authentication and commands from opaque checkpoint records", async 
     const ticket = first.issueBootstrapTicket();
     first.queueCommand("session.snapshot", {}, "maintenance");
     first.queueCommand("turn.start", {}, "execution");
+    first.persistPreparedLaunchConfiguration(identity, "retained-configuration");
     await first.flushCheckpoint();
     expect(checkpoint.workCommandIds).toEqual(["execution"]);
     await first.stop();
     rmSync(options.stateDirectory, { recursive: true });
     decodeDurablePrpCheckpoint(new Map(checkpoint.records)).restoreSessionDirectory(root);
     restored = new DurablePrpControlPlane(options);
+    expect(restored.preparedLaunchConfigurationId(identity)).toBe("retained-configuration");
+    expect(restored.preparedLaunchConfigurationId({ ...identity, runId: "unrelated" })).toBeUndefined();
+    expect(() => restored!.persistPreparedLaunchConfiguration(identity, "substituted-configuration")).toThrow("configuration_changed");
     expect(restored.getCommand("execution")).toMatchObject({ type: "turn.start" });
     await restored.start();
     const client = (await authenticate(restored, ticket))!;
@@ -78,7 +82,7 @@ it("restores authentication and commands from opaque checkpoint records", async 
   }
 });
 
-it.each(["missing record", "invalid state", "wrong sequence"])("rejects %s at checkpoint decoding", async fault => {
+it.each(["missing record", "invalid state", "wrong sequence", "invalid preparation identity", "duplicate preparation"])("rejects %s at checkpoint decoding", async fault => {
   const root = mkdtempSync(resolve(tmpdir(), "runner-checkpoint-invalid-"));
   const core = new DurablePrpControlPlane({ stateDirectory: root, identity, expectedRunnerVersion, expectedRunnerDigest });
   let checkpoint!: DurablePrpCheckpoint;
@@ -97,6 +101,13 @@ it.each(["missing record", "invalid state", "wrong sequence"])("rejects %s at ch
       const command = JSON.parse(records.get("command:1")!);
       command.controllerSeq = 2;
       records.set("command:1", JSON.stringify(command));
+    }
+    if (fault === "invalid preparation identity" || fault === "duplicate preparation") {
+      const header = JSON.parse(records.get("header")!);
+      const binding = { identity, configurationId: "retained-configuration" };
+      header.state.preparedLaunchConfigurations = fault === "duplicate preparation" ? [binding, binding]
+        : [{ ...binding, identity: { runId: identity.runId } }];
+      records.set("header", JSON.stringify(header));
     }
     expect(() => decodeDurablePrpCheckpoint(records)).toThrow(/native_runner_checkpoint_/);
   } finally {
@@ -3307,6 +3318,8 @@ describe("DurablePrpControlPlane", () => {
       peer = await authenticateVersion(core, core.issueBootstrapTicket());
       const oldToken = peer!.leaseToken!;
       core.persistRunAttachTemplate({ provider: { kind: "mock", run: "prior" } });
+      core.persistPreparedLaunchConfiguration(identity, "prior-configuration");
+      core.persistPreparedLaunchConfiguration(nextIdentity, "next-configuration");
       const command = core.queueCommand(
         "run.attach",
         {
@@ -3655,6 +3668,10 @@ describe("DurablePrpControlPlane", () => {
         );
         expect(successor).not.toBeNull();
         expect(core.store.state.identity).toEqual(nextIdentity);
+        expect(core.preparedLaunchConfigurationId(nextIdentity)).toBe("next-configuration");
+        core.persistPreparedLaunchConfiguration({ ...nextIdentity, runId: "third-run" }, "third-configuration");
+        expect(core.preparedLaunchConfigurationId(identity)).toBeUndefined();
+        expect(core.store.state.preparedLaunchConfigurations).toHaveLength(2);
         expect(core.store.state.runAttachTemplate).toEqual({ provider: { kind: "mock", run: "next" } });
         expect(
           (successor!.welcome.payload as Record<string, unknown>)

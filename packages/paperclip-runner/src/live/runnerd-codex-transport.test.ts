@@ -8336,6 +8336,7 @@ async function verifyLiveRunnerAdoption(
   detachBeforeCleanup = false,
   startWithoutCheckpoint = false,
   preparedTask = false,
+  adoptionAuthorization: "allow" | "deny" | "legacy" | "legacy-missing" | "missing-binding" = "allow",
 ) {
   const stateDirectory = await mkdtemp(join(tmpdir(), "runnerd-live-adopt-"));
   const server = createServer();
@@ -8354,7 +8355,7 @@ async function verifyLiveRunnerAdoption(
   const address = server.address();
   if (!address || typeof address === "string")
     throw new Error("Expected adoption test listener");
-  const registration = async (next: DurablePrpControlPlane) => {
+  const registration = vi.fn(async (next: DurablePrpControlPlane) => {
     authority = next;
     return {
       connectUrl: `ws://127.0.0.1:${address.port}/runner`,
@@ -8363,7 +8364,7 @@ async function verifyLiveRunnerAdoption(
         if (authority === next) authority = null;
       },
     };
-  };
+  });
   const identity = {
     runnerInstanceId: "runner-live-adopt",
     environmentLeaseId: "lease-live-adopt",
@@ -8465,9 +8466,19 @@ async function verifyLiveRunnerAdoption(
     if (!startWithoutCheckpoint) await compactProviderIdentityEvents();
 
     if (preparedTask) {
-      await rm(join(stateDirectory, "launch-preparation.json"));
+      if (adoptionAuthorization !== "legacy") await rm(join(stateDirectory, "launch-preparation.json"));
       prepareLaunch.mockClear();
+      registration.mockClear();
+      if (adoptionAuthorization === "missing-binding") {
+        const retained = JSON.parse(await readFile(controlPlaneStatePath, "utf8"));
+        delete retained.preparedLaunchConfigurations;
+        await writeFile(controlPlaneStatePath, JSON.stringify(retained), { mode: 0o600 });
+      }
     }
+    const authorizeRunnerAdoption = vi.fn(async () => {
+      expect(registration).not.toHaveBeenCalled();
+      if (adoptionAuthorization === "deny") throw new Error("project grant revoked");
+    });
     const duplicateLauncher = vi.fn(() => {
       throw new Error("duplicate runner spawn attempted");
     });
@@ -8475,6 +8486,7 @@ async function verifyLiveRunnerAdoption(
     const signal = vi.fn(() => true);
     adopted = createCapabilityRunnerdCodexTransport({
       ...options,
+      ...(preparedTask && !adoptionAuthorization.startsWith("legacy") ? { authorizeRunnerAdoption } : {}),
       // Hash different stable bytes without replacing the real runner artifact
       // used by concurrent tests. Adoption must never execute this path.
       ...(mismatchedArtifact
@@ -8506,6 +8518,18 @@ async function verifyLiveRunnerAdoption(
         },
       },
     });
+    if (preparedTask && ["deny", "legacy-missing", "missing-binding"].includes(adoptionAuthorization)) {
+      await expect(adopted.transport.request("thread/read", {})).rejects.toThrow(
+        adoptionAuthorization === "deny" ? "project grant revoked" : adoptionAuthorization === "legacy-missing"
+          ? "runner_launch_recovery_requirements_unavailable" : "runner_launch_recovery_configuration_unavailable");
+      expect(registration).not.toHaveBeenCalled();
+      expect(prepareLaunch).not.toHaveBeenCalled();
+      expect(duplicateLauncher).not.toHaveBeenCalled();
+      expect(signal).not.toHaveBeenCalled();
+      expect(() => process.kill(runnerPid!, 0)).not.toThrow();
+      expect(authorizeRunnerAdoption).toHaveBeenCalledTimes(adoptionAuthorization === "deny" ? 1 : 0);
+      return;
+    }
     if (mismatchedArtifact) {
       await expect(
         adopted.transport.request("thread/read", {}),
@@ -8576,7 +8600,13 @@ async function verifyLiveRunnerAdoption(
     }
     expect(duplicateLauncher).not.toHaveBeenCalled();
     if (preparedTask) {
-      expect(prepareLaunch).not.toHaveBeenCalled();
+      if (adoptionAuthorization === "legacy") {
+        expect(prepareLaunch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ identity }), expect.objectContaining({ configurationId: "adopted-preparation" }));
+        expect(authorizeRunnerAdoption).not.toHaveBeenCalled();
+      } else {
+        expect(prepareLaunch).not.toHaveBeenCalled();
+        expect(authorizeRunnerAdoption).toHaveBeenCalledExactlyOnceWith("adopted-preparation", identity);
+      }
       expect((await adopted.transport.request("thread/read", {})).thread).toMatchObject({ cwd: tmpdir() });
     }
     expect(adopted.evidence().diagnostics).toContain(
@@ -8627,6 +8657,9 @@ it(
 
 it("adopts a prepared runner after losing its controller launch cache without preparing resources again",
   () => verifyLiveRunnerAdoption(false, false, false, false, false, true), 30_000);
+
+it.each(["deny", "legacy", "legacy-missing", "missing-binding"] as const)("preserves adoption authorization with %s",
+  mode => verifyLiveRunnerAdoption(false, false, false, false, false, true, mode), 30_000);
 
 it(
   "blocks adopted runner artifact drift without duplicate launch, checkpoint replacement, or process signals",
