@@ -1,6 +1,3 @@
-// ACP SDK request failures carry the provider's numeric JSON-RPC code. Keep
-// only a closed category for the reserved range; provider text never crosses
-// the sidecar boundary.
 const JSON_RPC_ENSURE_FAILURE_CODES = new Map<number, string>([
   [-32700, "ACPX_SESSION_ENSURE_FAILED.JSONRPC_PARSE_ERROR"],
   [-32600, "ACPX_SESSION_ENSURE_FAILED.JSONRPC_INVALID_REQUEST"],

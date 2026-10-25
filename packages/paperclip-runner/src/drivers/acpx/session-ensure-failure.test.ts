@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { classifySessionEnsureFailure } from "./session-ensure-failure.js";
 
-// ACP SDK RequestError: an Error whose code is the provider's JSON-RPC code.
 function requestError(code: number): Error {
   return Object.assign(new Error("Internal error: private-provider-detail"), {
     code,
@@ -35,7 +34,6 @@ describe("ACPX session ensure failure classification", () => {
 
   it("keeps the generic identities for other failures", () => {
     for (const [rejection, expected] of [
-      // Outside the reserved JSON-RPC range keeps the generic identity.
       [requestError(20), "ACPX_SESSION_ENSURE_FAILED"],
       [requestError(-31999), "ACPX_SESSION_ENSURE_FAILED"],
       [requestError(-32769), "ACPX_SESSION_ENSURE_FAILED"],
