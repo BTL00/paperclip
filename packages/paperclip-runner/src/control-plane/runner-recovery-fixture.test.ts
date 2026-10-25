@@ -114,7 +114,11 @@ it.each([false, true])("preserves useful in-process work through repeated replac
     await vi.waitFor(() => expect(run.delivered).toHaveLength(64), { timeout: 10_000 });
     expect(new Set(run.delivered.map(event => event.sourceEventId)).size).toBe(64);
     expect(run.delivered.map(event => Number(event.text.match(/^step=(\d+)/)?.[1]))).toEqual(Array.from({ length: 64 }, (_, i) => i + 1));
-    expect(run.receipt()).toMatchObject({ phase: "completed", pid: run.child.pid, completedSteps: 64, acknowledgedEvents: 64 });
+    // Controller delivery precedes the acknowledgement reaching the runner.
+    // Prove backlog settlement at the runner before ending the experiment.
+    await vi.waitFor(() => expect(run.receipt()).toMatchObject({
+      phase: "completed", pid: run.child.pid, completedSteps: 64, acknowledgedEvents: 64, retainedEvents: 0,
+    }), { timeout: 10_000 });
     expect(run.receipt().peakRetainedEvents).toBeLessThanOrEqual(8);
     if (external) expect([...run.checkpoint()!.records.values()].join("\n")).not.toContain("step=");
     await run.command("runner.shutdown", "shutdown");
