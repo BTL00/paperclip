@@ -8,5 +8,6 @@ describe("runner API skill reference enrichment", () => {
       .find((entry) => entry.operationId === operationId);
     expect(match?.skillReference?.description).toContain("`?attention=blocked` is required");
     expect(match?.skillReference?.description).toContain("rejects `?limit=` and `?offset=`");
+    expect(match?.skillReference?.description).toContain("page through `GET /api/companies/:companyId/issues`");
   });
 });

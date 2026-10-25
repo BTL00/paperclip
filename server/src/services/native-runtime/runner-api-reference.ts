@@ -83,7 +83,7 @@ export const runnerApiReference: Record<string, { section: string; description?:
   },
   "GET /api/companies/{}/issues/count": {
     "section": "Issues (Tasks)",
-    "description": "Count blocked issues that need attention. `?attention=blocked` is required; other requests return 400. Accepts issue-list filters such as `?status=`, `?assigneeAgentId=`, `?projectId=`, `?labelId=` and `?q=`, and rejects `?limit=` and `?offset=`. For any other count, list issues and count the results"
+    "description": "Count blocked issues that need attention. `?attention=blocked` is required; other requests return 400. Accepts issue-list filters such as `?status=`, `?assigneeAgentId=`, `?projectId=`, `?labelId=` and `?q=`, and rejects `?limit=` and `?offset=`. For any other count, page through `GET /api/companies/:companyId/issues` with `?limit=` (default 500, maximum 1000) and increasing `?offset=` until a page is empty, and count every returned issue"
   },
   "GET /api/issues/{}": {
     "section": "Issues (Tasks)",
@@ -91,7 +91,7 @@ export const runnerApiReference: Record<string, { section: string; description?:
   },
   "GET /api/issues/{}/heartbeat-context": {
     "section": "Issues (Tasks)",
-    "description": "Compact issue context including `currentExecutionWorkspace` when one is linked"
+    "description": "Compact context for heartbeat: issue state, ancestor summaries, comment cursor, and `currentExecutionWorkspace` when one is linked"
   },
   "GET /api/issues/{}/diagnostics/blockers": {
     "section": "Issues (Tasks)",
