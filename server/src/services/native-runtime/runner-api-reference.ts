@@ -81,6 +81,10 @@ export const runnerApiReference: Record<string, { section: string; description?:
     "section": "Issues (Tasks)",
     "description": "List issues, sorted by priority. Filters: `?status=`, `?assigneeAgentId=`, `?assigneeUserId=`, `?projectId=`, `?labelId=`, `?q=` (full-text search across title, identifier, description, comments)"
   },
+  "GET /api/companies/{}/issues/count": {
+    "section": "Issues (Tasks)",
+    "description": "Count blocked issues that need attention. `?attention=blocked` is required; other requests return 400. Accepts issue-list filters such as `?status=`, `?assigneeAgentId=`, `?projectId=`, `?labelId=` and `?q=`, and rejects `?limit=` and `?offset=`. For any other count, list issues and count the results"
+  },
   "GET /api/issues/{}": {
     "section": "Issues (Tasks)",
     "description": "Issue details + ancestors"
