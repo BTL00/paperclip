@@ -49,7 +49,7 @@ export function nativeToolContractFingerprintForTarget(
             "always_advertised_run_issue_agent_binding_gated_current_task_description.v2",
           semanticCompletion: "finish_accessible_deliverable_evidence.v4",
           ...(providerKind === "opencode"
-            ? { opencodeAssignedMcpTools: "server_gateway_prp_on_demand.v1" }
+            ? { opencodeAssignedMcpTools: "server_gateway_prp_on_demand_exact_names.v2" }
             : {}),
           connectorTools: "assigned_resources_and_pinned_skill_bundle.v1",
           chatTaskTools: "durable_task_binding_and_accepted_origin.v1",

@@ -2003,7 +2003,10 @@ returns pinned tool aliases and schemas, intersects fresh grants, and respects
 planning/ask restrictions. Calls retain the original gateway binding and its
 argument validation, approvals, revocation, and audit rules; prompt arguments
 cannot choose a gateway or credential. Assigned gateway launch credentials stay
-on the controller. OpenCode sessions with the former direct catalog rotate their
+on the controller. The MCP bridge preserves exact declared operation names,
+including names that start with `paperclip_`; only a catalog-bound transport
+prefix may resolve to that declared name. Shortened or unknown names do not
+gain authority. OpenCode sessions with the former direct catalog rotate their
 provider checkpoint before reuse; other providers retain their existing tool
 contract fingerprints.
 

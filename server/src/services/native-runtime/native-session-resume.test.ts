@@ -1846,8 +1846,13 @@ describe("rebindNativeSessionCheckpoint", () => {
     expect(nativeToolContractFingerprintForTarget(target, "acpx")).toBe(legacy);
     const current = nativeToolContractFingerprintForTarget(target, "opencode");
     expect(current).not.toBe(legacy);
+    const shortenedCatalog = target === "local"
+      ? "sha256:2ae35faccbb63cfe009d94170ef1ef13f0d57e120af6160540598a3ec72001d7"
+      : "sha256:ee5285ca5118b8468c0afd1df4ef9c05d85b0934e882bccd0b193dc8722dbb7a";
+    expect(current).not.toBe(shortenedCatalog);
     const currentExecution = { ...execution(currentRunId), provider: { kind: "opencode", model: "openrouter/deepseek/deepseek-v4.1-flash-1017", permissionMode: "allow" }, session: { ...execution(currentRunId).session, driverKind: "opencode_server" } } as NativeExecutionInput;
     const previousExecution = { ...execution(previousRunId), provider: currentExecution.provider, session: currentExecution.session };
+    expect(rebindNativeSessionCheckpoint({ previousRun: previousRun({ nativeToolContractFingerprint: shortenedCatalog, nativeExecutionInput: previousExecution }), currentExecution, executionTargetKind: target })).toBeNull();
     expect(rebindNativeSessionCheckpoint({ previousRun: previousRun({ nativeToolContractFingerprint: legacy, nativeExecutionInput: previousExecution }), currentExecution, executionTargetKind: target })).toBeNull();
     expect(rebindNativeSessionCheckpoint({ previousRun: previousRun({ nativeToolContractFingerprint: current, nativeExecutionInput: previousExecution }), currentExecution, executionTargetKind: target })).not.toBeNull();
   });
