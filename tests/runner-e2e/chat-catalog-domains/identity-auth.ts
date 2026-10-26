@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import type { Browser, BrowserContext } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import type { RunnerApi } from "../api.js";
 
 /** Credentials remain in this closure and the attempt redactor, never case state/evidence.
@@ -39,6 +39,24 @@ export async function createAuthenticatedPerson(input: {
       ...(data === undefined ? {} : { "content-type": "application/json" }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
   }
   return { id: user.id, name: user.name, context, request,
+    bindApiSession(api: RunnerApi) {
+      if (api.baseURL !== input.api.baseURL || !cookie) throw new Error("Public human API binding requires the same authenticated instance");
+      api.setBrowserSession(cookie);
+    },
+    /** Server revocation leaves the old browser cookie in place so the next
+     * navigation exercises an actually invalid session rather than a fake UI flag. */
+    async expireSession() { await auth("sign-out", {}); cookie = ""; },
+    async signInThroughBrowser(page: Page, returnPath: string) {
+      if (page.context() !== context || !returnPath.startsWith("/") || returnPath.startsWith("//")) throw new Error("Human sign-in target must be the person's same-origin browser");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByLabel("Password", { exact: true }).fill(password);
+      await page.getByRole("button", { name: "Sign In", exact: true }).click();
+      await expect(page).toHaveURL(new URL(returnPath, input.api.baseURL).href);
+      const cookies = await context.cookies(input.api.baseURL);
+      cookie = cookies.map(value => `${value.name}=${value.value}`).join("; ");
+      for (const value of cookies) input.secrets.push(value.value);
+      if (!cookie) throw new Error("Human browser sign-in returned no session");
+    },
     async signOut() { await auth("sign-out", {}); cookie = ""; await context.clearCookies(); },
     async signIn() { await auth("sign-in/email", { email, password }); await installSession(context); },
     async dispose() { try { if (cookie) await auth("sign-out", {}); } finally { cookie = ""; await context.close(); } },
