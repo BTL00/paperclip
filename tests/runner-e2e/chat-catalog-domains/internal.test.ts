@@ -15,6 +15,17 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "tasks.attachment-brief": {
+      const briefHash = "a".repeat(64); const receipt = { id: "original", companyId: "company", issueId: "chat", issueCommentId: "human-comment",
+        createdByUserId: "person", createdByAgentId: null, sha256: briefHash, contentPath: "/api/attachments/original/content" };
+      o.state = { worker: { id: "morgan" }, briefAttachment: receipt, briefHash };
+      o.tasks[0] = { ...o.tasks[0]!, title: "Build website from attached brief", assigneeAgentId: "morgan" };
+      o.activity = [event("issue.created", "task")];
+      o.runs.push({ id: "worker", companyId: "company", agentId: "morgan", status: "running", contextSnapshot: { issueId: "task" } });
+      Object.assign(o, { sourceId: "chat", sourceAttachments: [receipt], originalBytesHash: briefHash,
+        workAttachments: [{ ...receipt, id: "copy", issueId: "task", contentPath: "/api/attachments/copy/content" }], workDocuments: [],
+        durablePath: "/api/attachments/copy/content", workerTaskStatus: 200, workerDownloadStatus: 200, workerDownloadedHash: briefHash }); break;
+    }
     case "projects.add-repository":
     case "projects.replace-repository": {
       const adding = scenario === "projects.add-repository";
@@ -164,6 +175,7 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "tasks.attachment-brief": o => { Object.assign(o, { workerDownloadStatus: 403 }); },
   "projects.add-repository": o => { Object.assign(o, { repositoryProject: { ...o.projects[0], workspaces: [{ id: "wrong", repoUrl: "https://github.com/acorn/unapproved" }] } }); },
   "projects.replace-repository": o => { (o.state.beforeOwnerReplacement as { agentStatus: number }).agentStatus = 200; },
   "tasks.organize-open-work": o => { o.reply = o.reply.replace("## Unassigned", "## Morgan"); },
@@ -441,6 +453,22 @@ describe("repository fixture prerequisites and readback", () => {
   it("rejects a replacement success claim before the human has changed the selection", () => {
     const o = valid("projects.replace-repository");
     (o.state.beforeOwnerReplacement as { reply: string }).reply += " I have switched the repository now.";
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("delegated attachment context calibration", () => {
+  it("rejects a source-only brief even when the original human download works", () => {
+    const o = valid("tasks.attachment-brief"); Object.assign(o, { workAttachments: [], durablePath: undefined });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("accepts a real durable original attachment reference that Morgan can independently retrieve", () => {
+    const o = valid("tasks.attachment-brief"); o.tasks[0]!.description = "Use [the attached brief](/api/attachments/original/content).";
+    Object.assign(o, { workAttachments: [], durablePath: "/api/attachments/original/content" });
+    expect(gradeInternal(o).passed).toBe(true);
+  });
+  it("rejects stale bytes under an available copied filename", () => {
+    const o = valid("tasks.attachment-brief"); Object.assign(o, { workerDownloadedHash: "b".repeat(64) });
     expect(gradeInternal(o).passed).toBe(false);
   });
 });
