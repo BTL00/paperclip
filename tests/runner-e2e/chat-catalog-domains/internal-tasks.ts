@@ -1,5 +1,6 @@
 import { delegatedTaskCases } from "./internal-task-creation.js";
 import { taskPrivacyCases } from "./internal-privacy.js";
+import { taskInventoryCases } from "./internal-task-inventory.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
@@ -58,6 +59,7 @@ const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(i
 export const tasksCases: readonly ChatCatalogCase[] = [
   ...delegatedTaskCases,
   ...taskPrivacyCases,
+  ...taskInventoryCases,
   ambiguousTask(),
   define("tasks.edit-properties", async ctx => {
     const p = await project(ctx); const worker = await fixtureWorker(ctx);
