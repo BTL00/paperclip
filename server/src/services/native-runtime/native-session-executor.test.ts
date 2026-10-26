@@ -11862,7 +11862,7 @@ describe("runnerd provider runtime wiring", () => {
     }
   });
 
-  it.each(["claude", "codex"].flatMap(provider => ["canonical", "quarantined", "wrong-identity", "active", "foreign-scope", "no-stop-proof", "not-suspended", "pending-outbox", "pending-command", "missing-terminal", "ambiguous", "contradictory"].map(mode => [provider, mode] as const)))(
+  it.each(["claude", "codex"].flatMap(provider => ["canonical", "quarantined", "empty-runner", "empty-runner-quarantined", "nonempty-runner", "wrong-identity", "active", "foreign-scope", "no-stop-proof", "not-suspended", "pending-outbox", "pending-command", "missing-terminal", "ambiguous", "contradictory"].map(mode => [provider, mode] as const)))(
     "recovers a blocked per-turn %s plugin checkpoint on a replacement lease: %s", async (provider, mode) => {
       const { permissionPolicy: _permissionPolicy, ...claudeProfile } = QUALIFIED_ACPX_PROFILES.claude;
       const first = { ...scopedNativeExecution(`per-turn-${provider}-${mode}`),
@@ -11880,8 +11880,12 @@ describe("runnerd provider runtime wiring", () => {
       const journal = JSON.stringify({ ...durableControlPlaneState(identity), commands: [{ status: mode === "pending-command" ? "pending" : "completed" }],
         committedEvents: mode === "missing-terminal" ? [] : [{ eventType: "run.terminal", envelope: { ...identity, payload: { reportedWorkDisposition: "blocked" } } }] });
       await writeFile(join(scoped, "control-plane/control-plane-state.json"), journal);
+      if (mode.startsWith("empty-runner") || mode === "nonempty-runner") {
+        await mkdir(join(scoped, "runner"));
+        if (mode === "nonempty-runner") await writeFile(join(scoped, "runner", "unknown.json"), "{}");
+      }
       let root = scoped;
-      if (["quarantined", "ambiguous"].includes(mode)) {
+      if (["quarantined", "empty-runner-quarantined", "ambiguous"].includes(mode)) {
         await mkdir(join(isolatedStateDirectory, "quarantine"), { recursive: true });
         root = join(isolatedStateDirectory, "quarantine", `${scoped.split("/").at(-1)}.identity_indeterminate.1`);
         await rename(scoped, root);
@@ -11917,7 +11921,7 @@ describe("runnerd provider runtime wiring", () => {
         const backend = createRunnerdBackend({ db, execution: next, runnerInstanceId: "replacement-runner", runnerIngressAuthorized: true,
           runnerExecutionTarget: { kind: "remote", transport: "sandbox", remoteCwd: ".", leaseId: "replacement-lease", runnerTask: task,
             sandboxLeaseAcquisition: { outcome: "replacement", providerLeaseId: "replacement-task" } } as never });
-        if (["canonical", "quarantined"].includes(mode)) {
+        if (["canonical", "quarantined", "empty-runner", "empty-runner-quarantined"].includes(mode)) {
           await expect(backend).resolves.toBeDefined();
           expect(state.createBackend).toHaveBeenCalledOnce();
           expect(owner).toHaveBeenCalledWith(expect.objectContaining({ resumeFrom: "old-task", priorIdentity: identity }));
@@ -11927,7 +11931,7 @@ describe("runnerd provider runtime wiring", () => {
         } else {
           await expect(backend).rejects.toThrow();
           expect(state.createBackend).not.toHaveBeenCalled();
-          if (["active", "foreign-scope", "pending-command", "missing-terminal", "ambiguous", "contradictory", "no-stop-proof"].includes(mode)) {
+          if (["active", "foreign-scope", "pending-command", "missing-terminal", "ambiguous", "contradictory", "nonempty-runner", "no-stop-proof"].includes(mode)) {
             expect(task).not.toHaveBeenCalled();
           }
           if (mode === "ambiguous") expect(await readFile(join(root, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);

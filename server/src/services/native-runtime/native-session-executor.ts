@@ -2062,29 +2062,34 @@ function savePluginRunnerCheckpoint(root: string, state: Record<string, unknown>
   renameSync(temporary, path);
 }
 
+function pluginRunnerdAuthorityLifecycle(
+  root: string,
+  identity: RunnerdDurableIdentity,
+): "absent" | "suspended" | "not_suspended" | "indeterminate" {
+  try {
+    const state = record(JSON.parse(readBoundedNativeFile(resolve(root, "plugin-runner-state.json"),
+      NATIVE_RUNNER_STATE_MAX_BYTES, "runner_state_too_large").toString("utf8")));
+    if (state.schema !== RUNNERD_STATE_SCHEMA || !RUNNERD_STATE_LIFECYCLES.has(String(state.lifecycle))
+      || !Object.entries(identity).every(([key, value]) => state[key] === value)) return "indeterminate";
+    return state.lifecycle === "suspended" ? "suspended" : "not_suspended";
+  } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT" ? "absent" : "indeterminate"; }
+}
+
 function runnerdAuthorityLifecycle(
   root: string,
   identity: RunnerdDurableIdentity,
 ): "absent" | "suspended" | "not_suspended" | "indeterminate" {
   const runnerRoot = resolve(root, "runner");
-  if (!existsSync(runnerRoot)) {
-    try {
-      const state = record(JSON.parse(readBoundedNativeFile(resolve(root, "plugin-runner-state.json"),
-        NATIVE_RUNNER_STATE_MAX_BYTES, "runner_state_too_large").toString("utf8")));
-      if (state.schema !== RUNNERD_STATE_SCHEMA || !RUNNERD_STATE_LIFECYCLES.has(String(state.lifecycle))
-        || !Object.entries(identity).every(([key, value]) => state[key] === value)) return "indeterminate";
-      return state.lifecycle === "suspended" ? "suspended" : "not_suspended";
-    } catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT" ? "absent" : "indeterminate"; }
-  }
+  if (!existsSync(runnerRoot)) return pluginRunnerdAuthorityLifecycle(root, identity);
   if (!isSafeNativeStateDirectory(runnerRoot)) return "indeterminate";
   const statePath = resolve(runnerRoot, "runner-state.json");
   if (!existsSync(statePath)) {
     try {
       // Older remote transports created this controller-side placeholder even
       // though runner state was owned by the sandbox. It carries no authority,
-      // so a verified failover backup may be consulted. Any non-empty direct
+      // so a verified plugin receipt or failover backup may be consulted. Any non-empty direct
       // directory remains indeterminate and therefore blocks fallback.
-      return readdirSync(runnerRoot).length === 0 ? "absent" : "indeterminate";
+      return readdirSync(runnerRoot).length === 0 ? pluginRunnerdAuthorityLifecycle(root, identity) : "indeterminate";
     } catch {
       return "indeterminate";
     }
