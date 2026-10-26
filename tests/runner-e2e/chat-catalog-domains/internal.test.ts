@@ -15,6 +15,29 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "inbox-search.archive-done":
+    case "inbox-search.restore-archive": {
+      const restore = scenario === "inbox-search.restore-archive"; const count = restore ? 3 : 501;
+      const done = Array.from({ length: count }, (_, index) => ({ id: `done-${index}`, companyId: "company", projectId: "p", title: `Done launch preparation ${index}`, status: "done" }));
+      const active = { id: "active", companyId: "company", projectId: "p", title: "Active work", status: "in_progress" };
+      const other = { id: "other-person", title: "Riley work", status: "done" }; const historical = { id: "history", title: "Historical archive", status: "done", archivedAt: "2026-10-26T10:00:00Z" };
+      o.tasks = [...done, active, other, ...(restore ? [historical] : [])];
+      o.state = { project: o.projects[0], originalTasks: [...done, active], personId: "person", otherPersonTask: other, question: { id: "question" }, setupQuerySent: true,
+        ...(restore ? { historicalArchive: historical } : {}) };
+      o.activity = done.map(row => ({ ...event("issue.inbox_archived", row.id, { userId: "person" }), id: `archive-${row.id}` }));
+      o.reply = `Archived ${count} Done items. You can Undo this cleanup.`;
+      Object.assign(o, { phaseReply: o.reply, ownerItems: [...done.map(row => ({ ...row, archivedAt: "2026-10-26T12:00:00Z", archivedByActorType: "agent", archivedByAgentId: "ceo", archivedByRunId: "run" })), active, ...(restore ? [historical] : [])],
+        otherPersonItems: [other], policy: { mode: "allowlist", allowedAgentIds: ["ceo"] }, questions: [{ id: "question", status: "pending" }] });
+      o.state.firstArchive = structuredClone(o); o.runs.push({ id: "second", companyId: "company", agentId: "ceo", status: "succeeded" });
+      if (restore) {
+        const missing = done[2]!; o.state.unrestorableTask = missing; o.tasks = o.tasks.filter(row => row.id !== missing.id);
+        Object.assign(o, { ownerItems: [...done.slice(0, 2), active, historical], unrestorableStatus: 404,
+          phaseReply: `Restored two items. Could not restore ${missing.id}; it was deleted.` });
+        o.activity.push(...done.slice(0, 2).map(row => ({ ...event("issue.inbox_unarchived", row.id, { userId: "person" }), id: `restore-${row.id}` })),
+          { ...event("issue.deleted", missing.id), agentId: null, actorType: "user", actorId: "person" });
+      } else Object.assign(o, { phaseReply: "Already archived; no new Done items remain to archive." });
+      break;
+    }
     case "documents-artifacts.private-download": {
       const privateTask = { ...o.tasks[0]!, visibility: "private" }; o.state.task = structuredClone(privateTask); o.tasks[0] = privateTask;
       const file = { id: "private-file", issueId: "task", sha256: "a".repeat(64), contentPath: "/api/attachments/private-file/content" };
@@ -201,6 +224,8 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "inbox-search.archive-done": o => { ((o as unknown as { ownerItems: Entity[] }).ownerItems[0]!).archivedAt = undefined; },
+  "inbox-search.restore-archive": o => { o.activity.push(event("issue.inbox_unarchived", "history", { userId: "person" })); },
   "documents-artifacts.private-download": o => { Object.assign(o, { observerFileStatus: 200 }); },
   "tasks.private-task": o => { Object.assign(o, { observerTaskStatus: 200 }); },
   "tasks.completion-with-gate": o => { o.tasks[0]!.status = "done"; },
@@ -239,10 +264,10 @@ describe("internal chat scenario independent oracles", () => {
       expect(gradeInternal(wrong).passed).toBe(false);
       expect(gradeInternal(undefined).passed).toBe(false);
       const noLinks = structuredClone(good); noLinks.links = [];
-      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download"].includes(definition.scenarioId));
+      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download", "inbox-search.archive-done", "inbox-search.restore-archive"].includes(definition.scenarioId));
     });
   }
-  it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-done")).passed).toBe(false));
+  it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-partial-failure")).passed).toBe(false));
 });
 
 describe("goal conditional phase calibration", () => {
@@ -554,6 +579,26 @@ describe("private attachment boundary calibration", () => {
   });
   it("rejects a public-download success claim when the real observer remains denied", () => {
     const o = valid("documents-artifacts.private-download"); o.reply = "The private file has an owner access boundary. Everyone can now download it.";
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("personal inbox operation calibration", () => {
+  it("rejects missing the final eligible row beyond the default page", () => {
+    const o = valid("inbox-search.archive-done");
+    const first = o.state.firstArchive as InternalObservation & { ownerItems: Entity[] };
+    first.ownerItems[500]!.archivedAt = undefined; expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects repeated archive writes even when the same items remain hidden", () => {
+    const o = valid("inbox-search.archive-done"); o.activity.push({ ...event("issue.inbox_archived", "done-0", { userId: "person" }), id: "duplicate-effect" });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a restore claim borrowed from a different response phase", () => {
+    const o = valid("inbox-search.restore-archive"); o.reply += " Restored two items; done-2 was deleted."; Object.assign(o, { phaseReply: "Everything was restored." });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects changes to another person's inbox preference", () => {
+    const o = valid("inbox-search.archive-done"); Object.assign(o, { otherPersonItems: [{ id: "other-person", title: "Riley work", status: "done", archivedAt: "2026-10-26T13:00:00Z" }] });
     expect(gradeInternal(o).passed).toBe(false);
   });
 });
