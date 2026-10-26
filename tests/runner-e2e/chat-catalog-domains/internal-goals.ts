@@ -32,9 +32,10 @@ export function grade_goals(value: unknown) {
       const growth = entity(o.state, "growth");
       c.add("saved-associations", !!current && current.goalId === growth.id && !!projectNow
         && (projectNow.goalId === growth.id || projectNow.goalIds?.includes(growth.id) === true), "The intended Launch and website task both reference the saved growth goal.");
+      const finalReply = finalPhaseReply(o);
       c.add("cross-company-request-denied", !!o.state.authorizedAlignment
         && typeof o.state.foreignRequest === "string" && o.humanQueries.includes(o.state.foreignRequest)
-        && /\b(?:cannot|can't|unable|not authorized|not accessible|different company|another company|cross-company|switch compan)\b/i.test(o.reply)
+        && /\b(?:cannot|can't|unable|not authorized|not accessible|different company|another company|cross-company|switch compan)\b/i.test(finalReply)
         && !o.reply.includes(String(o.state.protectedText))
         && !o.tasks.some(row => row.goalId === entity(o.state, "foreignGoal").id)
         && !o.projects.some(row => row.goalId === entity(o.state, "foreignGoal").id || row.goalIds?.includes(entity(o.state, "foreignGoal").id)),
@@ -47,10 +48,10 @@ export function grade_goals(value: unknown) {
     }
     case "goals.explain-purpose": {
       const growth = entity(o.state, "growth"); const team = entity(o.state, "team");
-      c.add("actual-chain", current?.goalId === team.id && team.parentId === growth.id && !!projectNow
-        && (projectNow.goalId === team.id || projectNow.goalIds?.includes(team.id) === true), "The observed task/project/team/company references form the fixture's real purpose chain.");
-      c.add("grounded-rationale", o.reply.includes(String(o.state.rationale)) && /\bwebsite\b/i.test(o.reply)
-        && [growth, team].every(row => hasLink(o, "goals", row)) && linkedTask(), "The explanation uses the unusual saved business rationale and links the actual hierarchy.");
+      const initial = observation(o.state.initialPurpose);
+      c.add("initial-purpose-chain-and-rationale", !!initial && initialPurposeValid(initial),
+        "The first phase itself follows the saved task/project/team/company chain, grounds its rationale, and links the source records.");
+      const finalReply = finalPhaseReply(o);
       const missing = entity(o.state, "missingTask");
       c.add("missing-association-is-explicit", !!o.tasks.find(row => row.id === missing.id && row.goalId == null)
         && typeof o.state.missingReply === "string"
@@ -58,10 +59,10 @@ export function grade_goals(value: unknown) {
         && !(o.state.missingReply as string).includes(String(o.state.rationale)),
         "The unaligned-task phase describes the actual missing relationship instead of importing the first task's rationale.");
       c.add("inaccessible-rationale-not-leaked", typeof o.state.foreignRequest === "string" && o.humanQueries.includes(o.state.foreignRequest)
-        && /\b(?:cannot|can't|unable|not authorized|not accessible|different company|another company|cross-company)\b/i.test(o.reply)
+        && /\b(?:cannot|can't|unable|not authorized|not accessible|different company|another company|cross-company)\b/i.test(finalReply)
         && !o.reply.includes(String(o.state.protectedText)) && !o.links.some(link => link.includes(entity(o.state, "foreignTask").id)),
         "A separate inaccessible task/goal produces a scoped limitation without the foreign rationale or resource links.");
-      c.add("read-only-explanation", !!before && sameTask(before, current) && !o.activity.some(row => row.entityId !== o.state.sourceId && [before.id, growth.id, team.id, savedProject?.id].includes(row.entityId) && row.agentId === o.leadId && /(?:updated|created|deleted)$/.test(row.action ?? "")),
+      c.add("read-only-explanation", !!before && sameTask(before, current) && linkedTask() && [growth, team].every(row => hasLink(o, "goals", row)) && !o.activity.some(row => row.entityId !== o.state.sourceId && [before.id, growth.id, team.id, savedProject?.id].includes(row.entityId) && row.agentId === o.leadId && /(?:updated|created|deleted)$/.test(row.action ?? "")),
         "An explanation does not rewrite the work's strategic context.");
       break;
     }
@@ -70,7 +71,7 @@ export function grade_goals(value: unknown) {
   return c.result();
 }
 
-const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(id, setup, grade_goals);
+const define = (id: string, setup: ChatCatalogCase["setup"]) => ({ ...makeDefinition(id, setup, grade_goals), observe: observeGoalPhases });
 export const goalsCases: readonly ChatCatalogCase[] = [
   createGoalTree(),
   crossCompanyAlignment(),
@@ -106,6 +107,7 @@ function crossCompanyAlignment(): ChatCatalogCase {
         projectGoalIds: first.projects.find(row => row.id === entity(state, "project").id)?.goalIds };
       await ctx.input.evidence("chat-catalog-before-cross-company-request.json", { authorizedAlignment: state.authorizedAlignment });
       const { sendChatMessage } = await import("../chat-flow.js");
+      state.foreignBaselineCommentIds = (await sourceReplies(ctx)).map(row => row.id);
       await sendChatMessage(ctx.input.page, String(state.foreignRequest));
     },
     async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
@@ -139,7 +141,8 @@ function purposeVariants(): ChatCatalogCase {
   return { ...base, coverageGaps: [], expectedRunCount: 3, expectedHumanMessageCount: 3, attemptTimeoutMs: 600_000,
     async act(ctx, state) {
       const first = await waitForPurposePhase(ctx, state, 1);
-      state.initialPurpose = { reply: first.reply, taskGoalId: first.tasks.find(row => row.id === entity(state, "task").id)?.goalId };
+      if (!initialPurposeValid(first)) throw new Error("Initial purpose explanation does not match its saved chain and rationale");
+      state.initialPurpose = { ...first, state: structuredClone(state) };
       const previous = await sourceReplies(ctx);
       const { sendChatMessage } = await import("../chat-flow.js");
       await sendChatMessage(ctx.input.page, String(state.missingRequest));
@@ -147,6 +150,7 @@ function purposeVariants(): ChatCatalogCase {
       const missing = (await sourceReplies(ctx)).filter(row => !previous.some(before => before.id === row.id));
       state.missingReply = missing.map(row => row.body ?? "").join("\n");
       await ctx.input.evidence("chat-catalog-purpose-conditional-phases.json", { initialPurpose: state.initialPurpose, missingReplies: missing });
+      state.foreignBaselineCommentIds = (await sourceReplies(ctx)).map(row => row.id);
       await sendChatMessage(ctx.input.page, String(state.foreignRequest));
     },
     async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
@@ -210,3 +214,28 @@ function createGoalTree(): ChatCatalogCase {
   } };
 }
 import { expect } from "@playwright/test";
+
+interface GoalPhaseObservation extends InternalObservation { finalPhaseReplies?: Entity[] }
+function finalPhaseReply(o: InternalObservation): string {
+  return ((o as GoalPhaseObservation).finalPhaseReplies ?? []).map(row => row.body ?? "").join("\n");
+}
+async function observeGoalPhases(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<GoalPhaseObservation> {
+  const o = await observeInternal(ctx, state); const source = ctx.issue();
+  if (!source || !Array.isArray(state.foreignBaselineCommentIds)) return { ...o, finalPhaseReplies: [] };
+  const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`);
+  const foreignHuman = comments.find(row => !row.authorAgentId && row.body === state.foreignRequest);
+  const finalPhaseReplies = foreignHuman ? comments.filter(row => row.authorAgentId === o.leadId
+    && !(state.foreignBaselineCommentIds as string[]).includes(row.id)
+    && o.runs.some(run => run.id === row.createdByRunId)
+    && Date.parse(row.createdAt ?? "") >= Date.parse(foreignHuman.createdAt ?? "")) : [];
+  return { ...o, finalPhaseReplies };
+}
+function initialPurposeValid(o: InternalObservation): boolean {
+  const before = entity(o.state, "task"); const growth = entity(o.state, "growth"); const team = entity(o.state, "team");
+  const current = o.tasks.find(row => row.id === before.id); const p = o.projects.find(row => row.id === entity(o.state, "project").id);
+  return current?.goalId === team.id && team.parentId === growth.id && !!p && (p.goalId === team.id || p.goalIds?.includes(team.id) === true)
+    && o.reply.includes(String(o.state.rationale)) && /\bwebsite\b/i.test(o.reply)
+    && [growth, team].every(row => hasLink(o, "goals", row)) && hasLink(o, "issues", before)
+    && sameTask(before, current) && !o.activity.some(row => [before.id, p.id, growth.id, team.id].includes(row.entityId ?? "")
+      && row.agentId === o.leadId && /(?:updated|created|deleted)$/.test(row.action ?? ""));
+}

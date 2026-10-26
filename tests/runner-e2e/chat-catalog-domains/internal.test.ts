@@ -40,7 +40,7 @@ function valid(scenario: string): InternalObservation {
     case "goals.align-existing-work": {
       const growth = { id: "growth" }; o.state.growth = growth; o.goals = [growth]; o.state.foreignGoal = { id: "foreign-goal" }; o.state.protectedText = "FOREIGN PRIVATE";
       o.state.authorizedAlignment = { taskGoalId: "growth" }; o.state.foreignRequest = "Use foreign-goal instead.";
-      o.humanQueries = ["Tie the work to growth.", "Use foreign-goal instead."]; o.reply = "I cannot use a goal from another company."; o.projects[0] = { ...o.projects[0]!, goalIds: ["growth"] }; o.tasks[0] = { ...o.tasks[0]!, goalId: "growth" };
+      o.humanQueries = ["Tie the work to growth.", "Use foreign-goal instead."]; o.reply = "I cannot use a goal from another company."; Object.assign(o, { finalPhaseReplies: [{ id: "final", body: o.reply }] }); o.projects[0] = { ...o.projects[0]!, goalIds: ["growth"] }; o.tasks[0] = { ...o.tasks[0]!, goalId: "growth" };
       o.activity = [event("issue.updated", "task"), event("project.updated", "p")]; o.links.push("/ACORN/goals/growth"); break;
     }
     case "goals.explain-purpose": {
@@ -49,7 +49,7 @@ function valid(scenario: string): InternalObservation {
       o.state.missingTask = { id: "missing-task", goalId: null }; o.tasks.push({ id: "missing-task", goalId: null });
       o.state.missingReply = "This task has no associated goal."; o.state.foreignTask = { id: "foreign-task" };
       o.state.foreignRequest = "Why foreign-task?"; o.state.protectedText = "FOREIGN PRIVATE"; o.humanQueries = ["Why this task?", "Why missing-task?", "Why foreign-task?"];
-      o.reply = "The website supports quiet research teams. I cannot access the other company task."; o.links.push("/ACORN/goals/growth", "/ACORN/goals/team"); break;
+      o.reply = "The website supports quiet research teams. I cannot access the other company task."; Object.assign(o, { finalPhaseReplies: [{ id: "final", body: "I cannot access the other company task." }] }); o.links.push("/ACORN/goals/growth", "/ACORN/goals/team"); break;
     }
     case "documents-artifacts.write-plan": {
       o.state.requirement = "Orchid 42";
@@ -85,6 +85,7 @@ function valid(scenario: string): InternalObservation {
     }
     default: throw new Error(`Missing valid calibration ${scenario}`);
   }
+  if (scenario === "goals.explain-purpose") { o.state.initialPurpose = structuredClone(o); (o.state.initialPurpose as InternalObservation).reply = "The website supports quiet research teams."; }
   if (["projects.create-project", "goals.create-goal-tree"].includes(scenario)) o.state.firstCreation = structuredClone(o);
   return o;
 }
@@ -96,7 +97,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "tasks.comment-with-reference": o => { o.comments[0]!.authorAgentId = null; o.comments[0]!.authorUserId = "human"; },
   "goals.create-goal-tree": o => { o.goals[1]!.parentId = "other-company-goal"; },
   "goals.align-existing-work": o => { o.tasks[0]!.goalId = null; },
-  "goals.explain-purpose": o => { o.reply = "The website exists to sell advertising, obviously."; },
+  "goals.explain-purpose": o => { (o.state.initialPurpose as InternalObservation).reply = "The website exists to sell advertising, obviously."; },
   "documents-artifacts.write-plan": o => { o.revisions[0]!.createdByRunId = "unrelated-run"; },
   "documents-artifacts.resolve-feedback": o => { o.annotations![1]!.status = "resolved"; },
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
@@ -185,4 +186,20 @@ it("accepts a genuine goal hierarchy link and ordinary signup phrasing", () => {
   o.goals[0]!.title = "Reach 1,000 new sign-ups";
   const first = o.state.firstCreation as InternalObservation; first.links = ["/ACORN/goals/growth"]; first.goals[0]!.title = "Reach 1,000 new sign-ups";
   expect(gradeInternal(o).passed).toBe(true);
+});
+
+
+describe("goal oracle phase binding", () => {
+  it("rejects alignment denial present only before the actual foreign request", () => {
+    const o = valid("goals.align-existing-work"); Object.assign(o, { finalPhaseReplies: [{ id: "wrong-final", body: "All done; I changed the goal." }] });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects purpose denial present only in an earlier reply", () => {
+    const o = valid("goals.explain-purpose"); Object.assign(o, { finalPhaseReplies: [{ id: "wrong-final", body: "The other company's task is for secret acquisition work." }] });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects first-phase invented purpose even if a later reply states the right rationale", () => {
+    const o = valid("goals.explain-purpose"); (o.state.initialPurpose as InternalObservation).reply = "The website exists to sell advertising.";
+    expect(gradeInternal(o).passed).toBe(false);
+  });
 });
