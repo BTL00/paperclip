@@ -4,7 +4,7 @@ import type { ChatCatalogCase, ChatCatalogGrade } from "../chat-catalog-contract
 import type { ChatScenario } from "../chat-feature-cases.js";
 import type { CredentialName, MatrixExecution } from "../types.js";
 
-export const identityBoundaryScenarioIds = ["access.sign-in", "onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard"] as const;
+export const identityBoundaryScenarioIds = ["access.sign-in", "onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard", "agent-chat.chat-disabled"] as const;
 export interface IdentityBoundaryContext {
   journeyKind: "browser-boundary";
   boundaryTarget: "authenticated-harness" | "empty-installed-target";

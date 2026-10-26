@@ -21,6 +21,15 @@ describe("separate browser boundary dispatch", () => {
     await expect(loadChatCatalogImplementation(descriptor, async () => { imported = true; return {}; })).rejects.toThrow("ordinary Agent Chat");
     expect(imported).toBe(false);
   });
+  it("admits disabled Agent Chat only on the real owned authenticated target with zero dispatch", async () => {
+    const disabled: ChatCatalogDescriptor = { ...descriptor, scenarioId: "agent-chat.chat-disabled", boundaryTarget: "authenticated-harness", authentication: "human-session" };
+    const implementation = { ...runtime(), ...disabled };
+    const importer = async () => ({ boundaryCases: [implementation] });
+    await expect(loadIdentityBoundaryImplementation(disabled, importer)).resolves.toMatchObject({ scenarioId: "agent-chat.chat-disabled" });
+    await expect(loadIdentityBoundaryImplementation({ ...disabled, boundaryTarget: "empty-installed-target" }, importer)).rejects.toThrow("owned authenticated company");
+    await expect(loadIdentityBoundaryImplementation({ ...disabled, authentication: "local-trusted" }, importer)).rejects.toThrow("owned authenticated company");
+    await expect(loadIdentityBoundaryImplementation({ ...disabled, expectedRunCount: 1 }, importer)).rejects.toThrow("zero agent admissions");
+  });
   it("requires actual installed identity and keeps the existing chat-only lane closed", () => {
     const execution = { id: "boundary", suite: { id: "chat-features" }, environment: { id: "local" } } as MatrixExecution;
     expect(() => chatBoundaryFingerprint(descriptor, execution, {})).toThrow("immutable installed CLI and server identity pins");

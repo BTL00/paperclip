@@ -20,6 +20,7 @@ describe("privileged outcomes require real owned operation or explicitly synthet
       expect(gradeComponentReference(observed(questionReply, { ...question, ...delta })).passed).toBe(false);
   });
   it("does not confuse presentation with real authorization proof or generic question advice", () => {
+    expect(gradeComponentReference(observed(questionReply + " This is not real authorization proof.", question)).passed).toBe(true);
     for (const reply of ["Show a question somewhere.", "This is not a synthetic fixture: verified real authorization workflow.", "Use /design-guide question. Confirmed production continuation workflow."])
       expect(gradeComponentReference(observed(reply, question)).passed).toBe(false);
     expect(gradeComponentReference(null).passed).toBe(false);

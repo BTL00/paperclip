@@ -3,6 +3,7 @@ import { validChatCatalogHumanCounts } from "./chat-catalog-contract.js";
 import type { ChatCatalogCase } from "./chat-catalog-contract.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
+import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
 export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
   journeyKind?: "agent-chat" | "browser-boundary";
@@ -60,8 +61,10 @@ export async function loadChatCatalogImplementation(
 /** Separate typed dispatch: no company, agent, or ChatFlowInput is fabricated. */
 export async function loadIdentityBoundaryImplementation(descriptor: ChatCatalogDescriptor,
   importer: (specifier: string) => Promise<Record<string, unknown>> = specifier => import(specifier)): Promise<IdentityBoundaryCase> {
-  if (descriptor.journeyKind !== "browser-boundary" || !["access.sign-in", "onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard"].includes(descriptor.scenarioId))
+  if (descriptor.journeyKind !== "browser-boundary" || !(identityBoundaryScenarioIds as readonly string[]).includes(descriptor.scenarioId))
     throw new Error("Only explicit catalog browser boundaries may bypass Agent Chat prerequisites");
+  if (descriptor.scenarioId === "agent-chat.chat-disabled" && (descriptor.boundaryTarget !== "authenticated-harness" || descriptor.authentication !== "human-session"))
+    throw new Error("Disabled Agent Chat requires the actual owned authenticated company target");
   if (descriptor.expectedRunCount !== 0 || (descriptor.minimumRunCount ?? 0) !== 0 || descriptor.expectedHumanMessageCount !== 0 || (descriptor.setupHumanMessageCount ?? 0) !== 0)
     throw new Error("Pre-chat boundaries require zero agent admissions and zero persisted chat queries");
   const module = await importer(chatCatalogModuleUrl(descriptor.modulePath));

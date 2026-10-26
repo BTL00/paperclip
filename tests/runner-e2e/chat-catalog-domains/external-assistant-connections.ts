@@ -45,6 +45,7 @@ export const assistantConnectionExternalCases = [definition("assistant-connectio
   return { setupServerUrl: setup.serverUrl, unauthenticatedMcpStatus, resultPath: `/${ctx.input.fixtures.company.issuePrefix}/apps/assistant-connection`, resultLabel: "Assistant Connection (MCP)" };
 }, gradeAssistantSetup, {
   authentication: "human-session",
+  coverageGaps: ["named-chatgpt-human-setup"],
   sourceFiles: ["chat-catalog-domains/external-assistant-connections.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "public-mcp-client.ts", "chat-scenarios/assistant-connections.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const source = ctx.input.page.url();
