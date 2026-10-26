@@ -16,6 +16,14 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "documents-artifacts.find-artifact": {
+      const deliveryAt = "2026-10-21T12:00:00.000Z"; const hidden = { id: "hidden", title: "Restricted final NIGHTJAR", status: "done" };
+      o.tasks[0] = { ...o.tasks[0]!, status: "done" }; const current = { ...o.tasks[0], completedAt: deliveryAt }; o.state.task = structuredClone(o.tasks[0]); o.tasks.push(hidden);
+      const file = { id: "file", issueId: "task", assetId: "asset", issueCommentId: "delivery", sha256: "a".repeat(64), contentPath: "/api/attachments/file/content", createdAt: "2026-10-26T12:00:00.000Z" };
+      Object.assign(o.state, { privateTask: hidden, privateMarker: hidden.title, privateAttachment: { id: "hidden-file", assetId: "hidden-asset" }, finalAttachment: file, finalHash: file.sha256, deliveryAt, weekStart: Date.parse("2026-10-19T00:00:00Z"), weekEnd: Date.parse("2026-10-26T00:00:00Z"), originalTasks: structuredClone(o.tasks), distractors: [hidden] });
+      Object.assign(o, { currentSource: current, finalAttachment: file, downloadedHash: file.sha256, deliveryComments: [{ id: "delivery", createdAt: deliveryAt, body: `Final approved website delivered, SHA256 ${file.sha256}.` }], searchStatus: 200, searchResults: [{ id: "task" }], privateFileStatus: 403 });
+      o.activity = [{ id: "import", action: "company.imported", createdAt: "2026-10-26T12:00:01.000Z" }]; o.links.push("/api/attachments/file/content?download=1"); o.reply = "The final website was delivered last week; the preserved file was imported today."; break;
+    }
     case "documents-artifacts.produce-download":
     case "documents-artifacts.revise-delivery": {
       const revising = scenario === "documents-artifacts.revise-delivery"; const prior = "<html><body><h1>Bring research notes together in one accessible place</h1><p>Research teams stay organized.</p><a href='https://example.test/signup'>Signup</a><footer>ORCHID</footer></body></html>";
@@ -312,6 +320,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
   "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
+  "documents-artifacts.find-artifact": o => { o.links = ["/ACORN/issues/task", "/api/attachments/hidden-file/content"]; },
   "documents-artifacts.produce-download": o => { o.links = ["/ACORN/issues/task", "/tmp/website.html"]; },
   "documents-artifacts.revise-delivery": o => { o.reply = "Here is the old version again."; },
   "tasks.assignment-conflict": o => { o.tasks[0]!.assigneeAgentId = "riley"; },
