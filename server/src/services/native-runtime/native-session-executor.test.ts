@@ -11862,6 +11862,77 @@ describe("runnerd provider runtime wiring", () => {
     }
   });
 
+  it.each(["claude", "codex"].flatMap(provider => ["canonical", "quarantined", "wrong-identity", "active", "foreign-scope", "no-stop-proof", "not-suspended", "pending-outbox", "pending-command", "missing-terminal", "ambiguous", "contradictory"].map(mode => [provider, mode] as const)))(
+    "recovers a blocked per-turn %s plugin checkpoint on a replacement lease: %s", async (provider, mode) => {
+      const { permissionPolicy: _permissionPolicy, ...claudeProfile } = QUALIFIED_ACPX_PROFILES.claude;
+      const first = { ...scopedNativeExecution(`per-turn-${provider}-${mode}`),
+        schema: "paperclip.native-execution-input.v5", executionMode: "default", planningContext: null, runtimeContext: nativeRuntimeContextFixture(),
+        ...(provider === "claude" ? { provider: { kind: "acpx", agent: "claude", model: "claude-sonnet-4-6", permissionMode: "approve-all", profile: claudeProfile } } : { provider: { kind: "codex", model: null, approvalPolicy: "never" } }),
+        session: { ...execution.session, driverKind: provider === "claude" ? "acpx_runtime" : "codex_app_server",
+          normalizedSessionId: `per-turn-${provider}-${mode}`, lifecyclePolicy: { mode: "per_turn", idleTimeoutMs: null } },
+      } as NativeExecutionInput;
+      parseNativeExecutionInput(first);
+      const next = { ...first, binding: { ...first.binding, runId: `${first.binding.runId}-reopened` } };
+      const identity = { runId: first.binding.runId, normalizedSessionId: first.session.normalizedSessionId!,
+        runnerInstanceId: "plugin-runner", environmentLeaseId: "old-lease", turnId: "old-turn", itemId: "old-item" };
+      const scoped = await initializeScopedRunnerRoot(first, identity.runnerInstanceId);
+      await mkdir(join(scoped, "control-plane"), { recursive: true });
+      const journal = JSON.stringify({ ...durableControlPlaneState(identity), commands: [{ status: mode === "pending-command" ? "pending" : "completed" }],
+        committedEvents: mode === "missing-terminal" ? [] : [{ eventType: "run.terminal", envelope: { ...identity, payload: { reportedWorkDisposition: "blocked" } } }] });
+      await writeFile(join(scoped, "control-plane/control-plane-state.json"), journal);
+      let root = scoped;
+      if (["quarantined", "ambiguous"].includes(mode)) {
+        await mkdir(join(isolatedStateDirectory, "quarantine"), { recursive: true });
+        root = join(isolatedStateDirectory, "quarantine", `${scoped.split("/").at(-1)}.identity_indeterminate.1`);
+        await rename(scoped, root);
+        if (mode === "ambiguous") await cp(root, `${root}-second`, { recursive: true });
+      }
+      if (mode === "contradictory") {
+        await mkdir(join(root, "runner"));
+        await writeFile(join(root, "runner/runner-state.json"), "{");
+      }
+      const db = leaseDb(next);
+      const ordinarySelect = db.select.bind(db);
+      db.select = ((fields?: Record<string, unknown>) => fields?.status === heartbeatRuns.status && fields?.runnerProfileJson === heartbeatRuns.runnerProfileJson
+        ? priorNativeRunDb(mode === "foreign-scope" ? { ...first, binding: { ...first.binding, agentId: "foreign" } } : first,
+          mode === "active" ? "running" : "succeeded").select(fields as never)
+        : ordinarySelect(fields as never)) as Db["select"];
+      const resume = vi.spyOn(environmentTaskRuntime, "resolvePluginTaskResume").mockImplementation(async () => {
+        if (mode === "no-stop-proof") throw new Error("Plugin Runner retained session is not authorized");
+        return "old-task";
+      });
+      const task = vi.fn(async (operation: any) => {
+        environmentTaskOperationSchema.parse(operation);
+        if (operation.kind === "read_state") return { kind: "state", taskId: "replacement-task", state: {
+          ...durableRunnerState(identity, mode === "not-suspended" ? "ready" : "suspended"),
+          outbox: mode === "pending-outbox" ? [{}] : [], pendingTerminalDelivery: null,
+          ...(mode === "wrong-identity" ? { itemId: "foreign" } : {}),
+        } };
+        return { kind: "description", taskId: "replacement-task", launchPreparationVersion: 1, projectAuthCheckVersion: 1,
+          runner: { version: "fixture", digest: `sha256:${"a".repeat(64)}` } };
+      });
+      state.createBackend.mockClear();
+      try {
+        const backend = createRunnerdBackend({ db, execution: next, runnerInstanceId: "replacement-runner", runnerIngressAuthorized: true,
+          runnerExecutionTarget: { kind: "remote", transport: "sandbox", remoteCwd: ".", leaseId: "replacement-lease", runnerTask: task,
+            sandboxLeaseAcquisition: { outcome: "replacement", providerLeaseId: "replacement-task" } } as never });
+        if (["canonical", "quarantined"].includes(mode)) {
+          await expect(backend).resolves.toBeDefined();
+          expect(state.createBackend).toHaveBeenCalledOnce();
+          expect(resume).toHaveBeenCalledWith(db, expect.objectContaining({ leaseId: "replacement-lease", priorIdentity: identity, inspectCheckpoint: true }));
+          expect(JSON.parse(await readFile(join(scoped, "plugin-runner-state.json"), "utf8"))).toMatchObject({ ...identity, lifecycle: "suspended" });
+          expect(await readFile(join(scoped, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);
+        } else {
+          await expect(backend).rejects.toThrow();
+          expect(state.createBackend).not.toHaveBeenCalled();
+          if (["active", "foreign-scope", "pending-command", "missing-terminal", "ambiguous", "contradictory", "no-stop-proof"].includes(mode)) {
+            expect(task).not.toHaveBeenCalled();
+          }
+          if (mode === "ambiguous") expect(await readFile(join(root, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);
+        }
+      } finally { resume.mockRestore(); }
+    });
+
   it.each(["verified", "wrong-state", "no-stop-proof", "disposition-retry", "disposition-wrong-state", "disposition-no-stop-proof"] as const)("admits only an authorized same-run plugin checkpoint: %s", async mode => {
     const current = scopedNativeExecution(`plugin-crash-${mode}`);
     const identity = { runId: current.binding.runId, normalizedSessionId: current.session.normalizedSessionId!,

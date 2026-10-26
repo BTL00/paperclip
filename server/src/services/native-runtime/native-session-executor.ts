@@ -4894,6 +4894,70 @@ async function verifyWarmTransitionRestart(input: {
   return verified;
 }
 
+async function recoverPluginRunnerCheckpoint(input: {
+  db: Db;
+  execution: NativeExecutionInput;
+  runnerExecutionTarget?: AdapterExecutionTarget | null;
+}, scoped: string): Promise<void> {
+  const target = input.runnerExecutionTarget;
+  if (target?.kind !== "remote" || target.transport !== "sandbox" || !target.runnerTask || !target.leaseId ||
+      target.sandboxLeaseAcquisition?.outcome === "resumed") return;
+  let root = scoped;
+  const quarantined = !existsSync(scoped);
+  const deny = (): never => { throw new Error("runner_state_identity_mismatch: plugin_checkpoint_recovery_unproven"); };
+  if (quarantined) {
+    const quarantine = resolve(runnerdStateBase(), "quarantine");
+    if (!existsSync(quarantine)) return;
+    if (!isSafeNativeStateDirectory(quarantine)) return deny();
+    const candidates = readdirSync(quarantine).filter(name => name.startsWith(`${basename(scoped)}.identity_indeterminate.`));
+    if (candidates.length === 0) return;
+    if (candidates.length !== 1) return deny();
+    root = resolve(quarantine, candidates[0]!);
+  }
+  if (!existsSync(root)) return;
+  if (!isSafeNativeStateDirectory(root)) return deny();
+  if (hasRetainedWarmTransitionEvidence(root)) {
+    if (quarantined) return deny();
+    return;
+  }
+  const identity = readRunnerdDurableIdentity(root);
+  if (!durableIdentityMatchesSession(identity, input.execution) || identity.runId === input.execution.binding.runId) {
+    if (quarantined) return deny();
+    return;
+  }
+  const direct = runnerdAuthorityLifecycle(root, identity);
+  // Never hide contradictory direct authority behind a remote checkpoint.
+  if (direct !== "absent" && !(quarantined && direct === "suspended")) {
+    if (quarantined) return deny();
+    return;
+  }
+  await assertCleanupActivationCommitted(input.db, root, input.execution);
+  const prior = await verifyPriorRunnerdStateForSessionScope({ ...input, root, identity, allowVerifiedBackup: true });
+  if (prior !== "terminal_state_indeterminate" && !(quarantined && prior === "verified")) {
+    if (quarantined) return deny();
+    return;
+  }
+  const control = record(JSON.parse(readBoundedNativeFile(resolve(root, "control-plane", "control-plane-state.json"),
+    NATIVE_CONTROL_PLANE_STATE_MAX_BYTES, "runner_durable_identity_too_large").toString("utf8")));
+  const terminal = record(Array.isArray(control.committedEvents) ? control.committedEvents.at(-1) : null);
+  if (!Array.isArray(control.commands) || control.commands.some(command => record(command).status !== "completed") ||
+      terminal.eventType !== "run.terminal" || record(terminal.envelope).runId !== identity.runId ||
+      record(terminal.envelope).normalizedSessionId !== identity.normalizedSessionId) return deny();
+  const resumeFrom = await resolvePluginTaskResume(input.db, { companyId: input.execution.binding.companyId,
+    leaseId: target.leaseId, priorIdentity: identity, inspectCheckpoint: true });
+  const checkpoint = environmentTaskResultSchema.parse(await target.runnerTask({ kind: "read_state", identity, resumeFrom }));
+  if (checkpoint.kind !== "state" || checkpoint.state.lifecycle !== "suspended" ||
+      !Array.isArray(checkpoint.state.outbox) || checkpoint.state.outbox.length !== 0 ||
+      checkpoint.state.pendingTerminalDelivery != null || checkpoint.state.pendingProviderCleanup != null ||
+      checkpoint.state.warmTransition != null) return deny();
+  savePluginRunnerCheckpoint(root, checkpoint.state, identity);
+  if (await verifyPriorRunnerdStateForSessionScope({ ...input, root, identity, allowVerifiedBackup: true }) !== "verified") return deny();
+  if (quarantined) {
+    if (existsSync(scoped)) return deny();
+    renameSync(root, scoped);
+  }
+}
+
 async function migrateRunnerdStateRootForExecution(input: {
   db: Db;
   execution: NativeExecutionInput;
@@ -4913,6 +4977,9 @@ async function migrateRunnerdStateRootForExecution(input: {
     issueId: input.execution.binding.issueId,
     stateKey: basename(scoped),
   });
+  if (!input.restartRecovery && !input.retainedWarmOwnerRunId) {
+    await recoverPluginRunnerCheckpoint(input, scoped);
+  }
   if (
     input.allowLocalRecovery &&
     !input.retainedWarmOwnerRunId &&
