@@ -16,8 +16,9 @@ export function resolveRunnerEnvironmentForRun<T extends Pick<Environment, "driv
   const lifecycleMode = admittedLifecycleMode ?? (config.runnerLifecycleMode === "warm" || config.runnerLifecycleMode === "per_turn"
     ? config.runnerLifecycleMode
     : adapterConfig.lifecycleMode);
+  // Capability admission below chooses warm retention; recovery preserves its admitted policy.
   if (environment.driver === "plugin") return { ...environment, config: { ...config,
-    runnerLifecycleMode: lifecycleMode === "warm" && (adapterConfig.provider ?? "codex") === "codex" ? "warm" : "per_turn",
+    runnerLifecycleMode: lifecycleMode === "per_turn" ? "per_turn" : "warm",
     runnerIdleTimeoutMs: resolvePaperclipRunnerIdleTimeoutMs(config.runnerIdleTimeoutMs ?? adapterConfig.idleTimeoutMs),
   } };
   if (lifecycleMode !== "warm") return environment;

@@ -522,6 +522,12 @@ describe("Runner-only plugin environments", () => {
     expect(agentRunnerAvailability("gemini_local", target)).toEqual({ supportedRunners: ["legacy"], defaultRunner: "legacy" });
     expect(state.ssh).not.toHaveBeenCalled();
   });
+  it("carries warm task capability from the selected driver without provider gates", async () => {
+    state.pluginByKey.mockResolvedValue(plugin({ supportsTasks: true, warmTaskVersion: 1 }));
+    expect(await resolveAgentRunnerTargetForCompany({} as never, "company", "computer"))
+      .toEqual({ driver: "plugin", runnerTasks: true, warmTaskVersion: 1 });
+  });
+
   it("saves a Claude agent on the plugin environment as Paperclip Runner", async () => {
     const saved = await resolveNewAgentRunnerForCompany({} as never, "company", { adapterType: "claude_local", defaultEnvironmentId: "computer" });
     expect(saved).toMatchObject({ adapterType: "paperclip_runner", adapterConfig: { provider: "acpx", acpxAgent: "claude" } });

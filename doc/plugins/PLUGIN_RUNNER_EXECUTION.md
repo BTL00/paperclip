@@ -23,7 +23,7 @@ bounded `read_file` operation for attachments and deliverables.
 
 Core supports per-turn workspace sessions with Codex, OpenCode, and ACPX.
 OpenCode and ACPX require the existing qualified provider profiles.
-Workspace-free providers are not supported here. Codex warm retention is opt-in through `warmTaskVersion: 1`; ACPX and OpenCode remain per-turn.
+Workspace-free providers are not supported here. Drivers opt into warm retention through `warmTaskVersion: 1`. Core prefers warm execution for new task runs on capable drivers, including ACPX; existing provider admission still determines which harnesses the driver supports.
 The plugin owns project workspace preparation. Core does not prepare or reuse
 a Core Git worktree for a task-only environment.
 Selecting a plain task directory does not add redundant default configuration.
@@ -164,13 +164,17 @@ The existing agent-independent `inspect` and `remove` operations continue to
 protect storage maintenance. Providers that do not declare finalization version 1
 retain the inspection-based completion path. No stored binding migration is required.
 
-## Codex warm task retention
+## Warm task retention
 
 A driver declares `warmTaskVersion: 1`, implements `onEnvironmentResumeLease`,
 and returns `warmTaskVersion: 1` from `describe` only when its execution host
-supports authorized run attachment. Select the agent's warm lifecycle or set
-`runnerLifecycleMode: "warm"` and `runnerIdleTimeoutMs` on its plugin environment.
-Core requires an explicitly selected account. Setup probes remain ephemeral.
+supports authorized run attachment. Newly hired agents targeting such a driver
+are configured for warm execution. Existing agents keep their explicit policy;
+plugin runs without an explicit policy prefer warm execution. There is no
+provider-specific warm gate or additional setting. Existing runs retain their
+admitted lifecycle policy during restart recovery. The existing
+`runnerIdleTimeoutMs` controls bounded retention. Core requires an explicitly
+selected account. Drivers without warm capability and setup probes remain ephemeral.
 
 Plugin task execution does not create a Core-managed GitHub broker. Warm reuse
 and restart recovery use the same broker-ownership rule as initial startup.
