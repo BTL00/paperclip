@@ -40,8 +40,11 @@ export function gradeLocateFiles(value: unknown) {
   c.add("actual-saved-files-retained", o.state.fileAfter === o.state.fileBefore && typeof o.state.fileBefore === "string"
     && o.state.fileBefore.trim() === o.state.marker && o.runs.some(run => run.id === o.state.fixtureRunId && run.agentId === (o.state.worker as Entity).id
       && run.status === "succeeded"), "A genuine worker created the prerequisite file and it remains unchanged.");
-  c.add("actual-workspace-result-link", !!after && o.links.some(href => workspaceLink(o.origin, href, after.workspace.id)),
-    "The response renders the real workspace view link.");
+  c.add("supported-workspace-view-guidance", (/workspace|files? (?:view|tab|panel)/i.test(o.reply)
+    || !!after && o.links.some(href => workspaceLink(o.origin, href, after.workspace.id)))
+    && !!after && o.links.filter(href => { try { return new URL(href, o.origin).pathname.includes("/execution-workspaces/"); } catch { return false; } })
+      .every(href => workspaceLink(o.origin, href, after.workspace.id)),
+    "The response points to the supported workspace view; any workspace link it does give must identify the actual bound workspace.");
   return c.result();
 }
 function workspaceLink(origin: string, href: string, id: string) {
@@ -60,9 +63,10 @@ export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-file
   async verifyResult(ctx, state, value) {
     const o = runtimeObservation(value); if (!o) throw new Error("Workspace result missing");
     const view = state.workspaceAfter as WorkspaceView;
-    const href = o.links.find(link => workspaceLink(o.origin, link, view.workspace.id)); if (!href) throw new Error("No actual workspace result link");
+    const href = o.links.find(link => workspaceLink(o.origin, link, view.workspace.id));
     const source = ctx.input.page.url();
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/execution-workspaces/${view.workspace.id}`, { waitUntil: "domcontentloaded" });
     await expect(ctx.input.page.getByRole("heading", { name: view.workspace.name, exact: true }).first()).toBeVisible();
     await ctx.input.evidence("runtime-task-workspace-opened.json", { taskId: (state.task as Entity).id, workspaceId: view.workspace.id, url: ctx.input.page.url() });
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });

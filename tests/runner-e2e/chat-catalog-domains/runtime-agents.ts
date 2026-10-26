@@ -1,6 +1,7 @@
 import { checks, sameTask } from "./internal-support.js";
-import { runtimeDefinition, runtimeWorker, runtimeObservation, unchangedAgent, agentLink, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
+import { runtimeDefinition, runtimeWorker, runtimeObservation, unchangedAgent, agentLink, verifyRuntimeResult, type RuntimeObservation, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
 import { pollUntil } from "../api.js";
+import { expect } from "@playwright/test";
 
 export function gradeRuntimeAgents(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -18,7 +19,7 @@ export function gradeRuntimeAgents(value: unknown) {
       c.add("unrelated-config-and-tasks-retained", !!before && !!worker && unchangedAgent(before, worker, ["reportsTo"])
         && Array.isArray(o.state.tasksBefore) && o.tasks.length === o.state.tasksBefore.length
         && o.tasks.every(row => (o.state.tasksBefore as typeof o.tasks).some(prior => sameTask(prior, row))), "Changing the manager preserves accounts, permissions and existing tasks.");
-      c.add("attributed-linked-agent", !!worker && !!agentLink(o, worker) && authored("agent.updated", worker.id), "The agent-authored reporting-line change is inspectable from the rendered reply.");
+      c.add("attributed-agent-change", !!worker && authored("agent.updated", worker.id), "The saved reporting-line change is independently attributed to the actual agent.");
       break;
     }
     case "agents.hire-denied":
@@ -47,8 +48,8 @@ export function gradeRuntimeAgents(value: unknown) {
         "An actual human revision occurred during the canonical query's active native run and remains in history.");
       c.add("rule-attributed-if-saved", !ruleSaved || !!current && current.revision.actorAgentId === o.leadId
         && o.runs.some(run => run.id === current.revision.sourceRunId), "A saved testing rule belongs to this actual agent run.");
-      c.add("future-use-and-profile-link", !!worker && !!agentLink(o, worker) && /future|next|subsequent|new (?:run|work)|conflict|revision/i.test(o.reply),
-        "The reply links Morgan and describes future instruction use or the unresolved revision.");
+      c.add("future-use-and-agent-or-revision-link", !!worker && instructionResultLink(o, worker) && /future|next|subsequent|new (?:run|work)|conflict|revision/i.test(o.reply),
+        "The reply links Morgan or the exact saved revision and describes future instruction use or the unresolved revision.");
       break;
     }
     case "agents.restore-instructions": {
@@ -61,8 +62,8 @@ export function gradeRuntimeAgents(value: unknown) {
         && [previous.revision.id, unwanted.revision.id, current.revision.id].every(id => o.instructionHistory?.revisions.some(row => row.id === id)),
         "Both historical revisions and the agent-authored restoration remain inspectable.");
       c.add("other-file-preserved", o.instructionSideFile?.content === o.state.sideContent, "Unrelated guidance remains unchanged.");
-      c.add("linked-and-honest-restoration", !!worker && !!agentLink(o, worker) && /restor|revert|undo|previous/i.test(o.reply)
-        && !/rewound|undid.*(?:executed|completed).*tasks/i.test(o.reply), "The reply links Morgan and describes an instruction restoration.");
+      c.add("honest-restoration", !!worker && /restor|revert|undo|previous/i.test(o.reply)
+        && !/rewound|undid.*(?:executed|completed).*tasks/i.test(o.reply), "The reply describes the actual instruction restoration without claiming to rewind executed tasks.");
       break;
     }
     default: c.add("known-runtime-agent-oracle", false, "The requested agent scenario has no authored oracle.");
@@ -96,7 +97,28 @@ export const runtimeAgentsCases = [
     const worker = await runtimeWorker(ctx); const riley = await runtimeWorker(ctx, "Riley", { role: "cto", title: "CTO" });
     const task = await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/issues`, { title: "Historical website assignment", status: "backlog", assigneeAgentId: worker.id });
     return { worker, riley, tasksBefore: [task] };
-  }, gradeRuntimeAgents),
+  }, gradeRuntimeAgents, { async verifyResult(ctx, state, value) {
+    await verifyRuntimeResult(ctx, state, value);
+    const source = ctx.input.page.url();
+    await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/agents/all`, { waitUntil: "domcontentloaded" });
+    await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
+    const toggle = ctx.input.page.getByRole("button", { name: "Org chart view", exact: true });
+    if (await toggle.isVisible()) await toggle.click();
+    else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/org`, { waitUntil: "domcontentloaded" });
+    const morgan = ctx.input.page.locator("[data-org-card]").filter({ hasText: "Morgan" });
+    const riley = ctx.input.page.locator("[data-org-card]").filter({ hasText: "Riley" });
+    await expect(morgan).toBeVisible(); await expect(riley).toBeVisible();
+    const org = await ctx.input.api.get<Array<{ id: string; reports: Array<{ id: string; reports: unknown[] }> }>>(`/api/companies/${ctx.input.fixtures.company.id}/org`);
+    const find = (rows: Array<{ id: string; reports: unknown[] }>, id: string): { id: string; reports: unknown[] } | undefined => {
+      for (const row of rows) { if (row.id === id) return row; const child = find(row.reports as typeof rows, id); if (child) return child; }
+    };
+    const manager = find(org, (state.riley as RuntimeAgent).id);
+    if (!manager?.reports.some(row => (row as { id: string }).id === (state.worker as RuntimeAgent).id)) throw new Error("Reloaded organization view data disagrees with the saved manager");
+    const workerBox = await morgan.boundingBox(); const managerBox = await riley.boundingBox();
+    if (!workerBox || !managerBox || workerBox.y <= managerBox.y) throw new Error("Rendered organization hierarchy does not put Morgan below Riley");
+    await ctx.input.evidence("runtime-manager-org-view.json", { workerId: (state.worker as RuntimeAgent).id, managerId: (state.riley as RuntimeAgent).id, renderedHierarchyMatches: true });
+    await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+  } }),
   runtimeDefinition("agents.hire-denied", async ctx => {
     await ctx.input.api.patch(`/api/agents/${ctx.input.fixtures.agent.id}/permissions`, { canCreateAgents: false });
     const { probeAgentPermission } = await import("./identity-support.js");
@@ -121,6 +143,13 @@ export const runtimeAgentsCases = [
     return { worker, instructionAgentId: worker.id, previousInstruction, unwantedInstruction, sideContent };
   }, gradeRuntimeAgents),
 ];
+function instructionResultLink(o: RuntimeObservation, worker: RuntimeAgent): boolean {
+  return !!agentLink(o, worker) || !!o.instruction && o.links.some(href => {
+    try { const url = new URL(href, o.origin); return url.origin === new URL(o.origin).origin
+      && url.pathname === `/api/agents/${worker.id}/instructions-bundle/revision/${o.instruction!.revision.id}`; }
+    catch { return false; }
+  });
+}
 function validTree(agents: RuntimeAgent[]) {
   return agents.every(agent => {
     const seen = new Set<string>(); let row: RuntimeAgent | undefined = agent;

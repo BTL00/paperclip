@@ -3,7 +3,7 @@ import { gradePauseAgent } from "./runtime-agent-lifecycle.js";
 function valid() {
   return { scenarioId: "agents.pause-agent", origin: "http://fixture.invalid", companyId: "company", leadId: "ceo",
     state: { worker: { id: "morgan" }, workerRunId: "worker-run", workerWasReallyWaiting: true, beforeHumanStatus: "running", agentPauseStatus: 403, humanPaused: true },
-    agents: [{ id: "morgan", status: "paused", lifecycleState: "paused" }], tasks: [], links: ["/ACORN/agents/morgan"],
+    agents: [{ id: "morgan", companyId: "company", status: "paused", lifecycleState: "paused" }], tasks: [], links: ["/ACORN/agents/morgan"],
     reply: "Open Morgan's profile and use the Pause control. Existing running work stops after cleanup; the pause remains until resumed.",
     activity: [{ id: "pause", action: "agent.paused", entityId: "morgan", actorType: "user" }],
     runs: [{ id: "worker-run", status: "cancelled" }], humanQueries: [] };
@@ -18,4 +18,8 @@ it("rejects a paused label while the old process still runs", () => {
 });
 it("rejects an agent-authored pause attribution", () => {
   const o = valid(); o.activity[0]!.actorType = "agent"; expect(gradePauseAgent(o).passed).toBe(false);
+});
+
+it("accepts correct human pause guidance without requiring a profile hyperlink", () => {
+  const o = valid(); o.links = []; expect(gradePauseAgent(o).passed).toBe(true);
 });

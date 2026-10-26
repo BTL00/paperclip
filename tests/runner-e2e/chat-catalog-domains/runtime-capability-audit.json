@@ -87,7 +87,7 @@
     {
       "scenarioId": "agent-chat.reopen-conversation",
       "readinessClass": "implemented",
-      "needs": "Genuine native setup history and declared canonical query boundary; same owned Morgan source, actual final-run result link, private-list denial and no navigation execution."
+      "needs": "Genuine native setup history and declared canonical query boundary; same owned Morgan source, actual run-bound navigation guidance, private-list denial and no navigation execution."
     },
     {
       "scenarioId": "agent-chat.remember-and-follow-up",

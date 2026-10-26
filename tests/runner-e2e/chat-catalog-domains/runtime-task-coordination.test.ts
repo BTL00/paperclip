@@ -19,3 +19,7 @@ it("rejects silently deleting the original prerequisite", () => {
 it("rejects a conflict with no actionable order decision", () => {
   const o = valid(); o.reply = "Website and Design form a cycle."; expect(gradeDependencyCycle(o).passed).toBe(false);
 });
+
+it("accepts a saved acyclic rejection naming both tasks without mandatory chat hrefs", () => {
+  const o = valid(); o.links = []; expect(gradeDependencyCycle(o).passed).toBe(true);
+});

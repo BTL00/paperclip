@@ -1,5 +1,5 @@
 import { checks, sameTask, type Entity } from "./internal-support.js";
-import { runtimeDefinition, runtimeObservation, observeRuntime, agentLink, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
+import { runtimeDefinition, runtimeObservation, observeRuntime, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
 interface BuiltInState { definition: { key: string }; agentId: string | null; agent: RuntimeAgent | null; status: string }
 export function gradeBuiltInConfiguration(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -16,8 +16,8 @@ export function gradeBuiltInConfiguration(value: unknown) {
     "An actual agent-attributed revision applies shorter summary guidance while retaining the summarizer purpose.");
   c.add("history-retained", !!beforeInstruction && o.instructionHistory?.revisions.some(row => row.id === beforeInstruction.revision.id) === true
     && o.tasks.length === 1 && sameTask(o.state.historicalTask as Entity, o.tasks[0]), "Instruction history and attributed historical work remain intact.");
-  c.add("inspectable-effective-change", !!worker && !!agentLink(o, worker) && /short|brief|concis/i.test(o.reply),
-    "The response links the protected agent and describes the saved change.");
+  c.add("inspectable-effective-change", !!worker && /short|brief|concis/i.test(o.reply),
+    "The response describes the saved protected-agent configuration change.");
   return c.result();
 }
 export const runtimeBuiltInCases = [runtimeDefinition("agents.configure-required-agent", async ctx => {

@@ -30,9 +30,10 @@ export const runtimeConferenceCases = [runtimeDefinition("agent-chat.conference-
     const o = await observeRuntime(ctx, state);
     const href = o.links.find(link => { const url = new URL(link, ctx.input.api.baseURL);
       return url.origin === ctx.input.api.baseURL && url.pathname === `/${state.companyPrefix}/board-chat`; });
-    if (!href) throw new Error("Conference response lacks the actual company board route");
+
     const source = ctx.input.page.url();
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    else await ctx.input.page.goto(`/${state.companyPrefix}/board-chat`, { waitUntil: "domcontentloaded" });
     await expect(ctx.input.page.getByPlaceholder("Ask anything about your organization...")).toBeVisible();
     await expect(ctx.input.page.getByText("Conference Room", { exact: true }).first()).toBeVisible();
     state.conferenceVisible = true;

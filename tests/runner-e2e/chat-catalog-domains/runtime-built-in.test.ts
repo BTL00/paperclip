@@ -20,3 +20,7 @@ it("rejects changing only prose without a saved instruction revision", () => {
 it("rejects erasing the old attributed task", () => {
   const o = valid(); o.tasks = []; expect(gradeBuiltInConfiguration(o).passed).toBe(false);
 });
+
+it("accepts a real built-in configuration change with textual guidance and no mandatory href", () => {
+  const o = valid(); o.links = []; expect(gradeBuiltInConfiguration(o).passed).toBe(true);
+});

@@ -91,3 +91,18 @@ it("rejects claimed success after a conflict left the rule unsaved", () => {
   o.reply = "There was a revision conflict, but I have added the testing rule for future work.";
   expect(gradeRuntimeAgents(o).passed).toBe(false);
 });
+
+it.each(["agents.change-manager", "agents.restore-instructions"])("%s accepts real saved results without a mandatory chat href", id => {
+  const o = valid(id); o.links = []; expect(gradeRuntimeAgents(o).passed).toBe(true);
+});
+it("keeps the explicit agent-or-revision link requirement for instruction edits", () => {
+  const o = valid("agents.edit-instructions"); o.links = []; expect(gradeRuntimeAgents(o).passed).toBe(false);
+});
+it("accepts the exact independently saved instruction revision link", () => {
+  const o = valid("agents.edit-instructions"); o.links = ["/api/agents/morgan/instructions-bundle/revision/merged"];
+  expect(gradeRuntimeAgents(o).passed).toBe(true);
+});
+it("rejects an unrelated API route offered as an instruction revision result", () => {
+  const o = valid("agents.edit-instructions"); o.links = ["/api/agents/morgan/keys"];
+  expect(gradeRuntimeAgents(o).passed).toBe(false);
+});

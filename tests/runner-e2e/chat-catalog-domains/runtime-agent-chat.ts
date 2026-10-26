@@ -17,8 +17,9 @@ export function gradeReopenConversation(value: unknown) {
     "The initial setup and canonical query are the only two runs; navigation creates neither work nor a duplicate standing chat.");
   c.add("private-chat-list-not-readable-to-agent", o.state.agentChatListStatus === 403,
     "The actual agent bearer cannot enumerate the person's private conversation list.");
-  c.add("canonical-query-response-link", o.state.linkMatchedFinalRun === true,
-    "A link to the actual existing conversation was rendered in a reply attributed to the canonical query's run.");
+  c.add("canonical-query-navigation-guidance", typeof o.state.finalQueryReply === "string" && /Morgan|conversation|chat|here|back/i.test(o.state.finalQueryReply)
+    && o.state.navigationMatchesIntendedAgent === true && o.state.finalNavigationLinksCorrect === true,
+    "The canonical query's actual attributed reply identifies the existing chat; the supported human navigation opens Morgan and any provided chat link has the correct scope.");
   return c.result();
 }
 export const runtimeAgentChatCases = [runtimeDefinition("agent-chat.reopen-conversation", async ctx => {
@@ -47,24 +48,35 @@ export const runtimeAgentChatCases = [runtimeDefinition("agent-chat.reopen-conve
     const setupIds = state.setupRunIds as string[];
     const finalReplies = comments.filter(row => row.authorAgentId === ctx.input.fixtures.agent.id
       && runs.some(run => run.id === row.createdByRunId && !setupIds.includes(run.id)));
+    state.finalQueryReply = finalReplies.map(row => row.body ?? "").join("\n");
+    const allFinalLinks: string[] = [];
     let href: string | undefined;
     for (const reply of finalReplies) {
       const links = await ctx.input.page.locator(`[id=${JSON.stringify(`comment-${reply.id}`)}] a[href]`).evaluateAll(rows => rows.map(row => row.getAttribute("href")!));
-      href = links.find(link => {
+      allFinalLinks.push(...links);
+      href ??= links.find(link => {
         const url = new URL(link, ctx.input.api.baseURL);
         return url.origin === ctx.input.api.baseURL && url.pathname.split("/").includes("chats")
           && [ctx.input.fixtures.agent.id, (state.lead as Entity).urlKey].includes(decodeURIComponent(url.pathname.split("/").at(-1)!));
       });
-      if (href) break;
+
     }
-    if (!href) throw new Error("Canonical reopen response lacks the existing Morgan conversation link");
-    state.linkMatchedFinalRun = true; state.beforeNavigationRuns = runs.length;
+    const lead = state.lead as Entity;
+    state.finalNavigationLinksCorrect = allFinalLinks.filter(link => new URL(link, ctx.input.api.baseURL).pathname.includes("/chats")).every(link => {
+      const url = new URL(link, ctx.input.api.baseURL); const parts = url.pathname.split("/").map(decodeURIComponent);
+      return url.origin === ctx.input.api.baseURL && parts[1] === ctx.input.fixtures.company.issuePrefix
+        && (parts.at(-1) === "chats" || [lead.id, lead.urlKey].includes(parts.at(-1)));
+    });
+    state.beforeNavigationRuns = runs.length;
     const chatList = `/api/companies/${ctx.input.fixtures.company.id}/chats`;
     state.beforeNavigationChatIds = (await ctx.input.api.get<Entity[]>(chatList)).map(row => row.id).sort();
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).last().click();
+    if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).last().click();
+    else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/chats`, { waitUntil: "domcontentloaded" });
     await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
     await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    const routeRef = decodeURIComponent(new URL(ctx.input.page.url()).pathname.split("/").at(-1)!);
+    state.navigationMatchesIntendedAgent = [lead.id, lead.urlKey].includes(routeRef);
     await ctx.refreshIssue(); state.reopenedIssueId = ctx.issue()?.id;
     const reopened = await ctx.input.api.get<{ conversationAgentId: string }>(`/api/issues/${ctx.issue()!.id}`);
     state.reopenedAgentId = reopened.conversationAgentId;

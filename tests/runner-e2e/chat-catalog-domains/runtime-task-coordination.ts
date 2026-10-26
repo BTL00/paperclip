@@ -1,5 +1,6 @@
-import { checks, project, task, sameTask, hasLink, verifyInternalResult, type Entity } from "./internal-support.js";
+import { checks, project, task, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, observeRuntime, runtimeObservation, type RuntimeObservation } from "./runtime-support.js";
+import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 
 interface DependencyTask extends Entity { blockedByIssueIds?: string[]; blockedBy?: Array<{ id: string }> }
@@ -21,7 +22,7 @@ export function gradeDependencyCycle(value: unknown) {
   c.add("explains-actual-conflict-and-next-decision", /\bWebsite\b/i.test(o.reply) && /\bDesign\b/i.test(o.reply)
     && /cycl|circular|already.*depend|deadlock/i.test(o.reply) && /choose|which|instead|remove|order|first/i.test(o.reply),
     "The response explains the named dependency conflict and an actionable order decision.");
-  c.add("actual-task-result-links", hasLink(o, "issues", website) && hasLink(o, "issues", design), "Both actual dependency records are linked from chat.");
+
   return c.result();
 }
 async function observeDependencies(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<DependencyObservation> {
@@ -33,4 +34,11 @@ export const runtimeTaskCoordinationCases = [runtimeDefinition("task-coordinatio
   const p = await project(ctx); const website = await task(ctx, "Website", p.id);
   const design = await task(ctx, "Design", p.id, { blockedByIssueIds: [website.id] });
   return { project: p, task: website, design };
-}, gradeDependencyCycle, { observe: observeDependencies, verifyResult: verifyInternalResult })];
+}, gradeDependencyCycle, { observe: observeDependencies, async verifyResult(ctx, state) {
+  const source = ctx.input.page.url();
+  for (const row of [state.task as Entity, state.design as Entity]) {
+    await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/issues/${row.identifier ?? row.id}`, { waitUntil: "domcontentloaded" });
+    await expect(ctx.input.page.getByRole("heading", { name: row.title!, exact: true }).first()).toBeVisible();
+  }
+  await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+} })];

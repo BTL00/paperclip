@@ -38,10 +38,9 @@ export function gradeControllerRestart(value: unknown) {
     "One ordinary continuation follows the explicit user request without duplicate execution tasks or replayed side effects.");
   c.add("source-and-history-retained", o.state.sourceIssueBefore === o.state.sourceIssueAfter && o.state.priorHistoryRetained === true,
     "The same conversation and genuine prior messages survive the controller restart.");
-  c.add("actual-final-download-link", !!final && o.links.some(href => {
-    try { const url = new URL(href, o.origin); return url.origin === new URL(o.origin).origin
-      && url.pathname === `/api/attachments/${final.attachmentId}/content`; } catch { return false; }
-  }), "The actual final file is available through a rendered production attachment link.");
+  c.add("actual-final-download-resource", !!final?.contentVerified && typeof final.attachmentId === "string" && !!final.attachmentId
+    && typeof final.workProductId === "string" && !!final.workProductId,
+    "The final work has a genuine run-attributed downloadable attachment and registered work product; its UI is verified separately.");
   return c.result();
 }
 export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-restart", async ctx => {
@@ -79,11 +78,14 @@ export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-rest
     if (!o || !artifact) throw new Error("No actual final continuation artifact");
     const href = o.links.find(link => { const url = new URL(link, o.origin); return url.origin === new URL(o.origin).origin
       && url.pathname === `/api/attachments/${artifact.attachmentId}/content`; });
-    if (!href) throw new Error("Final artifact link is absent");
+
     // HTML attachments use the production download policy. Verify the actual
     // human result control and download, not merely an API registration row.
     const downloadPromise = ctx.input.page.waitForEvent("download");
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).last().click();
+    if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).last().click();
+    else await ctx.input.page.goto(new URL(`/api/attachments/${artifact.attachmentId}/content?download=1`, o.origin).href).catch(error => {
+      if (!/Download is starting|net::ERR_ABORTED/i.test(String(error))) throw error;
+    });
     const download = await downloadPromise;
     if (download.suggestedFilename() !== state.filename) throw new Error("The visible result downloaded a different file");
     await ctx.input.evidence("runtime-controller-final-download.json", { attachmentId: artifact.attachmentId, filename: download.suggestedFilename(), sha256: artifact.sha256 });

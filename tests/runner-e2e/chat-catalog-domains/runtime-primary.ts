@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { checks, type Entity } from "./internal-support.js";
 import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
 import { probeAgentPermission, waitForReply } from "./identity-support.js";
-import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime, agentLink, type RuntimeAgent } from "./runtime-support.js";
+import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime, openRuntimeAgentProfile, type RuntimeAgent } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface Primary { companyId: string; userId: string; primaryAgentId: string | null }
 type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
@@ -53,9 +53,9 @@ export const runtimePrimaryCases = [runtimeDefinition("agents.choose-primary", a
     await waitForReply(ctx); const worker = state.worker as RuntimeAgent;
     state.beforeHumanPrimary = (await ctx.input.api.get<Primary>(endpoint(ctx.input.fixtures.company.id))).primaryAgentId;
     state.agentWriteStatus = await probeAgentPermission(ctx, endpoint(ctx.input.fixtures.company.id), "PUT", { primaryAgentId: worker.id });
-    const o = await observeRuntime(ctx, state); const href = agentLink(o, worker); if (!href) throw new Error("Primary guidance lacks Morgan's real profile link");
+    const o = await observeRuntime(ctx, state);
     const source = ctx.input.page.url();
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    await openRuntimeAgentProfile(ctx, worker, o);
     await ctx.input.page.getByRole("button", { name: "Set as my primary", exact: true }).click();
     const dialog = ctx.input.page.getByRole("alertdialog");
     await expect(dialog).toContainText("Change your primary agent?"); await expect(dialog).toContainText("Morgan");

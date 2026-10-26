@@ -50,18 +50,23 @@ export function runtimeObservation(value: unknown): RuntimeObservation | undefin
 export function agentLink(o: RuntimeObservation, agent: RuntimeAgent): string | undefined {
   return o.links.find(href => {
     try { const url = new URL(href, o.origin); const parts = url.pathname.split("/").map(decodeURIComponent); const index = parts.indexOf("agents");
-      return url.origin === new URL(o.origin).origin && index >= 0 && [agent.id, agent.urlKey].includes(parts[index + 1]); }
+      return url.origin === new URL(o.origin).origin && !url.pathname.startsWith("/api/") && index >= 0 && [agent.id, agent.urlKey].includes(parts[index + 1]); }
     catch { return false; }
   });
+}
+/** Canonical outcomes may name a supported control without a Markdown href. */
+export async function openRuntimeAgentProfile(ctx: ChatCatalogContext, agent: RuntimeAgent, o?: RuntimeObservation) {
+  const href = o && agentLink(o, agent);
+  if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+  else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/agents/${agent.id}`, { waitUntil: "domcontentloaded" });
+  await expect(ctx.input.page.getByRole("heading", { name: agent.name!, exact: true }).first()).toBeVisible();
 }
 export async function verifyRuntimeResult(ctx: ChatCatalogContext, state: Record<string, unknown>, value: unknown) {
   const o = runtimeObservation(value); if (!o) throw new Error("Missing independent runtime result");
   const target = o.agents.find(row => row.id === (state.worker as RuntimeAgent | undefined)?.id);
   if (!target) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); return; }
-  const href = agentLink(o, target); if (!href) throw new Error("No actual rendered target-agent link");
   const source = ctx.input.page.url();
-  await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
-  await expect(ctx.input.page.getByRole("heading", { name: target.name!, exact: true }).first()).toBeVisible();
+  await openRuntimeAgentProfile(ctx, target, o);
   await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
   await expect(ctx.input.page.getByRole("heading", { name: target.name!, exact: true }).first()).toBeVisible();
   await ctx.input.evidence("chat-catalog-runtime-profile-opened.json", { agentId: target.id, companyId: target.companyId, url: ctx.input.page.url() });
@@ -69,7 +74,7 @@ export async function verifyRuntimeResult(ctx: ChatCatalogContext, state: Record
 }
 export function runtimeDefinition(scenarioId: string, setup: ChatCatalogCase["setup"], grade: ChatCatalogCase["grade"], extra: Partial<ChatCatalogCase> = {}): ChatCatalogCase {
   return { scenarioId, setup, grade, observe: observeRuntime, verifyResult: verifyRuntimeResult,
-    oracleVersion: "paperclip.chat-catalog.runtime.v1", coverageGaps: [], expectedRunCount: 1,
+    oracleVersion: "paperclip.chat-catalog.runtime.v2", coverageGaps: [], expectedRunCount: 1,
     turnTimeoutMs: 120_000, attemptTimeoutMs: 300_000,
     sourceFiles: ["chat-catalog-domains/runtime-support.ts", `chat-catalog-domains/runtime-${scenarioId.split(".")[0]}.ts`, `chat-scenarios/${scenarioId.split(".")[0]}.yaml`], ...extra };
 }

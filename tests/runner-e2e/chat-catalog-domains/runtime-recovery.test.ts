@@ -1,8 +1,8 @@
 import { it, expect } from "vitest";
 import { gradeControllerRestart } from "./runtime-recovery.js";
 function valid() {
-  const initial = { contentVerified: true, content: "<h1>Unpredictable Orchid header</h1>", attachmentId: "initial" };
-  const final = { contentVerified: true, content: "<h1>Unpredictable Orchid header</h1><section>Contact hello@acorn.example</section>", attachmentId: "final" };
+  const initial = { contentVerified: true, content: "<h1>Unpredictable Orchid header</h1>", attachmentId: "initial", workProductId: "initial-product" };
+  const final = { contentVerified: true, content: "<h1>Unpredictable Orchid header</h1><section>Contact hello@acorn.example</section>", attachmentId: "final", workProductId: "final-product" };
   return { scenarioId: "recovery.controller-restart", origin: "http://fixture.invalid", companyId: "company", leadId: "ceo",
     state: { initialArtifact: initial, finalArtifact: final, fileBeforeRestart: initial.content, fileAfterRestart: initial.content, restarted: true,
       headerMarker: "Unpredictable Orchid header", finalFile: final.content, initialRunId: "first", sourceIssueBefore: "chat", sourceIssueAfter: "chat", priorHistoryRetained: true },
@@ -23,4 +23,8 @@ it("rejects source-history replacement", () => {
 });
 it("rejects a duplicate delegated execution task", () => {
   const o = valid(); (o.tasks as Array<{ id: string }>).push({ id: "duplicate-work" }); expect(gradeControllerRestart(o).passed).toBe(false);
+});
+
+it("accepts usable registered final work without a mandatory chat hyperlink", () => {
+  const o = valid(); o.links = []; expect(gradeControllerRestart(o).passed).toBe(true);
 });

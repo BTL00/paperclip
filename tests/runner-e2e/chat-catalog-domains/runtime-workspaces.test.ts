@@ -20,3 +20,8 @@ it("rejects linking another workspace", () => {
 it("rejects fabricated saved-file setup without its actual worker run", () => {
   const o = valid(); o.runs = []; expect(gradeLocateFiles(o).passed).toBe(false);
 });
+
+it("accepts the actual directory and supported view directions without a mandatory href", () => {
+  const o = valid(); o.links = []; o.reply = "The bound workspace uses /owned/task-root; open the Workspace view to inspect its files.";
+  expect(gradeLocateFiles(o).passed).toBe(true);
+});
