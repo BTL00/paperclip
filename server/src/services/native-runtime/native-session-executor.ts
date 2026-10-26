@@ -11447,7 +11447,12 @@ export function createRemoteRunnerProcessLauncher(input: {
         };
       }
     })();
-    return { child, completion, isExitConfirmed: () => exitConfirmed };
+    return {
+      child,
+      completion,
+      get startedAt() { return launchedIdentity?.startedAt; },
+      isExitConfirmed: () => exitConfirmed,
+    };
   };
 }
 
