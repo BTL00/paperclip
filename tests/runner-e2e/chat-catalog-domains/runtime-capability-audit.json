@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 1,
+  "scope": 60,
+  "liveOperations": 0,
+  "note": "Capability audit only. Local means constructible investigation path, not implemented or passing. Provider means genuine prerequisite required, not an inferred unsupported product capability. All frozen scenarios stay in denominator.",
+  "scenarios": [
+    {
+      "scenarioId": "agents.hire-claude-code",
+      "readinessClass": "provider",
+      "needs": "Eligible Claude account, qualified computer; must bind account and perform true validation."
+    },
+    {
+      "scenarioId": "agents.hire-needs-account",
+      "readinessClass": "provider",
+      "needs": "Start genuinely without eligible Anthropic access, then complete supported human account setup; resumed branch requires real Claude credentials."
+    },
+    {
+      "scenarioId": "agents.hire-needs-approval",
+      "readinessClass": "local",
+      "needs": "Company hire approval policy, real pending proposal, two independent accepted/rejected branches and no worker execution before decision."
+    },
+    {
+      "scenarioId": "agents.hire-denied",
+      "readinessClass": "implemented",
+      "needs": "Effective deny via public permissions; independent bearer probe; assert no employee/proposal/delegated task and honest human path."
+    },
+    {
+      "scenarioId": "agents.ambiguous-cloud-code",
+      "readinessClass": "provider",
+      "needs": "Both Claude Code and cloud execution must genuinely be available; human choice before any harness/target commit."
+    },
+    {
+      "scenarioId": "agents.edit-instructions",
+      "readinessClass": "local",
+      "needs": "Versioned file with unrelated guidance; agent edit plus genuine concurrent revision conflict/fresh merge branch."
+    },
+    {
+      "scenarioId": "agents.restore-instructions",
+      "readinessClass": "implemented",
+      "needs": "Two real saved instruction revisions; restore exact predecessor; history, side file, source-run/agent attribution and profile UI."
+    },
+    {
+      "scenarioId": "agents.change-manager",
+      "readinessClass": "implemented",
+      "needs": "Real same-company Morgan/Riley; tree validity, unchanged account/config/task ownership; saved attribution and profile reload."
+    },
+    {
+      "scenarioId": "agents.choose-primary",
+      "readinessClass": "local",
+      "needs": "Authenticated human preference and existing primary; profile replacement confirmation, other user/company scope and recent-chat precedence."
+    },
+    {
+      "scenarioId": "agents.pause-agent",
+      "readinessClass": "local",
+      "needs": "Genuine active worker; board profile Pause; observe pause state and actual old-run settlement without acknowledgement credit."
+    },
+    {
+      "scenarioId": "agents.resume-agent",
+      "readinessClass": "local",
+      "needs": "Public manual pause plus independently preserved readiness; permitted resume and separate remaining-gate branch."
+    },
+    {
+      "scenarioId": "agents.retire-agent",
+      "readinessClass": "local",
+      "needs": "Genuine active assignment and historical task; board termination and retained attribution/history."
+    },
+    {
+      "scenarioId": "agents.configure-required-agent",
+      "readinessClass": "local",
+      "needs": "Public built-in summarizer provision; change only supported config with protected identity/history unchanged."
+    },
+    {
+      "scenarioId": "agents.agent-api-key",
+      "readinessClass": "local",
+      "needs": "Human-session credential UI; one-time token privateSecrets sink, named-key public readback and revoke with identity retained."
+    },
+    {
+      "scenarioId": "agents.existing-grok-bot",
+      "readinessClass": "provider",
+      "needs": "Existing owned Grok Bot, experiment enabled, real two-way authenticated challenge; no local substitute."
+    },
+    {
+      "scenarioId": "agents.managed-profile",
+      "readinessClass": "local",
+      "needs": "No qualified Anthropic managed profile; agent denied operator provisioning; actual operator route and locked-environment/retention acknowledgement."
+    },
+    {
+      "scenarioId": "agent-chat.reopen-conversation",
+      "readinessClass": "source",
+      "needs": "Existing human-owned Morgan conversation and history; current shared source fixed to lead chat, cross-agent navigation must not duplicate or run."
+    },
+    {
+      "scenarioId": "agent-chat.remember-and-follow-up",
+      "readinessClass": "setup-turn",
+      "needs": "Genuine prior native choice/file turn, browser reload; original catalog query must bind after declared setup turns, plus missing-choice branch."
+    },
+    {
+      "scenarioId": "agent-chat.track-delegated-work",
+      "readinessClass": "local",
+      "needs": "Real website task linked to conversation with active worker; no duplicate task; independent execution status and output when present."
+    },
+    {
+      "scenarioId": "agent-chat.multiple-handoffs",
+      "readinessClass": "local",
+      "needs": "Real active website and completed logo handoffs; source-bound update once; logo output immutable; queued vs consumed verified."
+    },
+    {
+      "scenarioId": "agent-chat.conference-room",
+      "readinessClass": "local",
+      "needs": "Enable supported local-trusted board surface; exact company route/browser scope and differing protocol honestly described."
+    },
+    {
+      "scenarioId": "agent-chat.chat-disabled",
+      "readinessClass": "boundary",
+      "needs": "Agent Chat disabled precludes ordinary human query through Agent Chat; requires explicit manager decision for new boundary context, never ordinary-case bypass."
+    },
+    {
+      "scenarioId": "runs-adapters.list-model-options",
+      "readinessClass": "local",
+      "needs": "Real admitted model discovery/account inventory; independently compare restrictions, availability and binding, secrets never exposed."
+    },
+    {
+      "scenarioId": "runs-adapters.validate-hire",
+      "readinessClass": "provider",
+      "needs": "Eligible selected account with genuine target authentication failure; deterministic failure must not be synthesized in saved state."
+    },
+    {
+      "scenarioId": "runs-adapters.inspect-failed-run",
+      "readinessClass": "local",
+      "needs": "Generate real failed website run and later successful one; retain exact failure diagnostics and missing cost/log branches."
+    },
+    {
+      "scenarioId": "runs-adapters.reset-session",
+      "readinessClass": "setup-turn",
+      "needs": "Real existing runtime session, comments/files; human Reset Sessions then actual new execution plus retained durable history."
+    },
+    {
+      "scenarioId": "runs-adapters.upgrade-runner",
+      "readinessClass": "provider",
+      "needs": "Qualified legacy Claude target and compatible config/account; real human upgrade plus unsupported-setting atomic rejection branch."
+    },
+    {
+      "scenarioId": "execution-environments.add-computer",
+      "readinessClass": "provider",
+      "needs": "No SSH target; human operator connection details, real saved target and qualification before completion."
+    },
+    {
+      "scenarioId": "execution-environments.choose-capable-target",
+      "readinessClass": "provider",
+      "needs": "Two genuine targets with differing selected Claude support; authorized discovery boundary independently probed."
+    },
+    {
+      "scenarioId": "execution-environments.test-computer",
+      "readinessClass": "provider",
+      "needs": "Real SSH environment and operator probe; actual remote login/missing-runtime outcome, never localhost substitute."
+    },
+    {
+      "scenarioId": "execution-environments.assign-computer",
+      "readinessClass": "provider",
+      "needs": "Same-company qualified cloud target; public saved agent binding and protected/unsupported branch."
+    },
+    {
+      "scenarioId": "execution-environments.prepare-image",
+      "readinessClass": "provider",
+      "needs": "Real sandbox provider administration, image preparation status, immutable pinned usable image; Daytona key/image absent."
+    },
+    {
+      "scenarioId": "recovery.explain-stall",
+      "readinessClass": "local",
+      "needs": "Real retained recovery interruption/attempt counter/next action; contrast infrastructure, input, budget and deliberate stop causes."
+    },
+    {
+      "scenarioId": "recovery.controller-restart",
+      "readinessClass": "setup-turn",
+      "needs": "Existing input.restart supports action; native saved file/instruction before canonical query requires declared setup-human boundary."
+    },
+    {
+      "scenarioId": "recovery.source-action",
+      "readinessClass": "local",
+      "needs": "Real failed task and source recovery action, owner readback, separate independent repair only when actual work warrants it."
+    },
+    {
+      "scenarioId": "recovery.retry-exhausted",
+      "readinessClass": "local",
+      "needs": "Genuine exhausted infrastructure attempts and human Retry; previous evidence retained and new admission gates independently read."
+    },
+    {
+      "scenarioId": "recovery.workspace-repair",
+      "readinessClass": "local",
+      "needs": "Real export failure and newer destination edits; board reconciliation and uncertain-source hold; owned filesystem fixtures allowed."
+    },
+    {
+      "scenarioId": "recovery.unknown-email-outcome",
+      "readinessClass": "provider",
+      "needs": "Authorized real email with lost response after possible acceptance and unresolved provider receipt; no automatic resend, independent duplicates check."
+    },
+    {
+      "scenarioId": "recovery.post-stop-message",
+      "readinessClass": "local",
+      "needs": "Real run cleanup boundary; explicit Stop and saved new direction, single eligible continuation, no concurrent owner."
+    },
+    {
+      "scenarioId": "recovery.browser-reconnect",
+      "readinessClass": "local",
+      "needs": "Page context network disconnect while actual worker progresses; persisted events/history restored with no duplicate send or restart."
+    },
+    {
+      "scenarioId": "steering.queue-follow-up",
+      "readinessClass": "local",
+      "needs": "Real busy Morgan; save once correct task queue; order/wait state and actual later delivery."
+    },
+    {
+      "scenarioId": "steering.edit-queued-message",
+      "readinessClass": "source",
+      "needs": "Human-owned undispatched queue; browser edit/reorder, stale and dispatched branches; source task UI selection separate from fixed lead source."
+    },
+    {
+      "scenarioId": "steering.discard-queued-message",
+      "readinessClass": "source",
+      "needs": "Human-owned queued comment; browser discard eligible entry and separate dispatched cancellation-as-direction branch."
+    },
+    {
+      "scenarioId": "steering.steer-active",
+      "readinessClass": "local",
+      "needs": "Real compatible active harness and explicit Steer; delivered acknowledgement and actual output; provider rejection continuation branch."
+    },
+    {
+      "scenarioId": "steering.interrupt-with-direction",
+      "readinessClass": "local",
+      "needs": "Real active task with saved human direction; explicit interruption; old cancelled run, no concurrent owners, delivery once after cleanup."
+    },
+    {
+      "scenarioId": "steering.stop-versus-pause",
+      "readinessClass": "local",
+      "needs": "Running task under parent; board tree pause, persisted pause versus turn stop and explicit later resume/schedule."
+    },
+    {
+      "scenarioId": "steering.preserve-draft",
+      "readinessClass": "source",
+      "needs": "Unsent canonical query and completed upload receipt must survive task switch/reload before send; shared flow sends original query immediately after setup."
+    },
+    {
+      "scenarioId": "steering.approval-delivery",
+      "readinessClass": "local",
+      "needs": "Real waiting question plus ordinary comment queue during turn settlement; human answer delivery distinct from editable queue, once only."
+    },
+    {
+      "scenarioId": "task-coordination.delegate-with-context",
+      "readinessClass": "local",
+      "needs": "CEO-owned source launch task and actual attached brief; single Morgan child/linked work, real report incorporated without false parent attribution."
+    },
+    {
+      "scenarioId": "task-coordination.block-on-design",
+      "readinessClass": "local",
+      "needs": "Real unfinished design dependency, actual website admission blocked then resumed only after authorized prerequisite completion and other gates clear."
+    },
+    {
+      "scenarioId": "task-coordination.reject-dependency-cycle",
+      "readinessClass": "implemented",
+      "needs": "Real Design\u2192Website edge before query; reject reverse edge, unchanged records, both detail endpoint sets and actual task links."
+    },
+    {
+      "scenarioId": "task-coordination.independent-review",
+      "readinessClass": "local",
+      "needs": "Real delivered Morgan result plus independent eligible Riley; governed completion and self-approval rejection."
+    },
+    {
+      "scenarioId": "task-coordination.pause-tree",
+      "readinessClass": "local",
+      "needs": "Two genuinely running descendants and manual-paused child; board tree pause/resume with independent child pause and budget hold preserved."
+    },
+    {
+      "scenarioId": "workspaces.locate-files",
+      "readinessClass": "local",
+      "needs": "Actual projectless task execution binding; independent read active binding and distinguish pending choice from agent defaults."
+    },
+    {
+      "scenarioId": "workspaces.prepare-repository",
+      "readinessClass": "provider",
+      "needs": "Authorized acorn/site source currently unavailable; use auditable incidental fixture binding only if manager approves real owned Git fixture identity."
+    },
+    {
+      "scenarioId": "workspaces.private-repository-no-access",
+      "readinessClass": "provider",
+      "needs": "Real private repository and absent eligible Git connection, followed by genuine human access grant and intended-source preparation."
+    },
+    {
+      "scenarioId": "workspaces.preview-service",
+      "readinessClass": "local",
+      "needs": "Owned ready workspace with real website files; start supported service; independent readiness HTTP/endpoint view plus startup-failure branch."
+    },
+    {
+      "scenarioId": "workspaces.inspect-git",
+      "readinessClass": "local",
+      "needs": "Owned task-bound Git fixture with two genuine uncommitted changes; independently compare actual diff/file paths and preserve both edits."
+    },
+    {
+      "scenarioId": "workspaces.close-and-reopen",
+      "readinessClass": "local",
+      "needs": "Real retained task workspace no active run; close lifecycle state with files retained and actual retrieval/reopen proof."
+    },
+    {
+      "scenarioId": "workspaces.recover-lost-sandbox",
+      "readinessClass": "provider",
+      "needs": "True historical export failure and destroyed exact sandbox, surviving attachments; board saved-source reconstruction and fresh admission, no false recovered lost files."
+    }
+  ]
+}
