@@ -1,5 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { chatActions, chatConversations, chatDeliveries, chatEndpointResources, chatMessageLinks, issueComments, toolConnections } from "@paperclipai/db";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { agentWakeupRequests, chatActions, chatConversations, chatDeliveries, chatEndpointResources, chatMessageLinks, issueComments, toolConnections } from "@paperclipai/db";
 import { forbidden } from "../../../errors.js";
 import type { DbOrTransaction, EndpointRow, LifecycleRuntimeFence } from "../runtime-types.js";
 import { credentialFingerprint } from "../credential-fingerprint.js";
@@ -9,7 +9,24 @@ export type TaskRetryWakeAuthority = {
   intentId: string;
   sourceRunId: string;
   runtimeFence?: LifecycleRuntimeFence;
+  skippedActionIds?: string[];
 };
+
+async function skippedTaskRetryInputs(tx: DbOrTransaction, actions: Array<typeof chatActions.$inferSelect>,
+  authority: TaskRetryWakeAuthority) {
+  const first = actions[0];
+  const ids = actions.filter(action => action.status === "failed" && action.payload.requestedByActorType === "user" &&
+    authority.skippedActionIds?.includes(action.id)).map(action => action.id);
+  if (!first || !ids.length) return new Set<string>();
+  const rows = await tx.select({ id: agentWakeupRequests.id }).from(agentWakeupRequests).where(and(
+    eq(agentWakeupRequests.companyId, first.companyId), inArray(agentWakeupRequests.id, ids),
+    eq(agentWakeupRequests.agentId, String(first.payload.agentId)), eq(agentWakeupRequests.status, "skipped"),
+    isNull(agentWakeupRequests.runId), inArray(agentWakeupRequests.reason, ["budget.blocked", "agent.not_invokable"]),
+    eq(agentWakeupRequests.requestedByActorType, "user"),
+    eq(agentWakeupRequests.requestedByActorId, String(first.payload.requestedByActorId)),
+  ));
+  return new Set(rows.map(row => row.id));
+}
 
 export function githubTaskRetryAppMatches(endpoint: EndpointRow, delivery: typeof chatDeliveries.$inferSelect,
   response: { payload: Record<string, unknown> } | undefined) {
@@ -39,8 +56,9 @@ export async function githubTaskRetryRuntimeFence(tx: DbOrTransaction, endpoint:
     companyId: action.companyId, issueId: String(action.payload.issueId),
     agentId: String(action.payload.agentId), sourceRunId: authority.sourceRunId, intentId: authority.intentId,
   });
+  const skipped = await skippedTaskRetryInputs(tx, [action], authority);
   if (!retry || endpoint.provider !== "github" || !endpoint.botExternalId || action.kind !== "inbound_wakeup"
-    || action.status !== "processed" || delivery.state !== "processed") throw deny();
+    || (action.status !== "processed" && !skipped.has(action.id)) || delivery.state !== "processed") throw deny();
   const [response] = await tx.select({ payload: chatActions.payload }).from(chatActions).where(and(
     eq(chatActions.companyId, action.companyId), eq(chatActions.endpointId, endpoint.id),
     eq(chatActions.conversationId, action.conversationId!), eq(chatActions.deliveryId, delivery.id),
@@ -75,8 +93,10 @@ export function createGitHubTaskRetryBatchAuthority<T extends GitHubRetryBinding
       { code: "chat_action_authorization_changed" });
     const first = actions[0];
     if (!first) throw deny();
+    const skipped = await skippedTaskRetryInputs(tx, actions, notice.taskRetry);
     const commonScope = (action: typeof chatActions.$inferSelect) => JSON.stringify([
-      action.companyId, action.endpointId, action.conversationId, action.principalId, action.kind, action.status,
+      action.companyId, action.endpointId, action.conversationId, action.principalId, action.kind,
+      skipped.has(action.id) ? "processed" : action.status,
       ...["version", "issueId", "agentId", "sessionGeneration", "requestedByActorType", "requestedByActorId"]
         .map(key => action.payload[key]),
     ]);

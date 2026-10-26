@@ -181,6 +181,19 @@ export function unadmittedChatWakeupCondition(
           and chat_admission.agent_id::text = chat_unadmitted.payload->>'agentId'
           and chat_admission.status <> 'skipped'
       )
+      and not exists (
+        select 1 from chat_actions chat_retry
+        join agent_wakeup_requests chat_retry_admission on chat_retry_admission.id = chat_retry.id
+        where chat_retry.company_id = chat_unadmitted.company_id
+          and chat_retry.endpoint_id = chat_unadmitted.endpoint_id
+          and chat_retry.conversation_id = chat_unadmitted.conversation_id
+          and chat_retry.kind = 'failed_run_retry'
+          and chat_retry.payload->'taskRetryInput'->'skippedActionIds' ? chat_unadmitted.id::text
+          and chat_retry.payload->>'issueId' = chat_unadmitted.payload->>'issueId'
+          and chat_retry_admission.company_id = chat_retry.company_id
+          and chat_retry_admission.agent_id::text = chat_retry.payload->>'agentId'
+          and chat_retry_admission.status <> 'skipped'
+      )
       and (chat_unadmitted.status <> 'failed' or not exists (
         select 1 from chat_actions chat_later
         join agent_wakeup_requests chat_later_admission on chat_later_admission.id = chat_later.id
