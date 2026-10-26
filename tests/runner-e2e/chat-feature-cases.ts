@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { parseDocument } from "yaml";
+import { chatCatalogCases } from "./chat-catalog-registry.js";
+import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { RunnerProfileFixture, RunnerTaskFixture } from "./types.js";
 
 export const CHAT_FEATURE_SUITE = "chat-features";
@@ -34,11 +36,22 @@ export function readChatFeatureScenarios(text = readFileSync(new URL("./chat-sce
   });
 }
 export const chatFeatureScenarios = readChatFeatureScenarios();
+function definitionSources(directory = new URL("./", import.meta.url)): string[] {
+  return readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+    if (entry.isDirectory()) return ["node_modules", "results", "test-results", "playwright-report", ".results"].includes(entry.name)
+      ? [] : definitionSources(new URL(`${entry.name}/`, directory));
+    return /\.(ts|mjs|yaml|json)$/.test(entry.name) && !entry.name.endsWith(".test.ts") && !entry.name.startsWith("chat-campaign")
+      ? [new URL(entry.name, directory).href] : [];
+  });
+}
+// Includes every domain, helper, matcher and fixture source in this Product E2E family.
 export const chatFeatureDefinitionDigest = createHash("sha256").update([
-  "chat-feature-cases.ts", "chat-feature-flow.ts", "chat-feature-scoring.ts", "chat-flow.ts",
-  "completion-updates.ts", "redaction.ts", "launch.ts", "chat-scenarios/tasks.yaml", "chat-scenarios/defaults.yaml",
-  "../../server/src/services/agent-conversations.ts",
-].map(file => readFileSync(new URL(file, import.meta.url), "utf8")).join("\n")).digest("hex");
+  ...definitionSources(), new URL("../../server/src/services/agent-conversations.ts", import.meta.url).href,
+].map(file => {
+  const relative = new URL(file).pathname.replace(new URL("../../", import.meta.url).pathname, "");
+  const body = readFileSync(new URL(file), "utf8");
+  return JSON.stringify([relative, body]);
+}).join("\n")).digest("hex");
 
 export function chatFeatureProfile(profile: RunnerProfileFixture): RunnerProfileFixture {
   return { ...profile, buildAgent(input) {
@@ -66,3 +79,20 @@ export const chatFeatureTasks: readonly RunnerTaskFixture[] = CHAT_FEATURE_CASES
   buildVisibleMarker: nonce => `ACORN${nonce.replace(/[^a-zA-Z0-9]/g, "")}`,
   buildMatchers: () => [{ kind: "issue_status", expected: "in_review" }],
 }));
+
+
+/** Only executable domain cases become selectable cells. Missing cases remain in the frozen denominator. */
+export const chatCatalogTasks: readonly RunnerTaskFixture[] = chatCatalogCases.map(implementation => {
+  const scenario = chatCatalogScenarios.find(row => row.id === implementation.scenarioId)!;
+  return {
+    id: scenario.id, label: scenario.id, groups: ["chat"], flow: "agent_chat", workMode: "standard",
+    expectedRunCount: implementation.expectedRunCount, minimumExpectedRunCount: implementation.minimumRunCount,
+    automaticRetryPolicy: "single_attempt", turnTimeoutMs: implementation.turnTimeoutMs,
+    attemptTimeoutMs: { local: implementation.attemptTimeoutMs, daytona: implementation.attemptTimeoutMs },
+    expectedTerminalState: { issue: "in_review", run: "succeeded" },
+    buildTitle: nonce => `Chat catalog ${scenario.id} ${nonce}`,
+    buildPrompt: () => scenario.query,
+    buildVisibleMarker: nonce => `CATALOG${nonce.replace(/[^a-zA-Z0-9]/g, "")}`,
+    buildMatchers: () => [{ kind: "issue_status", expected: "in_review" }],
+  };
+});

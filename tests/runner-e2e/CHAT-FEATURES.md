@@ -1,9 +1,26 @@
 # Chat feature evals
 
-`chat-features` promotes two entries from the [scenario catalog](chat-scenarios/README.md)
-into real Product E2E executions. The scope is deliberately small: prove the
-fixture, browser interaction, independent grading and report loop before adding
-more features. Catalog coverage is not live acceptance.
+`chat-features` promotes executable entries from the [scenario catalog](chat-scenarios/README.md)
+into real Product E2E executions. The two original task journeys remain intact.
+Additional domain cases use `chat-catalog-contract.ts` and the explicit registry;
+listing a cell or calibrating its oracle is not live acceptance. The complete
+244-scenario denominator and unchanged requests are frozen in
+`chat-campaign-manifest.json`. Its raw-file/defaults inventory hash is
+`9dc9cf6a5426cf1b56bc30a3571851f233f9dd5e93a1292eaee414d33b52df77`.
+
+Domain cases own production API setup, explicit user followups, observations,
+case-specific grading and optional cleanup. The shared driver submits the exact
+catalog query, saves prerequisite state before action, records real API comments,
+run attribution and rendered links, and rechecks after browser reload. Every case
+declares run/time limits and an oracle version. Missing checks and contradictory
+grades fail. Known `coverageGaps` make a diagnostic case fail acceptance until its
+conditions are implemented; they are not blocked cases reported as passing.
+
+The registry contains only executable setups/actions/oracles. Scenarios absent
+from it remain in the denominator as unimplemented; optional external services
+must be real or explicitly labeled simulations. The frozen campaign ledger owns
+implementation readiness and all attempts separately from catalog discovery.
+No model judge supplies a generic pass.
 
 | Scenario | Actual user request | Independent outcome |
 | --- | --- | --- |
@@ -35,9 +52,7 @@ pnpm test:e2e:runner -- --id chat-features.runner-codex-subscription.local.creat
 pnpm test:e2e:runner -- --id chat-features.runner-codex-subscription.local.delegate-announcement --max-automatic-retries 0
 ```
 
-Run creation first and inspect its packaged report before delegation. For initial
-acceptance, run each cell three times against fresh fixtures on the same definition
-revision. Keep every attempt, including failures; a retry does not erase one. A
+Run creation first and inspect its packaged report before delegation. For the historical first-slice repeatability probe, each cell used three fresh fixtures on the same definition revision. The full-catalog campaign instead allows one initial attempt and one documented fix-and-rerun per failing scenario, with automatic retries disabled. Keep every attempt, including failures; a retry does not erase one. A
 fixture or product correction starts a new three-sample measurement. Both cells
 are explicit-only and excluded from `--all`; this does not implement or qualify
 the rest of the YAML inventory.
@@ -89,7 +104,7 @@ accepting the first samples; the existing completion semantic-review rubric stil
 applies. Oracle calibration tests exercise both valid evidence and plausible wrong
 outcomes without calling a model.
 
-Only after this loop is stable should another scenario be promoted. Keep each
+Preserve the historical measurements below when promoting another scenario. Keep each
 starting condition explicit: connected versus missing connection, allowed versus
 approval-required, and so on. Reuse the fixture/report infrastructure and add a
 case-specific outcome oracle; do not make all YAML paragraphs executable through

@@ -76,8 +76,8 @@ describe("chat feature saved-state oracle", () => {
 });
 
 describe("chat feature selection", () => {
-  it("registers only the two authored queries as explicit local subscription cells", () => {
-    const cells = runnerMatrix.filter(cell => cell.suite.id === "chat-features");
+  it("preserves the two original queries as explicit local subscription cells", () => {
+    const cells = runnerMatrix.filter(cell => cell.suite.id === "chat-features" && ["create-backlog", "delegate-announcement"].includes(cell.task.id));
     expect(cells).toHaveLength(2);
     for (const cell of cells) {
       expect(cell.environment.id).toBe("local");

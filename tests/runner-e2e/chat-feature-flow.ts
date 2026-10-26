@@ -1,3 +1,5 @@
+import { runChatCatalogFlow } from "./chat-catalog-flow.js";
+import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
 import { collectChatRunEvidence, sendChatMessage, type ChatFlowInput, type ChatIssue, type ChatRun } from "./chat-flow.js";
@@ -11,6 +13,11 @@ export async function runChatFeatureFlow(context: {
 }) {
   const { input } = context;
   const { api, page, fixtures: f, execution, nonce } = input;
+  if (!["create-backlog", "delegate-announcement"].includes(execution.task.id)) {
+    const scenario = chatCatalogScenarios.find(row => row.id === execution.task.id);
+    if (!scenario) throw new Error(`Unknown catalog scenario: ${execution.task.id}`);
+    return runChatCatalogFlow({ ...context, scenario });
+  }
   const caseId = execution.task.id as ChatFeatureCase;
   const scenario = chatFeatureScenarios.find(row => row.id === `tasks.${caseId}`);
   if (!scenario) throw new Error(`Unregistered chat feature scenario: ${caseId}`);

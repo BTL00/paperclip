@@ -25,7 +25,8 @@ import { copilotProviderDeathTasks } from "./copilot-active-stop-tasks.js";
 import { instructionPersistenceTask } from "./instruction-persistence.js";
 import { apiResponseReadingTask } from "./api-response-reading.js";
 import { taskTitleTasks, taskTitleDefinitionDigest, TASK_TITLE_BUDGET_CENTS } from "./task-titles.js";
-import { CHAT_FEATURE_SUITE, CHAT_FEATURE_BUDGET_CENTS, chatFeatureTasks, chatFeatureProfile, chatFeatureScenarios, chatFeatureDefinitionDigest } from "./chat-feature-cases.js";
+import { chatCatalogInventoryDigest, chatCatalogScenarios } from "./chat-catalog-inventory.js";
+import { CHAT_FEATURE_SUITE, CHAT_FEATURE_BUDGET_CENTS, chatFeatureTasks, chatCatalogTasks, chatFeatureProfile, chatFeatureScenarios, chatFeatureDefinitionDigest } from "./chat-feature-cases.js";
 import { blockerTasks, blockerProfile } from "./blocker-cases.js";
 import { accountingTasks } from "./accounting-cases.js";
 import { continuationTasks, questionResumeTask } from "./continuation-cases.js";
@@ -1605,16 +1606,16 @@ export const runnerSuites: readonly RunnerSuiteFixture[] = [
   },
   {
     id: CHAT_FEATURE_SUITE, label: "Chat feature journeys", manualOnly: true,
-    description: "Natural catalog requests create backlog work or delegate an announcement and return its saved result.",
+    description: "Executable catalog requests through Agent Chat, with independently graded persisted state.",
     groups: ["chat", "native"],
     profiles: [chatFeatureProfile(nativeProfile({ id: "runner-codex-subscription", label: "Native Codex subscription",
       provider: "codex", model: DEFAULT_CODEX_LOCAL_MODEL, credential: "CODEX_AUTH_JSON", supportedEnvironments: ["local"] }))],
-    environments: [localEnvironment], tasks: chatFeatureTasks, expectedMatrixSize: 2,
-    definitionMetadata: { version: 1, definitionDigest: chatFeatureDefinitionDigest, scheduling: "explicit-only",
+    environments: [localEnvironment], tasks: [...chatFeatureTasks, ...chatCatalogTasks], expectedMatrixSize: 2 + chatCatalogTasks.length,
+    definitionMetadata: { version: 2, definitionDigest: chatFeatureDefinitionDigest, inventoryDigest: chatCatalogInventoryDigest, frozenScenarioCount: 244, scheduling: "explicit-only",
       instructions: "production-role-defaults", companyAndAgentBudgetCents: CHAT_FEATURE_BUDGET_CENTS,
-      unpricedUsagePolicy: "allow-through-public-budget-policy", taskRunLimits: { ceo: 3, worker: 1 },
+      unpricedUsagePolicy: "allow-through-public-budget-policy", taskRunLimits: "per-case-declared; agent daily admission ceiling 3",
       maximumAttemptsPerCell: 1, setupProbeUsage: "unavailable-outside-heartbeat-accounting",
-      scenarios: chatFeatureScenarios.map(({ id, capabilities }) => ({ id, capabilities })) },
+      scenarios: [...chatFeatureScenarios, ...chatCatalogScenarios.filter(row => chatCatalogTasks.some(task => task.id === row.id))].map(({ id, capabilities }) => ({ id, capabilities })) },
   },
   {
     id: "agent-chat", label: "Persistent Agent Chat",
