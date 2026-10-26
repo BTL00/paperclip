@@ -275,8 +275,9 @@ function initialPurposeValid(o: InternalObservation): boolean {
 function groundedPurpose(reply: string): boolean {
   // The saved business fact is support for research teams. A fixture nonce is
   // never business meaning and faithful paraphrases need not repeat it.
-  return /\bresearch(?:ers)?\b/i.test(reply) && /\b(?:teams?|groups?)\b/i.test(reply)
-    && /\b(?:support|supports|help|helps|serve|serves|benefit|enable|for)\b/i.test(reply)
+  return reply.split(/[.\n;]|\bbut\b/i).some(part => /\bresearch(?:ers)?\b/i.test(part) && /\b(?:teams?|groups?)\b/i.test(part)
+    && /\b(?:support|supports|help|helps|serve|serves|benefit|enable|for)\b/i.test(part)
+    && !/\b(?:(?:does|do|will|would|can|could|is|are)\s+not|doesn't|don't|won't|can't|cannot|never)\s+(?:\w+\s+){0,2}(?:support|help|serve|benefit|enable)\b|\bnot\s+(?:(?:intended|meant)\s+to\s+(?:support|help)|for\s+(?:research|researchers))\b/i.test(part))
     && !reply.split(/[.\n;]/).some(part => !/\b(?:no|not|without|isn't|doesn't)\b/i.test(part)
       && /\b(?:sell(?:ing)?\s+(?:ads?|advertising|data)|ad revenue|advertising revenue)\b/i.test(part));
 }

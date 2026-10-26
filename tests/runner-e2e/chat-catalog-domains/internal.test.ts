@@ -266,6 +266,16 @@ describe("goal oracle phase binding", () => {
     (o.state.initialPurpose as InternalObservation).reply = "The website exists to sell advertising for research teams.";
     expect(gradeInternal(o).passed).toBe(false);
   });
+  it("rejects explicit negation of the saved business purpose while accepting future support", () => {
+    const o = valid("goals.explain-purpose"); const initial = o.state.initialPurpose as InternalObservation;
+    initial.reply = "The website does not support research teams."; expect(gradeInternal(o).passed).toBe(false);
+    initial.reply = "The website will help research groups sign up."; expect(gradeInternal(o).passed).toBe(true);
+  });
+  it("accepts the preserved first alignment reply's narrow context-only explanation", () => {
+    const o = valid("goals.align-existing-work");
+    (o.state.authorizedAlignment as { reply: string }).reply = "Done.\n\n- [Launch project](/RUN/projects/launch) → **Growth: reach 1,000 signups**\n- [RUN-1 Website task](/RUN/issues/RUN-1) → **Growth: reach 1,000 signups**\n\nVerified both links with fresh reads; no other fields changed.";
+    expect(gradeInternal(o).passed).toBe(true);
+  });
   it("rejects a conditional missing-context task contaminating the initial reference", () => {
     const o = valid("goals.explain-purpose");
     (o.state.initialPurpose as InternalObservation).tasks.push({ id: "missing-task", title: "Unaligned website work", goalId: null });
