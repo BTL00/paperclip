@@ -66,7 +66,7 @@
     },
     {
       "scenarioId": "agents.configure-required-agent",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Public built-in summarizer provision; change only supported config with protected identity/history unchanged."
     },
     {
@@ -106,7 +106,7 @@
     },
     {
       "scenarioId": "agent-chat.conference-room",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Enable supported local-trusted board surface; exact company route/browser scope and differing protocol honestly described."
     },
     {
@@ -116,7 +116,7 @@
     },
     {
       "scenarioId": "runs-adapters.list-model-options",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Real admitted model discovery/account inventory; independently compare restrictions, availability and binding, secrets never exposed."
     },
     {
@@ -271,7 +271,7 @@
     },
     {
       "scenarioId": "workspaces.locate-files",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Actual projectless task execution binding; independent read active binding and distinguish pending choice from agent defaults."
     },
     {
