@@ -8060,7 +8060,7 @@ describe("native warm session supervision", () => {
       const cleanupFailures: unknown[] = [];
       try { await closeWarmNativeSessionsForEnvironment({ environmentId, reason: "test cleanup" }); } catch (error) { cleanupFailures.push(error); }
       if (externalUrl) {
-        try { await db.execute(sql`TRUNCATE TABLE companies, environments, auth_users CASCADE`); } catch (error) { cleanupFailures.push(error); }
+        try { await db.execute(sql`TRUNCATE TABLE ${tables.companies}, ${tables.environments}, ${tables.authUsers} CASCADE`); } catch (error) { cleanupFailures.push(error); }
       }
       try { await database.cleanup(); } catch (error) { cleanupFailures.push(error); }
       if (previousHome === undefined) delete process.env.PAPERCLIP_HOME; else process.env.PAPERCLIP_HOME = previousHome;
