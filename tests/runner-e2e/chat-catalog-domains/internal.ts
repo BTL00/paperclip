@@ -5,6 +5,7 @@ import { goalsCases } from "./internal-goals.js";
 import { documents_artifactsCases } from "./internal-documents-artifacts.js";
 import { activityCases } from "./internal-activity.js";
 import { inboxSearchCases } from "./internal-inbox-search.js";
+import { agentFeedbackCases } from "./internal-agent-feedback.js";
 import { decisionSearchCases } from "./internal-decision-search.js";
 import { designSearchCases } from "./internal-design-search.js";
 import { inboxTriageCases } from "./internal-inbox-triage.js";
@@ -19,6 +20,7 @@ export const internalChatCatalogCases = [
   ...inboxTriageCases,
   ...designSearchCases,
   ...decisionSearchCases,
+  ...agentFeedbackCases,
 ];
 export function gradeInternal(value: unknown) {
   const o = observation(value);
