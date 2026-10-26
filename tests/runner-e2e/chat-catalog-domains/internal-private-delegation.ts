@@ -21,8 +21,7 @@ export function gradePrivateDelegation(value: unknown) {
     "The private conversation and existing private project remain restricted while both authorized agents retain actual access.");
   c.add("one-authorized-confidential-task", o.tasks.length === 1 && !!saved && saved.companyId === o.companyId && saved.projectId === p.id
     && saved.assigneeAgentId === worker.id && !(saved as PrivateTask).conversationAgentId
-    && /\b(?:confidential|private)\b/i.test(`${saved.title} ${saved.description ?? ""}`)
-    && /\b(?:announcement|launch)\b/i.test(`${saved.title} ${saved.description ?? ""}`)
+    && /\b(?:announcements?|announce|launch\s+(?:message|copy|notice|post))\b/i.test(`${saved.title} ${saved.description ?? ""}`)
     && o.activity.some(row => row.action === "issue.created" && row.entityId === saved.id && row.agentId === o.leadId)
     && hasLink(o, "issues", saved), "Exactly one ordinary confidential launch task belongs to the actual private project and authorized Morgan, with an inspectable source link.");
   c.add("morgan-retains-effective-access", o.workerTaskStatus === 200, "The actual assignee's independent bearer can retrieve the private delegated task.");

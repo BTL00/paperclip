@@ -523,6 +523,10 @@ describe("governed completion calibration", () => {
 });
 
 describe("private delegation audience calibration", () => {
+  it("accepts natural announcement wording without requiring privacy adjectives in the task text", () => {
+    const o = valid("tasks.private-task"); o.tasks[0]!.title = "Draft Acorn launch announcement"; o.tasks[0]!.description = "Write an announcement for the upcoming launch.";
+    expect(gradeInternal(o).passed).toBe(true);
+  });
   it("rejects a public source conversation even when the new project is private", () => {
     const o = valid("tasks.private-task"); Object.assign(o, { sourcePrivate: false }); expect(gradeInternal(o).passed).toBe(false);
   });
