@@ -12,19 +12,20 @@ interface PrivacyObservation extends InternalObservation {
   observer: { projectStatus: number; taskStatus: number; projectsStatus: number; searchStatus: number; projectsBody: string; searchBody: string };
   leadStatus: number; unrelatedAgentStatus: number; unrelatedPublicStatus: number;
 }
-async function mainPerson(ctx: ChatCatalogContext) {
+export async function mainPerson(ctx: ChatCatalogContext) {
   const session = await ctx.input.api.get<{ user?: { id: string } }>("/api/auth/get-session");
   if (!session.user?.id) throw new Error("Privacy fixtures require the real signed-in responsible person");
   return session.user.id;
 }
-async function observerPerson(ctx: ChatCatalogContext) {
+export async function observerPerson(ctx: ChatCatalogContext) {
   const browser = ctx.input.page.context().browser();
   if (!browser || !ctx.input.privateSecrets) throw new Error("Independent authenticated observer requires a browser and attempt-private redaction sink");
   const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
-  await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer");
+  try { await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer"); }
+  catch (error) { await observer.dispose(); throw error; }
   return observer;
 }
-async function personRead(person: Person, path: string) {
+export async function personRead(person: Person, path: string) {
   const response = await person.request(path);
   const body = response.ok ? await response.text() : "";
   await response.body?.cancel();
@@ -42,13 +43,13 @@ async function privacyProbeKey(ctx: ChatCatalogContext, agentId: string) {
   }
   return pending;
 }
-async function cleanupPrivacyProbes(ctx: ChatCatalogContext) {
+export async function cleanupPrivacyProbes(ctx: ChatCatalogContext) {
   const keys = privacyProbeKeys.get(ctx); privacyProbeKeys.delete(ctx);
   for (const [agentId, pending] of keys ?? []) {
     const key = await pending; await ctx.input.api.delete(`/api/agents/${agentId}/keys/${key.id}`, { allowNotFound: true });
   }
 }
-async function agentStatus(ctx: ChatCatalogContext, agentId: string, path: string) {
+export async function agentStatus(ctx: ChatCatalogContext, agentId: string, path: string) {
   const key = await privacyProbeKey(ctx, agentId);
   const url = new URL(path, ctx.input.api.baseURL);
   if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy probe escaped its isolated API");

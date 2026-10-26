@@ -15,6 +15,14 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "tasks.private-task": {
+      o.state.worker = { id: "morgan" }; o.state.confidentialMarker = "Confidential marker";
+      o.tasks[0] = { ...o.tasks[0]!, title: "Confidential launch announcement", assigneeAgentId: "morgan" };
+      o.activity = [event("issue.created", "task")];
+      o.runs.push({ id: "private-worker", companyId: "company", agentId: "morgan", status: "running", contextSnapshot: { issueId: "task" } });
+      Object.assign(o, { sourcePrivate: true, projectPrivate: true, leadProjectStatus: 200, workerProjectStatus: 200, workerTaskStatus: 200,
+        observerCompanyStatus: 200, observerTaskStatus: 404, observerSourceStatus: 404, observerProjectsStatus: 200, observerProjectsBody: "[]", observerSearchStatus: 200, observerSearchResults: "[]" }); break;
+    }
     case "tasks.completion-with-gate": {
       const policy = { stages: [{ id: "review-stage", type: "review", participants: [{ type: "user", userId: "riley" }] }] };
       const t = { ...o.tasks[0]!, status: "in_review", reviewPolicy: "human_only", executionPolicy: policy,
@@ -185,6 +193,7 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "tasks.private-task": o => { Object.assign(o, { observerTaskStatus: 200 }); },
   "tasks.completion-with-gate": o => { o.tasks[0]!.status = "done"; },
   "tasks.attachment-brief": o => { Object.assign(o, { workerDownloadStatus: 403 }); },
   "projects.add-repository": o => { Object.assign(o, { repositoryProject: { ...o.projects[0], workspaces: [{ id: "wrong", repoUrl: "https://github.com/acorn/unapproved" }] } }); },
@@ -501,5 +510,17 @@ describe("governed completion calibration", () => {
   it("rejects accepted-completion prose while the actual human review remains pending", () => {
     const o = valid("tasks.completion-with-gate"); o.reply = "Review is required, but I marked the task done.";
     expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("private delegation audience calibration", () => {
+  it("rejects a public source conversation even when the new project is private", () => {
+    const o = valid("tasks.private-task"); Object.assign(o, { sourcePrivate: false }); expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a private-looking task whose actual assignee cannot read it", () => {
+    const o = valid("tasks.private-task"); Object.assign(o, { workerTaskStatus: 403 }); expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects protected task discovery in a healthy unrelated member's search", () => {
+    const o = valid("tasks.private-task"); Object.assign(o, { observerSearchResults: '[{"id":"task"}]' }); expect(gradeInternal(o).passed).toBe(false);
   });
 });
