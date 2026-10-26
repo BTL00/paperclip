@@ -19,6 +19,7 @@ import {
   issueComments,
   issues,
   issueWorkProducts,
+  runIdentityContexts,
 } from "@paperclipai/db";
 
 import {
@@ -35,6 +36,7 @@ import { issueService } from "../issues.js";
 import { readInheritedGitHubReviewWait } from "../chat-channels/github/review-wait.js";
 import { boundExternalChatProvider } from "./external-chat-provider.js";
 import { resolveExternalChatQuestionResponse } from "./external-chat-question-response.js";
+import { githubRunReplyState } from "../chat-run-publications.js";
 
 // This boundary reads identity and wake authority, never launch renderings,
 // saved provider profiles, or run output. Keep the nested wake proof narrow too.
@@ -844,7 +846,9 @@ export function isPublishedGitHubReviewCompletionContinuation(value: unknown): b
 }
 
 /** Project a wait from the same saved publication and current authority used
- * by finalization. An older run's review never assigns this turn a new wait. */
+ * by finalization. Inherited waits need an accepted tree resume or a confirmed
+ * reply from this run to its exact current source. An arbitrary old review does
+ * not assign an unanswered new turn a wait. */
 export async function readPublishedGitHubReviewCompletionContinuationInTransaction(
   tx: Db, binding: ChatReuseBinding, lockMode: AuthorizationLockMode = "read",
 ) {
@@ -855,8 +859,19 @@ export async function readPublishedGitHubReviewCompletionContinuationInTransacti
   )).limit(1);
   if (!run || run.status !== "running") return null;
   const wait = await readInheritedGitHubReviewWait(tx, run);
-  if (wait?.kind !== "published" || wait.reviewRunId !== run.id ||
-      await resolveExternalChatResponseWaitAuthorizationInTransaction(tx, binding, lockMode) !== "authorized") return null;
+  if (wait?.kind !== "published") return null;
+  if (wait.reviewRunId !== run.id) {
+    const [identity] = await tx.select({ cause: runIdentityContexts.cause, parentContextId: runIdentityContexts.parentContextId })
+      .from(runIdentityContexts).where(and(eq(runIdentityContexts.id, run.activeIdentityContextId!),
+        eq(runIdentityContexts.companyId, run.companyId), eq(runIdentityContexts.runId, run.id),
+        eq(runIdentityContexts.status, "accepted"))).limit(1);
+    const resumed = run.contextSnapshot?.source === "issue.tree_resume" && identity?.cause === "issue_tree_resumed" &&
+      Boolean(identity.parentContextId);
+    if (!resumed && !(run.contextSnapshot?.source === "chat:github" &&
+        await githubRunReplyState(tx, { ...binding, endpointId: wait.endpointId,
+          sourceCommentId: wait.context.wakeCommentId, requireSettled: true }) === "confirmed")) return null;
+  }
+  if (await resolveExternalChatResponseWaitAuthorizationInTransaction(tx, binding, lockMode) !== "authorized") return null;
   return { kind: "response_wake" as const, summary: "Wait for the next authorized GitHub response to the published review.",
     idempotencyKey: `${publishedGitHubReviewWaitKey}${run.id}:${wait.reviewId}:${wait.headSha}` };
 }

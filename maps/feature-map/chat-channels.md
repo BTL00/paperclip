@@ -76,9 +76,11 @@ Repeat the review wait after a tree resume and a same-agent continuation with
 no new provider message. Accepted requester lineage and the latest saved review
 publication keep the task in review without a self-wake or duplicate publication.
 A newer unreviewed head, changed requester/repository, or revoked access cannot
-inherit the prior head's passive wait. After this run publishes a current-head
-review, omitted/null yielded continuation is filled from authorized server task
-context. A malformed first report can recover by omitting the continuation;
+inherit the prior head's passive wait. Omitted/null yielded continuation is filled
+from authorized server task context after a current-head review, an accepted tree
+resume inheriting it, or a same-head follow-up with this run's processed useful
+reply bound to its exact current source. Pending or ambiguous replies and
+acknowledgements do not authorize this fallback. A malformed first report can recover by omitting the continuation;
 explicit malformed input remains rejected. Revocation between context read,
 finish and commit preserves the task without self-waking. Done policy is unchanged.
 

@@ -87,7 +87,7 @@ export async function readInheritedGitHubReviewWait(db: Db, run: WaitRun) {
   if (!publication) return { kind: "revoked" as const };
   // The caller must still verify live task ownership, destination and principal
   // policy. This normalized source is used only by the passive-wait boundary.
-  return { kind: "published" as const, reviewId: review.id, reviewRunId: review.reviewRunId,
+  return { kind: "published" as const, endpointId: review.endpointId, reviewId: review.id, reviewRunId: review.reviewRunId,
     headSha: review.headSha, context: {
     source: "chat:github", paperclipHarnessCheckedOut: true,
     wakeCommentId: commentId, wakeCommentIds: [commentId],

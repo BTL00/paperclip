@@ -4601,18 +4601,155 @@ describe("native external-chat response wait", () => {
     return { ...fixture, review: review! };
   }
 
-  it("projects only bound authority while deriving a published GitHub completion wait", async () => {
+  async function seedInheritedReviewCompletionTurn(resume: boolean) {
     const fixture = await seedPublishedReviewCompletionTurn();
+    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, fixture.runId));
+    const predecessorId = randomUUID();
+    await db.insert(heartbeatRuns).values({ ...run!, id: predecessorId, activeIdentityContextId: null,
+      status: "succeeded", finishedAt: new Date() });
+    await db.update(chatGitHubReviews).set({ runId: predecessorId }).where(eq(chatGitHubReviews.id, fixture.review.id));
+    if (resume) {
+      const [origin] = await db.insert(runIdentityContexts).values({ companyId: fixture.companyId,
+        runId: predecessorId, revision: 1, messageId: fixture.commentId, responsibleUserId: fixture.userId,
+        cause: "chat_message", correlationId: "dispatch", status: "accepted" }).returning();
+      await db.update(runIdentityContexts).set({ messageId: null, parentContextId: origin!.id,
+        cause: "issue_tree_resumed" }).where(eq(runIdentityContexts.id, run!.activeIdentityContextId!));
+      await db.update(heartbeatRuns).set({ contextSnapshot: { source: "issue.tree_resume", wakeReason: "issue_tree_resumed",
+        issueId: fixture.issueId, paperclipHarnessCheckedOut: true,
+        paperclipWake: { checkedOutByHarness: true, issue: { id: fixture.issueId }, commentIds: [] } },
+      }).where(eq(heartbeatRuns.id, fixture.runId));
+    }
+    return { ...fixture, predecessorId };
+  }
+
+  it.each([undefined, null, "malformed-first"] as const)("derives an omitted inherited GitHub review wait after normal tree resume: %s", async absent => {
+    const fixture = await seedInheritedReviewCompletionTurn(true);
+    const authority = new PaperclipRunnerToolAuthority(db, fixture);
+    const read = () => authority.execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} });
+    const { resolveCompletionContinuation } = await import(new URL("../../../../packages/paperclip-runner/src/drivers/completion-continuation.ts", import.meta.url).href);
+    const report = { ...fixture.result, continuation: absent === "malformed-first" ? "response_wake" : absent };
+    if (absent === "malformed-first") {
+      expect(await resolveCompletionContinuation(report, fixture.runId, read)).toEqual(report);
+      expect(validatePrpStructuredRunResult(report).ok).toBe(false);
+      delete report.continuation;
+    }
+    const resolved = await resolveCompletionContinuation(report, fixture.runId, read) as PrpStructuredRunResult;
+    expect(resolved).toMatchObject({ reportedWorkDisposition: "yielded", continuation: { kind: "response_wake" } });
+    await expect(nativeCompletionFeedback(db, fixture.runId, resolved)).resolves.toContain("accepted");
+    await fixture.port.completeRun({ result: resolved, terminal: fixture.terminal, callerResultId: `wait-result-${fixture.runId}` });
+    await finalizeNativeRun({ db, runId: fixture.runId, workspaceFinalizeStatus: "succeeded", projectRunStatus: true });
+    expect((await db.select().from(issues).where(eq(issues.id, fixture.issueId)))[0]).toMatchObject({ status: "in_review" });
+    expect((await db.select().from(statusDecisions).where(eq(statusDecisions.runId, fixture.runId)))[0])
+      .toMatchObject({ reasonCode: "external_chat_response_waiting", decisionJson: { effects: [] } });
+    await finalizeNativeRun({ db, runId: fixture.runId, workspaceFinalizeStatus: "succeeded", projectRunStatus: true });
+    expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, fixture.companyId))).toHaveLength(0);
+    expect(await db.select().from(chatActions).where(and(eq(chatActions.companyId, fixture.companyId),
+      eq(chatActions.kind, "github_review_publication")))).toHaveLength(1);
+  });
+
+  async function seedCurrentAuthorReply(fixture: Awaited<ReturnType<typeof seedInheritedReviewCompletionTurn>>) {
+    const [reply] = await db.insert(chatActions).values({ companyId: fixture.companyId,
+      endpointId: fixture.endpointId, conversationId: fixture.conversationId, deliveryId: fixture.deliveryId,
+      kind: "github_review_publication", status: "processed", providerActionId: `github_publication:${fixture.issueId}:comment:${randomUUID()}`,
+      payload: { operation: "comment", session: { companyId: fixture.companyId, issueId: fixture.issueId,
+        runId: fixture.runId, agentId: fixture.agentId }, body: "Quantity is ignored by the current total calculation." },
+      result: { id: "123", url: "https://github.com/paperclip/test-repository/pull/1#issuecomment-123" },
+    }).returning();
+    return reply!;
+  }
+
+  it.each([undefined, null] as const)("derives an omitted inherited review wait only after this author reply is delivered: %s", async continuation => {
+    const fixture = await seedInheritedReviewCompletionTurn(false);
+    await seedCurrentAuthorReply(fixture);
+    const authority = new PaperclipRunnerToolAuthority(db, fixture);
+    const { resolveCompletionContinuation } = await import(new URL("../../../../packages/paperclip-runner/src/drivers/completion-continuation.ts", import.meta.url).href);
+    const resolved = await resolveCompletionContinuation({ ...fixture.result, continuation }, fixture.runId,
+      () => authority.execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} })) as PrpStructuredRunResult;
+    expect(resolved).toMatchObject({ continuation: { kind: "response_wake" } });
+    await expect(nativeCompletionFeedback(db, fixture.runId, resolved)).resolves.toContain("accepted");
+    await fixture.port.completeRun({ result: resolved, terminal: fixture.terminal, callerResultId: `wait-result-${fixture.runId}` });
+    await finalizeNativeRun({ db, runId: fixture.runId, workspaceFinalizeStatus: "succeeded", projectRunStatus: true });
+    expect((await db.select().from(issues).where(eq(issues.id, fixture.issueId)))[0]).toMatchObject({ status: "in_review" });
+    expect((await db.select().from(statusDecisions).where(eq(statusDecisions.runId, fixture.runId)))[0])
+      .toMatchObject({ reasonCode: "external_chat_response_waiting", decisionJson: { effects: [] } });
+    expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, fixture.companyId))).toHaveLength(0);
+  });
+
+  it.each(["missing_parent", "wrong_cause", "principal_revoked", "new_head", "pending_publication"] as const)(
+    "does not derive an inherited tree resume wait after %s", async gate => {
+      const fixture = await seedInheritedReviewCompletionTurn(true);
+      if (gate === "missing_parent" || gate === "wrong_cause") await db.update(runIdentityContexts)
+        .set(gate === "missing_parent" ? { parentContextId: null } : { cause: "chat_message" })
+        .where(eq(runIdentityContexts.runId, fixture.runId));
+      if (gate === "principal_revoked") await db.update(companyMemberships).set({ status: "suspended" })
+        .where(eq(companyMemberships.companyId, fixture.companyId));
+      if (gate === "new_head") await db.insert(chatGitHubReviews).values({ ...fixture.review, id: randomUUID(),
+        runId: null, deliveryId: randomUUID(), headSha: "c".repeat(40), state: "queued", assessment: null,
+        createdAt: new Date(Date.now() + 1000) });
+      if (gate === "pending_publication") await db.update(chatActions).set({ status: "received" })
+        .where(eq(chatActions.companyId, fixture.companyId));
+      const context = new PaperclipRunnerToolAuthority(db, fixture)
+        .execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} });
+      if (gate === "principal_revoked") await expect(context).rejects.toThrow("task is no longer available");
+      else expect(await context).toMatchObject({ completionContinuation: null });
+    });
+
+  it.each(["missing", "pending", "unknown", "mixed_unknown", "mixed_missing_assessment", "other_run", "other_source", "ack_only", "partial_assessment", "new_head", "revoked"] as const)(
+    "does not derive an inherited author reply wait after %s", async gate => {
+      const fixture = await seedInheritedReviewCompletionTurn(false);
+      const reply = await seedCurrentAuthorReply(fixture);
+      if (gate === "missing") await db.delete(chatActions).where(eq(chatActions.id, reply.id));
+      if (gate === "pending" || gate === "unknown") await db.update(chatActions)
+        .set({ status: gate === "pending" ? "received" : "failed", result: { deliveryUnknown: true } })
+        .where(eq(chatActions.id, reply.id));
+      if (gate === "mixed_unknown") await db.insert(chatActions).values({ ...reply, id: randomUUID(),
+        providerActionId: `github_publication:${randomUUID()}`, status: "failed", result: { deliveryUnknown: true } });
+      if (gate === "mixed_missing_assessment") await db.insert(chatActions).values({ ...reply, id: randomUUID(),
+        providerActionId: `github_publication:${randomUUID()}`, payload: { ...reply.payload,
+          operation: "assessment", reviewId: fixture.review.id }, result: { published: 1, total: 2 } });
+      if (gate === "other_run") await db.update(chatActions).set({ payload: { ...reply.payload,
+        session: { companyId: fixture.companyId, issueId: fixture.issueId, runId: fixture.predecessorId, agentId: fixture.agentId } } })
+        .where(eq(chatActions.id, reply.id));
+      if (gate === "other_source") {
+        const [source] = await db.select().from(chatDeliveries).where(eq(chatDeliveries.id, fixture.deliveryId));
+        const [other] = await db.insert(chatDeliveries).values({ ...source!, id: randomUUID(), providerEventId: randomUUID(), deduplicationKey: randomUUID() }).returning();
+        await db.update(chatActions).set({ deliveryId: other!.id }).where(eq(chatActions.id, reply.id));
+      }
+      if (gate === "partial_assessment") {
+        const [partial] = await db.insert(chatGitHubReviews).values({ ...fixture.review, id: randomUUID(),
+          runId: fixture.runId, deliveryId: randomUUID(), createdAt: new Date(Date.now() - 86_400_000), publicationReceipts: {
+            partial: { id: "123", url: "https://github.com/paperclip/test-repository/pull/1#issuecomment-123", digest: "partial" },
+          } }).returning();
+        await db.update(chatActions).set({ status: "failed", payload: { ...reply.payload,
+          operation: "assessment", reviewId: partial!.id }, result: { code: "publication_failed" } })
+          .where(eq(chatActions.id, reply.id));
+      }
+      if (gate === "ack_only") await db.update(chatActions).set({ kind: "github_response_comment" })
+        .where(eq(chatActions.id, reply.id));
+      if (gate === "new_head") await db.insert(chatGitHubReviews).values({ ...fixture.review, id: randomUUID(),
+        runId: null, deliveryId: randomUUID(), headSha: "c".repeat(40), state: "queued", assessment: null,
+        createdAt: new Date(Date.now() + 1000) });
+      if (gate === "revoked") await db.update(toolConnections).set({ enabled: false })
+        .where(eq(toolConnections.companyId, fixture.companyId));
+      const context = await new PaperclipRunnerToolAuthority(db, fixture)
+        .execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} });
+      expect(context).toMatchObject({ completionContinuation: null });
+    });
+
+  it.each(["current", "resume", "reply"] as const)("projects only bound authority while deriving a published GitHub completion wait: %s", async turn => {
+    const fixture = turn === "current" ? await seedPublishedReviewCompletionTurn() : await seedInheritedReviewCompletionTurn(turn === "resume");
+    const reply = turn === "reply" ? await seedCurrentAuthorReply(fixture as Awaited<ReturnType<typeof seedInheritedReviewCompletionTurn>>) : null;
     const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, fixture.runId));
     const payload = "unused-saved-review-rendering".repeat(32768);
     await db.update(heartbeatRuns).set({ runnerProfileJson: { retained: payload }, stdoutExcerpt: payload, stderrExcerpt: payload,
       contextSnapshot: { ...run.contextSnapshot, executionContinuation: { savedInput: payload },
         paperclipTaskMarkdown: payload, paperclipWake: { ...(run.contextSnapshot!.paperclipWake as object), retainedPayload: payload } },
     }).where(eq(heartbeatRuns.id, fixture.runId));
+    if (reply) await db.update(chatActions).set({ result: { ...reply.result, savedProviderOutput: payload } }).where(eq(chatActions.id, reply.id));
     const observed = createDb(temporary?.connectionString ?? externalTestDatabaseUrl!);
     const events: Array<Record<string, unknown>> = [], now = Date.now();
     const capture = createDatabaseResponseCapture({ start: now - 100, end: now + 59_000 }, event => events.push(event));
-    installDatabaseResponseCapture(observed, { heartbeatRuns }, capture);
+    installDatabaseResponseCapture(observed, { heartbeatRuns, chatActions }, capture);
     try {
       const context = await new PaperclipRunnerToolAuthority(observed, fixture)
         .execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} });
@@ -4621,6 +4758,8 @@ describe("native external-chat response wait", () => {
       const reads = events.filter(event => event.table === "heartbeat_runs" && event.operation === "select");
       expect(reads.length).toBeGreaterThan(0);
       expect(reads.reduce((bytes, event) => bytes + Number(event.responseValueBytes), 0)).toBeLessThan(16 * 1024);
+      const actionReads = events.filter(event => event.table === "chat_actions" && event.operation === "select");
+      expect(actionReads.reduce((bytes, event) => bytes + Number(event.responseValueBytes), 0)).toBeLessThan(16 * 1024);
       expect(JSON.stringify(context)).not.toContain(payload);
     } finally { capture.flush(); await observed.$client.end(); }
   });
@@ -4736,14 +4875,19 @@ describe("native external-chat response wait", () => {
     } finally { commitGuard.mockRestore(); await Promise.allSettled(writer ? [writer] : []); await writerDb.$client.end({ timeout: 1 }); }
   });
 
-  it.each(["before_feedback", "before_finalization", "during_commit"] as const)(
-    "rechecks a projected GitHub completion wait %s", async phase => {
-      const fixture = await seedPublishedReviewCompletionTurn();
+  it.each((["current", "resume", "reply"] as const).flatMap(turn =>
+    (["before_feedback", "before_finalization", "during_commit"] as const).map(phase => ({ turn, phase }))))(
+    "rechecks a projected GitHub completion wait $turn $phase", async ({ turn, phase }) => {
+      const fixture = turn === "current" ? await seedPublishedReviewCompletionTurn() : await seedInheritedReviewCompletionTurn(turn === "resume");
+      const reply = turn === "reply" ? await seedCurrentAuthorReply(fixture as Awaited<ReturnType<typeof seedInheritedReviewCompletionTurn>>) : null;
       const authority = new PaperclipRunnerToolAuthority(db, fixture);
       const { resolveCompletionContinuation } = await import(new URL("../../../../packages/paperclip-runner/src/drivers/completion-continuation.ts", import.meta.url).href);
       const result = await resolveCompletionContinuation({ ...fixture.result, continuation: null }, fixture.runId,
         () => authority.execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} })) as PrpStructuredRunResult;
-      const revoke = () => db.update(toolConnections).set({ enabled: false }).where(eq(toolConnections.companyId, fixture.companyId));
+      const revoke = () => reply
+        ? db.update(chatActions).set({ status: "failed", result: { deliveryUnknown: true } }).where(eq(chatActions.id, reply.id))
+        : turn === "resume" ? db.update(chatActions).set({ status: "received" }).where(eq(chatActions.companyId, fixture.companyId))
+        : db.update(toolConnections).set({ enabled: false }).where(eq(toolConnections.companyId, fixture.companyId));
       if (phase === "before_feedback") {
         await revoke();
         await expect(nativeCompletionFeedback(db, fixture.runId, result)).rejects.toThrow("no longer authorized");
@@ -4757,7 +4901,9 @@ describe("native external-chat response wait", () => {
         const read = chatWaitAuthority.readPublishedGitHubReviewCompletionContinuationInTransaction;
         guard = vi.spyOn(chatWaitAuthority, "readPublishedGitHubReviewCompletionContinuationInTransaction")
           .mockImplementation(async (...args) => {
-            await args[0].update(toolConnections).set({ enabled: false }).where(eq(toolConnections.companyId, fixture.companyId));
+            if (reply) await args[0].update(chatActions).set({ status: "failed", result: { deliveryUnknown: true } }).where(eq(chatActions.id, reply.id));
+            else if (turn === "resume") await args[0].update(chatActions).set({ status: "received" }).where(eq(chatActions.companyId, fixture.companyId));
+            else await args[0].update(toolConnections).set({ enabled: false }).where(eq(toolConnections.companyId, fixture.companyId));
             return read(...args);
           });
       }
