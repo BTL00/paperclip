@@ -47,6 +47,7 @@ import { adapterExecutionControls } from "../adapter-execution-control.js";
 import { executionFailureRetryCount } from "../execution-recovery-attempt.js";
 import {
   slackMentionAllowsRunStart,
+  resumeDeferredChatWake,
   assertDurableChatWakeupReceipt,
   assertDurableChatWakeupRequest,
   withDurableChatAdmission,
@@ -1857,6 +1858,13 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
       ));
       if (!latest || !latest.finishedAt || !isHeartbeatRunTerminalStatus(latest.status)) continue;
       if (latest.runtimeMode !== "legacy" && latest.runtimeMode !== "native") continue;
+      if (wake.idempotencyKey?.startsWith("chat-inbound:")) {
+        await resumeDeferredChatWake(db, { companyId: wake.companyId, agentId: wake.agentId,
+          issueId: String(wake.payload?.issueId), requestId: wake.id }).catch(() => {
+          logger.warn({ requestId: wake.id }, "saved chat source could not resume after recovery");
+        });
+        continue;
+      }
       const releaseSource = `${latest.companyId}:${String(wake.payload?.issueId)}:${latest.id}:${latest.sourceVersion}`;
       if (latest.runtimeMode === "native" && releasedNativeSources.has(releaseSource)) continue;
       if (latest.runtimeMode === "legacy") {
@@ -2373,10 +2381,13 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
           receipt.payload?.museBindingGeneration !== museRequest.bindingGeneration || receipt.payload?.museRequestDigest !== museRequest.requestDigest)) {
         throw conflict("Request ID reused with changed input.");
       }
-      if (receipt && durableRequest?.failedRunRetry && opts.taskRetryRequestId &&
-          receipt.status === "deferred_issue_execution" && !receipt.runId &&
-          receipt.payload?.taskRetryRequestId === opts.taskRetryRequestId) {
-        // A bound ordinary Retry may reconsider its same deferred chat receipt.
+      if (receipt && durableRequest && receipt.status === "deferred_issue_execution" && !receipt.runId &&
+          ((durableRequest.failedRunRetry && opts.taskRetryRequestId &&
+            receipt.payload?.taskRetryRequestId === opts.taskRetryRequestId) ||
+           (durableRequest.resumeDeferred && !durableRequest.failedRunRetry &&
+            receipt.payload?.issueId === durableRequest.issueId &&
+            queuedCommentIdsFromWakePayload(receipt.payload).includes(durableRequest.commentId)))) {
+        // The live inbound owner or a bound Retry may reconsider the same saved receipt.
         // The issue lock, live chat authority and execution holds below still
         // decide whether it can dispatch; this never creates another wake.
         executionWaitRequestId = receipt.id;
@@ -2822,8 +2833,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
               // system wake. Admission validates the saved user comment or board click.
               (opts.queuedCommentInterruptId ?? opts.queuedCommentRequestId) === executionWaitRequestId
                 ? undefined : eq(agentWakeupRequests.requestedByActorType,
-                    durableRequest?.failedRunRetry && opts.taskRetryRequestId
-                      ? opts.requestedByActorType ?? "" : "user"),
+                    durableRequest ? opts.requestedByActorType ?? "" : "user"),
               opts.queuedCommentInterruptId === executionWaitRequestId
                 ? sql`${agentWakeupRequests.payload}->'queuedCommentInterrupt'->>'actorId' = ${opts.requestedByActorId ?? ""}`
                 : opts.queuedCommentRequestId === executionWaitRequestId ? undefined
@@ -4187,7 +4197,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
           };
           // A deferred durable chat wake already owns this ID and source.
           // Promote that receipt in the same transaction as its successor.
-          const wakeupRequest = durableRequest?.failedRunRetry && executionWaitRequestId === durableRequest.id
+          const wakeupRequest = durableRequest && executionWaitRequestId === durableRequest.id
             ? await tx.update(agentWakeupRequests).set({
                 payload, status: "queued", error: null, finishedAt: null, updatedAt: new Date(),
               }).where(and(eq(agentWakeupRequests.id, durableRequest.id),

@@ -2425,6 +2425,121 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       await db.update(chatEndpoints).set({ botUsername: "gonzo[bot]", status: "active" }).where(eq(chatEndpoints.id, peer.id));
       return peer;
     }
+    it.each(["callback", "restart", "race", "unknown_stop", "wrong_allocation", "paused_endpoint", "revoked_principal", "deleted_comment", "changed_generation", "foreign_scope", "changed_source", "revoked_before_valid"])(
+      "reconsiders the same GitHub reply after stopped native workspace cleanup (%s)", async scenario => {
+        const f = await subscribedGitHubFixture("github:paperclipai/paperclip:419");
+        const issueId = f.conversation.issueId!;
+        const heartbeat = heartbeatService(db);
+        const sourceRunId = randomUUID(), leaseId = randomUUID(), providerLeaseId = randomUUID();
+        const capacityRunId = randomUUID(), stoppedAt = new Date(Date.now() - 10_000);
+        const initial = (await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, f.assignedAgentId)))[0];
+        await db.update(agentWakeupRequests).set({ status: "completed", runId: sourceRunId, finishedAt: stoppedAt })
+          .where(eq(agentWakeupRequests.id, initial.id));
+        await db.update(companies).set({ defaultResponsibleUserId: "owner-user" }).where(eq(companies.id, f.companyId));
+        await db.update(agents).set({ adapterType: "paperclip_runner", status: "running",
+          runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } } }).where(eq(agents.id, f.assignedAgentId));
+        await db.insert(heartbeatRuns).values({ id: capacityRunId, companyId: f.companyId, agentId: f.assignedAgentId,
+          status: "running", contextSnapshot: { issueId: randomUUID() } });
+        runningProcesses.set(capacityRunId, { child: {} as never, graceSec: 0, processGroupId: null });
+        onTestFinished(() => { runningProcesses.delete(capacityRunId); });
+        await db.insert(heartbeatRuns).values({ id: sourceRunId, companyId: f.companyId, agentId: f.assignedAgentId,
+          status: "cancelled", startedAt: new Date(stoppedAt.getTime() - 1000), finishedAt: stoppedAt,
+          runtimeMode: "native", nativeIssueId: issueId, nativePhase: "observed",
+          contextSnapshot: { issueId, source: "chat:github", wakeCommentIds: [initial.payload?.commentId] },
+          resultJson: { workspaceRestoreFailure: "restore_failed", workspaceRestoreRecovery: { leaseIds: [leaseId] } },
+        });
+        await db.insert(nativeRunFinalizations).values({ companyId: f.companyId, issueId,
+          runId: sourceRunId, phase: "terminal_failure" });
+        await db.insert(environmentLeases).values({ id: leaseId, companyId: f.companyId, issueId,
+          heartbeatRunId: sourceRunId, provider: "daytona", providerLeaseId,
+          status: "pending_cleanup", cleanupStatus: "failed", leasePolicy: "ephemeral" });
+        await db.insert(issueRecoveryActions).values({ companyId: f.companyId, sourceIssueId: issueId,
+          kind: "active_run_watchdog", status: "resolved", ownerType: "system", outcome: "blocked",
+          cause: "native_continuation_requires_reconciliation", fingerprint: randomUUID(), nextAction: "Retained workspace repair",
+          evidence: { runId: sourceRunId, automaticRecovery: { replay: "blocked" },
+            workspaceRestoreFailure: "restore_failed", workspaceRestoreRecovery: { leaseIds: [leaseId] },
+            workspaceRecovery: { schema: "paperclip.workspace-recovery.v1", runId: sourceRunId,
+              status: "recovered", stage: "saving_receipts", attempt: 1, attemptLimit: 6, retryable: true, requestIds: [] },
+            systemRecovery: { ...createSystemRecovery(sourceRunId), state: "complete", phase: "reconcile_effects" },
+          },
+        });
+        f.wakeup.mockImplementation(heartbeat.wakeup);
+        await deliverMessage({ callbacks: f.callbacks, endpointId: f.endpoint.id, provider: "github", thread: f.thread,
+          trigger: "subscribed_message", message: makeMessage({ id: "41903", text: "A genuinely new author reply after Stop",
+            userId: "42", userName: "octocat" }) });
+        const comment = (await readIssueCommentsByIssueId(issueId)).find(row => row.body.includes("genuinely new author reply"))!;
+        const [receipt] = (await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, f.assignedAgentId)))
+          .filter(row => row.id !== initial.id);
+        expect(receipt).toMatchObject({ status: "deferred_issue_execution", runId: null,
+          payload: { executionWait: { reason: "remote_cleanup" } } });
+        let nextReceipt: typeof receipt | undefined;
+        let nextCommentId: string | undefined;
+        if (scenario === "revoked_before_valid") {
+          const thread = makeThread({ channelId: "paperclipai/paperclip", id: "github:paperclipai/paperclip:419:rc:4332012267" }).thread;
+          const { id: _id, ...conversation } = f.conversation;
+          await db.insert(chatConversations).values({ ...conversation, externalThreadId: thread.id });
+          await deliverMessage({ callbacks: f.callbacks, endpointId: f.endpoint.id, provider: "github", thread,
+            trigger: "subscribed_message", message: makeMessage({ id: "41904", text: "A live source behind the deleted source",
+              userId: "42", userName: "octocat" }) });
+          nextCommentId = (await readIssueCommentsByIssueId(issueId)).find(row => row.body.includes("live source behind"))!.id;
+          nextReceipt = (await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.agentId, f.assignedAgentId)))
+            .find(row => row.id !== initial.id && row.id !== receipt.id);
+          expect(nextReceipt).toMatchObject({ status: "deferred_issue_execution", runId: null });
+          await db.update(issueComments).set({ deletedAt: new Date() }).where(eq(issueComments.id, comment.id));
+        }
+        const [lease] = await db.select().from(environmentLeases).where(eq(environmentLeases.id, leaseId));
+        if (scenario !== "unknown_stop") await db.update(environmentLeases).set({ status: "expired", cleanupStatus: "success",
+          releasedAt: new Date(), metadata: { remoteExecutionTermination: remoteTerminationReceipt(lease,
+            { providerLeaseId: scenario === "wrong_allocation" ? randomUUID() : providerLeaseId, state: "destroyed" }) } })
+          .where(eq(environmentLeases.id, leaseId));
+        if (scenario === "paused_endpoint") await db.update(chatEndpoints).set({ status: "paused" }).where(eq(chatEndpoints.id, f.endpoint.id));
+        if (scenario === "revoked_principal") await db.update(chatIdentityLinks).set({ status: "revoked", revokedAt: new Date() })
+          .where(eq(chatIdentityLinks.principalId, f.principal.id));
+        if (scenario === "deleted_comment") await db.update(issueComments).set({ deletedAt: new Date() }).where(eq(issueComments.id, comment.id));
+        if (scenario === "changed_generation") await db.update(chatConversations).set({ sessionGeneration: 2 }).where(eq(chatConversations.id, f.conversation.id));
+        if (scenario === "changed_source") {
+          const [action] = await db.select().from(chatActions).where(eq(chatActions.id, receipt.id));
+          await db.update(chatActions).set({ payload: { ...action.payload, commentId: initial.payload?.commentId } })
+            .where(eq(chatActions.id, action.id));
+        }
+        if (scenario === "restart") {
+          await f.service.shutdown();
+          // Fresh application owner and scheduler must recover from saved data,
+          // with no in-memory request object left in the retired chat service.
+          createService(new FakeChatSdkRuntime(), f.providerFetch, { wakeup: heartbeatService(db).wakeup });
+        }
+        const source = (await readHeartbeatRunsByCompanyId(f.companyId)).find(row => row.id === sourceRunId)!;
+        const { resumeDeferredChatWake } = await import("../services/durable-chat-wakeup.js");
+        if (scenario === "foreign_scope") await resumeDeferredChatWake(db, { companyId: randomUUID(), agentId: f.assignedAgentId,
+          issueId, requestId: receipt.id });
+        else if (scenario === "callback" || scenario === "revoked_before_valid") await heartbeat.resumeRemoteStopComments(source);
+        else if (scenario === "race") await Promise.all([heartbeat.resumeRemoteStopComments(source), heartbeat.resumeQueuedRuns()]);
+        else await heartbeatService(db).resumeQueuedRuns();
+        const [settled] = await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.id, receipt.id));
+        const successors = (await readHeartbeatRunsByCompanyId(f.companyId)).filter(row => row.wakeupRequestId === receipt.id);
+        const admitted = ["callback", "restart", "race"].includes(scenario);
+        expect(successors).toHaveLength(admitted ? 1 : 0);
+        expect(settled).toMatchObject({ id: receipt.id, idempotencyKey: receipt.idempotencyKey,
+          requestedByActorId: receipt.requestedByActorId, requestedAt: receipt.requestedAt,
+          status: admitted ? "queued" : "deferred_issue_execution" });
+        if (admitted) {
+          expect(extractWakeCommentIds(successors[0].contextSnapshot)).toEqual([comment.id]);
+          expect(successors[0].contextSnapshot?.chatConversationId).toBe(f.conversation.id);
+          expect(successors[0].retryOfRunId).toBeNull();
+          await heartbeat.resumeRemoteStopComments(source);
+          await heartbeat.resumeQueuedRuns();
+          expect((await readHeartbeatRunsByCompanyId(f.companyId)).filter(row => row.wakeupRequestId === receipt.id)).toHaveLength(1);
+        }
+        if (nextReceipt) {
+          const admittedBehindRevoked = (await readHeartbeatRunsByCompanyId(f.companyId)).filter(row => row.wakeupRequestId === nextReceipt.id);
+          expect(admittedBehindRevoked).toHaveLength(1);
+          expect(extractWakeCommentIds(admittedBehindRevoked[0].contextSnapshot)).toEqual([nextCommentId]);
+        }
+        expect((await readHeartbeatRunsByCompanyId(f.companyId)).find(row => row.id === sourceRunId))
+          .toMatchObject({ status: "cancelled", resultJson: { workspaceRestoreFailure: "restore_failed" } });
+      }, 40_000,
+    );
+
     it("loads only the current configured instruction skills, never provider links or another company", async () => {
       const f = await reviewBotFixture();
       const other = await seedCompany();
