@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { validChatCatalogHumanCounts } from "./chat-catalog-contract.js";
 import type { ChatCatalogCase } from "./chat-catalog-contract.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
@@ -21,7 +22,7 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (!descriptor) return;
   if (!known.has(scenarioId) || !descriptor.oracleVersion || !descriptor.sourceFiles.length
     || !/^\.\/chat-catalog-domains\/[a-z0-9-]+\.js$/.test(descriptor.modulePath)
-    || !descriptor.exportName || descriptor.expectedRunCount < 0 || descriptor.turnTimeoutMs <= 0 || descriptor.attemptTimeoutMs <= 0
+    || !descriptor.exportName || (descriptor.journeyKind !== "browser-boundary" && !validChatCatalogHumanCounts(descriptor)) || descriptor.expectedRunCount < 0 || descriptor.turnTimeoutMs <= 0 || descriptor.attemptTimeoutMs <= 0
     || (descriptor.minimumRunCount ?? descriptor.expectedRunCount) > descriptor.expectedRunCount)
     throw new Error(`Incomplete bounds/provenance for ${scenarioId}`);
   return descriptor;
@@ -43,7 +44,7 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")
@@ -61,14 +62,14 @@ export async function loadIdentityBoundaryImplementation(descriptor: ChatCatalog
   importer: (specifier: string) => Promise<Record<string, unknown>> = specifier => import(specifier)): Promise<IdentityBoundaryCase> {
   if (descriptor.journeyKind !== "browser-boundary" || !["access.sign-in", "onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard"].includes(descriptor.scenarioId))
     throw new Error("Only explicit catalog browser boundaries may bypass Agent Chat prerequisites");
-  if (descriptor.expectedRunCount !== 0 || (descriptor.minimumRunCount ?? 0) !== 0 || descriptor.expectedHumanMessageCount !== 0)
+  if (descriptor.expectedRunCount !== 0 || (descriptor.minimumRunCount ?? 0) !== 0 || descriptor.expectedHumanMessageCount !== 0 || (descriptor.setupHumanMessageCount ?? 0) !== 0)
     throw new Error("Pre-chat boundaries require zero agent admissions and zero persisted chat queries");
   const module = await importer(chatCatalogModuleUrl(descriptor.modulePath));
   const rows = module[descriptor.exportName];
   const selected = Array.isArray(rows) ? rows.filter(row => row.scenarioId === descriptor.scenarioId) : [];
   if (selected.length !== 1) throw new Error("Missing or duplicate browser boundary implementation");
   const implementation = selected[0] as IdentityBoundaryCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "boundaryTarget", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "boundaryTarget", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime boundary descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ([implementation.run, implementation.grade, implementation.cleanup].some(value => typeof value !== "function") || descriptor.queryBindings?.length

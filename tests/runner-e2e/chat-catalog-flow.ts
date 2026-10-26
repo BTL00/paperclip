@@ -3,7 +3,7 @@ import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./ch
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
 import { collectChatRunEvidence, sendChatMessage } from "./chat-flow.js";
-import { validateChatCatalogGrade, type ChatCatalogContext, type ChatCatalogGrade } from "./chat-catalog-contract.js";
+import { chatCatalogHumanHistoryMatches, validateChatCatalogGrade, type ChatCatalogSetupBoundary, type ChatCatalogContext, type ChatCatalogGrade } from "./chat-catalog-contract.js";
 import { findChatCatalogCase, loadChatCatalogImplementation } from "./chat-catalog-registry.js";
 import { chatCatalogInventoryDigest } from "./chat-catalog-inventory.js";
 import { resolveChatCatalogQuery } from "./chat-query-bindings.js";
@@ -21,6 +21,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   let grade: ChatCatalogGrade | undefined;
   let failed = false;
   let renderedQuery = scenario.query;
+  let setupBoundary: ChatCatalogSetupBoundary = { humanCommentIds: [], runIds: [] };
   async function conversation() {
     await context.refreshIssue();
     const issue = context.issue();
@@ -46,8 +47,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     const checks = [...grade.checks,
       { id: "catalog-complete-conditions", passed: !implementation!.coverageGaps?.length,
         detail: implementation!.coverageGaps?.length ? `Missing conditions: ${implementation!.coverageGaps.join(", ")}` : "No known catalog condition is omitted." },
-      { id: "catalog-original-human-query", passed: (implementation!.queryOutcome === "rejected" ? human.length === 0 : human[0]?.body.trim() === renderedQuery.trim()
-        && human.length === (implementation!.expectedHumanMessageCount ?? 1)),
+      { id: "catalog-original-human-query", passed: chatCatalogHumanHistoryMatches({ implementation: implementation!, human, runIds: evidence.runs.map(run => run.id), boundary: setupBoundary, renderedQuery }),
         detail: "The persisted request preserves the catalog query with only audited public-fixture identity bindings; all human turns were declared." },
       ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
         leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
@@ -90,6 +90,13 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       await input.evidence("chat-catalog-prepared-state.json", setupGrade);
       expect(setupGrade.passed && (implementation.setupPolicy?.invariantCheckIds ?? []).every(id => setupGrade.checks.some(check => check.id === id && check.passed)), "Independent scenario prerequisites").toBe(true);
     }
+    const setupConversation = await conversation();
+    const setupHuman = setupConversation.comments.filter(comment => !comment.authorAgentId);
+    expect(setupHuman.length, "Only declared genuine pre-query human turns exist").toBe(implementation.setupHumanMessageCount ?? 0);
+    expect(setupConversation.runs.length <= implementation.expectedRunCount, "Setup runs count toward the total native run bound").toBe(true);
+    setupBoundary = { humanCommentIds: setupHuman.map(comment => comment.id), runIds: setupConversation.runs.map(run => run.id) };
+    await input.evidence("chat-catalog-setup-boundary.json", { ...setupBoundary, setupHumanMessageCount: implementation.setupHumanMessageCount ?? 0,
+      expectedHumanMessageCount: implementation.expectedHumanMessageCount ?? 1, expectedRunCount: implementation.expectedRunCount });
     await input.evidence("chat-catalog-query.json", { query: scenario.query, expectedOutcome: implementation.queryOutcome ?? "persisted", journeyKind: "agent-chat" });
     await sendChatMessage(input.page, renderedQuery);
     if (implementation.queryOutcome === "rejected") {

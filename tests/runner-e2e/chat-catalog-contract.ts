@@ -44,6 +44,8 @@ export interface ChatCatalogCase {
   expectedRunCount: number;
   /** Persisted human comments; explicit followups must be declared before execution. */
   expectedHumanMessageCount?: number;
+  /** Genuine persisted human setup turns before the canonical query; included in the total above. */
+  setupHumanMessageCount?: number;
   minimumRunCount?: number;
   turnTimeoutMs: number;
   attemptTimeoutMs: number;
@@ -67,4 +69,26 @@ export function validateChatCatalogGrade(grade: ChatCatalogGrade): ChatCatalogGr
     throw new Error("Invalid chat catalog oracle result: checks must be nonempty, unique and agree with the verdict");
   }
   return grade;
+}
+
+export interface ChatCatalogSetupBoundary { humanCommentIds: string[]; runIds: string[] }
+export function validChatCatalogHumanCounts(implementation: Pick<ChatCatalogCase, "setupHumanMessageCount" | "expectedHumanMessageCount" | "queryOutcome">): boolean {
+  const setup = implementation.setupHumanMessageCount ?? 0, total = implementation.expectedHumanMessageCount ?? 1;
+  return Number.isSafeInteger(setup) && setup >= 0 && Number.isSafeInteger(total)
+    && total >= setup + (implementation.queryOutcome === "rejected" ? 0 : 1);
+}
+export function chatCatalogHumanHistoryMatches(input: {
+  implementation: Pick<ChatCatalogCase, "setupHumanMessageCount" | "expectedHumanMessageCount" | "queryOutcome">;
+  human: Array<{ id: string; body: string }>; runIds: string[];
+  boundary: ChatCatalogSetupBoundary; renderedQuery: string;
+}): boolean {
+  const count = input.implementation.setupHumanMessageCount ?? 0;
+  return validChatCatalogHumanCounts(input.implementation)
+    && input.boundary.humanCommentIds.length === count
+    && input.boundary.humanCommentIds.every((id, index) => input.human[index]?.id === id)
+    && input.boundary.runIds.every(id => input.runIds.includes(id))
+    && (input.implementation.queryOutcome === "rejected"
+      ? input.human.length === count
+      : input.human[count]?.body.trim() === input.renderedQuery.trim()
+        && input.human.length === (input.implementation.expectedHumanMessageCount ?? 1));
 }

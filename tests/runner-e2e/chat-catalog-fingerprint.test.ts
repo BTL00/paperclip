@@ -67,7 +67,7 @@ it("binds the real selected area and reviewed worker closure without importing u
   expect(files).toContain("tests/runner-e2e/chat-catalog-domains/internal-support.ts");
   expect(files).toContain("packages/adapter-utils/src/workspace-snapshot-thread-worker.ts");
   expect(files).not.toContain("tests/runner-e2e/chat-catalog-domains/internal-goals.ts");
-  expect(files).not.toContain("tests/runner-e2e/chat-catalog-domains/identity-auth.ts");
+  expect(files).toContain("tests/runner-e2e/chat-catalog-domains/identity-auth.ts");
   expect(result.unknownDynamicImports).toEqual([]);
 });
 it("fails closed when preserved prerequisites or a rejected query lack their independent verifier", async () => {
