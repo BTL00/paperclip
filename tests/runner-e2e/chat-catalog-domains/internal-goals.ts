@@ -14,14 +14,14 @@ export function grade_goals(value: unknown) {
   const linkedTask = () => !!current && hasLink(o, "issues", current);
   switch (o.scenarioId) {
     case "goals.create-goal-tree": {
-      const companyGoals = o.goals.filter(row => row.level === "company" && /(?:1[,.]?000|thousand)\s+signups?/i.test(`${row.title} ${row.description ?? ""}`));
+      const companyGoals = o.goals.filter(row => row.level === "company" && /(?:1[,.]?000|1\s?k|thousand)\s+(?:(?:new|user|total|product)\s+){0,2}sign[- ]?ups?/i.test(`${row.title} ${row.description ?? ""}`));
       const teamGoals = o.goals.filter(row => row.level === "team" && /\b(?:launch|launching)\b.*\bwebsite\b|\bwebsite\b.*\blaunch\b/i.test(`${row.title} ${row.description ?? ""}`));
       c.add("one-requested-tree", o.goals.length === 2 && companyGoals.length === 1 && teamGoals.length === 1
         && teamGoals[0]?.parentId === companyGoals[0]?.id && companyGoals[0]?.parentId == null
         && o.goals.every(row => row.companyId === o.companyId), "The two saved goals have exact levels, a valid parent and company scope.");
       c.add("attributed-goal-creation", o.goals.length === 2 && o.goals.every(row => authored("goal.created", row.id)), "Both requested goals were created by the CEO through the production path.");
       c.add("ownership-or-question", o.goals.every(row => row.ownerAgentId === o.leadId) || /\b(?:who|which)\b[^\n]*\b(?:own|owner|responsib)/i.test(o.reply), "Goal ownership is valid or its consequential missing input is explicit.");
-      c.add("hierarchy-link", o.goals.length === 2 && o.goals.every(row => hasLink(o, "goals", row)), "The reply links both saved levels for inspection.");
+      c.add("hierarchy-link", o.goals.length === 2 && hasHierarchyLink(o), "The reply links the saved hierarchy; its real tree exposes both levels.");
       c.add("retry-reuses-first-tree", initialGoalTreeCreation(observation(o.state.firstCreation)) && Array.isArray(o.state.firstIds) && o.state.firstIds.length === 2
         && o.goals.every(row => (o.state.firstIds as string[]).includes(row.id))
         && o.humanQueries.filter(query => query === o.state.retryQuery).length === 2, "An explicit unchanged request reuses the initial goal tree.");
@@ -72,7 +72,7 @@ export function grade_goals(value: unknown) {
 
 const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(id, setup, grade_goals);
 export const goalsCases: readonly ChatCatalogCase[] = [
-  retryDefinition("goals.create-goal-tree", grade_goals, initialGoalTreeCreation),
+  createGoalTree(),
   crossCompanyAlignment(),
   purposeVariants(),
 
@@ -166,11 +166,47 @@ async function sourceReplies(ctx: ChatCatalogContext) {
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 
 function initialGoalTreeCreation(o: InternalObservation | undefined): boolean {
-  if (!o || o.goals.length !== 2 || o.goals.some(row => row.companyId !== o.companyId || !hasLink(o, "goals", row))) return false;
-  const root = o.goals.find(row => row.level === "company" && /(?:1[,.]?000|thousand)\s+signups?/i.test(`${row.title} ${row.description ?? ""}`));
+  if (!o || o.goals.length !== 2 || o.goals.some(row => row.companyId !== o.companyId) || !hasHierarchyLink(o)) return false;
+  const root = o.goals.find(row => row.level === "company" && /(?:1[,.]?000|1\s?k|thousand)\s+(?:(?:new|user|total|product)\s+){0,2}sign[- ]?ups?/i.test(`${row.title} ${row.description ?? ""}`));
   const team = o.goals.find(row => row.level === "team" && /\b(?:launch|launching)\b.*\bwebsite\b|\bwebsite\b.*\blaunch\b/i.test(`${row.title} ${row.description ?? ""}`));
   return !!root && !!team && root.parentId == null && team.parentId === root.id
     && o.goals.every(goal => o.activity.some(row => row.action === "goal.created" && row.entityId === goal.id && row.agentId === o.leadId))
     && (o.goals.every(row => row.ownerAgentId === o.leadId) || /\b(?:who|which)\b[^\n]*\b(?:own|owner|responsib)/i.test(o.reply))
     && !/\b\d+\s*%\s*(?:complete|done|progress)|\balready\s+\d+\s+signups?/i.test(o.reply);
 }
+
+function hasHierarchyLink(o: InternalObservation): boolean {
+  const root = o.goals.find(row => row.level === "company");
+  return !!root && (hasLink(o, "goals", root) || o.links.some(href => {
+    try { const url = new URL(href, o.origin); return url.origin === new URL(o.origin).origin && /\/goals\/?$/.test(url.pathname); }
+    catch { return false; }
+  }));
+}
+function createGoalTree(): ChatCatalogCase {
+  const base = retryDefinition("goals.create-goal-tree", grade_goals, initialGoalTreeCreation);
+  return { ...base, async setup(ctx) {
+    await ctx.input.api.patch(`/api/companies/${ctx.input.fixtures.company.id}`, { description: "Our mission is to grow product adoption and help new teams sign up." });
+    return base.setup(ctx);
+  }, async verifyResult(ctx, _state, value) {
+    const o = observation(value); if (!o || !hasHierarchyLink(o)) throw new Error("No saved goal hierarchy result is accessible");
+    const root = o.goals.find(row => row.level === "company")!; const child = o.goals.find(row => row.parentId === root.id)!;
+    const sourceUrl = ctx.input.page.url();
+    const href = o.links.find(link => {
+      try { const url = new URL(link, o.origin); return url.origin === new URL(o.origin).origin
+        && (hasLink({ ...o, links: [link] }, "goals", root) || /\/goals\/?$/.test(url.pathname)); } catch { return false; }
+    })!;
+    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    if (/\/goals\/?$/.test(new URL(href, o.origin).pathname)) {
+      const rootLink = ctx.input.page.locator(`a[href*=${JSON.stringify(`/goals/${root.id}`)}]`).first();
+      await expect(rootLink).toBeVisible(); await rootLink.click();
+    }
+    await expect(ctx.input.page.getByRole("heading", { name: root.title!, exact: true }).first()).toBeVisible();
+    const childLink = ctx.input.page.locator(`a[href*=${JSON.stringify(`/goals/${child.id}`)}]`).first();
+    await expect(childLink).toBeVisible(); await childLink.click();
+    await expect(ctx.input.page.getByRole("heading", { name: child.title!, exact: true }).first()).toBeVisible();
+    await ctx.input.evidence("chat-catalog-goal-hierarchy-opened.json", { rootId: root.id, childId: child.id, childUrl: ctx.input.page.url() });
+    await ctx.input.page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
+    await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+  } };
+}
+import { expect } from "@playwright/test";

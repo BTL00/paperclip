@@ -179,3 +179,10 @@ describe("retry cannot repair a failed first outcome", () => {
     expect(gradeInternal(o).passed).toBe(false);
   });
 });
+
+it("accepts a genuine goal hierarchy link and ordinary signup phrasing", () => {
+  const o = valid("goals.create-goal-tree"); o.links = ["/ACORN/goals"];
+  o.goals[0]!.title = "Reach 1,000 new sign-ups";
+  const first = o.state.firstCreation as InternalObservation; first.links = ["/ACORN/goals/growth"]; first.goals[0]!.title = "Reach 1,000 new sign-ups";
+  expect(gradeInternal(o).passed).toBe(true);
+});
