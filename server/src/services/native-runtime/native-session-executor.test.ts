@@ -11911,6 +11911,7 @@ describe("runnerd provider runtime wiring", () => {
         return { kind: "description", taskId: "replacement-task", launchPreparationVersion: 1, projectAuthCheckVersion: 1,
           runner: { version: "fixture", digest: `sha256:${"a".repeat(64)}` } };
       });
+      const owner = vi.spyOn(pluginTaskRuntime, "createPluginRunnerTaskOwner");
       state.createBackend.mockClear();
       try {
         const backend = createRunnerdBackend({ db, execution: next, runnerInstanceId: "replacement-runner", runnerIngressAuthorized: true,
@@ -11919,6 +11920,7 @@ describe("runnerd provider runtime wiring", () => {
         if (["canonical", "quarantined"].includes(mode)) {
           await expect(backend).resolves.toBeDefined();
           expect(state.createBackend).toHaveBeenCalledOnce();
+          expect(owner).toHaveBeenCalledWith(expect.objectContaining({ resumeFrom: "old-task", priorIdentity: identity }));
           expect(resume).toHaveBeenCalledWith(db, expect.objectContaining({ leaseId: "replacement-lease", priorIdentity: identity, inspectCheckpoint: true }));
           expect(JSON.parse(await readFile(join(scoped, "plugin-runner-state.json"), "utf8"))).toMatchObject({ ...identity, lifecycle: "suspended" });
           expect(await readFile(join(scoped, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);
@@ -11930,7 +11932,7 @@ describe("runnerd provider runtime wiring", () => {
           }
           if (mode === "ambiguous") expect(await readFile(join(root, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);
         }
-      } finally { resume.mockRestore(); }
+      } finally { owner.mockRestore(); resume.mockRestore(); }
     });
 
   it.each(["verified", "wrong-state", "no-stop-proof", "disposition-retry", "disposition-wrong-state", "disposition-no-stop-proof"] as const)("admits only an authorized same-run plugin checkpoint: %s", async mode => {
