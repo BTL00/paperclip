@@ -492,21 +492,27 @@ export function createHeartbeatRunControl(db: Db, dependencies: HeartbeatRunCont
         completeTerminatedRemoteNativeSessionCleanup({ companyId, runId, remoteCleanupScope });
       }
     }
-    const stopped = state?.runtimeMode === "legacy" && state.status === "cancelled" ? await getRun(runId) : null;
-    if (stopped?.runtimeMode === "legacy" && stopped.status === "cancelled" &&
+    const stopped = state?.status === "cancelled" ? await getRun(runId) : null;
+    // Native interrupt acknowledgement is not physical containment. Publish the
+    // shared Stop receipt only after every exact remote lease confirms teardown.
+    // Keep workspace preservation separate: a stopped provider can still owe files.
+    if (stopped?.status === "cancelled" &&
         parseObject(stopped.resultJson?.executionCancellation).state === "requested" &&
-        await runUsedConversationAdapter(db, stopped) &&
+        (stopped.runtimeMode === "native" ? isAcknowledgedNativeStop(stopped)
+          : stopped.runtimeMode === "legacy" && await runUsedConversationAdapter(db, stopped)) &&
         await remoteExecutionHasStopped(db, companyId, runId)) {
       await db.update(heartbeatRuns).set({
         resultJson: sql`coalesce(${heartbeatRuns.resultJson}, '{}'::jsonb) || ${JSON.stringify({
           executionCancellation: { ...parseObject(stopped.resultJson?.executionCancellation),
             state: "acknowledged", acknowledgedAt: new Date().toISOString(),
             proof: "provider_termination_receipt" },
-          conversationContinuation: CONVERSATION_CONTINUATION_POLICY,
+          ...(stopped.runtimeMode === "legacy" ? { conversationContinuation: CONVERSATION_CONTINUATION_POLICY } : {}),
                  })}::jsonb`,
         updatedAt: new Date(),
       }).where(and(eq(heartbeatRuns.id, runId), eq(heartbeatRuns.companyId, companyId),
-        eq(heartbeatRuns.status, "cancelled")));
+        eq(heartbeatRuns.status, "cancelled"),
+        sql`${heartbeatRuns.resultJson}->'executionCancellation'->>'state' = 'requested'`,
+        stopped.runtimeMode === "native" ? sql`${heartbeatRuns.resultJson}->'nativeCancellation' = ${JSON.stringify(stopped.resultJson?.nativeCancellation)}::jsonb` : undefined));
     }
   }
 
