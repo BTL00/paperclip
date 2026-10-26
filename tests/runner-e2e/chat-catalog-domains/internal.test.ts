@@ -19,6 +19,25 @@ function valid(scenario: string): InternalObservation {
       o.projects[0] = { ...o.projects[0]!, archivedAt: "2026-10-26T12:00:00Z" }; o.state.originalBody = "Delivered"; o.state.originalActivityId = "original";
       o.documents = [{ id: "doc", body: "Delivered" }]; o.activity = [{ id: "original", action: "issue.created", entityId: "task" }, event("project.updated", "p")]; break;
     }
+    case "tasks.website-task":
+    case "tasks.website-without-project":
+    case "projects.project-work": {
+      delete o.state.task; o.state.worker = { id: "morgan" }; o.state.priorTasks = [];
+      o.tasks[0] = { ...o.tasks[0]!, title: scenario === "projects.project-work" ? "Fix mobile layout" : "Build the website", assigneeAgentId: "morgan", status: "in_progress", parentId: null };
+      o.activity = [event("issue.created", "task"), event("project.created", "p")];
+      o.runs[0]!.contextSnapshot = { issueId: "chat", wakeCommentId: "request" };
+      o.runs.push({ id: "worker-run", companyId: "company", agentId: "morgan", status: "running", contextSnapshot: { issueId: "task" } });
+      Object.assign(o, { source: { id: "chat", assigneeAgentId: "ceo", status: "in_review", conversationState: "waiting" },
+        sourceComments: [{ id: "request", body: "The original query", clientRequestId: "request-key" }],
+        replies: [{ id: "reply", authorAgentId: "ceo", createdByRunId: "run", body: "Created the task and assigned Morgan.", createdAt: "2026-10-26T12:00:00Z" }], websiteFiles: [] });
+      if (scenario === "tasks.website-without-project") o.state.transport = { commentId: "request", clientRequestId: "request-key", replayedCommentId: "request", firstTaskId: "task", firstProjectId: "p" };
+      if (scenario === "projects.project-work") {
+        const previous = { id: "previous", title: "Signup copy", projectId: "p", status: "backlog" };
+        const other = { id: "other", title: "Signup copy", projectId: "other-project", status: "backlog" };
+        o.state.priorTasks = [previous, other]; o.tasks.push(previous, other); o.links.push("/ACORN/issues/previous");
+      }
+      break;
+    }
     case "tasks.edit-properties": o.state.worker = { id: "morgan" }; o.tasks = [{ ...o.tasks[0]!, priority: "high", assigneeAgentId: "morgan" }]; o.activity = [event("issue.updated", "task")]; break;
     case "tasks.ambiguous-task": {
       const other = { ...o.tasks[0]!, id: "other", projectId: "other-project", title: "Landing page" };
@@ -92,6 +111,9 @@ function valid(scenario: string): InternalObservation {
 const corrupt: Record<string, (o: InternalObservation) => void> = {
   "projects.create-project": o => o.projects.push({ ...o.projects[0]!, id: "duplicate" }),
   "projects.archive-project": o => { o.documents = []; },
+  "tasks.website-task": o => { o.tasks[0]!.assigneeAgentId = "another-worker"; },
+  "tasks.website-without-project": o => { (o.state.transport as { replayedCommentId: string }).replayedCommentId = "duplicate"; },
+  "projects.project-work": o => { o.tasks[0]!.projectId = "other-project"; },
   "tasks.edit-properties": o => { o.tasks[0]!.assigneeAgentId = "someone-else"; },
   "tasks.ambiguous-task": o => { (o.state.clarification as InternalObservation).tasks[0]!.priority = "high"; },
   "tasks.comment-with-reference": o => { o.comments[0]!.authorAgentId = null; o.comments[0]!.authorUserId = "human"; },
@@ -202,4 +224,29 @@ describe("goal oracle phase binding", () => {
     const o = valid("goals.explain-purpose"); (o.state.initialPurpose as InternalObservation).reply = "The website exists to sell advertising.";
     expect(gradeInternal(o).passed).toBe(false);
   });
+});
+
+
+describe("delegated creation calibration", () => {
+  it("rejects invented finished website without delivered bytes", () => {
+    const o = valid("tasks.website-task"); Object.assign(o, { replies: [{ id: "reply", body: "The website is ready.", createdAt: "2026-10-26T12:00:00Z" }] });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("accepts genuine active work without pretending it has completed", () => {
+    expect(gradeInternal(valid("tasks.website-task")).passed).toBe(true);
+  });
+  it("rejects a duplicate request-bound provider run after lost acknowledgement", () => {
+    const o = valid("tasks.website-without-project"); o.runs.push({ ...o.runs[0]!, id: "duplicate-run" });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects an ungrounded other-project leftover summary", () => {
+    const o = valid("projects.project-work"); o.links = o.links.filter(href => !href.endsWith("previous")); o.links.push("/ACORN/issues/other");
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+
+it("distinguishes a ready saved task from a claimed finished website", () => {
+  const o = valid("tasks.website-task"); Object.assign(o, { replies: [{ id: "reply", body: "The website task is ready for Morgan.", createdAt: "2026-10-26T12:00:00Z" }] });
+  expect(gradeInternal(o).passed).toBe(true);
 });
