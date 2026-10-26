@@ -63,9 +63,19 @@ function openInventory(): ChatCatalogCase {
     }
     originalTasks.push(await task(ctx, "Completed launch work", p.id, { status: "done" }), await task(ctx, "Cancelled launch work", p.id, { status: "cancelled" }),
       await task(ctx, "Unrelated experiment", other.id));
-    return { project: p, originalTasks, ownerLabels: { [worker.id]: "Morgan", [secondWorker.id]: "Riley", unassigned: "Unassigned" } };
+    return { project: p, originalTasks, workerIds: [worker.id, secondWorker.id], ownerLabels: { [worker.id]: "Morgan", [secondWorker.id]: "Riley", unassigned: "Unassigned" } };
   }, gradeOpenInventory);
   return { ...base, sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-task-inventory.ts"], attemptTimeoutMs: 600_000,
+    setupPolicy: { readiness: "preserve-scenario", invariantCheckIds: ["inventory-owners-paused", "lead-ready"] },
+    async verifySetup(ctx, state) {
+      const c = checks();
+      const lead = await ctx.input.api.get<Entity & { lifecycleState: string }>(`/api/agents/${ctx.input.fixtures.agent.id}`);
+      const owners = await Promise.all((state.workerIds as string[]).map(id => ctx.input.api.get<Entity & { lifecycleState: string }>(`/api/agents/${id}`)));
+      c.add("inventory-owners-paused", owners.length === 2 && owners.every(row => row.status === "paused" && row.lifecycleState === "ready"),
+        "The existing inventory owners are genuinely ready but paused so prerequisite task statuses admit no provider work.");
+      c.add("lead-ready", lead.lifecycleState === "ready" && ["idle", "active"].includes(lead.status ?? ""), "The CEO remains ready for the canonical inventory query.");
+      return c.result();
+    },
     async verifyResult(ctx, state, value) {
       const o = observation(value)!; const shown = o.tasks.filter(row => hasLink(o, "issues", row));
       const representatives = new Map<string, Entity>();
