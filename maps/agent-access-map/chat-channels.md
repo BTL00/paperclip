@@ -314,3 +314,11 @@ Evidence: `source-only` — reviewed at `9ef434fe79c57d976b8b03b14c5242db270b832
 Verification: `not-run` — Use the actual permitted writer and run to create one child/publication, confirm recipient delivery and an exact-message reply, and repeat idempotent requests without duplicate sends. Assert run/owner/mode/budget/company/credential/attachment denials and separate read access. Inspect the provider before resolving an unknown write outcome; a 202 or queued publication alone is not proof of delivery.
 
 Gaps: Real AgentMail transport, recipient delivery, and each native tool binding still need live proof. Controlled provider receipts and inbound-reply recipes do not establish a newly initiated external email journey.
+
+Ordinary task Retry can select newer linked-human GitHub input whose original
+admission was skipped by a budget or agent-availability gate. The chat owner
+revalidates its exact processed delivery, company/task/agent/principal, unchanged
+comment, session generation, and admitted instruction snapshot. A separate retry
+receipt preserves the original skipped receipt and older failed native result.
+Current access and normal native stop/cleanup guards still govern execution;
+board wake metadata alone cannot manufacture chat authority or replay old work.

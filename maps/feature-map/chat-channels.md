@@ -227,3 +227,14 @@ Sources: Source: [TaskChatBubble.tsx](../../ui/src/components/task-chat/TaskChat
 ### Documentation scope: Chat and email channel setup
 
 Shared recipes name provider checks; each provider transport/thread/identity/file-size/type combination needs separate live evidence and deeper instructions.
+
+Saved-input Retry regression: fail a disposable GitHub turn, change the
+configured instruction skill, and send a new authorized request while an agent
+budget gate blocks admission. Clear that gate and use the task thread's ordinary
+**Retry** control. Verify the new saved message and its admitted skill snapshot
+reach one run, rather than replaying the previous failed request. Preserve both
+original receipts. With a committed failed native result, continuation requires
+verified controller and environment cleanup; an unknown executor remains held.
+After successful admission, reload and verify that the prior skipped receipt does
+not strand a later real provider reply or tree resume. Provider fixtures support
+this behavior; live fixed-source runtime and destination proof remain separate.
