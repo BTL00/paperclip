@@ -20,12 +20,10 @@ export interface ChatCatalogSetupPolicy {
   /** Required independent prerequisite checks when preserving a scenario-specific policy. */
   invariantCheckIds: readonly string[];
 }
-export interface ChatCatalogQueryBinding {
-  catalogToken: string;
-  stateKey: string;
-  resourceKind: "issue";
-  valueField: "identifier";
-}
+export type ChatCatalogQueryBinding = { catalogToken: string; stateKey: string } & (
+  | { resourceKind: "issue"; valueField: "identifier" }
+  | { resourceKind: "project-repository"; valueField: "fullName" }
+);
 export interface ChatCatalogQueryAttachment {
   /** A genuine UI upload receipt returned by setup; never arbitrary body text. */
   stateKey: string;
