@@ -10,9 +10,24 @@ export interface ChatCatalogContext {
   allRuns(): Promise<ChatRun[]>;
   refreshIssue(): Promise<void>;
 }
+export type ChatCatalogTerminalRunStatus = "succeeded" | "cancelled" | "failed" | "timed_out";
+export type ChatCatalogRunPolicy =
+  | { kind: "terminal-counts"; terminalStatusCounts: Partial<Record<ChatCatalogTerminalRunStatus, number>> }
+  | { kind: "source-settled-with-active-work"; maximumActiveWorkerRuns: number };
+export interface ChatCatalogSetupPolicy {
+  funding?: "standard" | "preserve-scenario";
+  readiness?: "all-ready" | "preserve-scenario";
+  /** Required independent prerequisite checks when preserving a scenario-specific policy. */
+  invariantCheckIds: readonly string[];
+}
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
+  journeyKind?: "agent-chat";
+  authentication?: "local-trusted" | "human-session";
+  setupPolicy?: ChatCatalogSetupPolicy;
+  runPolicy?: ChatCatalogRunPolicy;
+  queryOutcome?: "persisted" | "rejected";
   /** All case/grader helpers must be listed; the suite also fingerprints its complete source tree. */
   sourceFiles: readonly string[];
   oracleVersion: string;
@@ -24,6 +39,8 @@ export interface ChatCatalogCase {
   minimumRunCount?: number;
   turnTimeoutMs: number;
   attemptTimeoutMs: number;
+  verifySetup?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<ChatCatalogGrade>;
+  verifyQueryRejection?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<ChatCatalogGrade>;
   setup(context: ChatCatalogContext): Promise<Record<string, unknown>>;
   /** Only explicit scenario user followups/approvals through visible production UI. */
   act?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<void>;

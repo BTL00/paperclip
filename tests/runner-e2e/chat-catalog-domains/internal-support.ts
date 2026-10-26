@@ -4,19 +4,19 @@ import type { ChatRun } from "../chat-flow.js";
 
 export interface Entity {
   id: string; companyId?: string; name?: string; title?: string; description?: string | null;
-  identifier?: string; status?: string; priority?: string; assigneeAgentId?: string | null;
+  identifier?: string; urlKey?: string; status?: string; priority?: string; assigneeAgentId?: string | null;
   projectId?: string | null; parentId?: string | null; goalId?: string | null; goalIds?: string[];
   level?: string; ownerAgentId?: string | null; archivedAt?: string | null;
   key?: string; body?: string; latestRevisionId?: string; latestRevisionNumber?: number;
   createdByAgentId?: string | null; updatedByAgentId?: string | null; createdByRunId?: string | null;
   createdAt?: string; updatedAt?: string; authorAgentId?: string | null; authorUserId?: string | null;
   issueId?: string; action?: string; agentId?: string | null; actorId?: string; actorType?: string;
-  entityId?: string; details?: Record<string, unknown>;
+  entityId?: string; documentId?: string; originalRevisionId?: string | null; currentRevisionId?: string | null; resolvedByAgentId?: string | null; selectedText?: string; resolvedAt?: string | null; details?: Record<string, unknown>;
 }
 export interface InternalObservation {
-  scenarioId: string; companyId: string; leadId: string; state: Record<string, unknown>;
+  scenarioId: string; origin: string; companyId: string; leadId: string; state: Record<string, unknown>;
   tasks: Entity[]; projects: Entity[]; goals: Entity[]; comments: Entity[];
-  activity: Entity[]; documents: Entity[]; revisions: Entity[]; reply: string; links: string[]; humanQueries: string[]; runs: ChatRun[];
+  activity: Entity[]; annotations?: Entity[]; agents?: Entity[]; documents: Entity[]; revisions: Entity[]; reply: string; links: string[]; humanQueries: string[]; runs: ChatRun[];
 }
 export function entity(state: Record<string, unknown>, key: string): Entity {
   const value = state[key];
@@ -67,17 +67,17 @@ export async function observeInternal(ctx: ChatCatalogContext, state: Record<str
       revisions.push(...await api.get<Entity[]>(`${endpoint}/revisions`));
     }
   }
-  return { scenarioId: ctx.scenario.id, companyId: fixtures.company.id, leadId: fixtures.agent.id,
+  return { scenarioId: ctx.scenario.id, origin: api.baseURL, companyId: fixtures.company.id, leadId: fixtures.agent.id,
     state, tasks: tasks.filter(row => row.id !== source?.id), projects, goals, runs, comments, activity, documents, revisions,
     humanQueries: chat.filter(row => !row.authorAgentId).map(row => row.body ?? ""), reply: replies.map(row => row.body ?? "").join("\n"), links };
 }
 export function hasLink(o: InternalObservation, kind: "issues" | "projects" | "goals", row: Entity): boolean {
   return o.links.some(href => {
     try {
-      const url = new URL(href, "http://fixture.invalid");
-      if (url.origin !== "http://fixture.invalid") return false;
+      const url = new URL(href, o.origin);
+      if (url.origin !== new URL(o.origin).origin) return false;
       const parts = url.pathname.split("/").map(decodeURIComponent); const index = parts.indexOf(kind);
-      return index >= 0 && [row.id, row.identifier].includes(parts[index + 1]);
+      return index >= 0 && [row.id, row.identifier, row.urlKey].includes(parts[index + 1]);
     } catch { return false; }
   });
 }
@@ -85,7 +85,7 @@ export function observation(value: unknown): InternalObservation | undefined {
   if (!value || typeof value !== "object") return;
   const o = value as InternalObservation;
   if (!o.state || ![o.tasks, o.projects, o.goals, o.comments, o.activity, o.documents, o.revisions, o.links, o.humanQueries, o.runs].every(Array.isArray)
-    || typeof o.reply !== "string" || typeof o.companyId !== "string" || typeof o.leadId !== "string") return;
+    || typeof o.reply !== "string" || typeof o.origin !== "string" || typeof o.companyId !== "string" || typeof o.leadId !== "string") return;
   return o;
 }
 export function checks() {
@@ -116,7 +116,7 @@ export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Reco
     await link.click();
     await ctx.input.page.waitForURL(url => {
       const parts = url.pathname.split("/").map(decodeURIComponent); const at = parts.indexOf(kind);
-      return at >= 0 && [row.id, row.identifier].includes(parts[at + 1]);
+      return at >= 0 && [row.id, row.identifier, row.urlKey].includes(parts[at + 1]);
     });
     await expect(ctx.input.page.getByRole("heading", { name: row.title ?? row.name!, exact: true }).first()).toBeVisible();
     await ctx.input.evidence(`chat-catalog-opened-${kind}-${row.id}.json`, { id: row.id, kind, url: ctx.input.page.url(), title: row.title ?? row.name });

@@ -1,15 +1,19 @@
+import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
+import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./chat-catalog-fingerprint.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
 import { collectChatRunEvidence, sendChatMessage } from "./chat-flow.js";
 import { validateChatCatalogGrade, type ChatCatalogContext, type ChatCatalogGrade } from "./chat-catalog-contract.js";
-import { findChatCatalogCase } from "./chat-catalog-registry.js";
+import { findChatCatalogCase, loadChatCatalogImplementation } from "./chat-catalog-registry.js";
 import { chatCatalogInventoryDigest } from "./chat-catalog-inventory.js";
 
 /** The case owns product semantics; this flow owns the actual chat entry point and evidence lifecycle. */
 export async function runChatCatalogFlow(context: ChatCatalogContext) {
   const { input, scenario } = context;
-  const implementation = findChatCatalogCase(scenario.id);
-  if (!implementation) throw new Error(`No executable chat scenario: ${scenario.id}`);
+  const descriptor = findChatCatalogCase(scenario.id);
+  if (!descriptor) throw new Error(`No executable chat scenario: ${scenario.id}`);
+  const fingerprint = chatCatalogCaseFingerprint(descriptor, normalizedChatCatalogExecution(input.execution));
+  const implementation = await loadChatCatalogImplementation(descriptor);
   const deadlineAt = Date.now() + implementation.attemptTimeoutMs - 30_000;
   let state: Record<string, unknown> | undefined;
   let observation: unknown;
@@ -40,13 +44,11 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     const checks = [...grade.checks,
       { id: "catalog-complete-conditions", passed: !implementation!.coverageGaps?.length,
         detail: implementation!.coverageGaps?.length ? `Missing conditions: ${implementation!.coverageGaps.join(", ")}` : "No known catalog condition is omitted." },
-      { id: "catalog-original-human-query", passed: human[0]?.body.trim() === scenario.query.trim()
-        && human.length === (implementation!.expectedHumanMessageCount ?? 1),
+      { id: "catalog-original-human-query", passed: (implementation!.queryOutcome === "rejected" ? human.length === 0 : human[0]?.body.trim() === scenario.query.trim()
+        && human.length === (implementation!.expectedHumanMessageCount ?? 1)),
         detail: "The first persisted human message is the unchanged catalog request and all human turns were declared." },
-      { id: "catalog-bounded-native-runs", passed: evidence.runs.length >= (implementation!.minimumRunCount ?? implementation!.expectedRunCount)
-        && evidence.runs.length <= implementation!.expectedRunCount && evidence.runs.every(run => run.companyId === input.fixtures.company.id
-          && run.runtimeMode === "native" && run.status === "succeeded"),
-        detail: "All observed company provider runs satisfy the declared count, identity and successful native execution bounds." },
+      ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
+        leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
     ];
     grade = { passed: checks.every(check => check.passed), checks };
     await input.evidence("chat-catalog-observation.json", { scenarioId: scenario.id, inventoryDigest: chatCatalogInventoryDigest,
@@ -54,10 +56,12 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     return { grade, runs: evidence.runs, issue: evidence.issue };
   }
   try {
+    await input.evidence("chat-catalog-definition.json", { scenarioId: scenario.id, ...fingerprint,
+      suiteDefinitionHash: input.execution.suiteDefinitionHash, journeyKind: "agent-chat" });
     state = await implementation.setup(context);
     const company = `/api/companies/${input.fixtures.company.id}`;
     const agents = await input.api.get<Array<{ id: string }>>(`${company}/agents`);
-    for (const agent of agents) await pollUntil({ label: `catalog agent readiness ${agent.id}`,
+    if (implementation.setupPolicy?.readiness !== "preserve-scenario") for (const agent of agents) await pollUntil({ label: `catalog agent readiness ${agent.id}`,
       deadlineAt: Math.min(deadlineAt, Date.now() + 45_000), intervalMs: 500,
       load: () => input.api.get<{ lifecycleState: string; status: string; lifecycleError?: string }>(`/api/agents/${agent.id}`),
       accept: value => value.lifecycleState === "ready" && ["idle", "active"].includes(value.status),
@@ -65,18 +69,29 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     });
     const scopes = [{ scopeType: "company", scopeId: input.fixtures.company.id },
       ...agents.map(agent => ({ scopeType: "agent", scopeId: agent.id }))];
-    for (const scope of scopes) await input.api.post(`${company}/budgets/policies`, { ...scope, amount: 500,
+    if (implementation.setupPolicy?.funding !== "preserve-scenario") for (const scope of scopes) await input.api.post(`${company}/budgets/policies`, { ...scope, amount: 500,
       hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
     const funding = await input.api.get<{ policies: Array<{ scopeType: string; scopeId: string; amount: number; hardStopEnabled: boolean; isActive: boolean; unpricedUsagePolicy: string }> }>(`${company}/budgets/overview`);
-    expect(scopes.every(scope => funding.policies.some(policy => policy.scopeType === scope.scopeType && policy.scopeId === scope.scopeId
+    if (implementation.setupPolicy?.funding !== "preserve-scenario") expect(scopes.every(scope => funding.policies.some(policy => policy.scopeType === scope.scopeType && policy.scopeId === scope.scopeId
       && policy.amount === 500 && policy.hardStopEnabled && policy.isActive && policy.unpricedUsagePolicy === "allow")), "Public funding policy persisted").toBe(true);
-    await input.evidence("chat-catalog-funding.json", { scopes, amountCents: 500, hardStopEnabled: true,
-      unpricedUsagePolicy: "allow", setupProbeUsage: "unknown; production hello probes are outside heartbeat accounting" });
+    await input.evidence("chat-catalog-funding.json", { scopes, mode: implementation.setupPolicy?.funding ?? "standard",
+      policies: funding.policies.filter(policy => scopes.some(scope => scope.scopeType === policy.scopeType && scope.scopeId === policy.scopeId)), setupProbeUsage: "unknown; production hello probes are outside heartbeat accounting" });
     await input.evidence("chat-catalog-setup.json", { scenario, state, inventoryDigest: chatCatalogInventoryDigest,
       oracleVersion: implementation.oracleVersion, expectedRunCount: implementation.expectedRunCount,
       minimumRunCount: implementation.minimumRunCount, turnTimeoutMs: implementation.turnTimeoutMs,
       attemptTimeoutMs: implementation.attemptTimeoutMs });
+    if (implementation.verifySetup) {
+      const setupGrade = validateChatCatalogGrade(await implementation.verifySetup(context, state));
+      await input.evidence("chat-catalog-prepared-state.json", setupGrade);
+      expect(setupGrade.passed && (implementation.setupPolicy?.invariantCheckIds ?? []).every(id => setupGrade.checks.some(check => check.id === id && check.passed)), "Independent scenario prerequisites").toBe(true);
+    }
+    await input.evidence("chat-catalog-query.json", { query: scenario.query, expectedOutcome: implementation.queryOutcome ?? "persisted", journeyKind: "agent-chat" });
     await sendChatMessage(input.page, scenario.query);
+    if (implementation.queryOutcome === "rejected") {
+      const rejection = validateChatCatalogGrade(await implementation.verifyQueryRejection!(context, state));
+      await input.evidence("chat-catalog-query-rejection.json", rejection);
+      expect(rejection.passed, "Real browser/API query rejection").toBe(true);
+    }
     if (implementation.act) await implementation.act(context, state);
     let settledAt: number | undefined;
     let passedAt: number | undefined;
@@ -88,8 +103,8 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       },
       reject: result => {
         if (result.runs.length > implementation.expectedRunCount) return "Scenario exceeded its declared run bound";
-        if (result.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status))) return "Observed provider run failed";
-        if (result.runs.length && result.runs.every(run => run.status === "succeeded") && result.issue?.conversationState === "waiting") settledAt ??= Date.now();
+        if (result.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status) && !chatCatalogAllowedRunStatuses(implementation).includes(run.status))) return "Observed provider run failed";
+        if (result.runs.length && result.runs.every(run => !["queued", "running"].includes(run.status)) && result.issue?.conversationState === "waiting") settledAt ??= Date.now();
         else settledAt = undefined;
         return settledAt && Date.now() - settledAt >= 15_000
           ? `Settled scenario failed: ${result.grade.checks.filter(check => !check.passed).map(check => check.id).join(", ")}` : undefined;

@@ -1,3 +1,4 @@
+import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { recoverWorkerTiming } from "./worker-timing.js";
 import { openEvalOperations, type EvalOperations } from "./operations.js";
 import { readRecoveredFeedback } from "./feedback-recovery.js";
@@ -564,7 +565,7 @@ async function runAttempt(input: {
       PAPERCLIP_E2E_ACCOUNTING_CAMPAIGN_ID: accountingCampaignId,
       PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID: accountingAttemptId,
       PAPERCLIP_RUNNER_E2E_INSTALLED_STARTUP_ONLY: options.installedStartupOnly ? "1" : undefined,
-      PAPERCLIP_RUNNER_E2E_PUBLIC_MCP: executions.some(candidate => candidate.task.flow === "public_mcp") ? "1" : "0",
+      PAPERCLIP_RUNNER_E2E_PUBLIC_MCP: executions.some(candidate => candidate.task.flow === "public_mcp" || candidate.suite.id === "chat-features" && findChatCatalogCase(candidate.task.id)?.authentication === "human-session") ? "1" : "0",
       PAPERCLIP_RUNNER_E2E_PORT: String(port),
       PAPERCLIP_RUNNER_E2E_TEMP_ROOT: temporaryRoot,
       PAPERCLIP_RUNNER_E2E_PRIVATE_DIR: privateDir,

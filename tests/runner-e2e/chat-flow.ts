@@ -1,3 +1,4 @@
+import { chatCatalogAllowedRunStatuses } from "./chat-catalog-run-policy.js";
 import { runHiringTemplateFlow } from "./hiring-template-flow.js";
 import { gradeHiringTemplateTurns } from "./hiring-template-turn-accounting.js";
 import type { HiringTemplateEvidence } from "./hiring-template-scoring.js";
@@ -18,6 +19,7 @@ import { enableChatThroughSettings, runChatInterruption, runChatSettingsLifecycl
 import { runActiveReassignment, runWorkerCrash, runAnswerQuality } from "./chat-qualification.js";
 import { matchesRunCount, minimumRunCount } from "./run-count.js";
 import { runChatCompletionUpdate } from "./completion-update-flow.js";
+import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { CHAT_FEATURE_SUITE } from "./chat-feature-cases.js";
 import { runChatFeatureFlow } from "./chat-feature-flow.js";
 
@@ -361,6 +363,8 @@ export interface ChatFlowInput {
   execution: MatrixExecution;
   nonce: string;
   workspacePath: string;
+  /** Attempt-private redaction sink for synthetic secondary-user credentials. Never evidence. */
+  privateSecrets?: string[];
   restart: () => Promise<void>;
   observe: (issue: ChatIssue, runs: ChatRun[]) => void;
   capture: (id: string, label: string, file: string) => Promise<void>;
@@ -374,6 +378,7 @@ export async function runChatFlow(input: ChatFlowInput) {
   const marker = execution.task.buildVisibleMarker(nonce);
   const draftMarker = chatMarker("DRAFT", nonce);
   const caseId = execution.task.id;
+  const catalogDescriptor = execution.suite.id === CHAT_FEATURE_SUITE ? findChatCatalogCase(caseId) : undefined;
   const stopCase = ["stop-new-resume", "stop-startup-new-resume"].includes(caseId);
   const interruptionCase = ["followup-while-running", "revise-while-running"].includes(caseId);
   const expectedStops = new Map<string, string>();
@@ -1007,7 +1012,8 @@ export async function runChatFlow(input: ChatFlowInput) {
         projects,
       });
     }
-    await idle(minimumRunCount(execution.task));
+    if (catalogDescriptor) runs = await allRuns();
+    else await idle(minimumRunCount(execution.task));
     if (execution.suite.id === "hiring-templates") {
       // Refresh the whole consistent evidence generation for the final guard.
       hiringEvidence = await refreshHiringEvidence!();
@@ -1021,6 +1027,10 @@ export async function runChatFlow(input: ChatFlowInput) {
     });
     for (const run of runs.filter((run) => !isResetRun(run))) {
       expect(run.runtimeMode).toBe(execution.profile.expectedRuntimeMode);
+      if (catalogDescriptor?.runPolicy) {
+        expect(chatCatalogAllowedRunStatuses(catalogDescriptor)).toContain(run.status);
+        continue;
+      }
       expect(run.status).toBe(
         expectedStops.get(run.id) ?? (stopCase && run.status === "cancelled"
           ? "cancelled"

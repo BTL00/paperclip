@@ -1,3 +1,4 @@
+import { legacyChatFeatureFingerprint } from "./chat-catalog-fingerprint.js";
 import { runChatCatalogFlow } from "./chat-catalog-flow.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import { expect } from "@playwright/test";
@@ -19,6 +20,8 @@ export async function runChatFeatureFlow(context: {
     return runChatCatalogFlow({ ...context, scenario });
   }
   const caseId = execution.task.id as ChatFeatureCase;
+  await input.evidence("chat-catalog-definition.json", { scenarioId: `tasks.${caseId}`,
+    ...legacyChatFeatureFingerprint(execution), suiteDefinitionHash: execution.suiteDefinitionHash, journeyKind: "agent-chat" });
   const scenario = chatFeatureScenarios.find(row => row.id === `tasks.${caseId}`);
   if (!scenario) throw new Error(`Unregistered chat feature scenario: ${caseId}`);
   const marker = execution.task.buildVisibleMarker(nonce);

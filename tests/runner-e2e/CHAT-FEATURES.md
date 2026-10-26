@@ -22,6 +22,30 @@ must be real or explicitly labeled simulations. The frozen campaign ledger owns
 implementation readiness and all attempts separately from catalog discovery.
 No model judge supplies a generic pass.
 
+Discovery reads pure `chat-catalog-descriptors.json` metadata and does not import
+any domain. The runtime loads the selected area's module and rejects descriptor
+bounds/oracle/policy drift. `chat-catalog-fingerprint.ts` compiles imports to find
+real local dependencies, including transitive helpers and the selected domain,
+and binds the normalized execution, exact scenario/defaults, package versions and
+lockfile. Whole source revision and global suite hash remain separate provenance.
+The six reviewed dynamic resolutions are pinned to their callsite source hashes;
+source drift falls back to conservative source coverage. Installed or external
+journey overrides refuse the reviewed local-chat lane. No global loader hook is
+installed. This permits unchanged cases to retain a measurement when an unrelated,
+unloaded domain changes; a changed executable dependency invalidates that case.
+
+Standard funding/readiness and successful native runs are defaults. A scenario
+that preserves a special funding or paused state declares a setup policy and
+must independently verify its named prerequisites before the query. Declared
+terminal counts distinguish cancellation and denial from successful execution.
+Creation-only journeys may explicitly allow bounded separate worker execution
+while requiring a settled source and their own exact task/assignee oracle.
+Authenticated identity cases select the existing human-session fixture path;
+private secondary-user credentials join the attempt's redaction sink. Scenarios
+whose stated context has no working chat require a genuine boundary journey;
+these cannot receive a native chat pass from seeing an onboarding or login gate.
+
+
 | Scenario | Actual user request | Independent outcome |
 | --- | --- | --- |
 | `tasks.create-backlog` | Add a task for Morgan to draft the launch announcement in Launch, but don't start it yet. | Exactly one task, Launch project, Morgan assignee, backlog at creation, no worker execution, usable chat link after reload. |

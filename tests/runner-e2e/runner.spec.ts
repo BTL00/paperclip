@@ -1,3 +1,4 @@
+import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { createWorkerTiming } from "./worker-timing.js";
 import { FEEDBACK_PERSISTENCE_SUITE, gradeFeedbackPersistence } from "./feedback-persistence.js";
 import { EvalAttemptTrace, evalBraintrustConfig, EVAL_OBSERVABILITY_SECRET_NAMES } from "./braintrust.js";
@@ -918,7 +919,7 @@ for (const execution of executions) {
     try {
       trace?.phase("setup");
       await saveTrace();
-      if (execution.task.flow === "public_mcp") publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
+      if (execution.task.flow === "public_mcp" || execution.suite.id === "chat-features" && findChatCatalogCase(execution.task.id)?.authentication === "human-session") publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
       if (execution.suite.id === "stock-harness") {
         const receipt = verifyStockHarnessPreflight(process.env[STOCK_PREFLIGHT_ENV]);
         await writeSanitizedJson(snapshotsDir, "stock-harness-preflight.json", receipt, secrets);
@@ -1272,6 +1273,7 @@ for (const execution of executions) {
         selectedRuns = contextIntegrity.runs as unknown as RunRecord[];
       } else if (execution.task.flow === "agent_chat") {
         const chat = await runChatFlow({
+          privateSecrets: secrets,
           page, api, fixtures, execution, nonce, workspacePath,
           restart: () => restartChatServer(page, () => restartIsolatedPaperclipServer({ api, requestId: `chat-${nonce}`, deadlineAt: startedAtMs + deadlineMs })),
           observe: (chatIssue, chatRuns) => { issue = chatIssue; selectedRuns = chatRuns; },

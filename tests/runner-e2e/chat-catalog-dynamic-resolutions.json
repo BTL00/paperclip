@@ -1,0 +1,38 @@
+{
+  "packages/adapter-utils/src/workspace-snapshot-thread.ts": {
+    "sourceSha256": "79e837c059cdd1dfb2c7a9c8624c5e124082b3a5462ff40e24e8dcd204f3b559",
+    "resolution": "known-worker-and-pinned-tsx",
+    "dependencies": [
+      "packages/adapter-utils/src/workspace-snapshot-thread-worker.ts"
+    ]
+  },
+  "tests/runner-e2e/public-mcp-client.ts": {
+    "sourceSha256": "768aed950585ee72f32ea204a451bcfe67264bb0c8890371f12caa856e4871a0",
+    "resolution": "pinned-external-mcp-sdk",
+    "dependencies": [
+      "server/package.json"
+    ]
+  },
+  "tests/runner-e2e/remote-native-bootstrap.ts": {
+    "sourceSha256": "7e9b9032b604ed00731b0fc7faf5af41236b88cce4848b92b6f444793ab0e2d2",
+    "resolution": "pinned-external-daytona-sdk",
+    "dependencies": [
+      "packages/plugins/sandbox-providers/daytona/package.json"
+    ]
+  },
+  "tests/runner-e2e/installed-cli.ts": {
+    "sourceSha256": "414a75423585d8120896e07a6b86636446e6ee88990af2726261b3a17fd8bba6",
+    "resolution": "inactive-source-local-chat-lane",
+    "dependencies": []
+  },
+  "tests/runner-e2e/product-journeys/launch.ts": {
+    "sourceSha256": "b0e550358e9475fac6031b36e0fc3a84612d445368616393c140f577fc40420e",
+    "resolution": "inactive-product-journey-dispatch",
+    "dependencies": []
+  },
+  "tests/runner-e2e/github-review-launch.ts": {
+    "sourceSha256": "c68dc905d31fcc49e7edaeaef4ac7201e7d81c23433da4d48cac5fde2425d42b",
+    "resolution": "inactive-github-review-dispatch",
+    "dependencies": []
+  }
+}
