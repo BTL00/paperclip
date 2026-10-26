@@ -2253,6 +2253,16 @@ its live activity takes precedence over the prior owner and exhausted budget.
 Resolved and cancelled actions remain resolved.
 
 
+### Task directories after a fresh retry
+
+A fresh repository-free retry receives its own private attempt directory. Once
+that attempt succeeds, later ordinary input reuses the task's currently bound
+directory, including an attempt directory, and preserves its saved files. The
+binding is re-read before preparation. Only the exact company's task namespace
+is eligible; closed or changed bindings, foreign paths, symlinks and missing
+retained directories fail validation. A later explicitly fresh retry still
+receives a separate clean sibling and does not copy or replay the old turn.
+
 ### Stopped execution workspace recovery instructions
 
 A stopped run can retain a historical workspace repair instruction after machine
