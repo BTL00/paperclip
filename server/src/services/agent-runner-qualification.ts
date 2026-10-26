@@ -16,7 +16,9 @@ export async function qualifyAgentRunner(
   }
   const { environment } = await resolveAgentRunnerEnvironmentForCompany(db, agent.companyId, agent.defaultEnvironmentId);
   if (!environment || environment.id !== expectedEnvironmentId) {
-    throw conflict("The agent's computer changed. Save any environment changes, reload, and retry the upgrade.");
+    throw conflict(agent.adapterType === "paperclip_runner"
+      ? "The agent's computer changed. Save the computer selection, reload, and run its test again."
+      : "The agent's computer changed. Save any environment changes, reload, and retry the upgrade.");
   }
   if (environment.driver !== "sandbox") {
     throw unprocessable("This computer does not need sandbox qualification.");
@@ -39,7 +41,8 @@ export async function qualifyAgentRunner(
     ok: result.ok,
     driver: "sandbox",
     summary: qualified ? "The agent's computer is qualified for runner selection."
-      : "Could not qualify the agent's computer. Retry the upgrade or keep Legacy runner.",
+      : agent.adapterType === "paperclip_runner" ? "Could not verify the saved computer. Run test again."
+        : "Could not qualify the agent's computer. Retry the upgrade or keep Legacy runner.",
     details: {
       platformQualificationRecorded: qualified,
       ...(typeof result.details?.leaseId === "string" ? { leaseId: result.details.leaseId } : {}),
