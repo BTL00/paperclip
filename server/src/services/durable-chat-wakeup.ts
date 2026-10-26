@@ -198,6 +198,23 @@ export function unadmittedChatWakeupCondition(
   )`;
 }
 
+export interface DeferredChatWakeScope {
+  companyId: string;
+  agentId: string;
+  issueId: string;
+  requestId: string;
+}
+const deferredChatWakeOwners = new WeakMap<Db, (input: DeferredChatWakeScope) => Promise<void>>();
+
+/** The live inbound owner reauthorizes the original source. Cleanup owns no chat authority. */
+export function registerDeferredChatWakeOwner(db: Db, owner: (input: DeferredChatWakeScope) => Promise<void>) {
+  deferredChatWakeOwners.set(db, owner);
+  return () => { if (deferredChatWakeOwners.get(db) === owner) deferredChatWakeOwners.delete(db); };
+}
+export async function resumeDeferredChatWake(db: Db, input: DeferredChatWakeScope) {
+  await deferredChatWakeOwners.get(db)?.(input);
+}
+
 /** Internal authority: this object cannot be supplied through a JSON API. */
 export interface DurableChatWakeupRequest {
   readonly id: string;
@@ -210,6 +227,8 @@ export interface DurableChatWakeupRequest {
   readonly requestedAt: Date;
   readonly idempotencyKey: string;
   readonly failedRunRetry?: { readonly failedRunId: string };
+  /** Only the current inbound owner may reconsider its already saved, unconsumed receipt. */
+  readonly resumeDeferred?: true;
   readonly authorize: (tx: Db) => Promise<void>;
 }
 

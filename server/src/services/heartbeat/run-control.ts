@@ -1,3 +1,4 @@
+import { resumeDeferredChatWake } from "../durable-chat-wakeup.js";
 import { notifyEnvironmentCleanup } from "../environment-cleanup-notifications.js";
 import { readNativeStopExecutionEvidence } from "./native-stop-evidence-read.js";
 import { readTaskRetryIntent, reconcileTaskChatRetryReceipts } from "../task-retry.js";
@@ -549,12 +550,19 @@ export function createHeartbeatRunControl(db: Db, dependencies: HeartbeatRunCont
     const pending = await db.select().from(agentWakeupRequests).where(and(
       eq(agentWakeupRequests.companyId, run.companyId), eq(agentWakeupRequests.agentId, run.agentId),
       eq(agentWakeupRequests.status, "deferred_issue_execution"),
-      eq(agentWakeupRequests.requestedByActorType, "user"),
+      inArray(agentWakeupRequests.requestedByActorType, ["user", "system"]),
       requestId ? eq(agentWakeupRequests.id, requestId) : undefined,
       sql`${agentWakeupRequests.payload}->>'issueId' = ${issueId}`,
     )).orderBy(asc(agentWakeupRequests.requestedAt)).limit(50);
     for (const wake of pending) {
-      if (wake.idempotencyKey?.startsWith("chat-inbound:")) continue;
+      if (wake.idempotencyKey?.startsWith("chat-inbound:")) {
+        await resumeDeferredChatWake(db, { companyId: run.companyId, agentId: run.agentId,
+          issueId, requestId: wake.id }).catch(() => {
+          logger.warn({ requestId: wake.id }, "saved chat source could not resume after cleanup");
+        });
+        continue;
+      }
+      if (wake.requestedByActorType !== "user") continue;
       if (readTaskRetryIntent(wake.payload)) { await resumeTaskRetry(wake.companyId, wake.id); continue; }
       let payload = parseObject(wake.payload);
       if (payload.queuedCommentInterrupt) {
