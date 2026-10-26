@@ -15,6 +15,16 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "tasks.completion-with-gate": {
+      const policy = { stages: [{ id: "review-stage", type: "review", participants: [{ type: "user", userId: "riley" }] }] };
+      const t = { ...o.tasks[0]!, status: "in_review", reviewPolicy: "human_only", executionPolicy: policy,
+        executionState: { status: "pending", currentStageId: "review-stage", currentStageType: "review", currentParticipant: { type: "user", userId: "riley" }, completedStageIds: [] } };
+      o.state.task = structuredClone(t); o.state.worker = { id: "morgan" }; o.state.reviewerId = "riley"; o.tasks[0] = t;
+      o.runs.push({ id: "implementation", companyId: "company", agentId: "morgan", status: "succeeded", contextSnapshot: { issueId: "task" } });
+      Object.assign(o, { reviewTask: t, attachments: [{ id: "html", sha256: "a".repeat(64), createdByAgentId: "morgan", createdByRunId: "implementation" }],
+        downloaded: [{ id: "html", sha256: "a".repeat(64), body: "<html><body><h1>Acorn Notes</h1></body></html>" }], interactions: [] });
+      o.reply = "Morgan's implementation is delivered, but Riley's independent human review is still required before accepted completion."; break;
+    }
     case "tasks.attachment-brief": {
       const briefHash = "a".repeat(64); const receipt = { id: "original", companyId: "company", issueId: "chat", issueCommentId: "human-comment",
         createdByUserId: "person", createdByAgentId: null, sha256: briefHash, contentPath: "/api/attachments/original/content" };
@@ -175,6 +185,7 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "tasks.completion-with-gate": o => { o.tasks[0]!.status = "done"; },
   "tasks.attachment-brief": o => { Object.assign(o, { workerDownloadStatus: 403 }); },
   "projects.add-repository": o => { Object.assign(o, { repositoryProject: { ...o.projects[0], workspaces: [{ id: "wrong", repoUrl: "https://github.com/acorn/unapproved" }] } }); },
   "projects.replace-repository": o => { (o.state.beforeOwnerReplacement as { agentStatus: number }).agentStatus = 200; },
@@ -210,7 +221,7 @@ describe("internal chat scenario independent oracles", () => {
       expect(gradeInternal(wrong).passed).toBe(false);
       expect(gradeInternal(undefined).passed).toBe(false);
       const noLinks = structuredClone(good); noLinks.links = [];
-      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository"].includes(definition.scenarioId));
+      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate"].includes(definition.scenarioId));
     });
   }
   it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-done")).passed).toBe(false));
@@ -469,6 +480,20 @@ describe("delegated attachment context calibration", () => {
   });
   it("rejects stale bytes under an available copied filename", () => {
     const o = valid("tasks.attachment-brief"); Object.assign(o, { workerDownloadedHash: "b".repeat(64) });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("governed completion calibration", () => {
+  it("rejects removal of the actual independent review policy", () => {
+    const o = valid("tasks.completion-with-gate"); Object.assign((o as unknown as { reviewTask: object }).reviewTask, { executionPolicy: { stages: [] } });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a fabricated implementation delivery without actual bytes", () => {
+    const o = valid("tasks.completion-with-gate"); Object.assign(o, { downloaded: [] }); expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects accepted-completion prose while the actual human review remains pending", () => {
+    const o = valid("tasks.completion-with-gate"); o.reply = "Review is required, but I marked the task done.";
     expect(gradeInternal(o).passed).toBe(false);
   });
 });
