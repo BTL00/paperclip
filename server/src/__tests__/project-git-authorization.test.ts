@@ -3,7 +3,7 @@ import request from "supertest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { createDb, authUsers, companyMemberships, connectionGrants, executionWorkspaces, heartbeatRuns, issues, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
+import { createDb, authUsers, companyMemberships, connectionGrants, executionWorkspaces, heartbeatRuns, issues, projectAccessMembers, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
 import { LOW_TRUST_REVIEW_PRESET } from "@paperclipai/shared";
 import { ghFetch } from "../services/github-fetch.js";
 import { projectRoutes } from "../routes/projects.js";
@@ -61,6 +61,49 @@ const support = await getEmbeddedPostgresTestSupport();
       expect((await db.select().from(resourceLifecycleEvents).where(eq(resourceLifecycleEvents.resourceId, f.project.id))).length).toBeGreaterThan(0);
       await f.service.set(f.input.companyId, f.project.id, "A", null);
       await expect(f.service.resolve(f.request, f.scope)).rejects.toThrow("Authorize this project");
+    });
+    it("rechecks the consenting user's project access before background credential export", async () => {
+      const f = await projectAuthorizationFixture();
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      await db.update(projects).set({ visibility: "private" }).where(eq(projects.id, f.project.id));
+      await db.insert(projectAccessMembers).values({ companyId: f.input.companyId, projectId: f.project.id, subjectType: "user", subjectId: "A" });
+      expect(await f.service.resolve(f.request, f.scope)).toBe("test-token-A");
+      await db.delete(projectAccessMembers).where(eq(projectAccessMembers.projectId, f.project.id));
+      vault.resolveUserSecretValue.mockClear();
+      await expect(f.service.resolve(f.request, f.scope)).rejects.toThrow("private");
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+    });
+    it("does not lend background consent to a low-trust project", async () => {
+      const f = await projectAuthorizationFixture();
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      await db.update(projects).set({ executionWorkspacePolicy: { authorizationPolicy: { trustBoundary: {
+        mode: LOW_TRUST_REVIEW_PRESET, companyId: f.input.companyId, projectIds: [f.project.id],
+      } } } }).where(eq(projects.id, f.project.id));
+      vault.resolveUserSecretValue.mockClear();
+      await expect(f.service.resolve(f.request, f.scope)).rejects.toThrow("low-trust");
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+    });
+    it("uses the connection's current repository access for sources added after project authorization", async () => {
+      const f = await projectAuthorizationFixture();
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      const [workspace] = await db.insert(projectWorkspaces).values({ companyId: f.input.companyId,
+        projectId: f.project.id, name: "Added repository", repoUrl: "https://github.com/fixture/added",
+        metadata: { githubRepositoryUrl: "https://github.com/fixture/added", githubRepositoryPrivate: true },
+      }).returning();
+      const request = { ...f.request, workspaceId: workspace.id };
+      vault.resolveUserSecretValue.mockClear();
+      await expect(f.service.resolve(request, f.scope)).rejects.toThrow("does not include this repository");
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+      const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, f.selected.id));
+      await db.update(connectionGrants).set({ providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
+        repositoryCount: 2, repositories: [...saved.providerTenant!.github!.repositories!,
+          { id: "2", fullName: "fixture/added", installationId: "1", private: true }],
+      } } }).where(eq(connectionGrants.id, f.selected.id));
+      expect(await f.service.resolve(request, f.scope)).toBe("test-token-A");
+      await db.update(connectionGrants).set({ providerTenant: saved.providerTenant }).where(eq(connectionGrants.id, f.selected.id));
+      vault.resolveUserSecretValue.mockClear();
+      await expect(f.service.resolve(request, f.scope)).rejects.toThrow("does not include this repository");
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
     });
     it("never requests credentials or requires a connection for a known public repository", async () => {
       const f = await projectAuthorizationFixture();

@@ -182,6 +182,13 @@ Legacy workspaces use existing Connector catalog metadata, with anonymous
 GitHub discovery only when visibility is unknown. Unknown visibility defers
 provisioning; it is never assumed public. It never substitutes another grant
 when the selected one fails. Replacing a grant requires explicit reauthorization.
+Project consent follows the selected connection's current GitHub repository access,
+including repositories added to the project later. It does not create a second
+repository approval list. Project repository editors may add sources within that
+connection's access; manage permitted repositories in the GitHub connection.
+Background export also rechecks the consenting user's project read access and the
+project's existing trust policy. Low-trust or unverified projects cannot export a
+raw credential through standing consent.
 
 The trusted plugin capability `projects.git-credentials` enables
 `ctx.projects.resolveGitCredential(projectId, workspaceId, companyId)`. The host

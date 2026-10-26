@@ -50,6 +50,8 @@ describe("ProjectGitAuthorization", () => {
         ),
       );
       expect(container.textContent).toContain("existing GitHub permissions");
+      expect(container.textContent).toContain("Project repository editors can add repositories covered by this connection");
+      expect(container.textContent).toContain("Manage repository access in the GitHub connection");
       expect(container.textContent).toContain("Task runs continue to use their own identity");
       expect(container.textContent).toContain("fixture-login");
       const authorize = [...container.querySelectorAll("button")].find(

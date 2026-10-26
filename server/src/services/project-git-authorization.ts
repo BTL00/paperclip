@@ -18,7 +18,8 @@ import { normalizeProjectRepositoryUrl, projectRepositoryIsPrivate } from "./pro
 import { recordProjectLifecycleEvent } from "./resource-lifecycle-events.js";
 import { persistActivity, publishActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
-import { assertTaskWorkspaceExecutionAccess } from "./task-workspace-access.js";
+import { assertTaskWorkspaceExecutionAccess, assertTaskWorkspaceSourceProjectAccess } from "./task-workspace-access.js";
+import { resolveCoreTrustPreset } from "./trust-preset-resolver.js";
 
 function transientGitToken(token: string | undefined): string {
   if (!token || token.length > 4096 || /[\0\r\n]/.test(token) || token.startsWith("secret://")) {
@@ -219,7 +220,12 @@ export function projectGitAuthorizationService(db: Db) {
         );
       if (!selected)
         throw forbidden("Project GitHub authorization is unavailable; reconnect or select an authorization");
-      // GitHub may expose a broader token; only export for a repository listed by this grant.
+      await assertTaskWorkspaceSourceProjectAccess(db, {
+        type: "board", source: "session", userId: row.gitAuthorizedByUserId,
+      }, input.companyId, row.id);
+      if (resolveCoreTrustPreset({ companyId: input.companyId, workspaceSourceProject: row }).kind !== "standard")
+        throw forbidden("GitHub credentials are not available to low-trust or unverified projects");
+      // Project consent follows this connection's repository access, including future project sources.
       if (
         !selected.grant.providerTenant?.github?.repositories?.some(
           (r) => r.fullName.toLowerCase() === repo.fullName.toLowerCase(),

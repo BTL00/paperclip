@@ -27,6 +27,7 @@ export function ProjectGitAuthorization({ project }: { project: Project }) {
       <p className="text-sm text-muted-foreground">
         Allow this project’s workspace provider to use your GitHub Connector for repository provisioning and maintenance
         until revoked. This shares the Connector credential with the provider using its existing GitHub permissions.
+        Project repository editors can add repositories covered by this connection. Manage repository access in the GitHub connection.
         Task runs continue to use their own identity.
       </p>
       {data?.grantId && (
