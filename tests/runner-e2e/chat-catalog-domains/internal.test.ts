@@ -15,6 +15,16 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "inbox-search.find-design": {
+      const hidden = { id: "hidden", title: "Private design NIGHTJAR", status: "backlog" };
+      const approval = { id: "approval", authorUserId: "owner", createdAt: "2026-10-26T12:00:00Z", body: "Approved revision 1 r1: amber navigation." };
+      o.tasks.push(hidden); Object.assign(o.state, { originalTasks: structuredClone(o.tasks), privateTask: hidden, privateMarker: "NIGHTJAR", ownerId: "owner",
+        approvedRevision: { id: "r1", body: "Amber navigation" }, olderApprovalComment: { ...approval, id: "older", createdAt: "2026-10-26T11:00:00Z" }, approvalComment: approval, draftRevisionId: "r2", draftBody: "Violet draft" });
+      o.documents = [{ id: "doc", key: "plan", latestRevisionId: "r2", body: "Violet draft" }];
+      o.reply = "The approved design is revision 1 with amber navigation. The newer revision is unapproved.";
+      Object.assign(o, { approvedRevision: { id: "r1", body: "Amber navigation" }, approvalComments: [approval], olderApprovalComments: [{ ...approval, id: "older", createdAt: "2026-10-26T11:00:00Z" }], privateReadStatus: 403,
+        agentSearchStatus: 200, agentSearchResults: [{ id: "task" }] }); break;
+    }
     case "inbox-search.archive-done":
     case "inbox-search.restore-archive": {
       const restore = scenario === "inbox-search.restore-archive"; const count = restore ? 3 : 501;
@@ -252,6 +262,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.write-plan": o => { o.revisions[0]!.createdByRunId = "unrelated-run"; },
   "documents-artifacts.resolve-feedback": o => { o.annotations![1]!.status = "resolved"; },
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
+  "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
   "activity.company-overview": o => { o.reply = o.reply.replace("1 blocked", "3 blocked"); },
   "activity.audit-change": o => { o.reply = "Morgan, the current assignee, probably changed it today."; },
 };
