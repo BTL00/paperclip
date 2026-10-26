@@ -32,7 +32,7 @@ import {
 } from "@paperclipai/paperclip-runner";
 import {
   getEmbeddedPostgresTestSupport,
-  startEmbeddedPostgresTestDatabase,
+  startEmbeddedPostgresTestDatabase as startEmbeddedDatabase,
 } from "../../__tests__/helpers/embedded-postgres.js";
 import {
   canonicalNativeRuntimeContextDigest,
@@ -72,6 +72,18 @@ import {
   selectNativeSessionResumeRun,
 } from "./native-session-resume.js";
 import { nativeRuntimeContextFixture } from "./runtime-context.test-fixture.js";
+
+async function startEmbeddedPostgresTestDatabase(prefix: string) {
+  const { resolveExternalTestDatabaseUrl } = await import("../../__tests__/helpers/external-test-database.js");
+  const externalUrl = resolveExternalTestDatabaseUrl("PAPERCLIP_TEST_DATABASE_URL");
+  if (!externalUrl) return startEmbeddedDatabase(prefix);
+  const { closeRegisteredClients } = await import("@paperclipai/db");
+  return { connectionString: externalUrl, cleanup: async () => {
+    const db = createDb(externalUrl);
+    try { await db.execute(sql`TRUNCATE TABLE companies CASCADE`); }
+    finally { await closeRegisteredClients(externalUrl); }
+  } };
+}
 
 const companyId = "10000000-0000-4000-8000-000000000001";
 const issueId = "20000000-0000-4000-8000-000000000002";
@@ -1824,6 +1836,18 @@ describe("rebindNativeSessionCheckpoint", () => {
   );
 
 
+
+  it.each(["local", "remote"] as const)("refreshes only OpenCode's former direct MCP catalog on %s", target => {
+    const legacy = nativeToolContractFingerprintForTarget(target);
+    expect(nativeToolContractFingerprintForTarget(target, "codex")).toBe(legacy);
+    expect(nativeToolContractFingerprintForTarget(target, "acpx")).toBe(legacy);
+    const current = nativeToolContractFingerprintForTarget(target, "opencode");
+    expect(current).not.toBe(legacy);
+    const currentExecution = { ...execution(currentRunId), provider: { kind: "opencode", model: "openrouter/deepseek/deepseek-v4.1-flash-1017", permissionMode: "allow" }, session: { ...execution(currentRunId).session, driverKind: "opencode_server" } } as NativeExecutionInput;
+    const previousExecution = { ...execution(previousRunId), provider: currentExecution.provider, session: currentExecution.session };
+    expect(rebindNativeSessionCheckpoint({ previousRun: previousRun({ nativeToolContractFingerprint: legacy, nativeExecutionInput: previousExecution }), currentExecution, executionTargetKind: target })).toBeNull();
+    expect(rebindNativeSessionCheckpoint({ previousRun: previousRun({ nativeToolContractFingerprint: current, nativeExecutionInput: previousExecution }), currentExecution, executionTargetKind: target })).not.toBeNull();
+  });
 
   it("binds the provider tool catalog to the local or remote execution target", () => {
     const remoteFingerprint = nativeToolContractFingerprintForTarget("remote");

@@ -1995,6 +1995,19 @@ not grant execution authority: calls still use the existing gateway policy,
 approval, revocation, and audit paths.
 
 
+Native OpenCode sessions use the server-owned assigned-tool relay for local and
+remote execution. The provider receives only bounded search and call schemas,
+even when its protocol can fit the full catalog. This bounds provider grammar
+compilation independently of the transport's tool-count and byte limits. Search
+returns pinned tool aliases and schemas, intersects fresh grants, and respects
+planning/ask restrictions. Calls retain the original gateway binding and its
+argument validation, approvals, revocation, and audit rules; prompt arguments
+cannot choose a gateway or credential. Assigned gateway launch credentials stay
+on the controller. OpenCode sessions with the former direct catalog rotate their
+provider checkpoint before reuse; other providers retain their existing tool
+contract fingerprints.
+
+
 ### Use real connection requests (2026-09-14)
 
 When a user asks to connect a known service, the agent searches for that service
