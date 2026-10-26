@@ -1,3 +1,4 @@
+import { projectPrivacyCases } from "./internal-privacy.js";
 import { projectWorkCases } from "./internal-task-creation.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
@@ -39,6 +40,7 @@ export function grade_projects(value: unknown) {
 
 const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(id, setup, grade_projects);
 export const projectsCases: readonly ChatCatalogCase[] = [
+  ...projectPrivacyCases,
   ...projectWorkCases,
   retryDefinition("projects.create-project", grade_projects, initialProjectCreation),
   define("projects.archive-project", async ctx => {

@@ -15,6 +15,13 @@ function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
     case "projects.create-project": o.state = { firstIds: ["p"], retryQuery: "query" }; o.humanQueries = ["query", "query"]; o.tasks = []; o.activity = [event("project.created", "p")]; break;
+    case "projects.private-project": {
+      o.state.ownerId = "person"; o.state.inheritanceTask = { id: "probe", projectId: "p" }; o.state.privateMarker = "protected acquisition";
+      o.tasks.push({ id: "probe", projectId: "p" }); o.activity = [event("project.created", "p")];
+      Object.assign(o, { protectedProject: { ...o.projects[0], name: "Acquisition research", visibility: "private", privacyOwnerUserId: "person" },
+        observer: { projectStatus: 404, taskStatus: 404, projectsStatus: 200, searchStatus: 200, projectsBody: "[]", searchBody: "[]" }, leadStatus: 200, unrelatedAgentStatus: 404, unrelatedPublicStatus: 200 });
+      o.projects[0] = { ...o.projects[0]!, name: "Acquisition research" }; break;
+    }
     case "projects.archive-project": {
       o.projects[0] = { ...o.projects[0]!, archivedAt: "2026-10-26T12:00:00Z" }; o.state.originalBody = "Delivered"; o.state.originalActivityId = "original";
       o.documents = [{ id: "doc", body: "Delivered" }]; o.activity = [{ id: "original", action: "issue.created", entityId: "task" }, event("project.updated", "p")]; break;
@@ -110,6 +117,7 @@ function valid(scenario: string): InternalObservation {
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
   "projects.create-project": o => o.projects.push({ ...o.projects[0]!, id: "duplicate" }),
+  "projects.private-project": o => { Object.assign(o, { unrelatedAgentStatus: 200 }); },
   "projects.archive-project": o => { o.documents = []; },
   "tasks.website-task": o => { o.tasks[0]!.assigneeAgentId = "another-worker"; },
   "tasks.website-without-project": o => { (o.state.transport as { replayedCommentId: string }).replayedCommentId = "duplicate"; },
@@ -249,4 +257,14 @@ describe("delegated creation calibration", () => {
 it("distinguishes a ready saved task from a claimed finished website", () => {
   const o = valid("tasks.website-task"); Object.assign(o, { replies: [{ id: "reply", body: "The website task is ready for Morgan.", createdAt: "2026-10-26T12:00:00Z" }] });
   expect(gradeInternal(o).passed).toBe(true);
+});
+
+
+it("does not mistake an unusable observer search for privacy proof", () => {
+  const o = valid("projects.private-project"); (o as unknown as { observer: { searchStatus: number } }).observer.searchStatus = 403;
+  expect(gradeInternal(o).passed).toBe(false);
+});
+it("does not accept an entirely unauthorized agent as the unrelated-agent control", () => {
+  const o = valid("projects.private-project"); Object.assign(o, { unrelatedPublicStatus: 403 });
+  expect(gradeInternal(o).passed).toBe(false);
 });
