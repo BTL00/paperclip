@@ -61390,6 +61390,49 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.taskRetryRequestId === retry.id)).toHaveLength(1);
         expect((await readHeartbeatRunsById(current!.id))[0]).toMatchObject({ status: "failed", activeIdentityContextId: failed.activeIdentityContextId });
       } finally { probe.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
+      const [firstRetry] = await readHeartbeatRunsById(successor.id);
+      const nextRequest = () => request(app).post(`/api/issues/${issueId}/retry`).send({
+        idempotencyKey: randomUUID(), observedRunId: firstRetry.id });
+      await db.update(heartbeatRuns).set({ sessionIdAfter: "contradictory-provider-session" }).where(eq(heartbeatRuns.id, firstRetry.id));
+      await nextRequest().expect(409);
+      await db.update(heartbeatRuns).set({ sessionIdAfter: null }).where(eq(heartbeatRuns.id, firstRetry.id));
+      await db.update(issueComments).set({ body: "Changed original accepted message", updatedAt: new Date() }).where(eq(issueComments.id, comment.id));
+      await nextRequest().expect(409);
+      await db.update(issueComments).set({ body: comment.body, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id));
+      const [firstIntent] = await readAgentWakeupRequestsById(retry.id);
+      await db.update(agentWakeupRequests).set({ payload: { ...firstIntent.payload,
+        taskRetry: { ...(firstIntent.payload!.taskRetry as object), sourceRunId: firstRetry.id } } }).where(eq(agentWakeupRequests.id, firstIntent.id));
+      await db.update(heartbeatRuns).set({ contextSnapshot: { ...firstRetry.contextSnapshot, previousRunId: firstRetry.id } }).where(eq(heartbeatRuns.id, firstRetry.id));
+      await nextRequest().expect(409);
+      await db.update(agentWakeupRequests).set({ payload: firstIntent.payload }).where(eq(agentWakeupRequests.id, firstIntent.id));
+      await db.update(heartbeatRuns).set({ contextSnapshot: firstRetry.contextSnapshot }).where(eq(heartbeatRuns.id, firstRetry.id));
+      const second = await nextRequest().expect(202);
+      expect(second.body).toMatchObject({ accepted: true, observedRunId: firstRetry.id });
+      expect(second.body.chatActionId).toBeUndefined();
+      const [secondIntent] = await readAgentWakeupRequestsById(second.body.requestId);
+      expect(secondIntent.payload).toMatchObject({ taskRetry: { sourceRunId: firstRetry.id,
+        boardMessageOrigin: { commentId: comment.id, identityContextId: firstRetry.activeIdentityContextId } } });
+      const secondIdentities: string[] = [];
+      const secondProbe = vi.spyOn(runIdentityModule, "initializeRunIdentity").mockImplementation(async (database, input) => {
+        const identity = await realInitialize(database, input);
+        if (input.companyId === companyId) {
+          expect(identity).toMatchObject({ responsibleUserId: "owner-user", parentContextId: firstRetry.activeIdentityContextId });
+          const [executing] = await readHeartbeatRunsById(input.runId);
+          await expect(chatRunSourceMessageId(db, executing, { provider: "github" })).resolves.toBe(f.action.payload.commentId);
+          secondIdentities.push(input.runId);
+          throw new Error("board_retry_identity_probe_complete");
+        }
+        return identity;
+      });
+      try {
+        await heartbeat.resumeExecutionWaitComments();
+        await heartbeat.resumeQueuedRuns();
+        await heartbeat.drainActiveRunExecutions();
+        const [secondRun] = (await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.taskRetryRequestId === secondIntent.id);
+        expect(secondRun).toMatchObject({ status: "failed", error: "board_retry_identity_probe_complete", responsibleUserId: "owner-user" });
+        expect(secondIdentities).toEqual([secondRun.id]);
+        expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.taskRetryRequestId === secondIntent.id)).toHaveLength(1);
+      } finally { secondProbe.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
 
     } finally {
       await db.update(agentWakeupRequests).set({ status: "failed", finishedAt: new Date() }).where(and(
@@ -61743,6 +61786,18 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           const heartbeat = heartbeatService(db);
           const originalAuthorize = durableChatWakeup.authorizeFailedChatRunRetryWake;
           const verified: string[] = [];
+          const identitySources: Array<{ runId: string; messageId: string | null }> = [];
+          const realInitialize = runIdentityModule.initializeRunIdentity;
+          const identityProof = vi.spyOn(runIdentityModule, "initializeRunIdentity").mockImplementation(async (database, input) => {
+            const identity = await realInitialize(database, input);
+            if (input.companyId === companyId && mode === "legacy_execution" && verified.length > 1) {
+              identitySources.push({ runId: input.runId, messageId: identity.messageId });
+              // Exercise the actual initializer after the real Retry execution
+              // authority, without allocating a native provider for this probe.
+              throw new Error("certified_retry_identity_probe_complete");
+            }
+            return identity;
+          });
           const executionProof = vi.spyOn(durableChatWakeup, "authorizeFailedChatRunRetryWake").mockImplementation(async (...args) => {
             const input = args[2];
             const authorized = await originalAuthorize(...args);
@@ -61804,6 +61859,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
                   () => tx.update(issueRecoveryActions).set({ evidence: action.evidence }).where(eq(issueRecoveryActions.id, action.id)));
               }
               verified.push(input.runId!);
+              if (mode === "legacy_execution" && verified.length > 1) return authorized;
               // Stop after the real execution authority boundary. This produces
               // the exact never-started bootstrap shape without a provider call.
               throw conflict("The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
@@ -61847,12 +61903,14 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
               contextSnapshot: { source: "chat:github", wakeCommentId: saved.payload.commentId,
                 wakeCommentIds: [saved.payload.commentId] } });
             expect(verified).toEqual([firstAttempt.id, nextRun.id]);
+            expect(identitySources).toEqual([{ runId: nextRun.id, messageId: saved.payload.commentId }]);
+            await expect(chatRunSourceMessageId(db, nextRun, { provider: "github" })).resolves.toBe(saved.payload.commentId);
             expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.wakeCommentId === saved.payload.commentId))
               .toHaveLength(2);
             expect((await readHeartbeatRunsById(context.runId))[0]).toMatchObject({ status: "failed" });
             expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual(previousPublications);
             return;
-          } finally { executionProof.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
+          } finally { executionProof.mockRestore(); identityProof.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
         }
         await context.service.processFailedChatRunRetry(receipt.chatActionId!);
         expect(await unadmitted()).toHaveLength(mode === "still_budget_blocked" ? 1 : 0);

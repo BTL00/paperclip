@@ -259,7 +259,10 @@ worker, and physical source receipt; it is not deployed provider acceptance.
 Connected board-message preparation failures use the canonical board Retry
 owner only after the exact unchanged comment, original user wake, accepted
 same-user identity and pre-provider settlement are certified. Admission and
-execution recheck the pinned source and claimed successor receipts. This grants
+execution recheck the pinned source and claimed successor receipts. Repeated
+pre-provider failures retain the source only through each canonical intent,
+failed dispatch and accepted parent identity; cycles and chains beyond twenty
+links fail closed. This grants
 no external inbound authority or permission to replay a terminal result; an
 uncertifiable source directs the user to send a new task message. The real
 HTTP/queue regression proves this boundary locally, not hosted provider recovery.

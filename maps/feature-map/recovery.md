@@ -81,7 +81,9 @@ stopped-run recovery checks.
 
 The [connected-task regression](../../server/src/__tests__/chat-channels.integration.test.ts)
 uses HTTP Retry after an accepted board message fails before provider startup.
-It checks the canonical intent, same-user identity and actual queue dispatch;
+It checks the canonical intent, same-user identity and actual queue dispatch,
+then repeats Retry after another contained preparation failure with the same
+source and a new certified successor;
 edited source, contradictory execution evidence and mismatched receipts refuse
 or wait. This local boundary probe deliberately stops before a provider call,
 so it does not establish hosted recovery of the task.

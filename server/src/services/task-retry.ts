@@ -58,35 +58,26 @@ export function readTaskRetryIntent(payload: Record<string, unknown> | null | un
 export async function readTaskRetryBoardMessageOrigin(db: Db, input: {
   companyId: string; issueId: string; agentId: string; sourceRunId: string; actorId: string;
 }) {
-  if (adapterExecutionControls.has(input.sourceRunId)) return null;
-  const [origin] = await db.select({ commentId: issueComments.id, identityContextId: runIdentityContexts.id })
-    .from(heartbeatRuns)
-    .innerJoin(issues, and(eq(issues.id, input.issueId), eq(issues.companyId, input.companyId),
-      eq(issues.assigneeAgentId, input.agentId), sql`${issues.status} not in ('done', 'cancelled')`))
-    .innerJoin(runIdentityContexts, and(eq(runIdentityContexts.id, heartbeatRuns.activeIdentityContextId),
-      eq(runIdentityContexts.companyId, input.companyId), eq(runIdentityContexts.runId, heartbeatRuns.id),
-      eq(runIdentityContexts.status, "accepted"), eq(runIdentityContexts.responsibleUserId, input.actorId)))
-    .innerJoin(issueComments, and(eq(issueComments.id, runIdentityContexts.messageId),
-      eq(issueComments.companyId, input.companyId), eq(issueComments.issueId, input.issueId),
-      eq(issueComments.authorType, "user"), eq(issueComments.authorUserId, input.actorId),
-      sql`${issueComments.createdByRunId} is null`, sql`${issueComments.deletedAt} is null`,
-      eq(issueComments.createdAt, issueComments.updatedAt), sql`nullif(trim(${issueComments.body}), '') is not null`))
-    .innerJoin(agentWakeupRequests, and(eq(agentWakeupRequests.id, heartbeatRuns.wakeupRequestId),
-      eq(agentWakeupRequests.companyId, input.companyId), eq(agentWakeupRequests.agentId, input.agentId),
-      eq(agentWakeupRequests.runId, heartbeatRuns.id), eq(agentWakeupRequests.requestedByActorType, "user"),
-      eq(agentWakeupRequests.requestedByActorId, input.actorId), eq(agentWakeupRequests.reason, "issue_reopened_via_comment"), eq(agentWakeupRequests.status, "failed"),
-      sql`${agentWakeupRequests.payload}->>'issueId' = ${input.issueId}`,
-      sql`${agentWakeupRequests.payload}->>'commentId' = ${issueComments.id}::text`))
-    .where(and(eq(heartbeatRuns.id, input.sourceRunId), eq(heartbeatRuns.companyId, input.companyId),
+  return readBoardMessageRetrySource(db, input, new Set<string>());
+}
+
+async function readBoardMessageRetrySource(db: Db, input: {
+  companyId: string; issueId: string; agentId: string; sourceRunId: string; actorId: string;
+}, seen: Set<string>): Promise<{ commentId: string; identityContextId: string } | null> {
+  if (seen.size >= 20 || seen.has(input.sourceRunId) || adapterExecutionControls.has(input.sourceRunId)) return null;
+  seen.add(input.sourceRunId);
+  const [task] = await db.select({ id: issues.id }).from(issues).where(and(
+    eq(issues.id, input.issueId), eq(issues.companyId, input.companyId), eq(issues.assigneeAgentId, input.agentId),
+    sql`${issues.status} not in ('done', 'cancelled')`));
+  if (!task) return null;
+  const sourceConditions = [
+      eq(heartbeatRuns.id, input.sourceRunId), eq(heartbeatRuns.companyId, input.companyId),
       eq(heartbeatRuns.agentId, input.agentId), eq(heartbeatRuns.responsibleUserId, input.actorId),
       eq(heartbeatRuns.status, "failed"), eq(heartbeatRuns.runtimeMode, "legacy"), eq(heartbeatRuns.errorCode, "setup_failed"),
       sql`${heartbeatRuns.finishedAt} is not null`,
       sql`(${heartbeatRuns.issueId} is null or ${heartbeatRuns.issueId} = ${input.issueId}::uuid)`,
       sql`${heartbeatRuns.contextSnapshot}->>'issueId' = ${input.issueId}`,
       sql`(${heartbeatRuns.contextSnapshot}->>'taskId' is null or ${heartbeatRuns.contextSnapshot}->>'taskId' = ${input.issueId})`,
-      sql`${heartbeatRuns.contextSnapshot}->>'source' = 'issue.comment.reopen'`,
-      sql`${heartbeatRuns.contextSnapshot}->>'wakeCommentId' = ${issueComments.id}::text`,
-      sql`${heartbeatRuns.contextSnapshot}->'wakeCommentIds' = jsonb_build_array(${issueComments.id}::text)`,
       sql`${heartbeatRuns.resultJson}#>>'{executionRecovery,kind}' = 'bootstrap'`,
       sql`${heartbeatRuns.resultJson}#>'{executionRecovery,providerWorkStarted}' = 'false'::jsonb`,
       sql`${heartbeatRuns.resultJson}->>'stopReason' = 'adapter_failed'`,
@@ -120,8 +111,64 @@ export async function readTaskRetryBoardMessageOrigin(db: Db, input: {
           or source_payload_sha256 is not null or protocol_schema_version is not null or event_type not in ('error', 'agent_observability.unavailable', 'lifecycle')
           or (event_type = 'lifecycle' and (message <> 'task.run.measured' or payload->>'durableSettlement' is distinct from 'true'))
           or (event_type = 'error' and message is distinct from ${heartbeatRuns.error})))`,
+  ];
+  const [origin] = await db.select({ commentId: issueComments.id, identityContextId: runIdentityContexts.id })
+    .from(heartbeatRuns)
+    .innerJoin(runIdentityContexts, and(eq(runIdentityContexts.id, heartbeatRuns.activeIdentityContextId),
+      eq(runIdentityContexts.companyId, input.companyId), eq(runIdentityContexts.runId, heartbeatRuns.id),
+      eq(runIdentityContexts.status, "accepted"), eq(runIdentityContexts.responsibleUserId, input.actorId)))
+    .innerJoin(issueComments, and(eq(issueComments.id, runIdentityContexts.messageId),
+      eq(issueComments.companyId, input.companyId), eq(issueComments.issueId, input.issueId),
+      eq(issueComments.authorType, "user"), eq(issueComments.authorUserId, input.actorId),
+      sql`${issueComments.createdByRunId} is null`, sql`${issueComments.deletedAt} is null`,
+      eq(issueComments.createdAt, issueComments.updatedAt), sql`nullif(trim(${issueComments.body}), '') is not null`))
+    .innerJoin(agentWakeupRequests, and(eq(agentWakeupRequests.id, heartbeatRuns.wakeupRequestId),
+      eq(agentWakeupRequests.companyId, input.companyId), eq(agentWakeupRequests.agentId, input.agentId),
+      eq(agentWakeupRequests.runId, heartbeatRuns.id), eq(agentWakeupRequests.requestedByActorType, "user"),
+      eq(agentWakeupRequests.requestedByActorId, input.actorId), eq(agentWakeupRequests.reason, "issue_reopened_via_comment"), eq(agentWakeupRequests.status, "failed"),
+      sql`${agentWakeupRequests.payload}->>'issueId' = ${input.issueId}`,
+      sql`${agentWakeupRequests.payload}->>'commentId' = ${issueComments.id}::text`))
+    .where(and(...sourceConditions,
+      sql`${heartbeatRuns.contextSnapshot}->>'source' = 'issue.comment.reopen'`,
+      sql`${heartbeatRuns.contextSnapshot}->>'wakeCommentId' = ${issueComments.id}::text`,
+      sql`${heartbeatRuns.contextSnapshot}->'wakeCommentIds' = jsonb_build_array(${issueComments.id}::text)`,
     )).limit(1);
-  return origin ?? null;
+  if (origin) return origin;
+  // A repeated preparation failure must retain the same certified board
+  // source through its real coalesced intent and failed dispatch receipt.
+  // Every predecessor is checked again; cycles and long damaged chains fail closed.
+  const [successor] = await db.select({ identityContextId: heartbeatRuns.activeIdentityContextId,
+    retryId: sql<unknown>`${heartbeatRuns.contextSnapshot}->'taskRetryRequestId'`,
+    previousRunId: sql<unknown>`${heartbeatRuns.contextSnapshot}->'previousRunId'`,
+    dispatchKey: agentWakeupRequests.idempotencyKey }).from(heartbeatRuns)
+    .innerJoin(agentWakeupRequests, and(eq(agentWakeupRequests.id, heartbeatRuns.wakeupRequestId),
+      eq(agentWakeupRequests.companyId, input.companyId), eq(agentWakeupRequests.agentId, input.agentId),
+      eq(agentWakeupRequests.runId, heartbeatRuns.id), eq(agentWakeupRequests.status, "failed"),
+      eq(agentWakeupRequests.reason, "task_retry"), eq(agentWakeupRequests.requestedByActorType, "user"),
+      eq(agentWakeupRequests.requestedByActorId, input.actorId)))
+    .where(and(...sourceConditions, sql`${heartbeatRuns.contextSnapshot}->'boardMessageRetry' = 'true'::jsonb`)).limit(1);
+  if (!successor?.identityContextId || !z.string().uuid().safeParse(successor.retryId).success ||
+      successor.dispatchKey !== `task-retry-dispatch:${successor.retryId}`) return null;
+  const [receipt] = await db.select().from(agentWakeupRequests).where(and(
+    eq(agentWakeupRequests.id, String(successor.retryId)), eq(agentWakeupRequests.companyId, input.companyId),
+    eq(agentWakeupRequests.agentId, input.agentId), eq(agentWakeupRequests.runId, input.sourceRunId),
+    eq(agentWakeupRequests.status, "coalesced"), eq(agentWakeupRequests.reason, "task_retry"),
+    eq(agentWakeupRequests.requestedByActorType, "user"), eq(agentWakeupRequests.requestedByActorId, input.actorId),
+    sql`${agentWakeupRequests.payload}->>'issueId' = ${input.issueId}`));
+  const intent = readTaskRetryIntent(receipt?.payload);
+  if (!intent?.boardMessageOrigin || intent.generationId !== receipt!.id || intent.actorId !== input.actorId ||
+      intent.chatActionId || intent.canonicalIntentId || intent.sourceRunId !== successor.previousRunId) return null;
+  const [identity] = await db.select({ id: runIdentityContexts.id }).from(runIdentityContexts).where(and(
+    eq(runIdentityContexts.id, successor.identityContextId), eq(runIdentityContexts.companyId, input.companyId),
+    eq(runIdentityContexts.runId, input.sourceRunId), eq(runIdentityContexts.responsibleUserId, input.actorId),
+    eq(runIdentityContexts.status, "accepted"), eq(runIdentityContexts.cause, "task_retry"),
+    eq(runIdentityContexts.parentContextId, intent.boardMessageOrigin.identityContextId),
+    sql`${runIdentityContexts.messageId} is null`)).limit(1);
+  if (!identity) return null;
+  const parent = await readBoardMessageRetrySource(db, { ...input, sourceRunId: intent.sourceRunId }, seen);
+  return parent && parent.commentId === intent.boardMessageOrigin.commentId &&
+    parent.identityContextId === intent.boardMessageOrigin.identityContextId
+    ? { commentId: parent.commentId, identityContextId: identity.id } : null;
 }
 
 /** Caller holds the issue dispatch lock. Newer work supersedes an unadmitted
@@ -234,7 +281,7 @@ export async function requestTaskRetry(input: {
       ? await readTaskRetryBoardMessageOrigin(db, { companyId: issue.companyId,
         issueId: issue.id, agentId: issue.assigneeAgentId, sourceRunId: latest.id, actorId: input.actorId }) : null;
     if (boardMessageOrigin) intent.boardMessageOrigin = boardMessageOrigin;
-    if (chat && !active && !busy && !boardMessageOrigin && latest.contextSnapshot?.source === "issue.comment.reopen" &&
+    if (chat && !active && !busy && !boardMessageOrigin && (latest.contextSnapshot?.source === "issue.comment.reopen" || latest.contextSnapshot?.boardMessageRetry === true) &&
         latest.responsibleUserId === input.actorId) {
       throw conflict("This saved message cannot be retried safely. Send a new message on the task to continue from saved work.",
         { code: "chat_failed_run_retry_not_authorized", reason: "saved_board_message_not_replayable" });
