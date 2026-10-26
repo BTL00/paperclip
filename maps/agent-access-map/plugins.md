@@ -136,7 +136,7 @@ active run identity and trust boundary. UI/data/tool invocations have no export
 authority. No task identity is retained for maintenance.
 
 Evidence: owned embedded-database grant/route fixtures in
-`server/src/__tests__/github-operation-credentials.test.ts`, worker invocation
+`server/src/__tests__/project-git-authorization.test.ts`, worker invocation
 fixtures in `server/src/__tests__/plugin-worker-manager.test.ts`, and capability
 and scope denials in `packages/plugins/sdk/tests/host-client-factory.test.ts`.
 These are automated fixture checks, not live provider qualification.
