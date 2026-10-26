@@ -43,7 +43,9 @@ export function grade_goals(value: unknown) {
       c.add("context-only", !!before && sameTask(before, current, ["goalId"]) && o.tasks.length === 1 && o.goals.length === 1,
         "Alignment does not alter priority, ownership, execution state or duplicate records.");
       c.add("attributed-alignment", !!current && authored("issue.updated", current.id) && !!projectNow && authored("project.updated", projectNow.id), "Both association writes are independently attributed.");
-      c.add("linked-work-and-goal", linkedTask() && !!projectNow && hasLink(o, "projects", projectNow) && hasLink(o, "goals", growth), "Chat gives inspectable task, project and strategic goal references.");
+      const initialReply = (o.state.authorizedAlignment as { reply?: string } | undefined)?.reply;
+      c.add("phase-bound-strategic-context-explanation", typeof initialReply === "string" && explainsAlignmentOnly(initialReply),
+        "The initial authorized reply explains goal alignment as a context-only change, without claiming priority, reassignment or execution changes.");
       break;
     }
     case "goals.explain-purpose": {
@@ -103,15 +105,41 @@ function crossCompanyAlignment(): ChatCatalogCase {
             && o.runs.length === 1 && o.runs.every(row => row.status === "succeeded") && ctx.issue()?.conversationState === "waiting";
         },
       });
-      state.authorizedAlignment = { taskGoalId: first.tasks.find(row => row.id === entity(state, "task").id)?.goalId,
+      state.authorizedAlignment = { reply: first.reply, runIds: first.runs.map(row => row.id), taskGoalId: first.tasks.find(row => row.id === entity(state, "task").id)?.goalId,
         projectGoalIds: first.projects.find(row => row.id === entity(state, "project").id)?.goalIds };
       await ctx.input.evidence("chat-catalog-before-cross-company-request.json", { authorizedAlignment: state.authorizedAlignment });
       const { sendChatMessage } = await import("../chat-flow.js");
       state.foreignBaselineCommentIds = (await sourceReplies(ctx)).map(row => row.id);
       await sendChatMessage(ctx.input.page, String(state.foreignRequest));
     },
+    async verifyResult(ctx, state, value) {
+      const o = observation(value); if (!o) throw new Error("Missing independently read-back alignment");
+      const sourceUrl = ctx.input.page.url(); const growth = entity(state, "growth");
+      for (const [kind, row] of [["issues", entity(state, "task")], ["projects", entity(state, "project")]] as const) {
+        const saved = (kind === "issues" ? o.tasks : o.projects).find(item => item.id === row.id);
+        if (!saved) throw new Error("Aligned result is missing from public readback");
+        const href = o.links.find(link => hasLink({ ...o, links: [link] }, kind, saved));
+        if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+        else await ctx.input.page.goto(new URL(`/${ctx.input.fixtures.company.issuePrefix}/${kind}/${saved.identifier ?? saved.urlKey ?? saved.id}`, o.origin).href, { waitUntil: "domcontentloaded" });
+        await expect(ctx.input.page.getByRole("heading", { name: saved.title ?? saved.name!, exact: true }).first()).toBeVisible();
+        await ctx.input.evidence(`chat-catalog-alignment-opened-${kind}.json`, { id: saved.id, goalId: growth.id, url: ctx.input.page.url(), viaReturnedLink: !!href });
+        await ctx.input.page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
+        await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+      }
+    },
     async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
   };
+}
+
+function explainsAlignmentOnly(reply: string): boolean {
+  if (!/\b(?:goal|growth|strategic|alignment)\b/i.test(reply)) return false;
+  const unchangedAll = /\b(?:no other (?:fields?|properties|changes)|only[^.\n]*(?:goal|strategic|alignment)|(?:goal|strategic|alignment)[^.\n]*only)\b/i.test(reply);
+  const unchanged = (category: RegExp) => reply.split(/[.\n;]/).some(part => category.test(part)
+    && /\b(?:unchanged|not changed|did not|didn't|without|no change|same|preserved|remain)\b/i.test(part));
+  if (!unchangedAll && !(unchanged(/\bpriority\b/i) && unchanged(/\b(?:owner|ownership|assignee|assignment)\b/i)
+    && unchanged(/\b(?:execution|status|running|started|work state)\b/i))) return false;
+  return !reply.split(/[.\n;]/).some(part => !/\b(?:not|no|without|unchanged|didn't|hasn't)\b/i.test(part)
+    && /\b(?:raised|lowered|increased|decreased|changed|set)\b[^.\n]*\bpriority\b|\b(?:assigned|reassigned)\b|\b(?:started|launched|began|resumed)\b[^.\n]*\b(?:work|execution|task|run)\b/i.test(part));
 }
 
 import { observeInternal } from "./internal-support.js";
