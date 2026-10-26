@@ -61015,7 +61015,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
   );
 
   it.each([
-    ...(["accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
+    ...(["accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
       .map(mode => ({ provider: "github" as const, mode })),
   ])("retries the newer saved $provider request instead of the failed request after a budget hold: $mode", async ({ provider, mode }) => {
     const context = await failedChatRetryFixture(provider, undefined, true);
@@ -61082,7 +61082,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           await db.insert(nativeRunResults).values({ id: resultId, companyId, issueId: context.issue.id,
             runId: context.runId, completionContractId: contractId, serverFingerprint: resultId,
             schemaStatus: "accepted", canonicalSha256: resultId,
-            resultJson: { terminal: { runTerminalState: mode === "committed_succeeded" ? "succeeded" : "failed" } } });
+            resultJson: { terminal: { runTerminalState: mode.startsWith("committed_succeeded") ? "succeeded" : "failed" } } });
           await db.insert(nativeRunFinalizations).values({ companyId, issueId: context.issue.id,
             runId: context.runId, resultId, phase: "committed",
             leaseOwner: mode === "committed_live_controller" ? "active-controller" : null });
@@ -61094,17 +61094,39 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
               remoteExecutionTermination: remoteTerminationReceipt(lease, { providerLeaseId: lease.providerLeaseId, state: "destroyed" }) } });
         }
       }
-      if (mode === "committed_consumed") await db.update(heartbeatRuns).set({ contextSnapshot: {
+      if (["committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication"].includes(mode)) {
+        // A failed native run materializes its summary before delivery. Keep
+        // this historical output distinct from the newer user's request.
+        const [resultComment] = await db.insert(issueComments).values({ companyId, issueId: context.issue.id,
+          authorAgentId: context.fixture.assignedAgentId, createdByRunId: context.runId,
+          body: "The OpenCode run failed before it completed." }).returning();
+        await db.insert(chatPublications).values({ companyId, endpointId: context.endpoint.id,
+          conversationId: context.conversation.id, issueId: context.issue.id, commentId: resultComment.id,
+          idempotencyKey: `run:${context.runId}:failed-result`, payload: { text: resultComment.body },
+          state: ["committed_failed_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication"].includes(mode) ? "failed"
+            : mode === "committed_unknown_publication" ? "delivery_unknown" : "pending",
+          redactedError: "GitHub failure has no request binding" });
+        if (mode === "committed_mixed_publication") await db.insert(chatPublications).values({ companyId,
+          endpointId: context.endpoint.id, conversationId: context.conversation.id, issueId: context.issue.id,
+          commentId: resultComment.id, idempotencyKey: `run:${context.runId}:uncertain-result`,
+          payload: { text: resultComment.body }, state: "delivery_unknown" });
+      }
+      if (mode.startsWith("committed_consumed")) await db.update(heartbeatRuns).set({ contextSnapshot: {
         ...((await readHeartbeatRunsById(context.runId))[0]).contextSnapshot,
         wakeCommentId: saved.payload.commentId, wakeCommentIds: [saved.payload.commentId],
       } }).where(eq(heartbeatRuns.id, context.runId));
       if (mode === "malformed_previous") await db.update(heartbeatRuns).set({ contextSnapshot: {
         ...((await readHeartbeatRunsById(context.runId))[0]).contextSnapshot, wakeCommentIds: ["unbound"],
       } }).where(eq(heartbeatRuns.id, context.runId));
+      const previousPublications = await readChatPublicationsByEndpointId(context.endpoint.id);
       const request = { db, companyId, issueId: context.issue.id, actorId: "owner-user", actorSource: "cloud_tenant",
         observedRunId: context.runId, idempotencyKey: randomUUID(), prepareChatRetry: context.service.prepareFailedChatRunRetry };
-      if (mode === "committed_succeeded" || mode === "committed_consumed" || mode === "malformed_previous") {
-        await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: { code: "chat_failed_run_retry_not_authorized" } });
+      if (mode.startsWith("committed_succeeded") || mode.startsWith("committed_consumed") || mode === "malformed_previous" || mode === "committed_unknown_publication" || mode === "committed_pending_publication" || mode === "committed_mixed_publication") {
+        await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: {
+          code: "chat_failed_run_retry_not_authorized",
+          ...(mode.endsWith("publication") ? { reason: mode === "committed_consumed_publication" || mode === "committed_succeeded_publication"
+            ? "accepted_result_without_new_input" : "prior_result_publication" } : {}),
+        } });
         expect(await unadmitted()).toHaveLength(1);
         return;
       }
@@ -61177,7 +61199,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
               .toMatchObject({ phase: "committed" });
           }
         }
-        if (mode === "real_queue" || mode === "committed_failure") {
+        if (mode === "real_queue" || mode === "committed_failure" || mode === "committed_failed_publication") {
           expect(admitted.runId).toBeTruthy();
           expect((await readHeartbeatRunsById(admitted.runId!))[0]).toMatchObject({ status: "queued",
             contextSnapshot: { source: `chat:${provider}`, wakeCommentId: saved.payload.commentId } });
@@ -61204,6 +61226,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       expect((await readAgentWakeupRequestsById(saved.id))[0]).toMatchObject(mode === "source_claimed"
         ? { status: "queued", runId: context.runId } : { status: "skipped", runId: null });
       expect((await readHeartbeatRunsById(context.runId))[0]).toMatchObject({ status: "failed" });
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual(previousPublications);
     } finally { await context.service.shutdown(); }
   });
 
