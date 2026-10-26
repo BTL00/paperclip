@@ -63,7 +63,7 @@ export function normalizeProjectRepositoryUrl(value: string): { fullName: string
   return { fullName: path.slice(1), url: `https://github.com${path}` };
 }
 
-/** Reuse retained selection visibility (the UI lock), then active catalog data. Legacy URL-only
+/** Use the freshest active catalog visibility (the UI lock), then retained selections. Legacy URL-only
  * sources need anonymous discovery; unknown visibility must never start a private clone. */
 export async function projectRepositoryIsPrivate(
   db: import("@paperclipai/db").Db,
@@ -71,10 +71,10 @@ export async function projectRepositoryIsPrivate(
   workspace: Pick<ProjectWorkspace, "repoUrl" | "metadata">,
 ): Promise<boolean> {
   const repo = normalizeProjectRepositoryUrl(workspace.repoUrl!);
-  if (workspace.metadata?.githubRepositoryUrl === repo.url && typeof workspace.metadata.githubRepositoryPrivate === "boolean") {
-    return workspace.metadata.githubRepositoryPrivate;
-  }
-  const visibility = await db.select({ private: sql<boolean | null>`(
+  const visibility = await db.select({
+    refreshedAt: sql<string | null>`${connectionGrants.providerTenant}->'github'->>'lastAccessRefreshAt'`,
+    updatedAt: connectionGrants.updatedAt,
+    private: sql<boolean | null>`(
     select bool_or((repository->>'private')::boolean)
     from jsonb_array_elements(coalesce(${connectionGrants.providerTenant}->'github'->'repositories', '[]'::jsonb)) repository
     where lower(repository->>'fullName') = ${repo.fullName.toLowerCase()}
@@ -82,8 +82,16 @@ export async function projectRepositoryIsPrivate(
     eq(toolConnections.id, connectionGrants.connectionId), eq(toolConnections.companyId, companyId),
   )).where(and(eq(connectionGrants.companyId, companyId), eq(connectionGrants.status, "active"),
     eq(toolConnections.status, "active"), eq(toolConnections.enabled, true)));
-  if (visibility.some(row => row.private === true)) return true;
-  if (visibility.some(row => row.private === false)) return false;
+  const observedAt = (row: typeof visibility[number]) => {
+    const refreshedAt = Date.parse(row.refreshedAt ?? "");
+    return Number.isFinite(refreshedAt) ? refreshedAt : row.updatedAt.getTime();
+  };
+  const current = visibility.filter(row => typeof row.private === "boolean")
+    .sort((a, b) => observedAt(b) - observedAt(a))[0];
+  if (current) return current.private!;
+  if (workspace.metadata?.githubRepositoryUrl === repo.url && typeof workspace.metadata.githubRepositoryPrivate === "boolean") {
+    return workspace.metadata.githubRepositoryPrivate;
+  }
   const response = await ghFetch(`https://api.github.com/repos/${repo.fullName}`, {
     headers: { Accept: "application/vnd.github+json" }, redirect: "error", signal: AbortSignal.timeout(10_000),
   });

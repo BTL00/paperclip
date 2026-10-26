@@ -79,6 +79,25 @@ const support = await getEmbeddedPostgresTestSupport();
       expect(await f.service.resolve(f.request, f.scope)).toBeNull();
       expect(vault.resolveUserSecretValue).not.toHaveBeenCalled(); expect(ghFetch).not.toHaveBeenCalled();
     });
+    it.each([true, false])("uses refreshed catalog visibility after a repository becomes private=%s", async isPrivate => {
+      const f = await projectAuthorizationFixture();
+      await db.update(projectWorkspaces).set({ metadata: { githubRepositoryUrl: "https://github.com/fixture/project", githubRepositoryPrivate: !isPrivate } }).where(eq(projectWorkspaces.id, f.workspace.id));
+      const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, f.selected.id));
+      await db.update(connectionGrants).set({ providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
+        repositories: [{ id: "1", fullName: "fixture/project", installationId: "1", private: isPrivate }] } } }).where(eq(connectionGrants.id, f.selected.id));
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      expect(await f.service.resolve(f.request, f.scope)).toBe(isPrivate ? "test-token-A" : null);
+    });
+    it("uses repository access refresh time rather than unrelated grant updates for conflicting active catalogs", async () => {
+      const f = await projectAuthorizationFixture(), current = await grant(f.input, "A");
+      for (const [id, privateValue, refreshedAt] of [[f.selected.id, true, "2020-01-01T00:00:00Z"], [current.id, false, "2021-01-01T00:00:00Z"]] as const) {
+        const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, id));
+        await db.update(connectionGrants).set({ providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
+          lastAccessRefreshAt: refreshedAt, repositories: [{ id: "1", fullName: "fixture/project", installationId: "1", private: privateValue }] } } }).where(eq(connectionGrants.id, id));
+      }
+      await db.update(connectionGrants).set({ updatedAt: new Date() }).where(eq(connectionGrants.id, f.selected.id));
+      expect(await f.service.resolve(f.request, f.scope)).toBeNull();
+    });
     it("discovers legacy URL-only public sources anonymously and defers unknown private sources", async () => {
       const f = await projectAuthorizationFixture();
       await db.update(projectWorkspaces).set({ repoUrl: "https://github.com/fixture/legacy" }).where(eq(projectWorkspaces.id, f.workspace.id));
