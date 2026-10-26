@@ -20,6 +20,12 @@ export interface ChatCatalogSetupPolicy {
   /** Required independent prerequisite checks when preserving a scenario-specific policy. */
   invariantCheckIds: readonly string[];
 }
+export interface ChatCatalogQueryBinding {
+  catalogToken: string;
+  stateKey: string;
+  resourceKind: "issue";
+  valueField: "identifier";
+}
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
@@ -28,6 +34,8 @@ export interface ChatCatalogCase {
   setupPolicy?: ChatCatalogSetupPolicy;
   runPolicy?: ChatCatalogRunPolicy;
   queryOutcome?: "persisted" | "rejected";
+  /** Audited substitution of an incidental catalog fixture token, never other prose. */
+  queryBindings?: readonly ChatCatalogQueryBinding[];
   /** All case/grader helpers must be listed; the suite also fingerprints its complete source tree. */
   sourceFiles: readonly string[];
   oracleVersion: string;

@@ -1,4 +1,6 @@
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
+import { runChatBoundaryFlow } from "./chat-boundary-flow.js";
+import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import { createWorkerTiming } from "./worker-timing.js";
 import { FEEDBACK_PERSISTENCE_SUITE, gradeFeedbackPersistence } from "./feedback-persistence.js";
 import { EvalAttemptTrace, evalBraintrustConfig, EVAL_OBSERVABILITY_SECRET_NAMES } from "./braintrust.js";
@@ -919,6 +921,27 @@ for (const execution of executions) {
     try {
       trace?.phase("setup");
       await saveTrace();
+      const catalogDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
+      if (catalogDescriptor?.journeyKind === "browser-boundary") {
+        const scenario = chatCatalogScenarios.find(row => row.id === execution.task.id);
+        if (!scenario || !catalogDescriptor.boundaryTarget) throw new Error("Boundary scenario or target identity missing");
+        await workerTiming.enter("execution"); trace?.phase("execution");
+        const checks = await runChatBoundaryFlow({ journeyKind: "browser-boundary", boundaryTarget: catalogDescriptor.boundaryTarget,
+          scenario, page, api, execution, nonce, credentials, privateSecrets: secrets, privateDir, deadlineAt: startedAtMs + deadlineMs,
+          capture: captureScreenshot,
+          evidence: async (name, value) => {
+            await writeSanitizedJson(snapshotsDir, name, value, secrets);
+            if (name === "chat-boundary-cleanup.json") cleanup = (value as { cleanup?: string }).cleanup === "complete" ? "passed" : "failed";
+          },
+          observeResources(value) {
+            // Boundaries independently collect their real resources. They do not
+            // manufacture LiveFixtureValues or a source issue for result fields.
+            if (value.runIds.length) matcherResults.push({ matcher: { kind: "json_path", path: "boundary.actual-agent-dispatch", expected: true },
+              passed: false, detail: "This pre-chat boundary observed an unexpected real provider admission." });
+          },
+        }, catalogDescriptor);
+        matcherResults.push(...checks.map(check => ({ matcher: { kind: "json_path" as const, path: `boundary.${check.id}`, expected: true }, passed: check.passed, detail: check.detail })));
+      } else {
       if (execution.task.flow === "public_mcp" || execution.suite.id === "chat-features" && findChatCatalogCase(execution.task.id)?.authentication === "human-session") publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
       if (execution.suite.id === "stock-harness") {
         const receipt = verifyStockHarnessPreflight(process.env[STOCK_PREFLIGHT_ENV]);
@@ -3074,6 +3097,7 @@ for (const execution of executions) {
           throw new Error("Completion accuracy is unqualified: missing, invalid, or miscalibrated judge evidence");
         }
         expect(qualification, "completion reply accuracy").toBe("passed");
+      }
       }
     } catch (error) {
       primaryError = error;
