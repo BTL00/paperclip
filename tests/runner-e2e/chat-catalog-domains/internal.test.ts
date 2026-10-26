@@ -15,6 +15,15 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "tasks.assignment-conflict": {
+      o.tasks[0] = { ...o.tasks[0]!, assigneeAgentId: "riley", status: "backlog" }; o.state.task = structuredClone(o.tasks[0]);
+      o.reply = "Riley owns the backlog task. Observed old brief."; o.state.firstRead = structuredClone(o);
+      const held = { ...o.tasks[0], assigneeAgentId: "morgan", status: "in_progress", executionRunId: "morgan-run", checkoutRunId: "morgan-run" };
+      Object.assign(o.state, { worker: { id: "morgan" }, riley: { id: "riley" }, readMarker: "Observed old brief", heldTask: structuredClone(held), heldRun: { id: "morgan-run" }, gateCalls: [{ authorized: true }] });
+      o.tasks[0] = held; Object.assign(o, { currentTask: held, phaseReply: "Morgan holds the running checkout. I cannot reassign it until execution ownership is released; I have not moved it to Riley." });
+      o.activity = [{ id: "owner-change", action: "issue.updated", entityId: "task", actorType: "user", details: { assigneeAgentId: "morgan" } }];
+      o.runs.push({ id: "morgan-run", companyId: "company", agentId: "morgan", status: "running" }, { id: "final", companyId: "company", agentId: "ceo", status: "succeeded" }); break;
+    }
     case "activity.find-runs": {
       o.tasks[0] = { ...o.tasks[0]!, status: "done", assigneeAgentId: "morgan" }; o.state.task = o.tasks[0];
       const first = { id: "interrupted", companyId: "company", agentId: "morgan", status: "cancelled", contextSnapshot: { issueId: "task" } };
@@ -289,6 +298,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
   "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
+  "tasks.assignment-conflict": o => { o.tasks[0]!.assigneeAgentId = "riley"; },
   "activity.find-runs": o => { o.runs = o.runs.filter(run => run.id !== "interrupted"); },
   "activity.agent-feedback": o => { o.reply = "I browsed all feedback and Morgan complained about everything."; },
   "activity.company-overview": o => { o.reply = o.reply.replace("1 blocked", "3 blocked"); },
