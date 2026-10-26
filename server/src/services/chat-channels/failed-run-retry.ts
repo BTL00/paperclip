@@ -1,3 +1,4 @@
+import { safeChatWakeAuthorityReason, type ChatWakeAuthorityReason } from "./inbound/wakeup-authorization-error.js";
 import { admitExplicitNativeContinuation } from "../explicit-native-continuation.js";
 import { continuingTeamsFilePublication, type ContinuingTeamsFileTransfer } from "./microsoft-teams/file-transfer-source.js";
 import { readTaskChatRetryIntent, taskChatRetryCanAwaitRecovery, taskChatRetryExecutionStopped } from "./task-retry-authority.js";
@@ -127,10 +128,10 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
 
 
   const failedChatRetryDenied = (reason?: "accepted_result_without_new_input" |
-    "prior_result_publication" | "prior_interaction" | "source_authorization") =>
+    "prior_result_publication" | "prior_interaction" | "source_authorization", authorityReason?: ChatWakeAuthorityReason) =>
     conflict(
       "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
-      { code: "chat_failed_run_retry_not_authorized", ...(reason ? { reason } : {}) },
+      { code: "chat_failed_run_retry_not_authorized", ...(reason ? { reason } : {}), ...(reason === "source_authorization" && authorityReason ? { authorityReason } : {}) },
     );
   class FailedChatRetryPublicationReadError extends Error {
     constructor() {
@@ -1091,7 +1092,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     const invalidated = new Set(lifecycleRows.map(row => lifecycleKey(row.target, row.context)));
     const batch = reauthorization ? await authorizeGitHubTaskRetryBatch(tx, ordered, {
       nonblocking: true, terminal: input.publication === true, taskRetry: reauthorization,
-    }).catch(error => { if (isExternalActionAuthorizationChange(error)) throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined); throw error; }) : null;
+    }).catch(error => { if (isExternalActionAuthorizationChange(error)) throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined, safeChatWakeAuthorityReason(error)); throw error; }) : null;
     const canonicalSources: Array<Record<string, unknown>> = [];
     let destination: Awaited<ReturnType<typeof authorizeInboundWakeup>> | null =
       null;
@@ -1102,7 +1103,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         ...(reauthorization ? { taskRetry: reauthorization } : {}),
       }).catch((error) => {
         if (isExternalActionAuthorizationChange(error))
-          throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined);
+          throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined, safeChatWakeAuthorityReason(error));
         throw error;
       });
       if (reauthorization && !reauthorization.runtimeFence) reauthorization.runtimeFence = destination.retryRuntimeFence;

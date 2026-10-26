@@ -36,6 +36,29 @@ import { readInheritedGitHubReviewWait } from "../chat-channels/github/review-wa
 import { boundExternalChatProvider } from "./external-chat-provider.js";
 import { resolveExternalChatQuestionResponse } from "./external-chat-question-response.js";
 
+// This boundary reads identity and wake authority, never launch renderings,
+// saved provider profiles, or run output. Keep the nested wake proof narrow too.
+const responseWaitContextKeys = ["source", "issueId", "wakeReason", "wakeCommentId", "wakeCommentIds",
+  "interactionId", "interactionKind", "interactionStatus", "sourceRunId", "sourceCommentId",
+  "externalChatContinuation", "paperclipExternalChatQuestionResponse", "paperclipHarnessCheckedOut",
+  "paperclipExternalChatExecutionBound"] as const;
+const responseWaitRun = {
+  id: heartbeatRuns.id, companyId: heartbeatRuns.companyId, agentId: heartbeatRuns.agentId,
+  nativeIssueId: heartbeatRuns.nativeIssueId, issueId: heartbeatRuns.issueId, status: heartbeatRuns.status,
+  responsibleUserId: heartbeatRuns.responsibleUserId, activeIdentityContextId: heartbeatRuns.activeIdentityContextId,
+  contextSnapshot: sql<Record<string, unknown> | null>`case when jsonb_typeof(${heartbeatRuns.contextSnapshot}) = 'object'
+    then (select coalesce(jsonb_object_agg(field.key, field.value), '{}'::jsonb)
+      from jsonb_each(${heartbeatRuns.contextSnapshot}) as field(key, value)
+      where field.key in (${sql.join(responseWaitContextKeys.map(key => sql`${key}`), sql`, `)}))
+      || jsonb_build_object('paperclipWake', jsonb_build_object(
+        'checkedOutByHarness', ${heartbeatRuns.contextSnapshot}#>'{paperclipWake,checkedOutByHarness}',
+        'externalChatExecutionBound', ${heartbeatRuns.contextSnapshot}#>'{paperclipWake,externalChatExecutionBound}',
+        'externalChatProvider', ${heartbeatRuns.contextSnapshot}#>'{paperclipWake,externalChatProvider}',
+        'issue', jsonb_build_object('id', ${heartbeatRuns.contextSnapshot}#>'{paperclipWake,issue,id}'),
+        'commentIds', ${heartbeatRuns.contextSnapshot}#>'{paperclipWake,commentIds}'))
+    else null end`,
+};
+
 export const LIST_CHAT_ATTACHMENTS_TOOL_NAME = "list_chat_attachments";
 export const REUSE_CHAT_ATTACHMENT_TOOL_NAME = "reuse_chat_attachment";
 
@@ -653,7 +676,7 @@ export async function resolveExternalChatResponseWaitAuthorizationInTransaction(
       : issueQuery.for("update").limit(1));
 
   const runQuery = tx
-    .select()
+    .select(responseWaitRun)
     .from(heartbeatRuns)
     .where(
       and(
@@ -825,7 +848,7 @@ export function isPublishedGitHubReviewCompletionContinuation(value: unknown): b
 export async function readPublishedGitHubReviewCompletionContinuationInTransaction(
   tx: Db, binding: ChatReuseBinding, lockMode: AuthorizationLockMode = "read",
 ) {
-  const [run] = await tx.select().from(heartbeatRuns).where(and(
+  const [run] = await tx.select(responseWaitRun).from(heartbeatRuns).where(and(
     eq(heartbeatRuns.id, binding.runId), eq(heartbeatRuns.companyId, binding.companyId),
     eq(heartbeatRuns.agentId, binding.agentId), eq(heartbeatRuns.nativeIssueId, binding.issueId),
     eq(heartbeatRuns.runtimeMode, "native"),

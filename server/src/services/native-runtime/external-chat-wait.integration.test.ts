@@ -54,6 +54,8 @@ import { finalizeNativeRun } from "./native-run-finalizer.js";
 import { nativeCompletionFeedback } from "./native-completion-feedback.js";
 import { hasPublishedGitHubReview, readInheritedGitHubReviewWait } from "../chat-channels/github/review-wait.js";
 import * as chatWaitAuthority from "./chat-attachment-reuse.js";
+import * as publishedReviewAuthority from "../chat-channels/github/review-wait.js";
+import { toolAccessService } from "../tool-access.js";
 import { PaperclipControlPlanePort } from "./paperclip-control-plane-port.js";
 import {
   authorizeNativeChatReviewPresentation,
@@ -4599,6 +4601,30 @@ describe("native external-chat response wait", () => {
     return { ...fixture, review: review! };
   }
 
+  it("projects only bound authority while deriving a published GitHub completion wait", async () => {
+    const fixture = await seedPublishedReviewCompletionTurn();
+    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, fixture.runId));
+    const payload = "unused-saved-review-rendering".repeat(32768);
+    await db.update(heartbeatRuns).set({ runnerProfileJson: { retained: payload }, stdoutExcerpt: payload, stderrExcerpt: payload,
+      contextSnapshot: { ...run.contextSnapshot, executionContinuation: { savedInput: payload },
+        paperclipTaskMarkdown: payload, paperclipWake: { ...(run.contextSnapshot!.paperclipWake as object), retainedPayload: payload } },
+    }).where(eq(heartbeatRuns.id, fixture.runId));
+    const observed = createDb(temporary?.connectionString ?? externalTestDatabaseUrl!);
+    const events: Array<Record<string, unknown>> = [], now = Date.now();
+    const capture = createDatabaseResponseCapture({ start: now - 100, end: now + 59_000 }, event => events.push(event));
+    installDatabaseResponseCapture(observed, { heartbeatRuns }, capture);
+    try {
+      const context = await new PaperclipRunnerToolAuthority(observed, fixture)
+        .execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} });
+      expect(context).toMatchObject({ completionContinuation: { kind: "response_wake" } });
+      capture.flush();
+      const reads = events.filter(event => event.table === "heartbeat_runs" && event.operation === "select");
+      expect(reads.length).toBeGreaterThan(0);
+      expect(reads.reduce((bytes, event) => bytes + Number(event.responseValueBytes), 0)).toBeLessThan(16 * 1024);
+      expect(JSON.stringify(context)).not.toContain(payload);
+    } finally { capture.flush(); await observed.$client.end(); }
+  });
+
   it.each([undefined, null, "malformed-first"] as const)("derives an omitted published GitHub review wait through current task context: %s", async absent => {
     const fixture = await seedPublishedReviewCompletionTurn();
     const authority = new PaperclipRunnerToolAuthority(db, fixture);
@@ -4658,6 +4684,57 @@ describe("native external-chat response wait", () => {
       expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, fixture.companyId))).toHaveLength(0);
     },
   );
+
+  it("serializes an actual connection disable against the final status committer proof", async () => {
+    const fixture = await seedPublishedReviewCompletionTurn();
+    const authority = new PaperclipRunnerToolAuthority(db, fixture);
+    const { resolveCompletionContinuation } = await import(new URL("../../../../packages/paperclip-runner/src/drivers/completion-continuation.ts", import.meta.url).href);
+    const result = await resolveCompletionContinuation({ ...fixture.result, continuation: null }, fixture.runId,
+      () => authority.execute({ tool: "get_task_context", callId: randomUUID(), arguments: {} })) as PrpStructuredRunResult;
+    await nativeCompletionFeedback(db, fixture.runId, result);
+    await fixture.port.completeRun({ result, terminal: fixture.terminal, callerResultId: `wait-result-${fixture.runId}` });
+    const [connection] = await db.select().from(toolConnections).where(eq(toolConnections.companyId, fixture.companyId));
+    const applicationName = `review-wait-race-${fixture.runId}`;
+    const writerDb = createDb(externalTestDatabaseUrl ?? temporary!.connectionString, { applicationName });
+    let writer: Promise<unknown> | undefined;
+    let writerFinished = false, serialized = false;
+    const readProof = publishedReviewAuthority.readInheritedGitHubReviewWait;
+    const readForCommit = chatWaitAuthority.readPublishedGitHubReviewCompletionContinuationInTransaction;
+    const commitGuard = vi.spyOn(chatWaitAuthority, "readPublishedGitHubReviewCompletionContinuationInTransaction")
+      .mockImplementationOnce(async (...args) => {
+        const [committer] = await args[0].execute(sql`select pg_backend_pid() as pid`);
+        const proofGuard = vi.spyOn(publishedReviewAuthority, "readInheritedGitHubReviewWait")
+          .mockImplementationOnce(async (...proofArgs) => {
+            const proof = await readProof(...proofArgs);
+            // This is the same maintained writer used by PATCH tool-connections.
+            // It does not borrow the task's issue lock to disable a chat connection.
+            writer = toolAccessService(writerDb).updateConnection(connection!.id, { enabled: false })
+              .finally(() => { writerFinished = true; });
+            await vi.waitFor(async () => {
+              const waiting = await db.execute(sql`select query from pg_stat_activity
+                where application_name = ${applicationName} and wait_event_type = 'Lock'`);
+              expect(writerFinished || waiting.length > 0).toBe(true);
+              if (waiting.length) expect(String(waiting[0]!.query)).toContain('update "tool_connections"');
+              serialized = !writerFinished && waiting.length > 0;
+              if (serialized) {
+                const blockers = await db.execute(sql`select pg_blocking_pids(pid) as blockers from pg_stat_activity where application_name = ${applicationName} and wait_event_type = 'Lock'`);
+                expect(blockers[0]!.blockers).toContain(Number(committer!.pid));
+              }
+            });
+            return proof;
+          });
+        try { return await readForCommit(...args); }
+        finally { proofGuard.mockRestore(); }
+      });
+    try {
+      await finalizeNativeRun({ db, runId: fixture.runId, workspaceFinalizeStatus: "succeeded", projectRunStatus: true });
+      await writer;
+      expect(serialized).toBe(true);
+      expect((await db.select().from(issues).where(eq(issues.id, fixture.issueId)))[0]).toMatchObject({ status: "in_review" });
+      expect((await db.select().from(toolConnections).where(eq(toolConnections.id, connection!.id)))[0]).toMatchObject({ enabled: false });
+      expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, fixture.companyId))).toHaveLength(0);
+    } finally { commitGuard.mockRestore(); await Promise.allSettled(writer ? [writer] : []); await writerDb.$client.end({ timeout: 1 }); }
+  });
 
   it.each(["before_feedback", "before_finalization", "during_commit"] as const)(
     "rechecks a projected GitHub completion wait %s", async phase => {
