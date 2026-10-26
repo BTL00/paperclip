@@ -160,3 +160,42 @@ these company-scoped records when their company is deleted. Run-scoped adapters 
 Native warm sessions retain their token-free launchers and inactive broker until
 session retirement; environment deletion and orderly controller shutdown close
 idle owners first. Cleanup failures are logged and do not change the run result.
+
+## Project authorization for background repository work
+
+Background provisioning and workspace maintenance have no responsible task user.
+They must not retain a task's identity. A signed-in project workspace writer can
+select their own active, company-installed GitHub Connector grant in project
+settings and explicitly authorize the project. The binding stores the exact grant
+ID and consenting user, never a credential. Revocation records a project lifecycle
+event so subscribed providers can reconcile the change.
+
+`GET /api/projects/:id/git-authorization` returns the current binding and only the
+viewer's eligible personal grants. `PUT` accepts `{ grantId }` or `{ grantId: null }`.
+Agents cannot create this standing consent. Project workspace writers can remove it.
+Core rechecks membership, Connector installation/enablement, grant status, and
+repository metadata on each background use. Public repositories never require
+a connection or credential. Private repositories wait for authorization before
+provisioning starts, so missing consent cannot leave a failed anonymous clone.
+Repository selections retain the same visibility metadata used by the UI lock.
+Legacy workspaces use existing Connector catalog metadata, with anonymous
+GitHub discovery only when visibility is unknown. Unknown visibility defers
+provisioning; it is never assumed public. It never substitutes another grant
+when the selected one fails. Replacing a grant requires explicit reauthorization.
+
+The trusted plugin capability `projects.git-credentials` enables
+`ctx.projects.resolveGitCredential(projectId, workspaceId, companyId)`. The host
+binds requests to the active project lifecycle or workspace operation; data, UI,
+tool, and proactive calls do not carry this authority. Repository URLs come from
+stored project workspaces. Foreground preparation uses the live run's accepted
+identity and standard trust checks, even when background project consent exists.
+Maintenance ignores originating run/agent context and uses project consent only.
+
+The provider receives a transient GitHub token with its existing provider
+permissions. This is not a repository-scoped or read-only token minting API.
+Only grant-listed repositories can trigger background export. Plugins must never
+save tokens in entities, state, configuration, operation receipts, or logs, and
+must send them only to trusted execution infrastructure over HTTPS. Revocation
+prevents subsequent credential acquisition; it cannot recall a token already
+sent to an in-flight operation. Existing tasks and Git credential fallback rules
+outside this plugin API are unchanged.

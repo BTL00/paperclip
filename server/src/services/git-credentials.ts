@@ -315,6 +315,7 @@ export async function resolveManagedGitHubIdentitySelection(
     agentId?: string | null;
     allowStandingDelegation?: boolean;
     excludeGrantId?: string;
+    explicitGrantId?: string;
   },
 ): Promise<{
   configured: boolean;
@@ -357,6 +358,7 @@ export async function resolveManagedGitHubIdentitySelection(
   const grants = await db.select().from(connectionGrants).where(and(
     eq(connectionGrants.companyId, companyId),
     inArray(connectionGrants.connectionId, [...eligibleConnectionIds]),
+    context.explicitGrantId ? eq(connectionGrants.id, context.explicitGrantId) : undefined,
     or(eq(connectionGrants.kind, "agent"), eq(connectionGrants.kind, "user")),
   ));
   const dedicated = context.agentId
@@ -489,6 +491,7 @@ export async function resolveManagedGitHubCredential(
     responsibleUserId?: string | null;
     agentId?: string | null;
     allowStandingDelegation?: boolean;
+    explicitGrantId?: string;
   },
 ): Promise<{ configured: boolean; identitySource?: "personal" | "dedicated"; credential?: GitCredential; error?: string }> {
   const selection = await resolveManagedGitHubIdentitySelection(db, companyId, context);
@@ -583,6 +586,7 @@ export async function resolveManagedGitHubCredential(
   } catch {
     failure = { configured: true, identitySource: selection.identitySource, error: "GitHub credentials are temporarily unavailable" };
   }
+  if (context.explicitGrantId) return failure;
   // Retry credential acquisition, never the GitHub operation. An alternate
   // authorization must still belong to this exact principal and account.
   const alternate = await resolveManagedGitHubIdentitySelection(db, companyId, {
