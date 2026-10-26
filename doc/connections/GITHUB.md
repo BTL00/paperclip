@@ -351,6 +351,14 @@ system diagnostic, settlement events, empty execution evidence and absence of
 allocated resources establish that narrow recovery path. A generic setup
 failure or a claimed `providerWorkStarted: false` does not establish it.
 
+The canonical task Retry also recognizes an isolated-directory binding failure
+at the workspace preparation boundary before allocation. Its structured reason
+and task binding, trusted failed settlement, dispatch-only profile and absence
+of execution resources must all agree. Other workspace validation failures do
+not inherit this permission. Current request authorization still runs at both
+admission and execution; a failed unadmitted Retry intent does not replace the
+saved request or prevent a later deliberate Retry.
+
 ## Run projection
 
 The resolved token is leased at run start as an audited class-3 secret and is

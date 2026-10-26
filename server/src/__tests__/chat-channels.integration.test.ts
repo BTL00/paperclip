@@ -61231,6 +61231,126 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     },
   );
 
+  it.each(["contained", "prior_denied_intent", "other_reason", "wrong_issue", "provider_started", "result_extra", "profile", "usage", "output",
+    "process", "controller", "active_control", "lease", "accepted_result", "event_source", "extra_event", "source_edited", "principal_revoked"] as const)(
+    "retries an authenticated GitHub request after isolated-directory validation failed before allocation: %s", async mode => {
+    const f = await failedChatRetryFixture("github", "42", true, false, true);
+    const companyId = f.fixture.companyId, agentId = f.fixture.assignedAgentId, issueId = f.issue.id;
+    const diagnostic = "The existing execution workspace is not this task's isolated directory.";
+    try {
+      await initializeRunIdentity(db, { companyId, runId: f.runId, issueId, responsibleUserId: "owner-user",
+        messageIds: [String(f.action.payload.commentId)], cause: "chat_message" });
+      await db.update(heartbeatRuns).set({ errorCode: "workspace_validation_failed", error: diagnostic,
+        runtimeMode: "legacy", sessionIdBefore: "prior-provider-display-hint",
+        usageJson: { ledgerScope: { issueId, projectId: null, billingCode: null } },
+        runnerProfileJson: { adapterDispatch: { adapterType: "paperclip_runner" } },
+        resultJson: { executionRecovery: { kind: "bootstrap", providerWorkStarted: false }, stopReason: "adapter_failed",
+          workspaceValidation: { reason: "isolated_task_directory_binding_mismatch", issueId } } })
+        .where(eq(heartbeatRuns.id, f.runId));
+      await db.insert(heartbeatRunEvents).values([
+        { companyId, agentId, runId: f.runId, seq: 1, eventType: "error", stream: "system", level: "error", message: diagnostic },
+        { companyId, agentId, runId: f.runId, seq: 2, eventType: "lifecycle", stream: "system", level: "info",
+          message: "task.run.measured", payload: { durableSettlement: true, durationMs: 2505, outcome: "failed", phase: "task.run.measured" } },
+      ]);
+      await db.update(agents).set({ status: "running", runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } } })
+        .where(eq(agents.id, agentId));
+      const [capacity] = await db.insert(heartbeatRuns).values({ companyId, agentId, status: "running" }).returning();
+      const heartbeat = heartbeatService(db);
+      f.wakeup.mockImplementation(heartbeat.wakeup);
+      const app = express();
+      app.use(express.json());
+      app.use((req, _res, next) => { req.actor = boardActor(companyId); next(); });
+      app.use("/api", issueRoutes(db, createStorageService().storage, { chatRunRetries: f.service }));
+      app.use(errorHandler);
+      const [failed] = await readHeartbeatRunsById(f.runId);
+      const validation = failed.resultJson!.workspaceValidation as object;
+      if (mode === "other_reason" || mode === "wrong_issue") await db.update(heartbeatRuns).set({ resultJson: { ...failed.resultJson,
+        workspaceValidation: { ...validation, ...(mode === "other_reason" ? { reason: "plugin_workspace_strategy_unsupported" } : { issueId: randomUUID() }) } } })
+        .where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "provider_started" || mode === "result_extra") await db.update(heartbeatRuns).set({ resultJson: { ...failed.resultJson,
+        ...(mode === "provider_started" ? { executionRecovery: { kind: "bootstrap", providerWorkStarted: true } } : { unknownExecution: true }) } })
+        .where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "profile") await db.update(heartbeatRuns).set({ runnerProfileJson: { ...failed.runnerProfileJson, nativeExecutionInput: {} } }).where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "usage") await db.update(heartbeatRuns).set({ usageJson: { ...failed.usageJson, tokens: 1 } }).where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "output") await db.update(heartbeatRuns).set({ stdoutExcerpt: "provider output" }).where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "process") await db.update(heartbeatRuns).set({ processPid: 999999 }).where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "controller") await db.update(heartbeatRuns).set({ controllerLeaseExpiresAt: new Date(Date.now() + 60000) }).where(eq(heartbeatRuns.id, f.runId));
+      if (mode === "active_control") adapterExecutionControls.set(f.runId, createAdapterExecutionControl());
+      if (mode === "lease") await db.insert(environmentLeases).values({ companyId, heartbeatRunId: f.runId, issueId,
+        provider: "daytona", providerLeaseId: "contradictory-preparation-allocation", status: "active", leasePolicy: "ephemeral" });
+      if (mode === "accepted_result") {
+        const contractId = randomUUID(), resultId = randomUUID();
+        await db.insert(completionContracts).values({ id: contractId, companyId, issueId, revision: 1,
+          schemaVersion: "paperclip.completion-contract.v1", policyVersion: "test", risk: "standard",
+          completionAuthority: "server_arbiter", incompleteCriteriaPolicy: "preserve_non_terminal", contractJson: {},
+          canonicalSha256: contractId, createdByActorType: "system", createdByActorId: "test" });
+        await db.update(heartbeatRuns).set({ nativeIssueId: issueId, completionContractId: contractId }).where(eq(heartbeatRuns.id, f.runId));
+        await db.insert(nativeRunResults).values({ id: resultId, companyId, issueId, runId: f.runId, completionContractId: contractId,
+          schemaStatus: "accepted", serverFingerprint: resultId, canonicalSha256: resultId,
+          resultJson: { terminal: { runTerminalState: "succeeded" } } });
+      }
+      if (mode === "event_source") await db.update(heartbeatRunEvents).set({ sourceEventId: "provider-event" }).where(and(eq(heartbeatRunEvents.runId, f.runId), eq(heartbeatRunEvents.seq, 1)));
+      if (mode === "extra_event") await db.insert(heartbeatRunEvents).values({ companyId, agentId, runId: f.runId,
+        seq: 3, eventType: "lifecycle", stream: "system", level: "info", message: "unexpected provider preparation" });
+      if (mode === "principal_revoked") await db.update(chatIdentityLinks).set({ status: "revoked", revokedAt: new Date() }).where(eq(chatIdentityLinks.endpointId, f.endpoint.id));
+      if (mode === "contained") await expect(db.transaction(tx => f.service.prepareFailedChatRunRetry(tx, {
+        companyId, issueId, agentId, failedRunId: f.runId, initiatedByUserId: "owner-user",
+      }))).rejects.toMatchObject({ details: { code: "chat_failed_run_retry_not_authorized" } });
+      const send = () => request(app).post(`/api/issues/${issueId}/retry`).send({ idempotencyKey: randomUUID(), observedRunId: f.runId });
+      if (mode === "prior_denied_intent") {
+        const prior = await send().expect(202);
+        // Reproduce a terminal unadmitted authorization refusal, retaining the
+        // real HTTP intent/action receipts; the next normal click sees them.
+        await db.update(heartbeatRuns).set({ logBytes: 1 }).where(eq(heartbeatRuns.id, f.runId));
+        await f.service.processFailedChatRunRetry(prior.body.chatActionId);
+        await db.update(heartbeatRuns).set({ logBytes: null }).where(eq(heartbeatRuns.id, f.runId));
+        await reconcileTaskChatRetryReceipts(db);
+        expect((await readAgentWakeupRequestsById(prior.body.requestId))[0]).toMatchObject({ status: "failed", runId: null });
+        expect((await db.select().from(chatActions).where(eq(chatActions.id, prior.body.chatActionId)))[0]).toMatchObject({ status: "failed" });
+      }
+      const response = await send();
+      if (["principal_revoked", "accepted_result"].includes(mode)) {
+        expect(response.status).toBe(409);
+      } else {
+        expect(response.status).toBe(202);
+        if (mode === "source_edited") await db.update(issueComments).set({ body: "Changed after Retry acceptance" }).where(eq(issueComments.id, String(f.action.payload.commentId)));
+        await f.service.processFailedChatRunRetry(response.body.chatActionId);
+      }
+      if (!["contained", "prior_denied_intent"].includes(mode)) {
+        expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.retryOfRunId === f.runId)).toHaveLength(0);
+        return;
+      }
+      const [wake] = await readAgentWakeupRequestsById(response.body.chatActionId);
+      expect(wake).toMatchObject({ status: "queued", runId: expect.any(String) });
+      const [successor] = await readHeartbeatRunsById(wake.runId!);
+      expect(successor).toMatchObject({ retryOfRunId: f.runId, contextSnapshot: {
+        source: "chat:github", wakeCommentId: f.action.payload.commentId, taskRetryRequestId: response.body.requestId } });
+      const realInitialize = runIdentityModule.initializeRunIdentity;
+      const initialized: string[] = [];
+      const probe = vi.spyOn(runIdentityModule, "initializeRunIdentity").mockImplementation(async (database, input) => {
+        const identity = await realInitialize(database, input);
+        if (input.companyId !== companyId) return identity;
+        expect(identity.messageId).toBe(f.action.payload.commentId);
+        initialized.push(input.runId);
+        throw new Error("workspace_retry_identity_probe_complete");
+      });
+      try {
+        await db.update(heartbeatRuns).set({ status: "cancelled", finishedAt: new Date() }).where(eq(heartbeatRuns.id, capacity.id));
+        await db.update(agents).set({ status: "idle" }).where(eq(agents.id, agentId));
+        await heartbeat.resumeQueuedRuns();
+        await heartbeat.drainActiveRunExecutions();
+        expect(initialized).toEqual([successor.id]);
+        expect((await readHeartbeatRunsById(successor.id))[0]).toMatchObject({ error: "workspace_retry_identity_probe_complete" });
+        expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.retryOfRunId === f.runId)).toHaveLength(1);
+      } finally { probe.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
+    } finally {
+      adapterExecutionControls.get(f.runId)?.finish(); adapterExecutionControls.delete(f.runId);
+      await db.update(agentWakeupRequests).set({ status: "cancelled", finishedAt: new Date() }).where(and(
+        eq(agentWakeupRequests.companyId, companyId), inArray(agentWakeupRequests.status, ["queued", "deferred_issue_execution"])));
+      await f.service.shutdown();
+    }
+  });
+
   it("retries the saved board-message turn in a connected task after environment qualification failed before provider startup", async () => {
     const f = await failedChatRetryFixture("github", "42", true, false, true);
     try {

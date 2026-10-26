@@ -203,31 +203,48 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     }
   }
 
-  /** Chat authority checks run before runtime/profile resolution or provider
-   * startup. Recognize only their exact persisted diagnostics, settlement and
-   * absence of execution evidence. Generic setup errors and prior-session
-   * display hints do not establish this proof. */
-  async function isPreProviderChatAuthorizationFailure(
+  /** Certify known preparation boundaries from their server-owned failure
+   * contract and absence of execution evidence. Other workspace validations
+   * may run after acquisition and must not inherit this exception. A saved
+   * session display hint never establishes containment or resume authority. */
+  async function isPreProviderChatFailure(
     tx: DbOrTransaction,
     run: typeof heartbeatRuns.$inferSelect,
+    allowWorkspacePreparation = false,
   ): Promise<boolean> {
     const retryDiagnostic = "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.";
     const failedRetry = run.errorCode === "chat_failed_run_retry_not_authorized" && run.error === retryDiagnostic;
-    const diagnostic = failedRetry ? retryDiagnostic : "reviewed_chat_execution_binding_not_authorized";
+    const validation = run.resultJson?.workspaceValidation as Record<string, unknown> | undefined;
+    const recovery = run.resultJson?.executionRecovery as Record<string, unknown> | undefined;
+    const workspacePreparation = allowWorkspacePreparation && run.errorCode === "workspace_validation_failed" &&
+      validation?.reason === "isolated_task_directory_binding_mismatch" &&
+      typeof validation.issueId === "string" && validation.issueId === run.contextSnapshot?.issueId &&
+      (run.issueId === null || run.issueId === validation.issueId) &&
+      (run.contextSnapshot?.taskId === undefined || run.contextSnapshot.taskId === validation.issueId) &&
+      Object.keys(validation).every(key => ["reason", "issueId"].includes(key)) &&
+      recovery?.kind === "bootstrap" && recovery.providerWorkStarted === false &&
+      Object.keys(recovery).every(key => ["kind", "providerWorkStarted"].includes(key)) &&
+      run.resultJson?.stopReason === "adapter_failed" &&
+      Object.keys(run.resultJson).every(key => ["executionRecovery", "workspaceValidation", "stopReason",
+        "effectiveTimeoutSec", "timeoutConfigured", "timeoutFired", "timeoutSource"].includes(key));
+    const diagnostic = failedRetry ? retryDiagnostic : workspacePreparation ? run.error : "reviewed_chat_execution_binding_not_authorized";
+    const dispatchOnlyProfile = failedRetry || workspacePreparation;
     if (
       adapterExecutionControls.has(run.id) ||
       (run.controllerLeaseExpiresAt && run.controllerLeaseExpiresAt > new Date()) ||
       run.runtimeMode !== "legacy" ||
-      (!failedRetry && run.errorCode !== "setup_failed") ||
+      (!failedRetry && !workspacePreparation && run.errorCode !== "setup_failed") ||
       run.status !== "failed" || !run.finishedAt ||
-      (failedRetry && (run.sessionIdBefore !== null ||
-        JSON.stringify(run.runnerProfileJson) !== JSON.stringify({ adapterDispatch: { adapterType: "paperclip_runner" } }))) ||
-      run.error !== diagnostic ||
+      (failedRetry && run.sessionIdBefore !== null) ||
+      (dispatchOnlyProfile && JSON.stringify(run.runnerProfileJson) !== JSON.stringify({ adapterDispatch: { adapterType: "paperclip_runner" } })) ||
+      !diagnostic || run.error !== diagnostic ||
+      (workspacePreparation && run.usageJson !== null &&
+        Object.keys(run.usageJson).some(key => key !== "ledgerScope")) ||
       [
         run.runtimeModeResolverVersion,
         run.runtimeModeReason,
         run.runtimeModeResolvedAt,
-        ...(failedRetry ? [] : [run.runnerProfileJson]),
+        ...(dispatchOnlyProfile ? [] : [run.runnerProfileJson]),
         run.runnerInstanceId,
         run.nativeSessionId,
         run.nativeIssueId,
@@ -250,7 +267,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         run.lastOutputAt,
         run.lastOutputStream,
         run.lastOutputBytes,
-        run.usageJson,
+        ...(workspacePreparation ? [] : [run.usageJson]),
         run.exitCode,
         run.signal,
       ].some((value) => value !== null) ||
@@ -284,6 +301,8 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         issueId: String(run.contextSnapshot?.issueId), agentId: run.agentId,
         sourceRunId: run.retryOfRunId, intentId, chatActionId: run.wakeupRequestId });
       if (!prior || prior.wake.status !== "coalesced" || prior.wake.runId !== run.id) return false;
+    }
+    if (failedRetry || workspacePreparation) {
       if (!measured || measured.seq !== 2 || measured.agentId !== run.agentId ||
           measured.eventType !== "lifecycle" || measured.stream !== "system" ||
           measured.message !== "task.run.measured" || measured.sourceInstanceId !== null ||
@@ -294,7 +313,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
           measured.payload?.phase !== "task.run.measured") return false;
     }
     if (
-      events.length !== (failedRetry ? 2 : 1) ||
+      events.length !== (failedRetry || workspacePreparation ? 2 : 1) ||
       !event ||
       event.agentId !== run.agentId ||
       event.seq !== 1 ||
@@ -628,7 +647,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
           dryRun: true })) return;
       }
       if (await taskChatRetryExecutionStopped(tx as unknown as Db, run) ||
-          await isPreProviderChatAuthorizationFailure(tx, run)) return;
+          await isPreProviderChatFailure(tx, run, true)) return;
       if (allowPendingRecovery && await taskChatRetryCanAwaitRecovery(
         tx as unknown as Db, run, source.issueId, taskRetryIntentId,
       )) return;
@@ -774,7 +793,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
             "process_exit",
             "timeout",
           ].includes(failedRun.errorCode ?? "") ||
-          (evidence.kind === "retry" && await isPreProviderChatAuthorizationFailure(tx, evidence.run))
+          (evidence.kind === "retry" && await isPreProviderChatFailure(tx, evidence.run))
         )) ||
       (!input.publication &&
         ["backlog", "done", "cancelled"].includes(issue.status))
