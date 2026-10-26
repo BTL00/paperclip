@@ -54,8 +54,8 @@ export function grade_goals(value: unknown) {
       c.add("initial-purpose-chain-and-rationale", !!initial && initialPurposeValid(initial),
         "The first phase itself follows the saved task/project/team/company chain, grounds its rationale, and links the source records.");
       const finalReply = finalPhaseReply(o);
-      const missing = entity(o.state, "missingTask");
-      c.add("missing-association-is-explicit", !!o.tasks.find(row => row.id === missing.id && row.goalId == null)
+      const missing = o.state.missingTask && typeof o.state.missingTask === "object" ? o.state.missingTask as Entity : undefined;
+      c.add("missing-association-is-explicit", !!missing?.id && !!o.tasks.find(row => row.id === missing.id && row.goalId == null)
         && typeof o.state.missingReply === "string"
         && /(?:no|missing|not|unlinked|hasn't|doesn't|without)[^.!?]*?(?:goal|strateg|purpose|associat)|cannot[^.!?]*?determine/i.test(o.state.missingReply)
         && !(o.state.missingReply as string).includes(String(o.state.rationale)),
@@ -127,7 +127,7 @@ function crossCompanyAlignment(): ChatCatalogCase {
         await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
       }
     },
-    async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
+    async cleanup(ctx, state) { if (state.foreignCompany) await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
   };
 }
 
@@ -147,13 +147,11 @@ import { pollUntil } from "../api.js";
 
 function purposeVariants(): ChatCatalogCase {
   const base = define("goals.explain-purpose", async ctx => {
-    const rationale = `quiet research teams ${ctx.input.nonce}`;
+    const rationale = "quiet research teams";
     const growth = await goal(ctx, "Growth: reach 1,000 signups", { description: `We need a thousand signups to support ${rationale}.` });
     const team = await goal(ctx, "Launch the website", { level: "team", parentId: growth.id });
     const p = await project(ctx, "Launch", { goalIds: [team.id] });
     const t = await task(ctx, "Website task", p.id, { goalId: team.id });
-    const missingProject = await project(ctx, "Exploration");
-    const missingTask = await task(ctx, "Unaligned website work", missingProject.id);
     const foreignCompany = await ctx.input.api.post<Entity>("/api/companies", { name: `Inaccessible company ${ctx.input.nonce}` });
     const protectedText = `Protected purpose ${ctx.input.nonce}`;
     const foreignGoal = await ctx.input.api.post<Entity>(`/api/companies/${foreignCompany.id}/goals`, {
@@ -162,8 +160,7 @@ function purposeVariants(): ChatCatalogCase {
     const foreignTask = await ctx.input.api.post<Entity>(`/api/companies/${foreignCompany.id}/issues`, {
       title: "Inaccessible website work", goalId: foreignGoal.id, status: "backlog",
     });
-    return { growth, team, project: p, task: t, rationale, missingTask, missingProject, foreignTask, foreignCompany, protectedText,
-      missingRequest: `Why are we doing Unaligned website work (${missingTask.identifier ?? missingTask.id})?`,
+    return { growth, team, project: p, task: t, rationale, foreignTask, foreignCompany, protectedText,
       foreignRequest: `Why are we doing the website task ${foreignTask.identifier ?? foreignTask.id} in our other company?` };
   });
   return { ...base, coverageGaps: [], expectedRunCount: 3, expectedHumanMessageCount: 3, attemptTimeoutMs: 600_000,
@@ -171,6 +168,14 @@ function purposeVariants(): ChatCatalogCase {
       const first = await waitForPurposePhase(ctx, state, 1);
       if (!initialPurposeValid(first)) throw new Error("Initial purpose explanation does not match its saved chain and rationale");
       state.initialPurpose = { ...first, state: structuredClone(state) };
+      // This is a later conditional context, not a second website task competing
+      // with the canonical first-turn reference.
+      const missingProject = await project(ctx, "Exploration");
+      const missingTask = await task(ctx, "Unaligned website work", missingProject.id);
+      state.missingProject = missingProject; state.missingTask = missingTask;
+      state.missingRequest = `Why are we doing Unaligned website work (${missingTask.identifier ?? missingTask.id})?`;
+      await ctx.input.evidence("chat-catalog-purpose-missing-context-created.json", { afterInitialRunIds: first.runs.map(row => row.id),
+        initialTaskIds: first.tasks.map(row => row.id), initialProjectIds: first.projects.map(row => row.id), missingTask, missingProject });
       const previous = await sourceReplies(ctx);
       const { sendChatMessage } = await import("../chat-flow.js");
       await sendChatMessage(ctx.input.page, String(state.missingRequest));
@@ -181,7 +186,7 @@ function purposeVariants(): ChatCatalogCase {
       state.foreignBaselineCommentIds = (await sourceReplies(ctx)).map(row => row.id);
       await sendChatMessage(ctx.input.page, String(state.foreignRequest));
     },
-    async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
+    async cleanup(ctx, state) { if (state.foreignCompany) await ctx.input.api.delete(`/api/companies/${entity(state, "foreignCompany").id}`, { allowNotFound: true }); },
   };
 }
 async function waitForPurposePhase(ctx: ChatCatalogContext, state: Record<string, unknown>, count: number) {
@@ -261,9 +266,17 @@ async function observeGoalPhases(ctx: ChatCatalogContext, state: Record<string, 
 function initialPurposeValid(o: InternalObservation): boolean {
   const before = entity(o.state, "task"); const growth = entity(o.state, "growth"); const team = entity(o.state, "team");
   const current = o.tasks.find(row => row.id === before.id); const p = o.projects.find(row => row.id === entity(o.state, "project").id);
-  return current?.goalId === team.id && team.parentId === growth.id && !!p && (p.goalId === team.id || p.goalIds?.includes(team.id) === true)
-    && o.reply.includes(String(o.state.rationale)) && /\bwebsite\b/i.test(o.reply)
+  return o.tasks.length === 1 && o.projects.length === 1 && current?.goalId === team.id && team.parentId === growth.id && !!p && (p.goalId === team.id || p.goalIds?.includes(team.id) === true)
+    && groundedPurpose(o.reply) && /\bwebsite\b/i.test(o.reply)
     && [growth, team].every(row => hasLink(o, "goals", row)) && hasLink(o, "issues", before)
     && sameTask(before, current) && !o.activity.some(row => [before.id, p.id, growth.id, team.id].includes(row.entityId ?? "")
       && row.agentId === o.leadId && /(?:updated|created|deleted)$/.test(row.action ?? ""));
+}
+function groundedPurpose(reply: string): boolean {
+  // The saved business fact is support for research teams. A fixture nonce is
+  // never business meaning and faithful paraphrases need not repeat it.
+  return /\bresearch(?:ers)?\b/i.test(reply) && /\b(?:teams?|groups?)\b/i.test(reply)
+    && /\b(?:support|supports|help|helps|serve|serves|benefit|enable|for)\b/i.test(reply)
+    && !reply.split(/[.\n;]/).some(part => !/\b(?:no|not|without|isn't|doesn't)\b/i.test(part)
+      && /\b(?:sell(?:ing)?\s+(?:ads?|advertising|data)|ad revenue|advertising revenue)\b/i.test(part));
 }

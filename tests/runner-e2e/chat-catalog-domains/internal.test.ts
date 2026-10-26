@@ -138,7 +138,11 @@ function valid(scenario: string): InternalObservation {
     }
     default: throw new Error(`Missing valid calibration ${scenario}`);
   }
-  if (scenario === "goals.explain-purpose") { o.state.initialPurpose = structuredClone(o); (o.state.initialPurpose as InternalObservation).reply = "The website supports quiet research teams."; }
+  if (scenario === "goals.explain-purpose") {
+    const initial = structuredClone(o); initial.tasks = initial.tasks.filter(row => row.id === "task");
+    delete initial.state.missingTask; delete initial.state.missingReply;
+    initial.reply = "The website supports quiet research teams."; o.state.initialPurpose = initial;
+  }
   if (["projects.create-project", "goals.create-goal-tree"].includes(scenario)) o.state.firstCreation = structuredClone(o);
   return o;
 }
@@ -252,6 +256,25 @@ it("accepts a genuine goal hierarchy link and ordinary signup phrasing", () => {
 
 
 describe("goal oracle phase binding", () => {
+  it("accepts a faithful saved-purpose paraphrase without a fixture nonce", () => {
+    const o = valid("goals.explain-purpose"); o.state.rationale = "quiet research teams fixture-nonce";
+    (o.state.initialPurpose as InternalObservation).reply = "The website helps small research groups sign up, supporting our growth goal.";
+    expect(gradeInternal(o).passed).toBe(true);
+  });
+  it("rejects the wrong business fact even when it mentions research teams", () => {
+    const o = valid("goals.explain-purpose");
+    (o.state.initialPurpose as InternalObservation).reply = "The website exists to sell advertising for research teams.";
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a conditional missing-context task contaminating the initial reference", () => {
+    const o = valid("goals.explain-purpose");
+    (o.state.initialPurpose as InternalObservation).tasks.push({ id: "missing-task", title: "Unaligned website work", goalId: null });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("records an incomplete first-purpose phase as failure without requiring later fixture entities", () => {
+    const o = valid("goals.explain-purpose"); delete o.state.missingTask; delete o.state.missingReply; delete o.state.initialPurpose;
+    expect(() => gradeInternal(o)).not.toThrow(); expect(gradeInternal(o).passed).toBe(false);
+  });
   it("accepts correct context-only alignment without requiring unrequested goal links", () => {
     const o = valid("goals.align-existing-work"); o.links = ["/ACORN/issues/task", "/ACORN/projects/p"];
     (o.state.authorizedAlignment as { reply: string }).reply = "Done. Launch project and Website task now reference Growth. Verified both with fresh reads; no other fields changed.";
