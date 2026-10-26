@@ -126,10 +126,11 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
   } = options;
 
 
-  const failedChatRetryDenied = () =>
+  const failedChatRetryDenied = (reason?: "accepted_result_without_new_input" |
+    "prior_result_publication" | "prior_interaction" | "source_authorization") =>
     conflict(
       "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
-      { code: "chat_failed_run_retry_not_authorized" },
+      { code: "chat_failed_run_retry_not_authorized", ...(reason ? { reason } : {}) },
     );
   class FailedChatRetryPublicationReadError extends Error {
     constructor() {
@@ -874,6 +875,11 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         ),
       )
       .limit(1);
+    const previousComments = new Set(pendingSources?.length ? retryCommentIds(context, selectedInput) : []);
+    const independentFailedInput = input.taskRetryIntentId && pendingSources?.length &&
+      pendingSources.every(action => action.payload.requestedByActorType === "user") &&
+      commentIds.every(id => !previousComments.has(id)) && failedRun.status === "failed" &&
+      (accepted?.resultJson.terminal as Record<string, unknown> | undefined)?.runTerminalState === "failed";
     const [resultPublication] = await tx
       .select({ id: chatPublications.id })
       .from(chatPublications)
@@ -884,6 +890,10 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
           input.committedResponse
             ? eq(chatPublications.state, "delivery_unknown")
             : undefined,
+          // A distinct admitted user request does not replay the failed
+          // result's output. Preserve that terminal publication as history;
+          // pending or uncertain delivery still owns its external effects.
+          independentFailedInput ? ne(chatPublications.state, "failed") : undefined,
           continuingUnknownPublicationId
             ? ne(chatPublications.id, continuingUnknownPublicationId)
             : undefined,
@@ -899,18 +909,10 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         ),
       )
       .limit(1);
-    const previousComments = new Set(pendingSources?.length ? retryCommentIds(context, selectedInput) : []);
-    const independentFailedInput = input.taskRetryIntentId && pendingSources?.length &&
-      pendingSources.every(action => action.payload.requestedByActorType === "user") &&
-      commentIds.every(id => !previousComments.has(id)) && failedRun.status === "failed" &&
-      (accepted?.resultJson.terminal as Record<string, unknown> | undefined)?.runTerminalState === "failed";
-    if (
-      (!input.committedResponse && accepted && !independentFailedInput) ||
-      resultPublication ||
-      question ||
-      answerDelivery
-    )
-      throw failedChatRetryDenied();
+    if (!input.committedResponse && accepted && !independentFailedInput)
+      throw failedChatRetryDenied(input.taskRetryIntentId ? "accepted_result_without_new_input" : undefined);
+    if (resultPublication) throw failedChatRetryDenied(input.taskRetryIntentId ? "prior_result_publication" : undefined);
+    if (question || answerDelivery) throw failedChatRetryDenied(input.taskRetryIntentId ? "prior_interaction" : undefined);
     if (context.chatFailedRunRetry && !pendingSources) {
       const hint = context.chatFailedRunRetry as Record<string, unknown>;
       const [priorIntent] = await tx
@@ -1089,7 +1091,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     const invalidated = new Set(lifecycleRows.map(row => lifecycleKey(row.target, row.context)));
     const batch = reauthorization ? await authorizeGitHubTaskRetryBatch(tx, ordered, {
       nonblocking: true, terminal: input.publication === true, taskRetry: reauthorization,
-    }).catch(error => { if (isExternalActionAuthorizationChange(error)) throw failedChatRetryDenied(); throw error; }) : null;
+    }).catch(error => { if (isExternalActionAuthorizationChange(error)) throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined); throw error; }) : null;
     const canonicalSources: Array<Record<string, unknown>> = [];
     let destination: Awaited<ReturnType<typeof authorizeInboundWakeup>> | null =
       null;
@@ -1100,7 +1102,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         ...(reauthorization ? { taskRetry: reauthorization } : {}),
       }).catch((error) => {
         if (isExternalActionAuthorizationChange(error))
-          throw failedChatRetryDenied();
+          throw failedChatRetryDenied(input.taskRetryIntentId ? "source_authorization" : undefined);
         throw error;
       });
       if (reauthorization && !reauthorization.runtimeFence) reauthorization.runtimeFence = destination.retryRuntimeFence;
