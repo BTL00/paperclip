@@ -54,7 +54,7 @@ function valid(id: string) {
   } else if (id === "navigation-preferences.find-project-view") {
     Object.assign(o.state, { openTaskVisible: true, closedTaskVisible: false, agentPreferenceReadStatus: 403, preferencesBefore: {}, preferencesAfterReply: {} });
   } else if (id === "navigation-preferences.quick-search") {
-    Object.assign(o.state, { paletteTaskVisible: true, searchTaskVisible: true, searchQuery: "Launch" }); o.reply = "Open quick search with Cmd+K.";
+    Object.assign(o.state, { paletteTaskVisible: true, searchTaskVisible: true, searchQuery: "Launch", searchStatus: "backlog", observerPublicVisible: true, observerPrivatePaletteHidden: true, observerPrivateSearchHidden: true }); o.reply = "Open quick search with Cmd+K.";
   } else if (id === "questions-and-approvals.ambiguous-yes") {
     o.tasks = []; o.projects = []; o.state.proposals = [{ id: "note" }, { id: "poster" }];
     o.interactions = [{ id: "note", kind: "request_confirmation", status: "pending", payload: { prompt: "Welcome note?" } },
@@ -102,6 +102,10 @@ describe("identity catalog independent oracle calibration", () => {
   }
   it("does not treat response prose as persisted success", () => {
     for (const grade of [gradeCompanyRename, gradeNavigation, gradeQuestions, gradeBudget]) expect(grade({ reply: "Done, everything is saved." }).passed).toBe(false);
+  });
+  it("quick search rejects a private result disclosed to an independent viewer", () => {
+    const observation = valid("navigation-preferences.quick-search"); observation.state.observerPrivatePaletteHidden = false;
+    expect(gradeNavigation(observation).passed).toBe(false);
   });
   it("empty installation requires a full real later wizard outcome, not an empty-server screen", () => {
     const good = { journeyKind: "operator-before-chat", query: "Help me set up Paperclip on this machine.", querySent: false,
