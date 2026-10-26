@@ -7,7 +7,7 @@ import { observeInternal, type Entity, type InternalObservation } from "./intern
 export interface RuntimeAgent extends Entity {
   reportsTo?: string | null; adapterType?: string; adapterConfig?: Record<string, unknown>;
   runtimeConfig?: Record<string, unknown>; permissions?: Record<string, unknown>;
-  defaultEnvironmentId?: string | null; lifecycleState?: string;
+  defaultEnvironmentId?: string | null; lifecycleState?: string; lifecycleHolds?: string[]; pauseReason?: string | null;
 }
 export interface InstructionFile {
   path: string; content: string; revision: { id: string; parentRevisionId?: string | null;

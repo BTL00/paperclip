@@ -56,7 +56,7 @@
     },
     {
       "scenarioId": "agents.resume-agent",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Public manual pause plus independently preserved readiness; permitted resume and separate remaining-gate branch."
     },
     {
@@ -71,7 +71,7 @@
     },
     {
       "scenarioId": "agents.agent-api-key",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Human-session credential UI; one-time token privateSecrets sink, named-key public readback and revoke with identity retained."
     },
     {
@@ -236,7 +236,7 @@
     },
     {
       "scenarioId": "steering.preserve-draft",
-      "readinessClass": "source",
+      "readinessClass": "implemented",
       "needs": "Unsent canonical query and completed upload receipt must survive task switch/reload before send; shared flow sends original query immediately after setup."
     },
     {

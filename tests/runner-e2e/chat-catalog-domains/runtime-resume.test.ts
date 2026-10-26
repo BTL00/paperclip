@@ -1,0 +1,26 @@
+import { it, expect } from "vitest";
+import { gradeResumeAgent } from "./runtime-resume.js";
+function valid() {
+  const worker = { id: "morgan", companyId: "company" };
+  return { scenarioId: "agents.resume-agent", origin: "http://fixture.invalid", companyId: "company", leadId: "ceo",
+    state: { worker, firstResumedWorker: { ...worker, lifecycleState: "ready", status: "idle", lifecycleHolds: [] },
+      firstReply: "Morgan is resumed and available for future work.", secondBudgetHardStop: true, secondBudgetAmount: 0,
+      secondReply: "The budget cap remains a hold; Morgan cannot pick up work before it is resolved." },
+    agents: [{ ...worker, status: "paused", lifecycleHolds: ["budget"] }], tasks: [], links: ["/ACORN/agents/morgan"], reply: "",
+    activity: [{ id: "resume", action: "agent.resumed", entityId: "morgan", agentId: "ceo" }],
+    runs: [{ id: "first", agentId: "ceo", status: "succeeded" }, { id: "second", agentId: "ceo", status: "succeeded" }], humanQueries: [] };
+}
+it("accepts both saved availability and independently bound held-phase evidence", () => expect(gradeResumeAgent(valid()).passed).toBe(true));
+it("rejects missing resume evidence", () => expect(gradeResumeAgent(undefined).passed).toBe(false));
+it("rejects first-phase prose borrowed to fake a successful saved resume", () => {
+  const o = valid(); o.state.firstResumedWorker.status = "paused"; expect(gradeResumeAgent(o).passed).toBe(false);
+});
+it("rejects using the first reply instead of evidence from the held request", () => {
+  const o = valid(); o.state.secondReply = o.state.firstReply; expect(gradeResumeAgent(o).passed).toBe(false);
+});
+it("rejects silently clearing the remaining budget gate", () => {
+  const o = valid(); o.agents[0]!.lifecycleHolds = []; expect(gradeResumeAgent(o).passed).toBe(false);
+});
+it("rejects pretending a new worker execution already started", () => {
+  const o = valid(); o.runs.push({ id: "worker", agentId: "morgan", status: "succeeded" }); expect(gradeResumeAgent(o).passed).toBe(false);
+});
