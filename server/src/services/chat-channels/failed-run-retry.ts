@@ -285,10 +285,23 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         ),
       )
       .orderBy(asc(heartbeatRunEvents.seq))
-      .limit(3)
+      .limit(workspacePreparation ? 4 : 3)
       .for("share", { noWait: true });
-    const event = events[0];
-    const measured = events[1];
+    let preparationOffset = 0;
+    const warning = events[0];
+    if (workspacePreparation && warning?.eventType === "agent_observability.unavailable") {
+      // This known warning is written by configuration preparation, before
+      // workspace allocation. It is not evidence that a provider executed.
+      if (warning.seq !== 1 || warning.agentId !== run.agentId || warning.stream !== "system" || warning.level !== "warn" ||
+          warning.message !== "Company observability was not applied: this harness is not supported." ||
+          warning.payload?.reason !== "unsupported_harness" || (typeof warning.payload.revision !== "string" || !isUuidLike(warning.payload.revision)) ||
+          Object.keys(warning.payload).some(key => !["reason", "revision"].includes(key)) ||
+          warning.sourceInstanceId !== null || warning.sourceEventId !== null || warning.sourceSeq !== null ||
+          warning.sourcePayloadSha256 !== null || warning.protocolSchemaVersion !== null) return false;
+      preparationOffset = 1;
+    }
+    const event = events[preparationOffset];
+    const measured = events[preparationOffset + 1];
     if (failedRetry) {
       const explicit = run.contextSnapshot?.explicitUserContinuation as Record<string, unknown> | undefined;
       const hint = run.contextSnapshot?.chatFailedRunRetry as Record<string, unknown> | undefined;
@@ -303,7 +316,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
       if (!prior || prior.wake.status !== "coalesced" || prior.wake.runId !== run.id) return false;
     }
     if (failedRetry || workspacePreparation) {
-      if (!measured || measured.seq !== 2 || measured.agentId !== run.agentId ||
+      if (!measured || measured.seq !== 2 + preparationOffset || measured.agentId !== run.agentId ||
           measured.eventType !== "lifecycle" || measured.stream !== "system" ||
           measured.message !== "task.run.measured" || measured.sourceInstanceId !== null ||
           measured.sourceEventId !== null || measured.sourceSeq !== null || measured.sourcePayloadSha256 !== null ||
@@ -313,10 +326,10 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
           measured.payload?.phase !== "task.run.measured") return false;
     }
     if (
-      events.length !== (failedRetry || workspacePreparation ? 2 : 1) ||
+      events.length !== (failedRetry || workspacePreparation ? 2 + preparationOffset : 1) ||
       !event ||
       event.agentId !== run.agentId ||
-      event.seq !== 1 ||
+      event.seq !== 1 + preparationOffset ||
       event.eventType !== "error" ||
       event.stream !== "system" ||
       event.level !== "error" ||
