@@ -81,8 +81,8 @@
     },
     {
       "scenarioId": "agents.managed-profile",
-      "readinessClass": "local",
-      "needs": "No qualified Anthropic managed profile; agent denied operator provisioning; actual operator route and locked-environment/retention acknowledgement."
+      "readinessClass": "provider",
+      "needs": "Operator-managed Anthropic references, genuinely qualified locked environment and actual retention acknowledgement are needed for the completion branch; private discovery remains coordinator-owned."
     },
     {
       "scenarioId": "agent-chat.reopen-conversation",
@@ -112,7 +112,7 @@
     {
       "scenarioId": "agent-chat.chat-disabled",
       "readinessClass": "boundary",
-      "needs": "Agent Chat disabled precludes ordinary human query through Agent Chat; requires explicit manager decision for new boundary context, never ordinary-case bypass."
+      "needs": "Actual disabled Agent Chat context needs a narrowly allowlisted unavailable-surface browser-boundary case; ordinary Agent Chat cannot send its canonical query. No conference-only unrelated-gate substitute."
     },
     {
       "scenarioId": "runs-adapters.list-model-options",
@@ -211,13 +211,13 @@
     },
     {
       "scenarioId": "steering.edit-queued-message",
-      "readinessClass": "source",
-      "needs": "Human-owned undispatched queue; browser edit/reorder, stale and dispatched branches; source task UI selection separate from fixed lead source."
+      "readinessClass": "local",
+      "needs": "Human-owned undispatched real queue; ordinary browser task navigation can perform human edit/reorder while the canonical query remains in the lead source. Need actual concurrent/stale and already-dispatched controls; no shared source selector proven necessary."
     },
     {
       "scenarioId": "steering.discard-queued-message",
-      "readinessClass": "source",
-      "needs": "Human-owned queued comment; browser discard eligible entry and separate dispatched cancellation-as-direction branch."
+      "readinessClass": "local",
+      "needs": "Human-owned real queued comment; actual task UI discard plus separate genuinely dispatched cancellation-as-new-direction phase. Exact task human comment/run boundaries can be retained area-locally."
     },
     {
       "scenarioId": "steering.steer-active",
@@ -296,8 +296,8 @@
     },
     {
       "scenarioId": "workspaces.close-and-reopen",
-      "readinessClass": "local",
-      "needs": "Real retained task workspace no active run; close lifecycle state with files retained and actual retrieval/reopen proof."
+      "readinessClass": "implemented",
+      "needs": "Genuine Morgan file/artifact plus separate real Riley workspace; native setup context pins exact closure target. Authorized close, retained source fields and unchanged original artifact bytes, actual browser download and untouched Riley workspace/file."
     },
     {
       "scenarioId": "workspaces.recover-lost-sandbox",

@@ -5,27 +5,28 @@ import { checks, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface WorkspaceView { workspace: { id: string; companyId: string; projectId?: string | null; name: string; cwd: string }; repositories: unknown[] }
-export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean } = {}) {
+export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean; workerName?: string } = {}) {
   const { execution, fixtures, workspacePath, nonce, api } = ctx.input;
   const base = execution.profile.buildAgent({ environmentId: fixtures.environment.id, environmentFixtureId: execution.environment.id,
     workspacePath, secretRefs: fixtures.secretRefs, executionId: nonce });
   const { cwd: _cwd, ...taskConfig } = base.adapterConfig as Record<string, unknown>;
-  const worker = await runtimeWorker(ctx, "Morgan", { adapterConfig: taskConfig });
+  const worker = await runtimeWorker(ctx, options.workerName ?? "Morgan", { adapterConfig: taskConfig });
   const company = `/api/companies/${fixtures.company.id}`;
   for (const scope of [{ scopeType: "company", scopeId: fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }])
     await api.post(`${company}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
   const marker = `Saved website prerequisite ${nonce}`;
+  const previousRuns = await ctx.allRuns();
   const task = await api.post<Entity>(`${company}/issues`, { title: "Website task", status: "todo", assigneeAgentId: worker.id,
     description: `Create a local file website-fixture.txt containing exactly ${JSON.stringify(marker)} in your admitted task workspace. Save a brief task document as evidence, ${options.artifact ? "register the actual website-fixture.txt file as a downloadable artifact work product titled website-fixture.txt," : ""} then complete this fixture task normally. Do not create a project, repository, another task, or remote side effect.` });
   await pollUntil({ label: "Real projectless website fixture completion", deadlineAt: Date.now() + 180_000,
-    load: async () => ({ task: await api.get<Entity>(`/api/issues/${task.id}`), runs: await ctx.allRuns() }),
+    load: async () => ({ task: await api.get<Entity>(`/api/issues/${task.id}`), runs: (await ctx.allRuns()).filter(run => !previousRuns.some(prior => prior.id === run.id)) }),
     accept: value => value.task.status === "done" && value.runs.length === 1 && value.runs.every(run => run.status === "succeeded"),
     reject: value => value.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Projectless prerequisite provider run failed" : undefined });
   const view = await api.get<WorkspaceView>(`/api/issues/${task.id}/workspace`);
   const file = await api.get<{ resource?: { workspaceKind?: string }; content?: { data?: string } }>(`/api/issues/${task.id}/file-resources/content?workspace=execution&path=website-fixture.txt`);
   if (view.workspace.projectId || file.resource?.workspaceKind !== "execution_workspace" || file.content?.data?.trim() !== marker)
     throw new Error("Projectless fixture has no actual task-bound saved file");
-  const fixtureRunId = (await ctx.allRuns())[0]!.id;
+  const fixtureRunId = (await ctx.allRuns()).find(run => !previousRuns.some(prior => prior.id === run.id))!.id;
   const [artifact] = options.artifact ? await readRegisteredArtifacts(api, task.id, fixtureRunId, ["website-fixture.txt"]) : [];
   return { worker, task: await api.get<Entity>(`/api/issues/${task.id}`), workspaceBefore: view, marker, artifact,
     fileBefore: file.content.data, fixtureRunId };
