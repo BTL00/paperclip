@@ -163,7 +163,12 @@ write and verify one summary, finding, and App-scoped check. Retry the same tool
 call and verify it returns the saved receipt. Include text longer than 500
 characters and coverage with more than 50 entries. Change only the text suffix
 or final coverage entry and verify rejection without another write. Remove the
-durable publication and verify that a retry cannot dispatch a new write.
+completed durable publication and verify that a retry cannot dispatch a new write.
+Also interrupt metadata reads before publication staging, repeat the exact
+`begin_review` and `submit_review` requests, and verify typed results and one
+assessment publication. Let the original metadata read finish alongside its
+retry and verify that both converge on the same publication. Changed requests
+and revoked access must still stop preflight recovery.
 Leave a transient failure queued,
 restart the instance, and verify publication resumes at its saved deadline
 without another inbound message. Revoked access and permanent rejections must

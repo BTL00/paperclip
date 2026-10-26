@@ -115,8 +115,13 @@ GitHub publication recovery (2026-10-14): assigned-agent `submit_review`, `comme
 and `update_comment` calls reuse their run-, task-, endpoint-, and argument-bound
 publication on an exact retry. Identity uses the complete durable request rather
 than the shortened audit preview. A changed suffix, changed nested entry, or
-missing publication cannot authorize another write. Exact retries only read the
-receipt; the worker owns pending provider retries. Fresh gateway policy and provider authority remain
+missing completed publication cannot authorize another write. Exact retries read an
+existing receipt; the worker owns pending provider retries. A request interrupted
+during metadata or file reads before staging can repeat that preflight with the
+same full request identity. The immutable assessment, unique publication and
+provider lease still serialize its external write. `begin_review` exact retries
+resolve the run's current review and return a typed result instead of an audit
+preview. Fresh gateway policy and provider authority remain
 required. The durable worker resumes transient failures after restart and stops
 at its retry cap, revoked authority, or a superseded head. A pending receipt is
 not task completion. Source:
