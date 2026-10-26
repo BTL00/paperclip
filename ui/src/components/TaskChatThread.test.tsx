@@ -26,6 +26,7 @@ const transcriptState = vi.hoisted(() => ({
   transcriptByRun: new Map(),
   isInitialHydrating: false,
   hydratedRunIds: undefined as Set<string> | undefined,
+  truncatedRunIds: new Set<string>(),
 }));
 const nativeTranscriptState = vi.hoisted(() => ({
   transcriptByRun: new Map(),
@@ -35,6 +36,7 @@ const nativeTranscriptState = vi.hoisted(() => ({
 }));
 const transcriptHookRuns = vi.hoisted(() => ({
   legacy: [] as unknown[][],
+  legacyReadLimits: [] as (number | undefined)[],
   native: [] as unknown[][],
 }));
 const sidebarState = vi.hoisted(() => ({ isMobile: false }));
@@ -51,12 +53,14 @@ const editorCallbacks = vi.hoisted(() => ({ change: (_value: string) => {} }));
 const streamlinedState = vi.hoisted(() => ({ enabled: true }));
 
 vi.mock("@/components/transcript/useLiveRunTranscripts", () => ({
-  useLiveRunTranscripts: ({ runs }: { runs: unknown[] }) => {
+  useLiveRunTranscripts: ({ runs, logReadLimitBytes }: { runs: unknown[]; logReadLimitBytes?: number }) => {
     transcriptHookRuns.legacy.push(runs);
+    transcriptHookRuns.legacyReadLimits.push(logReadLimitBytes);
     return {
       transcriptByRun: new Map(transcriptState.transcriptByRun),
       isInitialHydrating: transcriptState.isInitialHydrating,
       hydratedRunIds: transcriptState.hydratedRunIds,
+      truncatedRunIds: transcriptState.truncatedRunIds,
     };
   },
 }));
@@ -122,11 +126,13 @@ beforeEach(() => {
   transcriptState.transcriptByRun.clear();
   transcriptState.isInitialHydrating = false;
   transcriptState.hydratedRunIds = undefined;
+  transcriptState.truncatedRunIds.clear();
   nativeTranscriptState.transcriptByRun.clear();
   nativeTranscriptState.errorsByRun.clear();
   nativeTranscriptState.hydratedRunIds = undefined;
   nativeTranscriptState.terminalHydratedRunIds = undefined;
   transcriptHookRuns.legacy.length = 0;
+  transcriptHookRuns.legacyReadLimits.length = 0;
   transcriptHookRuns.native.length = 0;
   sidebarState.isMobile = false;
   planState.data = null;
@@ -369,6 +375,27 @@ it.each([true, false])("keeps cold-open messages readable while history is pendi
   expect(container.textContent).toContain("Thread message 1");
   expect(container.textContent).toContain("More messages");
   expect(container.querySelector('[data-testid="mock-editor"]')).not.toBeNull();
+});
+
+it.each([0, 32_000, 100_000])("offers earlier output only when a single legacy run exceeds the compact window (%s bytes)", (logBytes) => {
+  const onExpandHistory = vi.fn();
+  if (logBytes > 32_000) transcriptState.truncatedRunIds.add("legacy-run");
+  const props = {
+    issueId: "single-legacy-run", comments: [], onAdd: async () => {}, onExpandHistory,
+    linkedRuns: [{ runId: "legacy-run", agentId: "agent", status: "succeeded", adapterType: "claude_local", runtimeMode: "legacy" as const, createdAt: "2025-01-01T10:00:00Z", startedAt: "2025-01-01T10:00:00Z", logBytes }],
+  };
+  render(<TaskChatThread {...props} compactHistory />);
+  expect(container.textContent).not.toContain("More messages");
+  const outputControl = [...container.querySelectorAll("button")].find((button) => button.textContent === "More run output");
+  expect(Boolean(outputControl)).toBe(logBytes > 32_000);
+  expect(transcriptHookRuns.legacyReadLimits.at(-1)).toBe(32_000);
+  if (outputControl) {
+    act(() => outputControl.click());
+    expect(onExpandHistory).toHaveBeenCalledOnce();
+    render(<TaskChatThread {...props} compactHistory={false} />);
+    expect(container.textContent).not.toContain("More run output");
+    expect(transcriptHookRuns.legacyReadLimits.at(-1)).toBeUndefined();
+  }
 });
 
 it("defers initial history for a saved conversation with its own draft key", () => {

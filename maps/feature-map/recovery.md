@@ -33,6 +33,10 @@ Agent access: [companion](../agent-access-map/recovery.md).
   workspace link when the destination is disabled. Local PostgreSQL and real
   filesystem regressions cover native and legacy recovery and one-time delivery;
   hosted provider recovery remains separate acceptance.
+  Native finalization deadline failures also retain the exact prepared source
+  for the same stop-and-save workflow before Retry admits another executor.
+  Retry reconstructs missing preservation for historical failures only from an
+  exact prepared source without a live finalization owner.
 - `unknown-outcome`: `recovery/unknown-outcome` — uncertain external side effects require inspection and
   an explicit decision, not automatic replay.
 - `user-continuation`: `recovery/user-continuation` — saved user messages after a stop are reconsidered once
@@ -203,8 +207,16 @@ Active remote process supervision distinguishes a failed health read from a
 confirmed exit. The [executor tests](../../server/src/services/native-runtime/native-session-executor.test.ts)
 exercise timeout recovery with a real listening process, unchanged ownership,
 and rejected identity evidence. The Runner restart tests require positive exit
-evidence before replacement. This coverage does not prove recovery of a
+evidence before replacement. The executor regressions also retire a real child
+during its metadata read, keep unknown adopted-process ownership held, and reject
+launch before detachment when Node is unavailable. The diagnostic tests cover
+permission failures and generation-bound zombie receipts. This coverage does not prove recovery of a
 historical retained sandbox or behavior during a live provider outage.
+The [transport regression](../../packages/paperclip-runner/src/live/runnerd-codex-transport.test.ts)
+also retains a real authenticated Runner and its journal when its close probe
+rejects, without signalling it, checkpointing it, or starting a replacement.
+The failed close still retires its local connections, event timers and
+notification stream. Repeated close cannot report successful retirement.
 
 For a release change during a remote provider session, verify that reattachment
 uses the controller's admitted pack manifest and runner digest. Check useful
@@ -276,6 +288,10 @@ completed obligations followed by quiet paused input.
 The physical export regression holds one export while another completes, then
 verifies a third Retry can use the free slot and shutdown joins the held work.
 These local checks do not prove recovery of a deployed allocation.
+The historical deadline case starts without preservation bookkeeping, holds the
+provider stop reply, and verifies that HTTP Retry cannot admit a successor until
+the real temporary files are restored. Duplicate requests then admit one queued
+turn. GitHub and Telegram admission also retain the exact pending recovery.
 
 Automated: [disposition notices](../../ui/src/components/DispositionRecoveryNotice.test.tsx)
 tests pending/error/gated states and waiting for the real retry acknowledgement.

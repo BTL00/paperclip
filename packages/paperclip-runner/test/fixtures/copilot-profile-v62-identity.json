@@ -1,5 +1,5 @@
 {
-  "commandDigest": "sha256:1251b53cb4716273c74e5839eb112ef8ca639e0967eb90a9f1a5f5ddafdb642c",
+  "commandDigest": "sha256:aeeb80bc186569c78911aeaa445c1fdf5e81420cfeadb563d5620497c58dd0f4",
   "declaration": {
     "schema": "paperclip.acpx_profile_declaration.v1",
     "agent": "copilot",
@@ -33,7 +33,7 @@
     "semanticDirectDriverSourceSha256": "ff572638f2cb5d9f8249ff8e2f412311c1e3af209ef0bf7e5ea9f10a21d91103",
     "semanticValidationSourceSha256": "02fbb92681c78c5de5d2f1aae25aabc25a0e5df6b0ff4baccac652192a8da975",
     "semanticNormalizationSourceSha256": "8b628b82e8eacc91cdcc6fdca2210ba4cf282f01e9c6f74e95ff271655b5047e",
-    "semanticCompletionContractSourceSha256": "f49398b682a5623812f5d3c33d6bb9a749008e47cc0ed969072041615f66df59",
+    "semanticCompletionContractSourceSha256": "3343df6362252d44d12b079ff78c8f6539d1544f3ce5ec36ff36db70ab0fac31",
     "semanticValidatorsSourceSha256": "f22d9caf2035b600abc1a6625ae23ca97f1409d7e29ed5b7264bb8f9784c7dc9",
     "semanticSchemaBundleSourceSha256": "016391a087cc217aafed4ba1f4efafc6e4881a7525952dce824b7f4d24530603",
     "semanticSidecarProtocolSourceSha256": "03c0c95b900f9dc18f29f6be27b8c79bc0bcab29780190d46a74e95328081236",
@@ -60,7 +60,7 @@
     "nativeInstructionsSourceSha256": "9173ebccf09cb56a781d2bf5c7eb27fdafb13d3450d99342c6aff86b42d6b43a",
     "providerLaunchSourceSha256": "fa8db1c42c378898287c141d8cea9069166981e369c9b9c51422cb6177de5a2c",
     "launchPreparationStoreSourceSha256": "ff6025568bbc0aa6ce545772d73dfca2d3da226740bd3a7b386b069e76cff296",
-    "runtimeRequestBridgeSourceSha256": "e6c98128d98a4177c42d68a04c1f749554fd5ec844da1bbbdb3f682670189445",
+    "runtimeRequestBridgeSourceSha256": "9be35e006ffffcca48205f9e53548dd453ec6a8cbcf0aa4dd735194e9619dfc7",
     "runtimeRequestFacadeSourceSha256": "d0ed28e0c5ddad34db8f437e704c8a755eb0b47f27e08e44185f66d1d2205295",
     "runtimeRequestNotificationSourceSha256": "6196c6175f11c69295dc00fc773201f4fdeca26c500653870253c43b81e65211",
     "guardedInstallationSourceSha256": "56a177d3e702914818dca4ca50e061f0d25f988bfc4c0582c36ce23c1696d82f",
@@ -74,7 +74,7 @@
     "profileSourceSha256": "f5538b3dbefa7634a332b87d5ededcefb56aa7e5790cede1c7a0d948a548a456",
     "metadataProbeSourceSha256": "be4c8416edd27061109bc1f33d0c26071b4facbb3f651beaae6b3c0275cce727",
     "permissionToolIdentitySourceSha256": "770b47305e571a81f344883057d0e4a482a1cd59ac77d045836593a8e739deb1",
-    "semanticContinuationSourceSha256": "c9cc0fd516b3df92a6655f56ee9bef37615a889c371e2e137d8ac5c1176de811",
+    "semanticContinuationSourceSha256": "d248e47a0fe7f2536d1e64cea0b0b410f34104800cd643d995b4473104ecc8e0",
     "runtimeHostSourceSha256": "94a73749267f5a80b5df19413a65b4b9263c00a9bf7e98fda00f00b8f9fd32ec",
     "runtimeAdapterSourceSha256": "e4c764c2c3c7dd655a965b39472bd1ad8d577d1e7258b25594b171c9429752b8",
     "runtimeSandboxSourceSha256": "92dfa53f5a3ed0062913ae417eeccec243b430d444495efde2a8e9c4c02e78ea",

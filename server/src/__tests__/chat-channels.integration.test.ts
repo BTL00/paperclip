@@ -17,7 +17,7 @@ import { createDatabaseResponseCapture, installDatabaseResponseCapture } from "@
 import { githubResponseAuthorityFields } from "../services/chat-channels/github/response-authority-read.js";
 import * as activityLogModule from "../services/activity-log.js";
 import * as connectionCredentialBindings from "../services/connection-credential-bindings.js";
-import { chatSlackManagerGrants, chatSlackRegistrations, toolOauthStates } from "@paperclipai/db";
+import { chatSlackManagerGrants, chatSlackRegistrations, toolOauthStates, environments } from "@paperclipai/db";
 import type { PaperclipCloudConnector, SealedConnectorCredentials } from "../services/paperclip-cloud-connector.js";
 import { buildSlackAppManifest, SLACK_MANAGER_SCOPES } from "@paperclipai/shared";
 import { registerChatActionWork, dueChatAction } from "../services/chat-action-work.js";
@@ -61960,7 +61960,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
   );
 
   it.each((["github", "telegram"] as const).flatMap(provider =>
-    (["pending", "historical_sibling", "foreign_source_hold", "automatic_scheduled", "automatic_running", "automatic_awaiting_evidence", "exhausted", "wrong_generation", "paused_endpoint", "paused_after_wait", "paused_agent_after_wait", "edited_after_wait", "superseded_after_wait"] as const).map(gate => ({ provider, gate }))))(
+    (["unregistered", "pending", "historical_sibling", "foreign_source_hold", "automatic_scheduled", "automatic_running", "automatic_awaiting_evidence", "exhausted", "wrong_generation", "paused_endpoint", "paused_after_wait", "paused_agent_after_wait", "edited_after_wait", "superseded_after_wait"] as const).map(gate => ({ provider, gate }))))(
     "holds an ordinary $provider Retry behind its exact remote recovery: $gate", async ({ provider, gate }) => {
       const context = await failedChatRetryFixture(provider, undefined, true);
       try {
@@ -61987,7 +61987,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           firstFailureAt: Date.now() - 1000, deadlineAt: Date.now() + 60_000,
           preservationOperationIds: [randomUUID()],
         };
-        const canResume = gate === "pending" || gate === "historical_sibling" || gate.startsWith("automatic_");
+        const canResume = gate === "unregistered" || gate === "pending" || gate === "historical_sibling" || gate.startsWith("automatic_");
         await db.insert(issueRecoveryActions).values({ companyId, sourceIssueId: issueId,
           kind: "active_run_watchdog", status: "resolved", ownerType: "system",
           cause: "native_continuation_requires_reconciliation", fingerprint: randomUUID(),
@@ -61998,6 +61998,19 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
             systemRecovery: priorRecovery,
           },
         });
+        if (gate === "unregistered") {
+          const [lease] = await db.select().from(environmentLeases).where(eq(environmentLeases.id, leaseId));
+          const [environment] = await db.insert(environments).values({ name: context.runId, driver: "sandbox" }).returning();
+          await db.delete(issueRecoveryActions).where(eq(issueRecoveryActions.sourceIssueId, issueId));
+          await db.update(heartbeatRuns).set({ resultJson: null, errorCode: "execution_finalization_deadline_exceeded",
+            runnerProfileJson: { nativeWorkspaceSync: { schema: "paperclip.native-workspace-sync/v3", state: "prepared",
+              descriptorSha256: "a".repeat(64), baselineSha256: "b".repeat(64), finalHostSha256: null,
+              workspaceId: issueId, leaseId, providerLeaseId: lease.providerLeaseId,
+              remoteCwd: lease.metadata.remoteCwd, resourceDisposition: "keep_running" } },
+          }).where(eq(heartbeatRuns.id, context.runId));
+          await db.update(environmentLeases).set({ environmentId: environment.id, status: "active", cleanupStatus: null, leasePolicy: "reuse_by_environment" })
+            .where(eq(environmentLeases.id, leaseId));
+        }
         const receipt = await requestTaskRetry({ db, companyId, issueId, actorId: "owner-user",
           actorSource: "cloud_tenant", observedRunId: context.runId, idempotencyKey: randomUUID(),
           prepareChatRetry: context.service.prepareFailedChatRunRetry });

@@ -8,6 +8,7 @@ import { WorkspaceRetryControl } from "../components/WorkspaceRetryButton";
 import { isLockedIssueStub, LockedIssueChip } from "@/components/LockedIssueChip";
 import { canManageIssuePrivacy } from "../lib/issuePrivacy";
 import { TextAttachmentContext } from "../context/TextAttachmentContext";
+import { useTaskPluginPanels, taskPluginPanelId } from "@/hooks/useTaskPluginPanels";
 import { useTaskBrowsers, useBrowserArrivals } from "@/hooks/useTaskBrowsers";
 import { WorkspaceExportRecovery } from "../components/WorkspaceExportRecovery";
 import { DispositionRecoveryProvider } from "../components/DispositionRecoveryNotice";
@@ -1203,6 +1204,11 @@ function InboxMobileToolbar({
   );
 }
 
+interface RecentIssueRunWindow {
+  runs: RunForIssue[];
+  hasEarlierRuns: boolean;
+}
+
 type IssueDetailChatTabProps = {
   executionBlocked?: boolean;
   interruption?: Issue["interruption"];
@@ -1620,37 +1626,48 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
   const hasLiveRuns = liveRunCount > 0 || !!resolvedActiveRun;
   const linkedRunsKey = historyExpanded
     ? queryKeys.issues.runs(issueQueryRef)
-    : [...queryKeys.issues.runs(issueQueryRef), "recent"];
+    : [...queryKeys.issues.runs(issueQueryRef), "recent-window"];
   const {
-    data: linkedRuns,
+    data: linkedRunHistory,
     isPending: linkedRunsPending,
     isError: linkedRunsError,
     refetch: refetchLinkedRuns,
-  } = useQuery({
+  } = useQuery<RunForIssue[] | RecentIssueRunWindow>({
     queryKey: linkedRunsKey,
     queryFn: async () => {
       if (historyExpanded) return activityApi.runsForIssue(issueQueryRef);
       let recent = await activityApi.recentRunsForIssue(issueQueryRef);
-      let previous = queryClient.getQueryData<RunForIssue[]>(linkedRunsKey) ?? [];
+      const previousWindow = queryClient.getQueryData<RecentIssueRunWindow>(linkedRunsKey);
+      let previous = previousWindow?.runs ?? [];
+      let reconciledFullHistory = false;
       if (previous.some((run) =>
         (run.status === "running" || run.status === "queued") && !recent.some((next) => next.runId === run.runId),
       )) {
         // After a reconnect, several turns may have completed beyond the small
         // window. Reconcile watched runs once against authoritative summaries.
         recent = await activityApi.runsForIssue(issueQueryRef);
+        reconciledFullHistory = true;
         const existingRunIds = new Set(recent.map((run) => run.runId));
         previous = previous.filter((run) => existingRunIds.has(run.runId));
       }
       // The second row refreshes a just-finished predecessor. Start with only
       // the latest run, then keep every run observed while this task is open.
       const visible = new Set([...previous.map((run) => run.runId), ...recent.slice(0, 1).map((run) => run.runId)]);
-      return [...new Map([...previous, ...recent].filter((run) => visible.has(run.runId)).map((run) => [run.runId, run])).values()];
+      return {
+        runs: [...new Map([...previous, ...recent].filter((run) => visible.has(run.runId)).map((run) => [run.runId, run])).values()],
+        // A first run is already visible. The disclosure needs evidence of an
+        // omitted run, and must retain that evidence as later turns arrive.
+        hasEarlierRuns: recent.some((run) => !visible.has(run.runId))
+          || (!reconciledFullHistory && recent.length >= 2 && previousWindow?.hasEarlierRuns === true),
+      };
     },
     enabled: !!issueId,
     refetchInterval:
       hasLiveRuns || issueStatus === "in_progress" ? 1000 : false,
-    placeholderData: historyExpanded ? queryClient.getQueryData<RunForIssue[]>([...queryKeys.issues.runs(issueQueryRef), "recent"]) : undefined,
+    placeholderData: historyExpanded ? queryClient.getQueryData<RecentIssueRunWindow>([...queryKeys.issues.runs(issueQueryRef), "recent-window"])?.runs : undefined,
   });
+  const linkedRuns = Array.isArray(linkedRunHistory) ? linkedRunHistory : linkedRunHistory?.runs;
+  const hasEarlierRuns = !Array.isArray(linkedRunHistory) && linkedRunHistory?.hasEarlierRuns === true;
   const resolvedActivity = useMemo(
     () => [...new Map([...(activity ?? []), ...(inputFacts.data ?? [])].map((event) => [event.id, event])).values()],
     [activity, inputFacts.data],
@@ -2560,7 +2577,8 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
           <ThreadComponent
             {...(!classicTaskInterfaceEnabled ? {
               compactHistory: !historyExpanded,
-              historyControl: !historyExpanded && (hasEarlierMessages || (linkedRuns?.length ?? 0) > 0) ? (
+              onExpandHistory,
+              historyControl: !historyExpanded && (hasEarlierMessages || hasEarlierRuns) ? (
                 <Button type="button" variant="ghost" size="sm" onClick={onExpandHistory}>
                   More messages
                 </Button>
@@ -3938,6 +3956,19 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     openTaskSidePanel();
     if (isMobile) setMobilePropsOpen(true);
   }, [issue?.id, openTaskSidePanel, isMobile]);
+  const pluginPanels = useTaskPluginPanels(issue, taskChatShellEnabled);
+  const revealedPluginPanels = useRef(new Set<string>());
+  const openedPluginPanelKeys = useRef(new Set<string>());
+  const dismissedPluginPanelKeys = useRef(new Set<string>());
+  useEffect(() => {
+    for (const panel of pluginPanels) {
+      const key = JSON.stringify([currentUserId, issue?.id, panel.runId, taskPluginPanelId(panel)]);
+      if (revealedPluginPanels.current.has(key)) continue;
+      revealedPluginPanels.current.add(key);
+      openTaskSidePanel();
+      if (isMobile) setMobilePropsOpen(true);
+    }
+  }, [pluginPanels, currentUserId, issue?.id, openTaskSidePanel, isMobile]);
   const browserQuery = useTaskBrowsers(issue?.id);
   const { openBrowserId, openBrowser: setOpenBrowserId, acknowledgeBrowserOpened: handleBrowserOpened } =
     useBrowserArrivals(currentUserId ?? "anonymous", issue?.id, browserQuery.data);
@@ -6054,7 +6085,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
   );
 
   useLayoutEffect(() => {
-    if (!panelIssue || suppressPanelUntilPlan || (conversation && !conversation.issue)) {
+    if (!panelIssue || suppressPanelUntilPlan || (conversation && !conversation.issue) || (taskChatShellEnabled && isMobile)) {
       closePanel();
       return;
     }
@@ -6093,6 +6124,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       openPanel(
         <IssueGalleryContext.Provider value={openIssueGallery}>
           <TaskSidePanel
+            pluginPanels={pluginPanels}
+            openedPluginPanelKeys={openedPluginPanelKeys.current}
+            dismissedPluginPanelKeys={dismissedPluginPanelKeys.current}
             openBrowserId={openBrowserId}
             onBrowserOpened={handleBrowserOpened}
             key={panelIssue.id}
@@ -6118,6 +6152,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     }
     return () => closePanel();
   }, [
+    pluginPanels,
     openBrowserId,
     handleBrowserOpened,
     closePanel,
@@ -7661,6 +7696,18 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-52 p-1" align="end">
+                {taskChatShellEnabled && !historyExpanded ? (
+                  <button
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50"
+                    onClick={() => {
+                      expandHistory();
+                      setMoreOpen(false);
+                    }}
+                  >
+                    <ActivityIcon className="h-3 w-3" />
+                    Show task activity
+                  </button>
+                ) : null}
                 {streamlinedTaskDetailEnabled ? (
                   <>
                     <button
@@ -8657,6 +8704,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                     <SheetTitle>Task side panel</SheetTitle>
                   </SheetHeader>
                   <TaskSidePanel
+                    pluginPanels={pluginPanels}
+                    openedPluginPanelKeys={openedPluginPanelKeys.current}
+                    dismissedPluginPanelKeys={dismissedPluginPanelKeys.current}
                     openBrowserId={openBrowserId}
                     onBrowserOpened={handleBrowserOpened}
                     key={`${issue.id}:mobile`}

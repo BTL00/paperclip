@@ -61,7 +61,7 @@ import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { nativeSha256 } from "./canonical.js";
 import { resolveRemoteProviderPackAuthority } from "./remote-provider-pack-authority.js";
-import { RemoteRunnerRecoveryError, readRemoteRunnerRecoveryError } from "./remote-runner-recovery-diagnostics.js";
+import { REMOTE_RECOVERY_PROCESS_CHECK_SCRIPT, RemoteRunnerRecoveryError, readRemoteRunnerRecoveryError } from "./remote-runner-recovery-diagnostics.js";
 import { agentDirectoryWorkingCopyService } from "../agent-directory-working-copies.js";
 import { probeAgentDirectory } from "../agent-directory-probe.js";
 import { AGENT_FILES_CONTRACT } from "../agent-file-store.js";
@@ -529,6 +529,10 @@ describe("remote controller restart adoption", () => {
       exitCode: 4,
       timedOut: false,
     });
+    await expect(adopted.isAlive()).rejects.toMatchObject({ remoteRunnerRecovery: {
+      stage: "process_verification", reason: "probe_failed",
+    } });
+    execute.mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 45, timedOut: false });
     expect(await adopted.isAlive()).toBe(false);
   });
   it.each([
@@ -724,7 +728,9 @@ describe("remote controller restart adoption", () => {
       if (change === "start ticks") await writeFile(join(proc, String(pid), "stat"), stat(101));
       else if (change === "boot identity") await writeFile(join(proc, "sys/kernel/random/boot_id"), "abcd-5678\n");
       else await rm(join(proc, String(pid), "stat"));
-      expect(await adopted.isAlive()).toBe(false);
+      await expect(adopted.isAlive()).rejects.toMatchObject({ remoteRunnerRecovery: {
+        stage: "process_verification", reason: change === "fingerprint probe" ? "fingerprint_unavailable" : "process_generation_changed",
+      } });
       await expect(verifyRemoteRunnerReattachment({ claim, target: target as never, identity, runId: "run", normalizedSessionId: "session" }))
         .rejects.toMatchObject({ message: "runner_remote_process_identity_unavailable", remoteRunnerRecovery: {
           stage: "process_verification", reason: change === "fingerprint probe" ? "fingerprint_unavailable" : "process_generation_changed",
@@ -778,6 +784,81 @@ describe("remote controller restart adoption", () => {
 
 
 describe("remote runner launch fingerprint compatibility", () => {
+  it("verifies the generation emitted by the actual launch writer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "runner-generation-roundtrip-"));
+    const marker = join(root, "identity");
+    const statPath = join(root, "stat");
+    const bootPath = join(root, "boot_id");
+    const commandPath = join(root, "cmdline");
+    const stat = (pid: number) => `${pid} (runner (child)) ${["S", ...Array(18).fill("0"), 100].join(" ")}\n`;
+    await writeFile(statPath, stat(1));
+    await writeFile(bootPath, "abcd-1234\n");
+    await writeFile(commandPath, "runner\0--runner-id\0writer-verifier\0");
+    const writer = REMOTE_RUNNER_CHILD_LAUNCH_SCRIPT
+      .replaceAll('"/proc/"+process.argv[1]+"/stat"', JSON.stringify(statPath))
+      .replaceAll("/proc/sys/kernel/random/boot_id", bootPath);
+    const child = spawn("/bin/sh", ["-c", writer, "writer", marker, "nonce", "writer-verifier", join(root, "diagnostics"),
+      process.execPath, "-e", 'process.stdout.write("ready");setInterval(() => {}, 1000)', "--", "--runner-id", "writer-verifier"], { stdio: ["ignore", "pipe", "pipe"] });
+    const exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        child.stdout.once("data", () => resolve());
+        child.once("error", reject);
+        child.once("exit", code => reject(new Error(`launch writer exited before readiness: ${code}`)));
+      });
+      await writeFile(statPath, stat(child.pid!));
+      const generation = (await readFile(marker, "utf8")).split("\n")[4]!;
+      expect(generation).not.toBe("");
+      const verifier = REMOTE_RECOVERY_PROCESS_CHECK_SCRIPT
+        .replaceAll('"/proc/" + pid + "/cmdline"', JSON.stringify(commandPath))
+        .replaceAll('"/proc/" + pid + "/stat"', JSON.stringify(statPath))
+        .replaceAll('"/proc/sys/kernel/random/boot_id"', JSON.stringify(bootPath));
+      expect(execFileSync("sh", ["-c", verifier, "verifier", marker, "nonce", "writer-verifier", String(child.pid), generation], { encoding: "utf8" })).toBe("");
+      expect(() => execFileSync("sh", ["-c", verifier, "verifier", marker, "nonce", "writer-verifier", String(child.pid), `${generation}-changed`], { stdio: "pipe" }))
+        .toThrow();
+      expect(() => process.kill(child.pid!, 0)).not.toThrow();
+    } finally {
+      child.kill("SIGKILL");
+      await exited;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["missing", "broken", "working"] as const)("checks the Node probe before creating launch state (%s)", async runtime => {
+    const root = await mkdtemp(join(tmpdir(), "runner-launch-probe-"));
+    const bin = join(root, "bin");
+    const marker = join(root, "state", "identity");
+    const detached = join(root, "detached");
+    let launch: { command: string; args?: string[] } | undefined;
+    const execute = vi.fn(async (request: { command: string; args?: string[] }) => {
+      if (request.args?.[2] === "paperclip-runner-launch") launch = request;
+      return { exitCode: 1, timedOut: false, stdout: "", stderr: "" };
+    });
+    try {
+      await mkdir(bin);
+      for (const name of ["dirname", "mkdir", "sh"]) await symlink(execFileSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).trim(), join(bin, name));
+      await writeFile(join(bin, "nohup"), `#!/bin/sh\nprintf detached > '${detached}'\n`, { mode: 0o755 });
+      if (runtime === "working") await symlink(process.execPath, join(bin, "node"));
+      if (runtime === "broken") await writeFile(join(bin, "node"), "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+      const handle = createRemoteRunnerProcessLauncher({
+        target: { kind: "remote", transport: "sandbox", environmentId: "environment", leaseId: "lease", remoteCwd: root },
+        runner: { execute } as never, remoteBinary: "/runtime/runnerd", processIdentityPath: marker,
+        stateDirectory: root, diagnosticsDirectory: join(root, "diagnostics"), runnerInstanceId: "runner-launch",
+      })({ command: "/runtime/runnerd", args: [], cwd: root, environment: {} });
+      await expect(handle.completion).rejects.toThrow("runner_remote_process_launch_failed");
+      expect(launch).toBeDefined();
+      let status = 0;
+      try { execFileSync(launch!.command, launch!.args, { env: { ...process.env, PATH: bin }, stdio: "pipe" }); }
+      catch (error) { status = (error as { status: number }).status; }
+      if (status === 0) await vi.waitFor(async () => expect(await readFile(detached, "utf8")).toBe("detached"));
+      expect(status === 0).toBe(runtime === "working");
+      if (runtime !== "working") {
+        await expect(access(join(root, "state"))).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(access(detached)).rejects.toMatchObject({ code: "ENOENT" });
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it.each([true, false])("launches with the guaranteed Node runtime when boot identity is available: %s", async (hasBootIdentity) => {
     const root = await mkdtemp(join(tmpdir(), "remote-launch-generation-"));
     try {
@@ -803,6 +884,77 @@ describe("remote runner launch fingerprint compatibility", () => {
 });
 
 describe("remote runner process supervision", () => {
+  it.each(["exit", "unreadable", "changed generation"] as const)("requires an exit receipt when process metadata changes during supervision (%s)", async failure => {
+    const root = await mkdtemp(join(tmpdir(), "runner-exit-receipt-"));
+    const marker = join(root, "identity");
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", "--", "--runner-id", "runner-exit"], { stdio: "ignore" });
+    const exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
+    const proc = join(root, "proc");
+    const statPath = join(proc, String(child.pid), "stat");
+    const hook = join(root, "probe-hook.cjs");
+    await mkdir(join(proc, String(child.pid)), { recursive: true });
+    await mkdir(join(proc, "sys/kernel/random"), { recursive: true });
+    await writeFile(statPath, `${child.pid} (runner (child)) ${["S", ...Array(18).fill("0"), failure === "changed generation" ? 101 : 100].join(" ")}\n`);
+    await writeFile(join(proc, String(child.pid), "cmdline"), "runner\0--runner-id\0runner-exit\0");
+    await writeFile(join(proc, "sys/kernel/random/boot_id"), "abcd-1234\n");
+    await writeFile(hook, `const fs = require("node:fs");
+const read = fs.readFileSync;
+fs.readFileSync = function(path, ...args) {
+  if (path === ${JSON.stringify(statPath)}) {
+    if (${JSON.stringify(failure)} === "unreadable") throw Object.assign(new Error("denied"), { code: "EACCES" });
+    if (${JSON.stringify(failure)} === "exit") {
+      process.kill(${child.pid}, "SIGKILL");
+      const until = Date.now() + 5000;
+      while (true) {
+        try { process.kill(${child.pid}, 0); }
+        catch (error) { if (error.code === "ESRCH") break; throw error; }
+        if (Date.now() > until) throw new Error("fixture child was not reaped");
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      }
+      fs.rmSync(path);
+    }
+  }
+  return read.call(this, path, ...args);
+};`);
+    let savedMarker = "";
+    const ok = { stdout: "", stderr: "", exitCode: 0, signal: null, timedOut: false };
+    const execute = vi.fn(async (request: { command: string; args?: string[] }) => {
+      if (request.args?.[2] === "paperclip-runner-launch") {
+        savedMarker = `${request.args[4]}\n${child.pid}\n2026-10-26T00:00:00.000Z\nrunner-exit\nlinux:abcd-1234:100\n`;
+        await writeFile(marker, savedMarker);
+        return ok;
+      }
+      const args = request.args?.map(arg => arg.replaceAll("/proc/", `${proc}/`)) ?? [];
+      return new Promise<typeof ok>(resolve => execFile(request.command, args, {
+        env: { ...process.env, NODE_OPTIONS: `--require=${hook}` }, timeout: 8_000,
+      }, (error, stdout, stderr) => resolve({ ...ok, stdout, stderr,
+        exitCode: error ? typeof error.code === "number" ? error.code : -1 : 0, timedOut: !!error?.killed })));
+    });
+    const handle = createRemoteRunnerProcessLauncher({
+      target: { kind: "remote", transport: "sandbox", environmentId: "environment", leaseId: "lease", remoteCwd: root },
+      runner: { execute } as never, remoteBinary: "/runtime/runnerd", processIdentityPath: marker,
+      stateDirectory: root, diagnosticsDirectory: join(root, "diagnostics"), runnerInstanceId: "runner-exit",
+    })({ command: "/runtime/runnerd", args: [], cwd: root, environment: {} });
+    try {
+      if (failure === "exit") {
+        await expect(handle.completion).resolves.toMatchObject({ code: null });
+        expect(handle.isExitConfirmed?.()).toBe(true);
+      } else {
+        expect(await handle.completion.catch(readRemoteRunnerRecoveryError)).toEqual({ stage: "process_verification",
+          reason: failure === "unreadable" ? "fingerprint_unavailable" : "process_generation_changed" });
+        expect(handle.isExitConfirmed?.()).toBe(false);
+        expect(() => process.kill(child.pid!, 0)).not.toThrow();
+      }
+      expect(await readFile(marker, "utf8")).toBe(savedMarker);
+      expect(execute.mock.calls.filter(([request]) => request.args?.[2] === "paperclip-runner-launch")).toHaveLength(1);
+    } finally {
+      child.kill("SIGKILL");
+      await exited;
+      await handle.completion.catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it("preserves a real listening process and its marker when a health RPC times out", async () => {
     const root = await mkdtemp(join(tmpdir(), "runner-health-listener-"));
     const marker = join(root, "identity");
@@ -1440,6 +1592,7 @@ describe("remote provider pack manifest", () => {
       opencodeProxy: "dist/cli/opencode-app-server-proxy.cjs", acpxSidecar: "dist/cli/acpx-runtime-sidecar.cjs",
     }).map(([key, path]) => [key, { path, sha256: digest }])) as Record<"nodeCommand" | "opencodeCommand", { path: string; sha256: string }>;
     const payload = {
+      compatibility: { opencode: 1, acpx: 1 },
       target: { platform: "linux", architecture }, runnerSourceRevision: "a".repeat(40),
       pins: { nodeMinimum: "24.11.0", codex: QUALIFIED_ACPX_PROFILES.codex.agentRuntimeVersion,
         opencode: "1.18.34", acpx: "0.13.1", grok: QUALIFIED_ACPX_PROFILES.grok.agentRuntimeVersion,
@@ -1449,6 +1602,11 @@ describe("remote provider pack manifest", () => {
       distDigest: digest, artifacts,
       bridgeDigest: "sha256:" + createHash("sha256").update(digest + "\n" + digest + "\n" + digest).digest("hex"),
     };
+    if (provider === "cursor") Object.assign(payload, { providers: { cursor: {
+      version: QUALIFIED_ACPX_PROFILES.cursor.agentServerVersion, profileDigest: QUALIFIED_ACPX_PROFILES.cursor.commandDigest,
+      closureDigest: `sha256:${CURSOR_DISTRIBUTION_PINS["linux-x64"].closureSha256}`, qualification: "qualified",
+      path: "provider-assets/cursor/linux-x64", sha256: digest,
+    } } });
     const manifest = { schema: "paperclip-runner/remote-provider-pack/v1", payload,
       digest: "sha256:" + createHash("sha256").update(canonical(payload)).digest("hex") };
     state.bundledPackManifestPath = join(root, "provider-pack.json");
@@ -1463,11 +1621,22 @@ describe("remote provider pack manifest", () => {
       workspace: { ...execution.workspace, cwd: root },
       session: { ...execution.session, normalizedSessionId: `bundled-${provider}-${randomUUID()}`, driverKind: provider === "opencode" ? "opencode_server" : "acpx_runtime" },
     } as unknown as NativeExecutionInputV1;
-    const syncIn = vi.fn(async () => undefined);
-    const execute = vi.fn(async (command: { command: string; args?: string[] }) => {
-      if (command.args?.[0] === "--build-metadata") throw new Error("reached-staged-Linux-daemon-verification");
-      return { exitCode: 0, signal: null, timedOut: false, stdout: "", stderr: "" };
-    });
+    const syncIn = vi.fn(async (_operations: { files: { kind: string }[] }[]) => undefined);
+    const installed = structuredClone(manifest);
+    if (provider === "opencode") {
+      installed.payload.runnerSourceRevision = "c".repeat(40);
+      installed.payload.artifacts.nodeCommand.sha256 = "sha256:" + "d".repeat(64);
+      installed.digest = "sha256:" + createHash("sha256").update(canonical(installed.payload)).digest("hex");
+    }
+    const execute = vi.fn(async (command: { command: string; args?: string[] }) => ({
+      exitCode: 0, signal: null, timedOut: false, stderr: "",
+      stdout: command.args?.[0] === "--build-metadata" ? JSON.stringify({
+        schema: "paperclip-runner/runnerd-build-metadata/v1", binaryName: "paperclip-runnerd",
+        packageName: "@paperclipai/paperclip-runner", binaryContractVersion: 2,
+        durableSessionCapabilities: ["unlimited_runtime", "connection_lease_renewal"], prpTransportModes: ["listen_ws"],
+        providerPacks: [{ root: "/opt/paperclip-runner/provider-pack", manifest: installed, immutable: true }],
+      }) : "",
+    }));
     try {
       await createRunnerdBackend({ db: leaseDb(remoteExecution), execution: remoteExecution,
         runnerInstanceId: "bundled-image-runner", runnerIngressAuthorized: true,
@@ -1491,12 +1660,17 @@ describe("remote provider pack manifest", () => {
         const { bundledRemoteProviderPackManifestPath } = await import("../../vendor/paperclip-runner/index.js");
         expect(bundledRemoteProviderPackManifestPath).toHaveBeenCalledWith(undefined, `linux-${architecture}`);
       }
-      await expect(transport.controlPlaneRegistration({})).rejects.toThrow("reached-staged-Linux-daemon-verification");
       expect(syncIn).toHaveBeenCalledWith([expect.objectContaining({ files: [expect.objectContaining({
         sourcePath: state.bundledRunnerBinary, targetPath: "/workspace/.paperclip-runtime/paperclip-runner/bin/paperclip-runnerd",
       })] })]);
       expect(execute.mock.calls.some(([call]) => call.args?.[1] === "uname -s; uname -m")).toBe(false);
       expect(existsSync(join(transport.stateDirectory!, "provider-pack-authority.json"))).toBe(false);
+      expect(transport).toMatchObject({ providerPackAuthorityDigest: installed.digest,
+        providerNodeCommand: "/opt/paperclip-runner/provider-pack/node_modules/node/bin/node",
+        providerNodeCommandSha256: installed.payload.artifacts.nodeCommand.sha256 });
+      expect(execute.mock.calls.filter(([call]) => call.args?.[0] === "--build-metadata")).toHaveLength(1);
+      expect(execute.mock.calls.some(([call]) => call.args?.[0] === "-e" || call.args?.[0] === "--version")).toBe(false);
+      expect(syncIn.mock.calls.every(([operations]) => operations.every(operation => operation.files.every(file => file.kind === "file")))).toBe(true);
       if (provider === "claude-x64") {
         const identity = transport.prpIdentity!;
         const artifact = { version: "0.0.0", digest: "sha256:" + createHash("sha256").update(daemon).digest("hex") };
@@ -1514,24 +1688,30 @@ describe("remote provider pack manifest", () => {
         await writeFile(state.bundledPackManifestPath!, JSON.stringify(next));
         await writeFile(state.bundledRunnerBinary!, Buffer.concat([daemon, Buffer.from("new release")]));
         const recoveryExecute = vi.fn(async (request: { args: string[] }) => {
+          if (request.args[0] === "--build-metadata") return { exitCode: 0, timedOut: false, stderr: "", stdout: JSON.stringify({
+            schema: "paperclip-runner/runnerd-build-metadata/v1", binaryName: "paperclip-runnerd",
+            packageName: "@paperclipai/paperclip-runner", binaryContractVersion: 2,
+            durableSessionCapabilities: ["unlimited_runtime", "connection_lease_renewal"], prpTransportModes: ["listen_ws"],
+            providerPacks: [{ root: "/opt/paperclip-runner/provider-pack", manifest, immutable: true }],
+          }) };
+          if (request.args[0] === "-e" || request.args[0] === "--version") return { exitCode: 0, timedOut: false, stderr: "", stdout: request.args[0] === "--version" ? "1.18.34" : "" };
           const script = request.args[1];
           const stdout = script.includes("base64") ? Buffer.from(JSON.stringify({ ...identity, lifecycle: "running" })).toString("base64")
             : script.includes("cat --") ? `nonce\n123\n2026-09-19T10:00:00.000Z\n${identity.runnerInstanceId}\nlinux:abcd-1234:100\n` : "";
           return { stdout, stderr: "", exitCode: 0, timedOut: false };
         });
         await createRunnerdBackend({ db: leaseDb(remoteExecution), execution: remoteExecution,
-          runnerInstanceId: identity.runnerInstanceId,
+          runnerInstanceId: identity.runnerInstanceId, runnerIngressAuthorized: true,
           runnerExecutionTarget: { kind: "remote", transport: "sandbox", remoteCwd: "/workspace",
-            environmentId: "environment", leaseId: "lease", providerKey: "daytona", runner: { execute: recoveryExecute },
+            environmentId: "environment", leaseId: "lease", providerKey: "daytona", effectiveCapabilities: { runnerWebSocketIngress: true }, runner: { execute: recoveryExecute },
             sandboxLeaseAcquisition: { outcome: "resumed", providerLeaseId: "sandbox" } } as never,
           restartRecovery: { kind: "reattach_remote_runner", runId: remoteExecution.binding.runId,
             leaseOwner: "controller", controllerGeneration: 2, providerAttempt: 1, restartKind: "graceful", recoveryRequestId: null,
             remote: { providerLeaseId: "sandbox", remoteCwd: "/workspace" } },
         });
         state.createBackend.mock.calls.at(-1)![1].codexTransportFactory!();
-        expect(state.createTransport.mock.calls.at(-1)![0]).toMatchObject({
-          providerPackAuthorityDigest: manifest.digest, runnerArtifact: artifact, adoptExistingRunner: { pid: 123 },
-        });
+        const recovered = state.createTransport.mock.calls.at(-1)![0];
+        expect(recovered).toMatchObject({ providerPackAuthorityDigest: manifest.digest, runnerArtifact: artifact, adoptExistingRunner: { pid: 123 } });
       }
     } finally {
       state.bundledPackManifestPath = null; state.bundledRunnerBinary = null;
