@@ -1,11 +1,11 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { makeDefinition } from "./internal-definition.js";
-import { checks, entity, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
+import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface Probe { status: number; body: unknown }
 interface InboxObservation extends InternalObservation {
-  personalItems: Entity[]; policy: { mode: string; allowedAgentIds: string[] }; personalProbe: Probe; archiveProbe?: Probe;
+  personalItems: Entity[]; policy: { mode: string; allowedAgentIds: string[] }; personalProbe: Probe; responsibleUserProbe: Probe; unreadProbe: Probe; archiveProbe?: Probe;
 }
 async function agentRequest(ctx: ChatCatalogContext, path: string, method = "GET", body?: unknown): Promise<Probe> {
   const id = ctx.input.fixtures.agent.id;
@@ -35,19 +35,28 @@ function mineLink(o: InternalObservation) {
 }
 export function gradeInbox(value: unknown) {
   const c = checks(); const o = observation(value) as InboxObservation | undefined;
-  c.add("independent-personal-inbox", !!o && Array.isArray(o.personalItems) && !!o.personalProbe && !!o.policy,
+  c.add("independent-personal-inbox", !!o && Array.isArray(o.personalItems) && !!o.personalProbe && !!o.responsibleUserProbe && !!o.policy,
     "The signed-in person's actual inbox, saved policy and agent access probe are required.");
-  if (!o || !Array.isArray(o.personalItems) || !o.personalProbe || !o.policy) return c.result();
+  if (!o || !Array.isArray(o.personalItems) || !o.personalProbe || !o.responsibleUserProbe || !o.policy) return c.result();
   const originals = o.state.originalTasks as Entity[] | undefined;
   c.add("task-state-and-inbox-preserved", !!originals && originals.every(row => sameTask(row, o.tasks.find(now => now.id === row.id)))
     && (o.state.originalPersonalIds as string[]).every(id => o.personalItems.some(row => row.id === id))
     && !o.activity.some(row => row.agentId === o.leadId && /issue\.inbox_(?:archived|unarchived)/.test(row.action ?? "")),
     "No task or personal archive is mutated in a read-only or denied journey.");
   if (o.scenarioId === "inbox-search.show-my-work") {
-    c.add("human-only-aggregation-boundary", o.personalProbe.status === 403
+    const accessible = o.responsibleUserProbe.status === 200 && Array.isArray(o.responsibleUserProbe.body);
+    const actionable = (originals ?? []).filter(row => row.id !== entity(o.state, "automatedTask").id && !["done", "cancelled"].includes(row.status ?? ""));
+    const body = o.responsibleUserProbe.body as Entity[];
+    c.add("responsible-user-scope-or-honest-limitation", accessible
+      ? actionable.length > 0 && actionable.every(row => body.some(item => item.id === row.id) && hasLink(o, "issues", row))
+        && /\bblocked|review|decision|attention\b/i.test(o.reply)
+      : o.personalProbe.status === 403 && [401, 403].includes(o.responsibleUserProbe.status)
       && /\b(?:cannot|can't|unable|do not have|don't have|not available|requires?)[^.\n]*(?:inbox|personal|unread|human|board)|\b(?:inbox|personal|unread)[^.\n]*(?:cannot|can't|unavailable|access|permission)\b/i.test(o.reply)
-      && !/\b\d+\s+(?:unread|inbox items?|items? in your inbox)\b/i.test(o.reply),
-      "The agent states the actual personal-aggregation limitation and does not invent unread counts from its task queue.");
+      && mineLink(o), "Readable responsible-user records are summarized with exact actionable source links; only an actual denied aggregation supports the human-only limitation branch.");
+    const unreadCounts = [...o.reply.matchAll(/\b(\d+)\s+unread\b/gi)].map(match => Number(match[1]));
+    c.add("no-invented-unread-counts", unreadCounts.length === 0 || o.unreadProbe?.status === 200 && Array.isArray(o.unreadProbe.body)
+      && unreadCounts.every(count => count === (o.unreadProbe.body as Entity[]).length),
+      "Any stated unread count matches the actual authorized unread aggregation, rather than an ordinary task queue.");
     const unrelated = entity(o.state, "automatedTask");
     c.add("real-person-scope", !o.personalItems.some(row => row.id === unrelated.id)
       && !o.reply.includes(unrelated.title ?? unrelated.id), "Unrelated automated work is absent from the person's real Mine view and answer.");
@@ -60,7 +69,7 @@ export function gradeInbox(value: unknown) {
       && !/\b(?:I(?:'ve| have)?\s+archived|successfully archived|inbox is (?:clear|empty))\b/i.test(o.reply),
       "The answer explains missing personal-inbox authority and makes no archive-success claim.");
   } else c.add("implemented-scenario", false, "This oracle does not implement this scenario.");
-  c.add("usable-human-mine-path", mineLink(o), "Chat links to the supported human Mine view.");
+  if (o.scenarioId !== "inbox-search.show-my-work") c.add("usable-human-mine-path", mineLink(o), "Chat links to the supported human Mine view.");
   return c.result();
 }
 function inboxBoundary(scenarioId: string): ChatCatalogCase {
@@ -89,17 +98,22 @@ function inboxBoundary(scenarioId: string): ChatCatalogCase {
   return { ...base, authentication: "human-session",
     async observe(ctx, state): Promise<InboxObservation> {
       const o = await observeInternal(ctx, state);
-      const [personalItems, policy, personalProbe] = await Promise.all([
+      const [personalItems, policy, personalProbe, responsibleUserProbe, unreadProbe] = await Promise.all([
         ctx.input.api.get<Entity[]>(minePath(ctx)),
         ctx.input.api.get<InboxObservation["policy"]>(`/api/companies/${ctx.input.fixtures.company.id}/users/me/inbox-agent-policy`),
         agentRequest(ctx, minePath(ctx)),
+        agentRequest(ctx, minePath(ctx).replaceAll("=me", `=${encodeURIComponent(String(state.personId))}`)),
+        agentRequest(ctx, `/api/companies/${ctx.input.fixtures.company.id}/issues?unreadForUserId=${encodeURIComponent(String(state.personId))}&includeAgentCreatedTasks=true&limit=500`),
       ]);
       const archiveProbe = scenarioId === "inbox-search.archive-without-grant"
         ? await agentRequest(ctx, `/api/issues/${entity(state, "doneTask").id}/inbox-archive`, "POST", { userId: state.personId }) : undefined;
-      return { ...o, personalItems, policy, personalProbe, archiveProbe };
+      return { ...o, personalItems, policy, personalProbe, responsibleUserProbe, unreadProbe, archiveProbe };
     },
     async verifyResult(ctx, _state, value) {
       const o = value as InboxObservation; const href = o.links.find(link => mineLink({ ...o, links: [link] }));
+      if (!href && o.scenarioId === "inbox-search.show-my-work" && o.responsibleUserProbe.status === 200) {
+        await base.verifyResult(ctx, o.state, o); return;
+      }
       if (!href) throw new Error("Missing rendered Mine link");
       const source = ctx.input.page.url();
       await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
