@@ -1349,6 +1349,21 @@ does not reset the provider-attempt budget.
 
 Provider execution and control-plane finalization have different clocks. A healthy provider can think or execute a long tool without output. Once execution settles, recovery and finalization control steps have a 60-second deadline, checked on startup and every 15 seconds. With a healthy database and scheduler, an abandoned transition must be repaired or surfaced within 90 seconds. Terminal persistence must not wait on provider cleanup or publication; a late finalizer cannot change a reassigned or closed task or release another run's locks. Historical ambiguous runs are never automatically replayed after an upgrade.
 
+When that deadline fails a native run with a prepared workspace, the same
+transaction records the exact source's file-preservation obligation. Existing
+stop-and-retain recovery contains the provider and saves the files before
+ordinary Retry can continue. Finalized workspaces, mismatched sources and
+accepted results keep their existing settlement paths. Reassignment does not
+discard the stopped run's files or grant authority over the new assignee.
+
+For older failed native runs that lack this bookkeeping, a deliberate Retry
+registers preservation from the exact prepared workspace descriptor and assigns
+the existing bounded maintenance owner. A live finalization owner or mismatched
+source cannot be adopted. Registration does not prove termination or authorize
+replay: the provider stop receipt, saved-file receipt, current execution authority
+and effect fences still control successor admission. Repeated clicks retain the
+same recovery generation and request.
+
 Every continuation carries the triggering request, ordered user direction, interaction outcomes, completed work, and explicit history coverage. A delivered message remains part of the task's request after its connection or approval resolves. The original title is background; a completed Notion read does not satisfy a later Gmail request. Author and source-trust boundaries survive rendering into both native and legacy prompts. Missing required history must be fetched before dispatch rather than described as complete.
 
 ### Interrupted conversation continuation
@@ -1829,6 +1844,24 @@ Only a matching ownership marker and confirmed process exit permit automatic
 replacement. Missing or conflicting identity evidence, failed reads, and an
 exhausted probe budget retain the existing ownership and recovery safeguards.
 They must not launch a competing listener or overwrite the original marker.
+
+Remote process verification uses one Node probe for liveness, command identity,
+and the saved Linux boot identity and start ticks. If metadata disappears during
+the probe, only a fresh `ESRCH` response confirms exit. A zombie also confirms
+exit when its generation matches the saved marker. Permission errors, unreadable
+metadata, and changed generations remain uncertain. Adopted-runner checks reject
+that uncertainty rather than returning the same `false` value as a confirmed
+exit. Launch checks that Node can run the probe before creating launch state or
+detaching the process. These receipts do not release historical recovery holds
+or prove that workspace files and provider state have been saved.
+The transport propagates rejected adopted-process checks through close and
+command waits. It must not turn a rejected check into a positive exit observation.
+When a process check rejects close, the transport retires its local controller,
+timers and notification queue without signalling the remote Runner or replacing
+its checkpoint. Repeated close retains the same failed ownership result.
+Copilot profile 62 binds this shared transport implementation. Profile 61 remains
+decodable for recovery, but exact launch admission uses the current profile and
+digest. Earlier live qualification results keep their original profile identity.
 
 Healthy native warm turns retain their runner and provider processes. After a
 controller crash, continuation can recover a completed remote session from its

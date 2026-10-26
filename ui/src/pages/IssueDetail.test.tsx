@@ -1684,6 +1684,100 @@ describe("IssueDetail", () => {
     expect(windowOpen).not.toHaveBeenCalled();
   });
 
+  it.each([null, "queued", "running", "succeeded", "failed"])("hides the history disclosure on a fresh task with first run %s", async (status) => {
+    queryClient.setQueryData(["issues", "history-expanded", "PAP-1"], false);
+    mockIssuesApi.get.mockResolvedValue(createIssue());
+    const runs = status ? [{ runId: "first-run", status, agentId: "agent-1", createdAt: new Date().toISOString() }] : [];
+    mockActivityApi.recentRunsForIssue.mockResolvedValue(runs);
+    await act(async () => renderIssueView());
+    await waitForAssertion(() => {
+      const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0];
+      expect(mockActivityApi.recentRunsForIssue).toHaveBeenCalled();
+      expect(props?.linkedRuns).toMatchObject(runs);
+      expect(props?.compactHistory).toBe(true);
+      expect(props?.historyControl).toBeNull();
+    });
+    expect(mockActivityApi.runsForIssue).not.toHaveBeenCalled();
+    expect(mockIssuesApi.listComments).not.toHaveBeenCalled();
+  });
+
+  it("loads full first-run activity from the task menu without an older-message disclosure", async () => {
+    queryClient.setQueryData(["issues", "history-expanded", "PAP-1"], false);
+    mockIssuesApi.get.mockResolvedValue(createIssue());
+    const run = { runId: "first-run", runtimeMode: "native", status: "succeeded", agentId: "agent-1", createdAt: new Date().toISOString() };
+    mockActivityApi.recentRunsForIssue.mockResolvedValue([run]);
+    mockActivityApi.runsForIssue.mockResolvedValue([run]);
+    await act(async () => renderIssueView());
+    await waitForAssertion(() => {
+      const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0];
+      expect(props?.linkedRuns).toMatchObject([run]);
+      expect(props?.compactHistory).toBe(true);
+      expect(props?.historyControl).toBeNull();
+    });
+    expect(mockActivityApi.runsForIssue).not.toHaveBeenCalled();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="More task actions"]')!.click();
+    });
+    const activityButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "Show task activity");
+    expect(activityButton).toBeTruthy();
+    await act(async () => activityButton!.click());
+    await waitForAssertion(() => {
+      expect(mockActivityApi.runsForIssue).toHaveBeenCalled();
+      expect(mockIssueChatThreadRender.mock.calls.at(-1)?.[0].compactHistory).toBe(false);
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="More task actions"]')!.click();
+    });
+    expect(Array.from(document.body.querySelectorAll("button"))
+      .some((button) => button.textContent?.trim() === "Show task activity")).toBe(false);
+  });
+
+  it("does not add a history disclosure when a second run is observed while the page stays open", async () => {
+    queryClient.setQueryData(["issues", "history-expanded", "PAP-1"], false);
+    mockIssuesApi.get.mockResolvedValue(createIssue());
+    const run = (runId: string) => ({ runId, status: "succeeded", agentId: "agent-1", createdAt: new Date().toISOString() });
+    const first = run("first"), second = run("second");
+    mockActivityApi.recentRunsForIssue.mockResolvedValue([first]);
+    await act(async () => renderIssueView());
+    await waitForAssertion(() => expect(mockIssueChatThreadRender.mock.calls.at(-1)?.[0].linkedRuns).toMatchObject([first]));
+    mockActivityApi.recentRunsForIssue.mockResolvedValue([second, first]);
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: queryKeys.issues.runs("PAP-1") }); });
+    await waitForAssertion(() => {
+      const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0];
+      expect(props?.linkedRuns).toMatchObject([first, second]);
+      expect(props?.historyControl).toBeNull();
+    });
+    expect(mockActivityApi.runsForIssue).not.toHaveBeenCalled();
+  });
+
+  it("reveals omitted runs through the history disclosure when there are no older comments", async () => {
+    queryClient.setQueryData(["issues", "history-expanded", "PAP-1"], false);
+    mockIssuesApi.get.mockResolvedValue(createIssue());
+    const run = (runId: string) => ({ runId, status: "succeeded", agentId: "agent-1", createdAt: new Date().toISOString() });
+    const latest = run("latest"), older = run("older"), next = run("next");
+    mockActivityApi.recentRunsForIssue.mockResolvedValue([latest, older]);
+    mockActivityApi.runsForIssue.mockResolvedValue([next, latest, older]);
+    await act(async () => renderIssueView());
+    await waitForAssertion(() => {
+      const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0];
+      expect(props?.linkedRuns).toMatchObject([latest]);
+      expect(props?.historyControl).toBeTruthy();
+    });
+    mockActivityApi.recentRunsForIssue.mockResolvedValue([next, latest]);
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: queryKeys.issues.runs("PAP-1") }); });
+    await waitForAssertion(() => expect(mockIssueChatThreadRender.mock.calls.at(-1)?.[0].linkedRuns).toMatchObject([latest, next]));
+    const disclosure = mockIssueChatThreadRender.mock.calls.at(-1)?.[0].historyControl;
+    expect(disclosure).toBeTruthy();
+    await act(async () => disclosure.props.onClick());
+    await waitForAssertion(() => {
+      const props = mockIssueChatThreadRender.mock.calls.at(-1)?.[0];
+      expect(props?.linkedRuns).toMatchObject([next, latest, older]);
+      expect(props?.historyControl).toBeNull();
+      expect(props?.compactHistory).toBe(false);
+    });
+  });
+
   it("reveals a cold task and recent exchange while full detail and older history are stalled", async () => {
     queryClient.setQueryData(["issues", "history-expanded", "PAP-1"], false);
     const stalled = createDeferred<Issue>();
@@ -2510,6 +2604,7 @@ describe("IssueDetail", () => {
       );
     });
     expect(mockSetPanelVisible).not.toHaveBeenCalled();
+    expect(mockOpenPanel).not.toHaveBeenCalled();
   });
 
   it("opens a plan deep link in the shared mobile side-panel sheet", async () => {

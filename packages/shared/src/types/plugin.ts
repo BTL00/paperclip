@@ -191,6 +191,8 @@ export interface SandboxProviderCapabilities {
 }
 
 export interface PluginEnvironmentDriverDeclaration {
+  /** Plugin-managed skill keys automatically included when this environment is selected. */
+  skillKeys?: string[];
   /** Provides Runner execution, resource preparation, and PRP connections via environmentTask. */
   supportsTasks?: boolean;
   freshWorkspaceVersion?: 1;
@@ -495,6 +497,12 @@ export interface PluginUiSlotDeclaration {
    * Required for `detailTab`, `taskDetailView`, and `contextMenuItem`.
    */
   entityTypes?: PluginUiSlotEntityType[];
+  /** Also offer this agent detail tab beside a task while its agent is running.
+   * GET this plugin-relative path with :entityId replaced by the agent ID.
+   * The board/agent-scoped route returns { available: boolean }.
+   */
+  taskSidePanel?: { availabilityPath: string };
+
   /**
    * Optional company-scoped route segment for page, routeSidebar, and
    * companySettingsPage slots.

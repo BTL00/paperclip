@@ -7,10 +7,13 @@ import { agentWakeupRequests, chatActions, chatConversations, chatEndpoints, hea
 import { conflict, forbidden, notFound } from "../errors.js";
 import { persistActivity } from "./activity-log.js";
 import { createSystemRecovery, readSystemRecovery } from "./system-recovery-state.js";
-import { updateSystemRecovery } from "./system-recovery.js";
+import { adoptSystemRecovery, updateSystemRecovery } from "./system-recovery.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { notifyChatActionWork } from "./chat-work-notifications.js";
 import { authorizationService } from "./authorization.js";
+import { preserveNativeFailedWorkspace } from "./native-runtime/native-failed-workspace-recovery.js";
+import { NativeWorkspaceFinalizationBusyError } from "./native-runtime/native-workspace-finalization-ownership.js";
+import { hasRequiredWorkspaceRecovery } from "./workspace-restore-recovery-state.js";
 
 export async function taskRetryMutationAllowed(db: Db, input: {
   companyId: string; issueId: string; actorId: string; actorSource: TaskRetryIntent["actorSource"];
@@ -116,9 +119,22 @@ export async function requestTaskRetry(input: {
       active = undefined;
     }
     const busy = ["queued", "running", "scheduled_retry"].includes(latest.status);
+    if (!busy) {
+      // Historical deadline failures can predate their preservation record.
+      // Register the exact prepared source; this proves neither a stopped
+      // executor nor permission to replay its work.
+      try { await preserveNativeFailedWorkspace(db, latest); }
+      catch (error) { if (!(error instanceof NativeWorkspaceFinalizationBusyError)) throw error; }
+    }
     const records = await tx.select().from(issueRecoveryActions).where(and(
       eq(issueRecoveryActions.companyId, issue.companyId), eq(issueRecoveryActions.sourceIssueId, issue.id),
       sql`${issueRecoveryActions.evidence}->>'runId' = ${latest.id}`)).for("update");
+    for (let index = 0; !busy && index < records.length; index++) {
+      const action = records[index];
+      if (!hasRequiredWorkspaceRecovery(action.evidence) || readSystemRecovery(action.evidence)) continue;
+      await adoptSystemRecovery(db, { companyId: issue.companyId, issueId: issue.id, runId: latest.id, actionId: action.id });
+      [records[index]] = await tx.select().from(issueRecoveryActions).where(eq(issueRecoveryActions.id, action.id));
+    }
     // An unadmitted request can outlive its exhausted repair. A new deliberate
     // click replaces that generation; a replay of the same key returned above.
     if (active && !busy && !active.runId && records.some(action =>

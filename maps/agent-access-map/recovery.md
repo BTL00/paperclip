@@ -4,6 +4,15 @@ Product map: [Recovery](../feature-map/recovery.md).
 
 Feature ID: `recovery`.
 
+Native finalization deadline reconciliation records unfinished workspace
+preservation through the existing server-owned recovery path. It grants no
+additional agent API, provider-stop authority or permission to replay work.
+
+Remote process probes remain server-owned. Confirmed exit requires `ESRCH` or a
+zombie with the saved generation. Unknown adopted-process ownership rejects the
+probe and grants no permission to replace a runner, signal a different process,
+or replay work. Launch requires a working Node probe before detachment.
+
 Ordinary board Retry can reauthorize saved GitHub input for the same App after
 reconnect. It pins current runtime authority and preserves sender, repository,
 conversation and task checks. Pending input takes precedence over the older
@@ -13,6 +22,11 @@ processed earlier response ledger to prove the same endpoint's App claim before
 that input. Company, conversation, agent and prior delivery/source linkage remain
 required. Explicit conflicting App IDs cannot use that fallback. Local PostgreSQL and HTTP-route regressions
 cover these transitions; hosted execution and delivery remain separate acceptance.
+Dispatch validates the exact claimed wake and resolved user-continuation receipt
+for the current successor. A later board Retry can follow that successor only
+when exact durable diagnostics and absent execution/resources prove it never
+started. This preserves the original sender/source and grants no agent Retry
+permission or accepted-result replay.
 
 Source revision: `3bbc2104b65caf9f7763938a01260a5673e12f7a`.
 
@@ -241,6 +255,13 @@ retry deadlines. A duplicate request during physical preservation does not
 replace the owner's generation or revision. Resolved files-only recovery retains
 its no-replay restriction. The local PostgreSQL regression checks the producer,
 worker, and physical source receipt; it is not deployed provider acceptance.
+
+An authorized deliberate Retry also registers missing historical native
+preservation from an exact prepared descriptor and an unowned terminal
+finalization. It adopts only the existing bounded maintenance capability. A live
+owner or mismatched allocation cannot supply this proof. No termination receipt
+or execution authority is created by registration; connected Retry still waits
+behind recovery and rechecks its existing external identity.
 
 The internal preservation resume path grants no board or agent execution API.
 It requires the exact source action, company, run, lease and environment, a

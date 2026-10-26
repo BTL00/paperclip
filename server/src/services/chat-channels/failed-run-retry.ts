@@ -1,7 +1,8 @@
 import { safeChatWakeAuthorityReason, type ChatWakeAuthorityReason } from "./inbound/wakeup-authorization-error.js";
+import { adapterExecutionControls } from "../adapter-execution-control.js";
 import { admitExplicitNativeContinuation } from "../explicit-native-continuation.js";
 import { continuingTeamsFilePublication, type ContinuingTeamsFileTransfer } from "./microsoft-teams/file-transfer-source.js";
-import { readTaskChatRetryIntent, taskChatRetryCanAwaitRecovery, taskChatRetryExecutionStopped } from "./task-retry-authority.js";
+import { readTaskChatRetryIntent, taskChatRetryCanAwaitRecovery, taskChatRetryExecutionStopped, taskChatRetryAdmittedContinuationStopped } from "./task-retry-authority.js";
 import { notifyChatActionWork, notifyChatPublicationWork } from "../chat-work-notifications.js";
 import { FAILED_RUN_RETRY_STALE_MS, dueChatAction } from "../chat-action-work.js";
 import { readChatAuthorizationRun } from "./authorization-run-read.js";
@@ -130,7 +131,9 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
   const failedChatRetryDenied = (reason?: "accepted_result_without_new_input" |
     "prior_result_publication" | "prior_interaction" | "source_authorization", authorityReason?: ChatWakeAuthorityReason) =>
     conflict(
-      "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
+      reason === "accepted_result_without_new_input"
+        ? "This attempt already recorded a result. Send a new message on the task to continue from the saved work."
+        : "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
       { code: "chat_failed_run_retry_not_authorized", ...(reason ? { reason } : {}), ...(reason === "source_authorization" && authorityReason ? { authorityReason } : {}) },
     );
   class FailedChatRetryPublicationReadError extends Error {
@@ -200,24 +203,31 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     }
   }
 
-  /** The reviewed-chat ownership check runs before runtime/profile resolution
-   * or provider startup. Recognize only that exact persisted failure together
-   * with its sole system diagnostic and absence of execution evidence. A
-   * generic setup error (or a prior-session display hint) is not this proof. */
-  async function isPreProviderReviewedChatFailure(
+  /** Chat authority checks run before runtime/profile resolution or provider
+   * startup. Recognize only their exact persisted diagnostics, settlement and
+   * absence of execution evidence. Generic setup errors and prior-session
+   * display hints do not establish this proof. */
+  async function isPreProviderChatAuthorizationFailure(
     tx: DbOrTransaction,
     run: typeof heartbeatRuns.$inferSelect,
   ): Promise<boolean> {
-    const diagnostic = "reviewed_chat_execution_binding_not_authorized";
+    const retryDiagnostic = "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.";
+    const failedRetry = run.errorCode === "chat_failed_run_retry_not_authorized" && run.error === retryDiagnostic;
+    const diagnostic = failedRetry ? retryDiagnostic : "reviewed_chat_execution_binding_not_authorized";
     if (
+      adapterExecutionControls.has(run.id) ||
+      (run.controllerLeaseExpiresAt && run.controllerLeaseExpiresAt > new Date()) ||
       run.runtimeMode !== "legacy" ||
-      run.errorCode !== "setup_failed" ||
+      (!failedRetry && run.errorCode !== "setup_failed") ||
+      run.status !== "failed" || !run.finishedAt ||
+      (failedRetry && (run.sessionIdBefore !== null ||
+        JSON.stringify(run.runnerProfileJson) !== JSON.stringify({ adapterDispatch: { adapterType: "paperclip_runner" } }))) ||
       run.error !== diagnostic ||
       [
         run.runtimeModeResolverVersion,
         run.runtimeModeReason,
         run.runtimeModeResolvedAt,
-        run.runnerProfileJson,
+        ...(failedRetry ? [] : [run.runnerProfileJson]),
         run.runnerInstanceId,
         run.nativeSessionId,
         run.nativeIssueId,
@@ -257,11 +267,34 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
           eq(heartbeatRunEvents.runId, run.id),
         ),
       )
-      .limit(2)
+      .orderBy(asc(heartbeatRunEvents.seq))
+      .limit(3)
       .for("share", { noWait: true });
     const event = events[0];
+    const measured = events[1];
+    if (failedRetry) {
+      const explicit = run.contextSnapshot?.explicitUserContinuation as Record<string, unknown> | undefined;
+      const hint = run.contextSnapshot?.chatFailedRunRetry as Record<string, unknown> | undefined;
+      const intentId = run.contextSnapshot?.taskRetryRequestId;
+      if (typeof intentId !== "string" || !run.retryOfRunId || !run.wakeupRequestId ||
+          hint?.version !== 1 || hint.actionId !== run.wakeupRequestId || hint.failedRunId !== run.retryOfRunId ||
+          explicit?.previousRunId !== run.retryOfRunId || explicit.taskRetryRequestId !== intentId ||
+          explicit.commentId !== run.contextSnapshot?.wakeCommentId) return false;
+      const prior = await readTaskChatRetryIntent(tx as unknown as Db, { companyId: run.companyId,
+        issueId: String(run.contextSnapshot?.issueId), agentId: run.agentId,
+        sourceRunId: run.retryOfRunId, intentId, chatActionId: run.wakeupRequestId });
+      if (!prior || prior.wake.status !== "coalesced" || prior.wake.runId !== run.id) return false;
+      if (!measured || measured.seq !== 2 || measured.agentId !== run.agentId ||
+          measured.eventType !== "lifecycle" || measured.stream !== "system" ||
+          measured.message !== "task.run.measured" || measured.sourceInstanceId !== null ||
+          measured.sourceEventId !== null || measured.sourceSeq !== null || measured.sourcePayloadSha256 !== null ||
+          measured.protocolSchemaVersion !== null || typeof measured.payload?.durationMs !== "number" ||
+          !Number.isFinite(measured.payload.durationMs) || measured.payload.durationMs < 0 ||
+          measured.payload?.durableSettlement !== true || measured.payload?.outcome !== "failed" ||
+          measured.payload?.phase !== "task.run.measured") return false;
+    }
     if (
-      events.length !== 1 ||
+      events.length !== (failedRetry ? 2 : 1) ||
       !event ||
       event.agentId !== run.agentId ||
       event.seq !== 1 ||
@@ -560,6 +593,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     companyId: string,
     taskRetryIntentId?: string,
     allowPendingRecovery = false,
+    executionRunId?: string,
   ) {
     const [run] = await tx
       .select()
@@ -584,12 +618,17 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
         // Persisting independent input may wait behind an unknown executor.
         // Promotion still requires the ordinary new-user-turn stop proof.
         if (allowPendingRecovery) return;
+        if (executionRunId && await taskChatRetryAdmittedContinuationStopped(tx as unknown as Db, run, {
+          issueId: source.issueId, intentId: taskRetryIntentId, successorRunId: executionRunId,
+          commentId: source.commentIds.at(-1)!,
+        })) return;
         if (await admitExplicitNativeContinuation({ db: tx as Db, companyId, issueId: source.issueId,
           agentId: source.agentId, actorType: "user", actorId: source.requestedByActorId,
           reason: "issue_commented", commentId: source.commentIds.at(-1)!, successorRunId: taskRetryIntentId,
           dryRun: true })) return;
       }
-      if (await taskChatRetryExecutionStopped(tx as unknown as Db, run)) return;
+      if (await taskChatRetryExecutionStopped(tx as unknown as Db, run) ||
+          await isPreProviderChatAuthorizationFailure(tx, run)) return;
       if (allowPendingRecovery && await taskChatRetryCanAwaitRecovery(
         tx as unknown as Db, run, source.issueId, taskRetryIntentId,
       )) return;
@@ -735,7 +774,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
             "process_exit",
             "timeout",
           ].includes(failedRun.errorCode ?? "") ||
-          (evidence.kind === "retry" && await isPreProviderReviewedChatFailure(tx, evidence.run))
+          (evidence.kind === "retry" && await isPreProviderChatAuthorizationFailure(tx, evidence.run))
         )) ||
       (!input.publication &&
         ["backlog", "done", "cancelled"].includes(issue.status))
@@ -748,6 +787,22 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     if (failedRun.runtimeMode === "native" && evidence.kind === "retry" && !input.taskRetryIntentId)
       await failedNativeRetryCoordinator(tx, evidence.run, issue.id);
     const context = failedRun.contextSnapshot ?? {};
+    const selection = input.taskRetryInput && taskRetryInputSchema.safeParse(input.taskRetryInput);
+    if (selection && !selection.success) throw failedChatRetryDenied();
+    const selectedInput = selection?.success ? selection.data : undefined;
+    if (input.taskRetryIntentId && !input.committedResponse && failedRun.status === "failed" &&
+        failedRun.runtimeMode === "native" && failedRun.nativeIssueId === issue.id &&
+        context.issueId === issue.id && context.source === "issue.tree_resume" &&
+        !selectedInput?.sourceActionIds.length) {
+      // An inherited requester is not permission to replay a recorded result.
+      // Explain the existing refusal before raw chat-source validation hides
+      // the supported new-message path. This branch grants no continuation.
+      const [recorded] = await tx.select({ id: nativeRunResults.id }).from(nativeRunResults).where(and(
+        eq(nativeRunResults.companyId, input.companyId), eq(nativeRunResults.issueId, issue.id),
+        eq(nativeRunResults.runId, failedRun.id), eq(nativeRunResults.schemaStatus, "accepted"),
+      )).limit(1).for("share", { noWait: true });
+      if (recorded) throw failedChatRetryDenied("accepted_result_without_new_input");
+    }
     const provider = CHAT_PROVIDERS.find(
       (value) => context.source === `chat:${value}`,
     );
@@ -758,9 +813,6 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
       (context.taskKey !== issue.identifier && context.taskKey !== issue.id)
     )
       throw failedChatRetryDenied();
-    const selection = input.taskRetryInput && taskRetryInputSchema.safeParse(input.taskRetryInput);
-    if (selection && !selection.success) throw failedChatRetryDenied();
-    const selectedInput = selection?.success ? selection.data : undefined;
     if (selectedInput && (!input.taskRetryIntentId || provider !== "github")) throw failedChatRetryDenied();
     const reauthorization = input.taskRetryReauthorization ?? (selectedInput ? {
       intentId: input.taskRetryIntentId!, sourceRunId: failedRun.id, runtimeFence: selectedInput.runtimeFence,
@@ -1484,7 +1536,7 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
       });
       await assertFailedNativeRetryState(tx, source, input.companyId,
         typeof source.intent.payload.taskRetryIntentId === "string" ? source.intent.payload.taskRetryIntentId : undefined,
-        input.phase === "admission");
+        input.phase === "admission", input.phase === "execution" ? input.runId : undefined);
       const context = input.contextSnapshot;
       const hint = context.chatFailedRunRetry as
         | Record<string, unknown>

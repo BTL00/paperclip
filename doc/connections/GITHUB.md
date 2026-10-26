@@ -329,6 +329,26 @@ another recipient is named. The routing rule does not change automatic issue or 
 event policies. Archived bots and identities from other companies or providers
 are excluded from the routing lookup.
 
+## Retrying a saved request
+
+A normal task Retry can continue a newer saved GitHub message after an earlier
+attempt failed. Execution revalidates the exact admitted successor, its current
+linked principal and repository access, and the durable continuation receipt;
+it does not repeat the admission that already consumed the recovery hold.
+A failed native predecessor still requires its committed failed result and
+exact executor termination proof. Successful results and uncertain delivery do
+not grant a replay.
+If an inherited task-resume attempt already recorded a result, ordinary Retry
+explains that exact replay is unavailable and directs the user to send a new
+message to continue from saved work. That new turn still passes normal current
+requester, access and executor-containment checks.
+
+If that successor failed at Retry authorization before runtime or provider
+startup, the next normal Retry follows its canonical source receipt. The exact
+system diagnostic, settlement events, empty execution evidence and absence of
+allocated resources establish that narrow recovery path. A generic setup
+failure or a claimed `providerWorkStarted: false` does not establish it.
+
 ## Run projection
 
 The resolved token is leased at run start as an audited class-3 secret and is
