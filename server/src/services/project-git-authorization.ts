@@ -20,6 +20,8 @@ import { persistActivity, publishActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
 import { assertTaskWorkspaceExecutionAccess, assertTaskWorkspaceSourceProjectAccess } from "./task-workspace-access.js";
 import { resolveCoreTrustPreset } from "./trust-preset-resolver.js";
+import { isCloudManagedInstance } from "./cloud-instance.js";
+import { isCurrentCloudOwnerInstanceAdmin, loadCurrentCloudOwnerAuthority } from "./cloud-tenant-authority.js";
 
 function transientGitToken(token: string | undefined): string {
   if (!token || token.length > 4096 || /[\0\r\n]/.test(token) || token.startsWith("secret://")) {
@@ -218,10 +220,13 @@ export function projectGitAuthorizationService(db: Db) {
         (await eligible(input.companyId, row.gitAuthorizedByUserId)).find(
           ({ grant }) => grant.id === row.gitAuthorizationGrantId,
         );
-      if (!selected)
+      if (!row.gitAuthorizedByUserId || !selected)
         throw forbidden("Project GitHub authorization is unavailable; reconnect or select an authorization");
+      const cloud = isCloudManagedInstance();
+      const isInstanceAdmin = cloud && await isCurrentCloudOwnerInstanceAdmin(db, row.gitAuthorizedByUserId,
+        await loadCurrentCloudOwnerAuthority(row.gitAuthorizedByUserId));
       await assertTaskWorkspaceSourceProjectAccess(db, {
-        type: "board", source: "session", userId: row.gitAuthorizedByUserId,
+        type: "board", source: cloud ? "cloud_tenant" : "session", userId: row.gitAuthorizedByUserId, isInstanceAdmin,
       }, input.companyId, row.id);
       if (resolveCoreTrustPreset({ companyId: input.companyId, workspaceSourceProject: row }).kind !== "standard")
         throw forbidden("GitHub credentials are not available to low-trust or unverified projects");

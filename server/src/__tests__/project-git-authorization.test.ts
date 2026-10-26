@@ -3,7 +3,7 @@ import request from "supertest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { createDb, authUsers, companyMemberships, connectionGrants, executionWorkspaces, heartbeatRuns, issues, projectAccessMembers, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
+import { createDb, authUsers, companyMemberships, connectionGrants, executionWorkspaces, heartbeatRuns, instanceUserRoles, issues, projectAccessMembers, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
 import { LOW_TRUST_REVIEW_PRESET } from "@paperclipai/shared";
 import { ghFetch } from "../services/github-fetch.js";
 import { projectRoutes } from "../routes/projects.js";
@@ -72,6 +72,49 @@ const support = await getEmbeddedPostgresTestSupport();
       vault.resolveUserSecretValue.mockClear();
       await expect(f.service.resolve(f.request, f.scope)).rejects.toThrow("private");
       expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+    });
+    it("rechecks current Cloud owner elevation for consent on another user's private project", async () => {
+      const f = await projectAuthorizationFixture();
+      await db.update(projects).set({ visibility: "private", privacyOwnerUserId: "B" }).where(eq(projects.id, f.project.id));
+      vi.stubEnv("PAPERCLIP_CLOUD_TENANT_SERVER_TOKEN", "fixture-tenant-token");
+      vi.stubEnv("PAPERCLIP_CLOUD_API_ORIGIN", "https://cloud.example.invalid");
+      vi.stubEnv("PAPERCLIP_CLOUD_STACK_ID", "fixture-stack");
+      vi.stubEnv("PAPERCLIP_STACK_SLUG", "fixture-stack");
+      const managed = (enabled: boolean) => vi.stubEnv("PAPERCLIP_MANAGED_CONFIG", JSON.stringify({
+        v: 1, mode: "cloud", catalogVersion: "test", features: { enableOwnerInstanceAdmin: enabled }, plugins: { autoInstall: [] },
+      }));
+      const portfolio = (role = "owner", stackSlug = "fixture-stack") => Response.json({ stacks: [{ stackSlug, role, isCurrent: true }] });
+      const fetch = vi.fn(async () => portfolio());
+      vi.stubGlobal("fetch", fetch); managed(true);
+      try {
+        const app = express(); app.use(express.json());
+        app.use((req, _res, next) => { req.actor = { type: "board", source: "cloud_tenant", userId: "A",
+          companyIds: [f.input.companyId], isInstanceAdmin: true }; next(); });
+        app.use("/api", projectRoutes(db)); app.use(errorHandler);
+        expect((await request(app).put(`/api/projects/${f.project.id}/git-authorization`).send({ grantId: f.selected.id })).status).toBe(200);
+        expect(await f.service.resolve(f.request, f.scope)).toBe("test-token-A");
+        const cleanup = { ...f.scope, workspaceId: f.workspace.id, operation: "remove" as const };
+        expect(await f.service.resolve(f.request, cleanup)).toBe("test-token-A");
+        expect(fetch).toHaveBeenCalledWith(new URL("https://cloud.example.invalid/v1/tenant/portfolio"), expect.objectContaining({
+          headers: expect.objectContaining({ "x-paperclip-cloud-user-id": "A", "x-paperclip-cloud-stack-id": "fixture-stack" }),
+        }));
+        // Stale local roles must never replace current Cloud authority.
+        await db.insert(instanceUserRoles).values({ userId: "A", role: "instance_admin" });
+        for (const denied of ["role", "setting", "unavailable", "stack"] as const) {
+          managed(denied !== "setting");
+          fetch.mockImplementation(async () => denied === "unavailable" ? new Response(null, { status: 503 })
+            : portfolio(denied === "role" ? "admin" : "owner", denied === "stack" ? "different-stack" : "fixture-stack"));
+          vault.resolveUserSecretValue.mockClear();
+          await expect(f.service.resolve(f.request, cleanup)).rejects.toThrow("private");
+          expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+        }
+        await db.insert(projectAccessMembers).values({ companyId: f.input.companyId, projectId: f.project.id, subjectType: "user", subjectId: "A" });
+        fetch.mockImplementation(async () => new Response(null, { status: 503 }));
+        expect(await f.service.resolve(f.request, cleanup)).toBe("test-token-A");
+      } finally {
+        await db.delete(instanceUserRoles).where(eq(instanceUserRoles.userId, "A"));
+        vi.unstubAllGlobals(); vi.unstubAllEnvs();
+      }
     });
     it("does not lend background consent to a low-trust project", async () => {
       const f = await projectAuthorizationFixture();

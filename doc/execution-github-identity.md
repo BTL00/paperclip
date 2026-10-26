@@ -189,6 +189,10 @@ connection's access; manage permitted repositories in the GitHub connection.
 Background export also rechecks the consenting user's project read access and the
 project's existing trust policy. Low-trust or unverified projects cannot export a
 raw credential through standing consent.
+Cloud owner access is rechecked through current Cloud authority and the managed
+owner-elevation setting on every private background export; saved local admin
+roles cannot replace that authority. An unavailable authority check cannot confer
+owner access, though explicit project membership still applies.
 
 The trusted plugin capability `projects.git-credentials` enables
 `ctx.projects.resolveGitCredential(projectId, workspaceId, companyId)`. The host
