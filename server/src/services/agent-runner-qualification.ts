@@ -2,7 +2,7 @@ import type { Db } from "@paperclipai/db";
 import type { Agent, EnvironmentProbeResult } from "@paperclipai/shared";
 import { conflict, unprocessable } from "../errors.js";
 import { resolveAgentRunnerEnvironmentForCompany } from "./agent-runner-selection.js";
-import { probeEnvironment } from "./environment-probe.js";
+import { probeEnvironment, readSandboxPlatformQualification } from "./environment-probe.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
 
 export async function qualifyAgentRunner(
@@ -11,8 +11,8 @@ export async function qualifyAgentRunner(
   expectedEnvironmentId: string,
   pluginWorkerManager?: PluginWorkerManager,
 ): Promise<EnvironmentProbeResult> {
-  if (!["claude_local", "codex_local"].includes(agent.adapterType)) {
-    throw unprocessable("This agent does not need a runner upgrade.");
+  if (!["claude_local", "codex_local", "paperclip_runner"].includes(agent.adapterType)) {
+    throw unprocessable("This agent does not support computer qualification.");
   }
   const { environment } = await resolveAgentRunnerEnvironmentForCompany(db, agent.companyId, agent.defaultEnvironmentId);
   if (!environment || environment.id !== expectedEnvironmentId) {
@@ -20,6 +20,12 @@ export async function qualifyAgentRunner(
   }
   if (environment.driver !== "sandbox") {
     throw unprocessable("This computer does not need sandbox qualification.");
+  }
+  // A normal native-agent Test still probes its runtime. Reuse a valid saved
+  // platform proof so that test does not invalidate a healthy computer first.
+  if (agent.adapterType === "paperclip_runner" && await readSandboxPlatformQualification(db, environment, agent.companyId)) {
+    return { ok: true, driver: "sandbox", summary: "The agent's computer is qualified for runner selection.",
+      details: { platformQualificationRecorded: true } };
   }
   const result = await probeEnvironment(db, environment, {
     companyId: agent.companyId,
