@@ -1,4 +1,5 @@
 import { adapterExecutionControls, createAdapterExecutionControl } from "../services/adapter-execution-control.js";
+import { chatRunSourceMessageId } from "../services/chat-channels/run-origin.js";
 import * as durableChatWakeup from "../services/durable-chat-wakeup.js";
 import { conflict } from "../errors.js";
 import * as githubTaskPreparation from "../services/chat-channels/github/task-preparation.js";
@@ -61022,6 +61023,73 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       } finally { await f.service.shutdown(); }
     },
   );
+
+  it("distinguishes an inherited GitHub requester from permission to replay a committed provider failure", async () => {
+    const f = await failedChatRetryFixture("github", "42", true, false, true);
+    try {
+      const companyId = f.fixture.companyId, agentId = f.fixture.assignedAgentId, issueId = f.issue.id;
+      await initializeRunIdentity(db, { companyId, runId: f.runId, issueId, responsibleUserId: "owner-user",
+        messageIds: [String(f.action.payload.commentId)], cause: "chat_message" });
+      await db.update(agents).set({ status: "running", runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } } })
+        .where(eq(agents.id, agentId));
+      const [capacity] = await db.insert(heartbeatRuns).values({ companyId, agentId, status: "running" }).returning();
+      const heartbeat = heartbeatService(db);
+      const resumed = await heartbeat.wakeup(agentId, { source: "on_demand", triggerDetail: "manual",
+        reason: "issue_tree_resumed", requestedByActorType: "user", requestedByActorId: "owner-user",
+        payload: { issueId }, contextSnapshot: { issueId, taskKey: f.issue.identifier, source: "issue.tree_resume" } });
+      expect(resumed).toMatchObject({ status: "queued" });
+      await initializeRunIdentity(db, { companyId, runId: resumed!.id, issueId, responsibleUserId: "owner-user",
+        parentRunId: f.runId, cause: "issue_tree_resumed" });
+      const contractId = randomUUID(), resultId = randomUUID();
+      await db.insert(completionContracts).values({ id: contractId, companyId, issueId, revision: 1,
+        schemaVersion: "paperclip.completion-contract.v1", policyVersion: "test", risk: "standard",
+        completionAuthority: "server_arbiter", incompleteCriteriaPolicy: "preserve_non_terminal", contractJson: {},
+        canonicalSha256: contractId, createdByActorType: "system", createdByActorId: "test" });
+      await db.update(heartbeatRuns).set({ status: "failed", finishedAt: new Date(), runtimeMode: "native",
+        nativeIssueId: issueId, nativePhase: "committed", errorCode: "adapter_failed", error: "Native session failed",
+        completionContractId: contractId }).where(eq(heartbeatRuns.id, resumed!.id));
+      await db.update(agentWakeupRequests).set({ status: "failed", finishedAt: new Date() }).where(eq(agentWakeupRequests.id, resumed!.wakeupRequestId!));
+      await db.insert(nativeRunResults).values({ id: resultId, companyId, issueId, runId: resumed!.id,
+        completionContractId: contractId, schemaStatus: "accepted", serverFingerprint: resultId, canonicalSha256: resultId,
+        resultJson: { result: { reportedWorkDisposition: "needs_review", completionClaim: { objectiveSatisfied: false } },
+          terminal: { runTerminalState: "failed", turnTerminalState: "failed" } } });
+      await db.insert(nativeRunFinalizations).values({ companyId, issueId, runId: resumed!.id, phase: "committed", resultId });
+      const lease = { id: randomUUID(), companyId, heartbeatRunId: resumed!.id, provider: "daytona", providerLeaseId: "contained-resume-provider" };
+      await db.insert(environmentLeases).values({ ...lease, issueId, status: "expired", leasePolicy: "ephemeral",
+        cleanupStatus: "success", releasedAt: new Date(), metadata: { remoteExecutionTermination:
+          remoteTerminationReceipt(lease, { providerLeaseId: lease.providerLeaseId, state: "destroyed" }) } });
+      await db.update(heartbeatRuns).set({ status: "cancelled", finishedAt: new Date() }).where(eq(heartbeatRuns.id, capacity.id));
+      await db.update(issues).set({ status: "blocked", executionRunId: null }).where(eq(issues.id, issueId));
+      await db.update(agents).set({ status: "idle" }).where(eq(agents.id, agentId));
+      const [failedResume] = await readHeartbeatRunsById(resumed!.id);
+      expect(failedResume.contextSnapshot).toMatchObject({ source: "issue.tree_resume" });
+      expect(failedResume.contextSnapshot).not.toHaveProperty("wakeCommentIds");
+      await expect(chatRunSourceMessageId(db, failedResume, { provider: "github" }))
+        .resolves.toBe(f.action.payload.commentId);
+      const input = { db, companyId, issueId, actorId: "owner-user", actorSource: "cloud_tenant",
+        observedRunId: resumed!.id, idempotencyKey: randomUUID(), prepareChatRetry: f.service.prepareFailedChatRunRetry };
+      const app = express();
+      app.use(express.json());
+      app.use((req, _res, next) => { req.actor = boardActor(companyId); next(); });
+      app.use("/api", issueRoutes(db, createStorageService().storage, { chatRunRetries: f.service }));
+      app.use(errorHandler);
+      const denied = await request(app).post(`/api/issues/${issueId}/retry`).send({
+        idempotencyKey: input.idempotencyKey, observedRunId: input.observedRunId,
+      }).expect(409);
+      expect(denied.body).toMatchObject({ error: "This attempt already recorded a result. Send a new message on the task to continue from the saved work.",
+        details: { code: "chat_failed_run_retry_not_authorized", reason: "accepted_result_without_new_input" } });
+      // Isolate the later accepted-result guard using only owned fixture data.
+      // Resolving inherited provenance cannot by itself authorize replay.
+      await db.update(heartbeatRuns).set({ contextSnapshot: { ...failedResume.contextSnapshot,
+        source: "chat:github", wakeCommentId: f.action.payload.commentId, wakeCommentIds: [f.action.payload.commentId] } })
+        .where(eq(heartbeatRuns.id, failedResume.id));
+      try {
+        await expect(requestTaskRetry({ ...input, idempotencyKey: randomUUID() })).rejects.toMatchObject({ details: {
+          code: "chat_failed_run_retry_not_authorized", reason: "accepted_result_without_new_input" } });
+      } finally { await db.update(heartbeatRuns).set({ contextSnapshot: failedResume.contextSnapshot }).where(eq(heartbeatRuns.id, failedResume.id)); }
+      expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.retryOfRunId === resumed!.id)).toHaveLength(0);
+    } finally { await f.service.shutdown(); }
+  });
 
   it.each([
     ...(["real_budget_ingress", "legacy_budget_ingress", "legacy_prior_response", "legacy_execution", "legacy_execution_log", "legacy_execution_lease", "legacy_execution_profile", "legacy_execution_event", "legacy_execution_controller", "legacy_execution_intent", "legacy_no_prior", "legacy_prior_late", "legacy_prior_unprocessed", "legacy_prior_delivery_unprocessed", "legacy_prior_numeric_app", "legacy_response_conflict", "legacy_prior_wrong_app", "legacy_prior_wrong_agent", "legacy_prior_unlinked", "legacy_prior_retargeted", "legacy_explicit_null", "legacy_explicit_empty", "legacy_explicit_malformed", "legacy_explicit_mismatch", "legacy_current_app_changed", "source_app_changed", "source_destination_changed", "accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)

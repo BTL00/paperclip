@@ -338,6 +338,10 @@ it does not repeat the admission that already consumed the recovery hold.
 A failed native predecessor still requires its committed failed result and
 exact executor termination proof. Successful results and uncertain delivery do
 not grant a replay.
+If an inherited task-resume attempt already recorded a result, ordinary Retry
+explains that exact replay is unavailable and directs the user to send a new
+message to continue from saved work. That new turn still passes normal current
+requester, access and executor-containment checks.
 
 If that successor failed at Retry authorization before runtime or provider
 startup, the next normal Retry follows its canonical source receipt. The exact

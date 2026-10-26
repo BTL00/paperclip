@@ -131,7 +131,9 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
   const failedChatRetryDenied = (reason?: "accepted_result_without_new_input" |
     "prior_result_publication" | "prior_interaction" | "source_authorization", authorityReason?: ChatWakeAuthorityReason) =>
     conflict(
-      "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
+      reason === "accepted_result_without_new_input"
+        ? "This attempt already recorded a result. Send a new message on the task to continue from the saved work."
+        : "The exact failed chat request can no longer be retried safely. Check its current connection, access, and recovery state.",
       { code: "chat_failed_run_retry_not_authorized", ...(reason ? { reason } : {}), ...(reason === "source_authorization" && authorityReason ? { authorityReason } : {}) },
     );
   class FailedChatRetryPublicationReadError extends Error {
@@ -785,6 +787,22 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
     if (failedRun.runtimeMode === "native" && evidence.kind === "retry" && !input.taskRetryIntentId)
       await failedNativeRetryCoordinator(tx, evidence.run, issue.id);
     const context = failedRun.contextSnapshot ?? {};
+    const selection = input.taskRetryInput && taskRetryInputSchema.safeParse(input.taskRetryInput);
+    if (selection && !selection.success) throw failedChatRetryDenied();
+    const selectedInput = selection?.success ? selection.data : undefined;
+    if (input.taskRetryIntentId && !input.committedResponse && failedRun.status === "failed" &&
+        failedRun.runtimeMode === "native" && failedRun.nativeIssueId === issue.id &&
+        context.issueId === issue.id && context.source === "issue.tree_resume" &&
+        !selectedInput?.sourceActionIds.length) {
+      // An inherited requester is not permission to replay a recorded result.
+      // Explain the existing refusal before raw chat-source validation hides
+      // the supported new-message path. This branch grants no continuation.
+      const [recorded] = await tx.select({ id: nativeRunResults.id }).from(nativeRunResults).where(and(
+        eq(nativeRunResults.companyId, input.companyId), eq(nativeRunResults.issueId, issue.id),
+        eq(nativeRunResults.runId, failedRun.id), eq(nativeRunResults.schemaStatus, "accepted"),
+      )).limit(1).for("share", { noWait: true });
+      if (recorded) throw failedChatRetryDenied("accepted_result_without_new_input");
+    }
     const provider = CHAT_PROVIDERS.find(
       (value) => context.source === `chat:${value}`,
     );
@@ -795,9 +813,6 @@ export function createChatFailedRunRetry(db: Db, options: ChatFailedRunRetryOpti
       (context.taskKey !== issue.identifier && context.taskKey !== issue.id)
     )
       throw failedChatRetryDenied();
-    const selection = input.taskRetryInput && taskRetryInputSchema.safeParse(input.taskRetryInput);
-    if (selection && !selection.success) throw failedChatRetryDenied();
-    const selectedInput = selection?.success ? selection.data : undefined;
     if (selectedInput && (!input.taskRetryIntentId || provider !== "github")) throw failedChatRetryDenied();
     const reauthorization = input.taskRetryReauthorization ?? (selectedInput ? {
       intentId: input.taskRetryIntentId!, sourceRunId: failedRun.id, runtimeFence: selectedInput.runtimeFence,
