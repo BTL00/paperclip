@@ -39,7 +39,7 @@ const support = await getEmbeddedPostgresTestSupport();
       await db.insert(toolConnectionInstalls).values({ companyId: input.companyId, connectionId: selected.connectionId, targetType: "company", targetId: input.companyId });
       const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, selected.id));
       await db.update(connectionGrants).set({ providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
-        repositories: [{ id: "1", fullName: "fixture/project", installationId: "1", private: true }] } } }).where(eq(connectionGrants.id, selected.id));
+        lastAccessRefreshAt: "2020-01-01T00:00:00Z", repositories: [{ id: "1", fullName: "fixture/project", installationId: "1", private: true }] } } }).where(eq(connectionGrants.id, selected.id));
       const service = projectGitAuthorizationService(db);
       const request = { companyId: input.companyId, projectId: project.id, workspaceId: workspace.id };
       return { input, selected, project, workspace, service, request, scope: { projectId: project.id } };
@@ -97,6 +97,14 @@ const support = await getEmbeddedPostgresTestSupport();
       }
       await db.update(connectionGrants).set({ updatedAt: new Date() }).where(eq(connectionGrants.id, f.selected.id));
       expect(await f.service.resolve(f.request, f.scope)).toBeNull();
+    });
+    it("never lets a legacy catalog's OAuth update outrank an observed repository refresh", async () => {
+      const f = await projectAuthorizationFixture(), legacy = await grant(f.input, "A");
+      const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, legacy.id));
+      await db.update(connectionGrants).set({ updatedAt: new Date(), providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
+        repositories: [{ id: "1", fullName: "fixture/project", installationId: "1", private: false }] } } }).where(eq(connectionGrants.id, legacy.id));
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      expect(await f.service.resolve(f.request, f.scope)).toBe("test-token-A");
     });
     it("discovers legacy URL-only public sources anonymously and defers unknown private sources", async () => {
       const f = await projectAuthorizationFixture();

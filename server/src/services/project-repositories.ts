@@ -73,7 +73,6 @@ export async function projectRepositoryIsPrivate(
   const repo = normalizeProjectRepositoryUrl(workspace.repoUrl!);
   const visibility = await db.select({
     refreshedAt: sql<string | null>`${connectionGrants.providerTenant}->'github'->>'lastAccessRefreshAt'`,
-    updatedAt: connectionGrants.updatedAt,
     private: sql<boolean | null>`(
     select bool_or((repository->>'private')::boolean)
     from jsonb_array_elements(coalesce(${connectionGrants.providerTenant}->'github'->'repositories', '[]'::jsonb)) repository
@@ -82,16 +81,15 @@ export async function projectRepositoryIsPrivate(
     eq(toolConnections.id, connectionGrants.connectionId), eq(toolConnections.companyId, companyId),
   )).where(and(eq(connectionGrants.companyId, companyId), eq(connectionGrants.status, "active"),
     eq(toolConnections.status, "active"), eq(toolConnections.enabled, true)));
-  const observedAt = (row: typeof visibility[number]) => {
-    const refreshedAt = Date.parse(row.refreshedAt ?? "");
-    return Number.isFinite(refreshedAt) ? refreshedAt : row.updatedAt.getTime();
-  };
-  const current = visibility.filter(row => typeof row.private === "boolean")
-    .sort((a, b) => observedAt(b) - observedAt(a))[0];
+  // OAuth refreshes change updatedAt without observing repository visibility.
+  const current = visibility.filter(row => typeof row.private === "boolean" && Number.isFinite(Date.parse(row.refreshedAt ?? "")))
+    .sort((a, b) => Date.parse(b.refreshedAt!) - Date.parse(a.refreshedAt!))[0];
   if (current) return current.private!;
   if (workspace.metadata?.githubRepositoryUrl === repo.url && typeof workspace.metadata.githubRepositoryPrivate === "boolean") {
     return workspace.metadata.githubRepositoryPrivate;
   }
+  const legacy = visibility.filter(row => typeof row.private === "boolean");
+  if (legacy.length && legacy.every(row => row.private === legacy[0]!.private)) return legacy[0]!.private!;
   const response = await ghFetch(`https://api.github.com/repos/${repo.fullName}`, {
     headers: { Accept: "application/vnd.github+json" }, redirect: "error", signal: AbortSignal.timeout(10_000),
   });
