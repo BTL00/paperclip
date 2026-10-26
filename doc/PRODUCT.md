@@ -49,6 +49,11 @@ start execution. This preference does not change the org chart or permissions.
 
 ### Agent Execution
 
+New agents in plugin environments finish setup before the environment prepares
+their resources and tests the model connection. The saved draft does not need
+a working computer to finish setup. The agent becomes ready only after the
+lifecycle verification succeeds.
+
 Existing Claude and Codex agents can upgrade from the legacy runner on their
 Harness / Runtime page when Paperclip Runner is the qualified default for their
 environment. One action saves pending edits and translates compatible settings
