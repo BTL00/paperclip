@@ -15,6 +15,15 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "inbox-search.show-decisions": {
+      const pending = { id: "question", status: "pending", addresseeUserId: "riley" }; const completed = { id: "complete", status: "answered", resolvedByUserId: "owner", result: { answers: ["received"] } };
+      const history = { id: "history", title: "Completed launch information", status: "backlog" }; const hiring = { id: "hire", status: "pending" };
+      o.tasks[0]!.title = "Riley launch question"; o.state.task = structuredClone(o.tasks[0]); o.tasks.push(history);
+      Object.assign(o.state, { ownerId: "owner", rileyId: "riley", historyTask: structuredClone(history), hiring: structuredClone(hiring), pendingQuestion: structuredClone(pending), completedQuestion: structuredClone(completed) });
+      Object.assign(o, { hiring, pendingQuestion: pending, completedQuestion: completed, visibleAttention: { items: [{ subject: { id: "hire" } }, { subject: { id: "question" }, resolverAudience: { addresseeUserId: "riley", effectiveResolverPolicy: "human_only" } }] }, permissionStatus: 403 });
+      o.links.push("/ACORN/issues/history", "/ACORN/approvals/hire");
+      o.reply = "Launch designer: pending approval for you as human operator.\nRiley launch question: waiting for Riley to answer.\nCompleted launch information: answered history, no action remains."; break;
+    }
     case "inbox-search.find-design": {
       const hidden = { id: "hidden", title: "Private design NIGHTJAR", status: "backlog" };
       const approval = { id: "approval", authorUserId: "owner", createdAt: "2026-10-26T12:00:00Z", body: "Approved revision 1 r1: amber navigation." };
@@ -262,6 +271,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.write-plan": o => { o.revisions[0]!.createdByRunId = "unrelated-run"; },
   "documents-artifacts.resolve-feedback": o => { o.annotations![1]!.status = "resolved"; },
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
+  "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
   "activity.company-overview": o => { o.reply = o.reply.replace("1 blocked", "3 blocked"); },
   "activity.audit-change": o => { o.reply = "Morgan, the current assignee, probably changed it today."; },
