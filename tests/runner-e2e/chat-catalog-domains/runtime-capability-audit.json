@@ -61,8 +61,8 @@
     },
     {
       "scenarioId": "agents.retire-agent",
-      "readinessClass": "local",
-      "needs": "Genuine active assignment and historical task; board termination and retained attribution/history."
+      "readinessClass": "implemented",
+      "needs": "Actual busy native assignment and truthful human-authored historical task/documents; agent denial, human Terminate UI, confirmed cancellation and retained identity/history/attribution."
     },
     {
       "scenarioId": "agents.configure-required-agent",
@@ -91,8 +91,8 @@
     },
     {
       "scenarioId": "agent-chat.remember-and-follow-up",
-      "readinessClass": "setup-turn",
-      "needs": "Genuine prior native choice/file turn, browser reload; original catalog query must bind after declared setup turns, plus missing-choice branch."
+      "readinessClass": "implemented",
+      "needs": "Genuine native blue preview and retained agreement after reload; exact canonical preview link; explicit never-selected alternate-design follow-up with independent phase clarification."
     },
     {
       "scenarioId": "agent-chat.track-delegated-work",
@@ -131,8 +131,8 @@
     },
     {
       "scenarioId": "runs-adapters.reset-session",
-      "readinessClass": "setup-turn",
-      "needs": "Real existing runtime session, comments/files; human Reset Sessions then actual new execution plus retained durable history."
+      "readinessClass": "implemented",
+      "needs": "Real native saved session/file/artifact prerequisite; actual human reset; exact new user continuation; fresh future session with retained history and bytes."
     },
     {
       "scenarioId": "runs-adapters.upgrade-runner",
@@ -201,8 +201,8 @@
     },
     {
       "scenarioId": "recovery.browser-reconnect",
-      "readinessClass": "local",
-      "needs": "Page context network disconnect while actual worker progresses; persisted events/history restored with no duplicate send or restart."
+      "readinessClass": "partial",
+      "needs": "Real browser offline/server completion plus second actual still-running phase; phase-bound status replies and no duplicate sends/runs. Failed-native-run reconnect remains a concrete coverage gap; no live runtime attempts yet."
     },
     {
       "scenarioId": "steering.queue-follow-up",

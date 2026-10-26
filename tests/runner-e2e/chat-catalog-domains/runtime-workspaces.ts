@@ -1,10 +1,11 @@
 import { expect } from "@playwright/test";
 import { pollUntil } from "../api.js";
+import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { checks, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface WorkspaceView { workspace: { id: string; companyId: string; projectId?: string | null; name: string; cwd: string }; repositories: unknown[] }
-async function savedTaskWorkspace(ctx: ChatCatalogContext) {
+export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean } = {}) {
   const { execution, fixtures, workspacePath, nonce, api } = ctx.input;
   const base = execution.profile.buildAgent({ environmentId: fixtures.environment.id, environmentFixtureId: execution.environment.id,
     workspacePath, secretRefs: fixtures.secretRefs, executionId: nonce });
@@ -15,7 +16,7 @@ async function savedTaskWorkspace(ctx: ChatCatalogContext) {
     await api.post(`${company}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
   const marker = `Saved website prerequisite ${nonce}`;
   const task = await api.post<Entity>(`${company}/issues`, { title: "Website task", status: "todo", assigneeAgentId: worker.id,
-    description: `Create a local file website-fixture.txt containing exactly ${JSON.stringify(marker)} in your admitted task workspace. Save a brief task document as evidence, then complete this fixture task normally. Do not create a project, repository, another task, or remote side effect.` });
+    description: `Create a local file website-fixture.txt containing exactly ${JSON.stringify(marker)} in your admitted task workspace. Save a brief task document as evidence, ${options.artifact ? "register the actual website-fixture.txt file as a downloadable artifact work product titled website-fixture.txt," : ""} then complete this fixture task normally. Do not create a project, repository, another task, or remote side effect.` });
   await pollUntil({ label: "Real projectless website fixture completion", deadlineAt: Date.now() + 180_000,
     load: async () => ({ task: await api.get<Entity>(`/api/issues/${task.id}`), runs: await ctx.allRuns() }),
     accept: value => value.task.status === "done" && value.runs.length === 1 && value.runs.every(run => run.status === "succeeded"),
@@ -24,8 +25,10 @@ async function savedTaskWorkspace(ctx: ChatCatalogContext) {
   const file = await api.get<{ resource?: { workspaceKind?: string }; content?: { data?: string } }>(`/api/issues/${task.id}/file-resources/content?workspace=execution&path=website-fixture.txt`);
   if (view.workspace.projectId || file.resource?.workspaceKind !== "execution_workspace" || file.content?.data?.trim() !== marker)
     throw new Error("Projectless fixture has no actual task-bound saved file");
-  return { worker, task: await api.get<Entity>(`/api/issues/${task.id}`), workspaceBefore: view, marker,
-    fileBefore: file.content.data, fixtureRunId: (await ctx.allRuns())[0]!.id };
+  const fixtureRunId = (await ctx.allRuns())[0]!.id;
+  const [artifact] = options.artifact ? await readRegisteredArtifacts(api, task.id, fixtureRunId, ["website-fixture.txt"]) : [];
+  return { worker, task: await api.get<Entity>(`/api/issues/${task.id}`), workspaceBefore: view, marker, artifact,
+    fileBefore: file.content.data, fixtureRunId };
 }
 export function gradeLocateFiles(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -51,7 +54,7 @@ function workspaceLink(origin: string, href: string, id: string) {
   try { const url = new URL(href, origin); const parts = url.pathname.split("/").map(decodeURIComponent); const at = parts.indexOf("execution-workspaces");
     return url.origin === new URL(origin).origin && at >= 0 && parts[at + 1] === id; } catch { return false; }
 }
-export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-files", savedTaskWorkspace, gradeLocateFiles, {
+export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-files", ctx => savedTaskWorkspace(ctx), gradeLocateFiles, {
   expectedRunCount: 2, attemptTimeoutMs: 540_000,
   async observe(ctx, state) {
     const id = (state.task as Entity).id;
