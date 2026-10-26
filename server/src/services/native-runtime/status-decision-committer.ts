@@ -1,5 +1,5 @@
 import { scheduledIssueMonitorWait } from "../issue-monitors.js";
-import { hasPublishedGitHubReview } from "../chat-channels/github/review-wait.js";
+import { hasPublishedGitHubReview, readInheritedGitHubReviewWait } from "../chat-channels/github/review-wait.js";
 import { pendingNativeGovernance } from "./native-governance.js";
 import { findSupersededExternalReviewRequests, supersedeExternalReviewRequestsInTransaction } from "./superseded-external-review-requests.js";
 import { normalizePrpResultSignals, type PrpStructuredRunResult } from "../../vendor/paperclip-runner/index.js";
@@ -1658,8 +1658,23 @@ export async function commitNativeStatusDecision(input: {
     }
     if (reasonCode === "scheduled_monitor_waiting") {
       const expected = input.requireMonitorWait;
-      const publishedReviewWait = input.decision.statusAction === "in_review" && input.decision.toStatus === "in_review" &&
-        await hasPublishedGitHubReview(tx as unknown as Db, input);
+      const inReview = input.decision.statusAction === "in_review" && input.decision.toStatus === "in_review";
+      let publishedReviewWait = inReview && await hasPublishedGitHubReview(tx as unknown as Db, input);
+      if (expected && inReview && !publishedReviewWait) {
+        // Arbitration may reuse a previous publication. Prove that same source
+        // here, while retaining the independently saved monitor and its owner.
+        const [run] = await tx.select({
+          id: heartbeatRuns.id, companyId: heartbeatRuns.companyId, agentId: heartbeatRuns.agentId,
+          responsibleUserId: heartbeatRuns.responsibleUserId,
+          activeIdentityContextId: heartbeatRuns.activeIdentityContextId,
+          nativeIssueId: heartbeatRuns.nativeIssueId, issueId: heartbeatRuns.issueId,
+        }).from(heartbeatRuns).where(and(
+          eq(heartbeatRuns.id, input.runId), eq(heartbeatRuns.companyId, input.companyId),
+          eq(heartbeatRuns.nativeIssueId, input.issueId), eq(heartbeatRuns.agentId, expected.agentId),
+        )).limit(1);
+        publishedReviewWait = !!run && (await readInheritedGitHubReviewWait(tx as unknown as Db,
+          { ...run, contextSnapshot: null }))?.kind === "published";
+      }
       if (!expected || issue.workMode !== "standard" || issue.executionRunId !== input.runId ||
           (input.decision.statusAction !== "preserve" && !publishedReviewWait) || input.decision.effects.length !== 1 ||
           input.decision.effects[0]?.kind !== "release_checkout" ||
