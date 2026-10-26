@@ -35,6 +35,7 @@ export function grade_activity(value: unknown) {
       c.add("real-two-change-history", priorityEvents.length === 2 && priorityEvents.every(event => o.activity.some(row => row.id === event.id)), "Both fixture priority changes remain visible on the exact task.");
       c.add("attribution-and-values", priorityEvents.length === 2 && priorityEvents.every(event => !!event.actorId
         && mentionsRecordedActor(o.reply, event.actorId)
+        && o.reply.split(/[;\n]|\.(?:\s|$)/).some(part => new RegExp(`\\b${String(event.details?.priority)}\\b`, "i").test(part) && mentionsRecordedActor(part, event.actorId!))
         && o.reply.toLowerCase().includes(String(event.details?.priority).toLowerCase())),
         "Editor identity is the recorded actor ID or the canonical Local board label, never a generic operator inference.");
       c.add("recorded-event-times", priorityEvents.length === 2 && priorityEvents.every(event => mentionsRecordedTime(o.reply, event.createdAt,
