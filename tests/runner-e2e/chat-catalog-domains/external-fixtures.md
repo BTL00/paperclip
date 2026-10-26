@@ -49,6 +49,18 @@ receipts contain only scenario, provider, configured boolean and missing field
 names. Never persist the parsed private file, credential values, session state or
 raw provider receipts into tracked files/public evidence.
 
+The two project repository scenarios use a `github` provider binding with an
+explicitly authorized token environment reference `tokenEnv` (also present in
+`credentialEnv`). Add-repository requires `siteRepositoryId`; replacement requires
+`oldRepositoryId` and `newRepositoryId`. Each numeric ID must occur in
+`resourceIds`. The scoped disposable credential must independently expose the
+canonical synthetic names `acorn/site`, `acorn/site-old`, and `acorn/site-new`
+needed by the selected query through the production GitHub connection. Different
+real names require a reviewed query identity binding; they are never silently
+substituted. The fixture creates a company-owned encrypted secret and public
+connection, verifies current repository discovery, and deletes both on cleanup.
+Ambient `gh` authentication and personal credentials are never adopted.
+
 Synthetic notes apps, MCP gateways, local plugins, team packages, local encrypted
 secrets and test endpoints do not require this file. They use real public
 Paperclip APIs and controlled fixture implementations; they cannot count as live

@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 /** Private file contains only explicit disposable-resource allowlists and env
  * names. Credential values belong in the coordinator's child environment. */
 export const EXTERNAL_CONFIG_ENV = "PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG";
-export type ExternalProvider = "notion" | "slack" | "agentmail" | "vault";
+export type ExternalProvider = "notion" | "slack" | "agentmail" | "vault" | "github";
 export interface ProviderBinding {
   disposable: true;
   resourceIds: string[];
@@ -12,6 +12,8 @@ export interface ProviderBinding {
 }
 export interface ExternalFixtureConfig { schemaVersion: 1; providers: Partial<Record<ExternalProvider, ProviderBinding>> }
 export const externalRequirements: Record<string, { provider: ExternalProvider; fields: readonly string[] }> = {
+  "projects.add-repository": { provider: "github", fields: ["siteRepositoryId", "tokenEnv"] },
+  "projects.replace-repository": { provider: "github", fields: ["oldRepositoryId", "newRepositoryId", "tokenEnv"] },
   "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl"] },
   "connection-setup.notion-missing": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.notion-wrong-account": { provider: "notion", fields: ["sharedWorkspaceId", "personalWorkspaceId", "personalPageId", "oauthBrowserSession"] },
@@ -34,7 +36,7 @@ export function validateExternalConfig(value: unknown): ExternalFixtureConfig {
   const config = value as ExternalFixtureConfig;
   if (!config || config.schemaVersion !== 1 || !config.providers || typeof config.providers !== "object" || Array.isArray(config.providers)) throw new Error("Invalid external fixture configuration; contents withheld");
   for (const [provider, binding] of Object.entries(config.providers)) {
-    if (!["notion", "slack", "agentmail", "vault"].includes(provider) || !binding || binding.disposable !== true
+    if (!["notion", "slack", "agentmail", "vault", "github"].includes(provider) || !binding || binding.disposable !== true
       || !Array.isArray(binding.resourceIds) || !binding.resourceIds.length || binding.resourceIds.some((id: unknown) => typeof id !== "string" || !id.trim())
       || !Array.isArray(binding.credentialEnv) || !binding.credentialEnv.length || binding.credentialEnv.some((name: unknown) => typeof name !== "string" || !/^PAPERCLIP_CHAT_EVAL_[A-Z0-9_]+$/.test(name))
       || !binding.prerequisites || typeof binding.prerequisites !== "object" || Array.isArray(binding.prerequisites)

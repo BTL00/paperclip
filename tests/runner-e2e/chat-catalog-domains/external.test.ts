@@ -84,7 +84,11 @@ describe("external domain independent oracles", () => {
   it("a plausible reply alone never passes", () => { for (const definition of definitions) expect(definition.grade({ reply: "Done, everything is connected and ready." }).passed).toBe(false); });
 });
 describe("private disposable provider prerequisite contract", () => {
-  it("enumerates only the 16 named-provider journeys", () => { expect(Object.keys(externalRequirements)).toHaveLength(16); });
+  it("enumerates the 16 named-provider journeys and two authorized repository journeys", () => {
+    expect(Object.keys(externalRequirements)).toHaveLength(18);
+    expect(Object.entries(externalRequirements).filter(([, requirement]) => requirement.provider === "github").map(([id]) => id))
+      .toEqual(["projects.add-repository", "projects.replace-repository"]);
+  });
   it("missing input produces field-only receipts, never a configured pass", () => {
     for (const id of Object.keys(externalRequirements)) { const receipt = externalPrerequisiteReceipt(id, undefined, {}); expect(receipt.configured).toBe(false); expect(receipt.missing.length).toBeGreaterThan(1); }
   });
