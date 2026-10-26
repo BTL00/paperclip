@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { agents, companies, createDb, heartbeatRuns, issueRecoveryActions, issues, nativeRunFinalizations } from "@paperclipai/db";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../__tests__/helpers/embedded-postgres.js";
-import { executionProjectionsForRuns, type RecoverySelectionDiagnostic } from "./execution-projection.js";
+import { executionProjectionsForRuns } from "./execution-projection.js";
 
 const support = await getEmbeddedPostgresTestSupport();
 describe.skipIf(!support.supported)("persisted stopped-workspace projection", () => {
@@ -32,18 +32,7 @@ describe.skipIf(!support.supported)("persisted stopped-workspace projection", ()
         workspaceRecovery: { schema: "paperclip.workspace-recovery.v1", runId, status: "recovered",
           stage: "saving_receipts", attempt: 1, attemptLimit: 6, retryable: true, requestIds: [] },
       } });
-    await db.insert(issueRecoveryActions).values(Array.from({ length: 25 }, (_, index) => ({ companyId,
-      sourceIssueId: issueId, kind: "active_run_watchdog", cause: "native_continuation_requires_reconciliation",
-      fingerprint: `unrelated-${index}`, status: "resolved", nextAction: "secret-diagnostic-fixture",
-      evidence: { runId: randomUUID(), automaticRecovery: { replay: "allowed" },
-        workspaceRecovery: { message: "secret-diagnostic-fixture" } } })));
-    let diagnostic: RecoverySelectionDiagnostic | undefined;
-    const projections = await executionProjectionsForRuns(db, companyId, [runId], new Date(),
-      { onRecoverySelection: value => { diagnostic = value; } });
-    expect(diagnostic).toMatchObject({ runId, candidateCount: 26, matchingCandidateCount: 1, truncated: true,
-      selectedWorkspaceDisplay: "recovered", projectionMatchesWorkspaceDisplay: true });
-    expect(diagnostic?.candidates).toHaveLength(20);
-    expect(JSON.stringify(diagnostic)).not.toContain("secret-diagnostic-fixture");
+    const projections = await executionProjectionsForRuns(db, companyId, [runId]);
     expect(projections.get(runId)).toMatchObject({ phase: "recovery_needed", label: "Stopped",
       nextAction: "Saved work recovered. Send a message to continue.", permittedActions: ["inspect_run"] });
   });

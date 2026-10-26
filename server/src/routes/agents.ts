@@ -7701,21 +7701,13 @@ export function agentRoutes(
   });
 
   router.get("/issues/:issueId/execution", async (req, res) => {
-    if (req.query.recoveryDiagnostics !== undefined && req.query.recoveryDiagnostics !== "1")
-      throw badRequest("Invalid recovery diagnostics flag");
-    const includeRecoveryDiagnostics = req.query.recoveryDiagnostics === "1";
-    if (includeRecoveryDiagnostics) assertBoard(req);
     const issue = await getAccessibleResource(req, res, issueService(db).getById(req.params.issueId as string), "Issue not found");
     if (!issue) return;
     const [run] = await db.select({ id: heartbeatRuns.id, agentId: heartbeatRuns.agentId }).from(heartbeatRuns).where(and(
       eq(heartbeatRuns.companyId, issue.companyId),
       sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issue.id}`,
     )).orderBy(sql`case when ${heartbeatRuns.id} = ${issue.executionRunId} then 0 when ${heartbeatRuns.status} = 'running' then 1 else 2 end`, desc(heartbeatRuns.createdAt)).limit(1);
-    let recoverySelectionDiagnostics: unknown;
-    const execution = run ? await executionProjectionForRun(db, issue.companyId, run.id, new Date(),
-      includeRecoveryDiagnostics ? { onRecoverySelection: diagnostic => { recoverySelectionDiagnostics = diagnostic; } } : {}) : null;
-    res.json(run ? { runId: run.id, agentId: run.agentId, recoveryAction: await issueRecoveryActionService(db).getActiveForIssue(issue.companyId, issue.id), execution,
-      ...(includeRecoveryDiagnostics ? { recoverySelectionDiagnostics } : {}) } : null);
+    res.json(run ? { runId: run.id, agentId: run.agentId, recoveryAction: await issueRecoveryActionService(db).getActiveForIssue(issue.companyId, issue.id), execution: await executionProjectionForRun(db, issue.companyId, run.id) } : null);
   });
 
   router.get("/issues/:issueId/active-run", async (req, res) => {

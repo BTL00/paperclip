@@ -142,7 +142,6 @@ function registerModuleMocks() {
     heartbeatService: () => mockHeartbeatService,
     issueApprovalService: () => ({}),
     issueService: () => mockIssueService,
-    issueRecoveryActionService: () => ({ getActiveForIssue: vi.fn(async () => null) }),
     logActivity: mockLogActivity,
     secretService: () => ({}),
     syncInstructionsBundleConfigFromFilePath: vi.fn((_agent, config) => config),
@@ -463,30 +462,7 @@ describe("agent live run routes", () => {
       },
     );
 
-    it.each(["agent", "foreign_company", "invalid_flag", "board"])("scopes recovery selection diagnostics: %s", async mode => {
-    mockIssueService.getById.mockResolvedValue({ id: failedChatIssueId, companyId: mode === "foreign_company" ? "other-company" : "company-1" });
-    const db = createRuntimeRequestDbStub({ id: failedChatRunId, agentId: routeAgentId });
-    const actor = mode === "agent" ? { type: "agent", agentId: routeAgentId, companyId: "company-1" }
-      : { type: "board", userId: "operator", source: "session", companyIds: ["company-1"], isInstanceAdmin: false };
-    if (mode === "board") mockExecutionProjection.executionProjectionForRun.mockImplementationOnce(async (...args: unknown[]) => {
-      const options = args[4] as { onRecoverySelection: (value: unknown) => void };
-      options.onRecoverySelection({ runId: failedChatRunId, candidateCount: 0, candidates: [] });
-      return null;
-    });
-    const res = await requestApp(await createApp(db, actor), url => request(url).get(`/api/issues/${failedChatIssueId}/execution?recoveryDiagnostics=${mode === "invalid_flag" ? "true" : "1"}`));
-    if (mode === "board") {
-      expect(res.status, JSON.stringify(res.body)).toBe(200);
-      expect(res.body.recoverySelectionDiagnostics).toEqual({ runId: failedChatRunId, candidateCount: 0, candidates: [] });
-      expect(mockExecutionProjection.executionProjectionForRun).toHaveBeenCalledWith(db, "company-1", failedChatRunId,
-        expect.any(Date), { onRecoverySelection: expect.any(Function) });
-    } else {
-      expect(mode === "invalid_flag" ? [400] : [403, 404]).toContain(res.status);
-      expect(db.select).not.toHaveBeenCalled();
-      expect(mockExecutionProjection.executionProjectionForRun).not.toHaveBeenCalled();
-    }
-  }, 45_000);
-
-  it("accepts uppercase UUIDs without changing the lookup value", async () => {
+    it("accepts uppercase UUIDs without changing the lookup value", async () => {
       const runId = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
       const response = await requestApp(await createApp(), (url) =>
         request(url).get(`/api/heartbeat-runs/${runId}/log`),
