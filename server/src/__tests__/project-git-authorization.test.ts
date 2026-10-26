@@ -70,6 +70,26 @@ const support = await getEmbeddedPostgresTestSupport();
       expect(await f.service.resolve(f.request, f.scope)).toBeNull();
       expect(ghFetch).not.toHaveBeenCalled(); expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
     });
+    it.each(["inspect", "remove"] as const)("allows authorized %s after archive while denying provisioning and revoked consent", async operation => {
+      const f = await projectAuthorizationFixture();
+      await db.update(projectWorkspaces).set({ metadata: { githubRepositoryUrl: "https://github.com/fixture/project", githubRepositoryPrivate: true } })
+        .where(eq(projectWorkspaces.id, f.workspace.id));
+      await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
+      await db.update(projects).set({ archivedAt: new Date() }).where(eq(projects.id, f.project.id));
+      const scope = { ...f.scope, workspaceId: f.workspace.id, operation };
+      expect(await f.service.resolve(f.request, scope)).toBe("test-token-A");
+      vault.resolveUserSecretValue.mockClear();
+      for (const deniedScope of [f.scope, { ...f.scope, operation }, { ...scope, operation: "prepare" as const },
+        { ...scope, workspaceId: randomUUID() }, { ...scope, runId: f.input.runId, agentId: f.input.agentId }]) {
+        await expect(f.service.resolve(f.request, deniedScope)).rejects.toThrow();
+      }
+      await expect(f.service.set(f.input.companyId, f.project.id, "A", f.selected.id)).rejects.toThrow("Active project");
+      await db.update(connectionGrants).set({ status: "revoked" }).where(eq(connectionGrants.id, f.selected.id));
+      await expect(f.service.resolve(f.request, scope)).rejects.toThrow("authorization is unavailable");
+      await f.service.set(f.input.companyId, f.project.id, "A", null);
+      await expect(f.service.resolve(f.request, scope)).rejects.toThrow("Authorize this project");
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+    });
     it.each(["revoked", "disabled"])("ignores %s private catalog entries when the current repository is public", async stale => {
       const f = await projectAuthorizationFixture();
       if (stale === "revoked") await db.update(connectionGrants).set({ status: "revoked" }).where(eq(connectionGrants.id, f.selected.id));

@@ -289,7 +289,7 @@ export type PluginRpcErrorCode =
  */
 export interface PluginInvocationScope {
   companyId: string;
-  projectGit?: { projectId: string; workspaceId?: string; runId?: string; agentId?: string };
+  projectGit?: { projectId: string; workspaceId?: string; runId?: string; agentId?: string; operation?: "prepare" | "inspect" | "remove" };
 }
 
 /**

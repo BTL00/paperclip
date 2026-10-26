@@ -139,6 +139,7 @@ export function projectGitAuthorizationService(db: Db) {
         workspaceId?: string;
         runId?: string;
         agentId?: string;
+        operation?: "prepare" | "inspect" | "remove";
       },
     ) {
       if (
@@ -147,7 +148,9 @@ export function projectGitAuthorizationService(db: Db) {
         (scope.workspaceId && scope.workspaceId !== input.workspaceId)
       )
         throw forbidden("Git credentials require a matching host project operation");
-      const row = await project(input.companyId, input.projectId);
+      const cleanup = scope.workspaceId === input.workspaceId && !scope.runId && !scope.agentId &&
+        (scope.operation === "inspect" || scope.operation === "remove");
+      const row = await project(input.companyId, input.projectId, cleanup);
       const [workspace] = await db
         .select()
         .from(projectWorkspaces)

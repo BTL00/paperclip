@@ -297,11 +297,11 @@ describe("plugin-worker-manager stderr failure context", () => {
         const params = { ...common, projectId: "project-a", runId: "run-a", agentId: "agent-a", operation: {
           kind, source: { id: "workspace-a" }, binding: { projectWorkspaceId: "workspace-a" } } };
         await expect(handle.call("workspaceOperation", params as never)).resolves.toEqual({ companyId: "company-a",
-          ...(kind === "finalize" ? {} : { projectGit: { projectId: "project-a", workspaceId: "workspace-a",
+          ...(kind === "finalize" ? {} : { projectGit: { projectId: "project-a", workspaceId: "workspace-a", operation: kind,
             ...(kind === "prepare" ? { runId: "run-a", agentId: "agent-a" } : {}) } }) });
       }
       await expect(handle.call("workspaceOperation", { ...common, projectId: "project-a", runId: null, agentId: null,
-        operation: { kind: "prepare", source: { id: "workspace-a" } } } as never)).resolves.toEqual({ companyId: "company-a", projectGit: { projectId: "project-a", workspaceId: "workspace-a" } });
+        operation: { kind: "prepare", source: { id: "workspace-a" } } } as never)).resolves.toEqual({ companyId: "company-a", projectGit: { projectId: "project-a", workspaceId: "workspace-a", operation: "prepare" } });
       await expect(handle.call("workspaceOperation", { ...common, projectId: "project-a", runId: null, agentId: "agent-a",
         operation: { kind: "prepare", source: { id: "workspace-a" } } } as never)).resolves.toEqual({ companyId: "company-a" });
     } finally { await handle.stop().catch(() => undefined); }

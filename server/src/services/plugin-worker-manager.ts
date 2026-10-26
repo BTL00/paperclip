@@ -1167,12 +1167,12 @@ export function createPluginWorkerHandle(
         const source = operation.kind === "prepare" ? operation.source : operation.binding;
         const workspaceId = isRecord(source) ? readNonEmptyString(operation.kind === "prepare" ? source.id : source.projectWorkspaceId) : null;
         const projectId = readNonEmptyString(params.projectId);
-        if (projectId && workspaceId && ["prepare", "inspect", "remove"].includes(String(operation.kind))) {
+        if (projectId && workspaceId && (operation.kind === "prepare" || operation.kind === "inspect" || operation.kind === "remove")) {
           // Only foreground preparation may use a run. Maintenance uses project consent.
           const runId = operation.kind === "prepare" ? readNonEmptyString(params.runId) : null;
           const agentId = operation.kind === "prepare" ? readNonEmptyString(params.agentId) : null;
           if (Boolean(runId) !== Boolean(agentId)) return { companyId: directCompanyId };
-          return { companyId: directCompanyId, projectGit: { projectId, workspaceId,
+          return { companyId: directCompanyId, projectGit: { projectId, workspaceId, operation: operation.kind,
             ...(runId && agentId ? { runId, agentId } : {}) } };
         }
       }

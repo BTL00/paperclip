@@ -134,6 +134,8 @@ requires `projects.git-credentials` and a matching host-issued project operation
 Background work uses the selected project grant. Foreground preparation uses the
 active run identity and trust boundary. UI/data/tool invocations have no export
 authority. No task identity is retained for maintenance.
+Archived projects allow only host-issued workspace inspection and removal using
+existing consent; they cannot acquire credentials for provisioning.
 
 Evidence: owned embedded-database grant/route fixtures in
 `server/src/__tests__/project-git-authorization.test.ts`, worker invocation

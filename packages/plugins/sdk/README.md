@@ -1450,6 +1450,8 @@ without authorization wait before provisioning. Repository visibility comes from
 the Connector catalog and retained project selections; legacy URL-only sources
 use anonymous discovery when visibility is unknown. A revoked or invalid private
 repository authorization fails closed. There is no fallback to another grant.
+Archived projects keep credential access only for host-issued workspace inspection
+and removal with existing consent; provisioning remains blocked.
 
 The return value is transient raw credential material with the Connector's
 existing permissions. This capability is for trusted execution infrastructure,
