@@ -13,6 +13,11 @@ processed earlier response ledger to prove the same endpoint's App claim before
 that input. Company, conversation, agent and prior delivery/source linkage remain
 required. Explicit conflicting App IDs cannot use that fallback. Local PostgreSQL and HTTP-route regressions
 cover these transitions; hosted execution and delivery remain separate acceptance.
+Dispatch validates the exact claimed wake and resolved user-continuation receipt
+for the current successor. A later board Retry can follow that successor only
+when exact durable diagnostics and absent execution/resources prove it never
+started. This preserves the original sender/source and grants no agent Retry
+permission or accepted-result replay.
 
 Source revision: `3bbc2104b65caf9f7763938a01260a5673e12f7a`.
 

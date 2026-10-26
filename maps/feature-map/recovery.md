@@ -100,6 +100,11 @@ Repeat with legacy input that has no saved App ID and was refused by a budget
 before acknowledgement. An earlier processed response from the same endpoint,
 conversation and agent can prove its App claim. Missing, late, unlinked or
 conflicting proof must reject Retry. Verify actual execution separately.
+At dispatch, confirm the admitted successor retains the same source and resolved
+continuation receipt. If it fails at Retry authorization before provider startup,
+use the next ordinary Retry against that newest failed run. It must retain the
+saved follow-up and create one successor; output, an allocated environment or an
+active controller must prevent treating that failure as never started.
 
 ### `post-stop-message`
 
