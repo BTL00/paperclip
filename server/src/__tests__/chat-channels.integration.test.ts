@@ -3499,6 +3499,97 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       expect(classifications).toHaveLength(2); expect(classifications.map(c => c.violation)).toEqual([false, true]);
       expect(classifications.every(c => c.toolInvocationId === approval.invocationId && c.costEventId)).toBe(true);
     });
+    it.each(["begin_review", "submit_review"] as const)("recovers %s after a timeout before publication staging", async name => {
+      const f = await publicationRetryFixture();
+      let release!: () => void;
+      const blocked = new Promise<void>(resolve => { release = resolve; });
+      let metadataReads = 0;
+      f.setSupplementalProviderFetch(async (input, init) => {
+        if (String(input).endsWith("/pulls/418") && metadataReads++ === 0) {
+          await blocked;
+          throw new Error("Connection closed before PR metadata arrived");
+        }
+        return f.provider(input, init);
+      });
+      vi.stubGlobal("fetch", f.providerFetch);
+      onTestFinished(() => { release(); vi.unstubAllGlobals(); });
+      const gateway = createToolGatewayService(db);
+      const session = await gateway.createSession({ companyId: f.companyId, agentId: f.assignedAgentId, runId: f.run.id });
+      const tool = (await githubBotToolsForSession(db, f.session)).find(tool => tool.upstreamToolName === name)!;
+      const parameters = name === "begin_review" ? { reviewedCommit: f.head } : f.assessment;
+      const input = { sessionToken: session.token, tool: tool.name, parameters };
+      await expect(gateway.executeTool({ ...input, timeoutMs: 50 })).rejects.toMatchObject({ reasonCode: "tool_timeout" });
+      expect(await f.action()).toBeUndefined();
+      release();
+      const retry = await gateway.executeTool(input);
+      expect(retry).toMatchObject({ result: { data: name === "begin_review"
+        ? { reviewedCommit: f.head, state: "running" }
+        : { status: "processed", score: 3, conclusion: "neutral" } } });
+      const writes = f.responseWrites.length;
+      expect(await gateway.executeTool(input)).toMatchObject({ invocationId: retry.invocationId,
+        result: { data: name === "begin_review" ? { reviewedCommit: f.head } : { status: "processed" } } });
+      expect(f.responseWrites).toHaveLength(writes);
+      expect(f.responseComments.size).toBe(1);
+    });
+    it("stages one assessment when the timed-out metadata read completes alongside its retry", async () => {
+      const f = await publicationRetryFixture();
+      let release!: () => void;
+      const blocked = new Promise<void>(resolve => { release = resolve; });
+      let metadataReads = 0;
+      f.setSupplementalProviderFetch(async (input, init) => {
+        if (String(input).endsWith("/pulls/418") && metadataReads++ === 0) await blocked;
+        return f.provider(input, init);
+      });
+      vi.stubGlobal("fetch", f.providerFetch);
+      onTestFinished(() => { release(); vi.unstubAllGlobals(); });
+      const gateway = createToolGatewayService(db);
+      const session = await gateway.createSession({ companyId: f.companyId, agentId: f.assignedAgentId, runId: f.run.id });
+      const tool = (await githubBotToolsForSession(db, f.session)).find(tool => tool.upstreamToolName === "submit_review")!;
+      const input = { sessionToken: session.token, tool: tool.name, parameters: f.assessment };
+      await expect(gateway.executeTool({ ...input, timeoutMs: 50 })).rejects.toMatchObject({ reasonCode: "tool_timeout" });
+      const retry = gateway.executeTool(input);
+      release();
+      expect(await retry).toMatchObject({ result: { data: { actionId: expect.any(String) } } });
+      await expect.poll(async () => (await f.action())?.status).toBe("processed");
+      expect(await gateway.executeTool(input)).toMatchObject({ result: { data: { status: "processed" } } });
+      const actions = await db.select().from(chatActions).where(and(eq(chatActions.endpointId, f.endpoint.id),
+        eq(chatActions.kind, "github_review_publication")));
+      expect(actions).toHaveLength(1);
+      expect(actions[0].status).toBe("processed");
+      expect(f.responseComments.size).toBe(1);
+      expect(f.responseWrites.map(write => write.method)).toEqual(["POST", "PATCH"]);
+    });
+    it("rejects changed requests and revoked access before repeating an unstaged review", async () => {
+      const f = await publicationRetryFixture();
+      let metadataReads = 0;
+      let unavailable = true;
+      f.setSupplementalProviderFetch(async (input, init) => {
+        if (String(input).endsWith("/pulls/418")) {
+          metadataReads++;
+          if (unavailable) throw new Error("Connection closed before PR metadata arrived");
+        }
+        return f.provider(input, init);
+      });
+      vi.stubGlobal("fetch", f.providerFetch);
+      onTestFinished(() => vi.unstubAllGlobals());
+      const gateway = createToolGatewayService(db);
+      const session = await gateway.createSession({ companyId: f.companyId, agentId: f.assignedAgentId, runId: f.run.id });
+      const tool = (await githubBotToolsForSession(db, f.session)).find(tool => tool.upstreamToolName === "submit_review")!;
+      const input = { sessionToken: session.token, tool: tool.name, parameters: f.assessment, idempotencyKey: "preflight-request" };
+      await expect(gateway.executeTool(input)).rejects.toThrow("GitHub is temporarily unavailable");
+      unavailable = false;
+      const failedReads = metadataReads;
+      await expect(gateway.executeTool({ ...input, parameters: { ...f.assessment, summary: "Changed assessment" } }))
+        .rejects.toMatchObject({ reasonCode: "github_publication_unavailable" });
+      expect(await f.action()).toBeUndefined();
+      expect(metadataReads).toBe(failedReads);
+      await db.insert(toolPolicies).values({ companyId: f.companyId, name: "Revoke review", policyType: "block", priority: 0,
+        selectors: { catalogEntryId: tool.catalogEntryId! } });
+      await expect(gateway.executeTool(input)).rejects.toThrow();
+      expect(await f.action()).toBeUndefined();
+      expect(metadataReads).toBe(failedReads);
+      expect(f.responseWrites.map(write => write.method)).toEqual(["POST"]);
+    });
     it("reads pending GitHub receipts without dispatch and refuses a missing publication", async () => {
       const f = await publicationRetryFixture();
       let attempts = 0;

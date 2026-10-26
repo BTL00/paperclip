@@ -249,9 +249,15 @@ the receipt.
 
 Receipt recovery compares the complete saved publication request, including long
 text and nested coverage entries. Shortened audit previews do not establish
-request identity. Changed content or a missing durable publication returns a
-conflict without dispatching another write. Exact retries read the current
-receipt; the durable worker owns pending publication retries.
+request identity. Changed content or a missing completed durable publication
+returns a conflict without dispatching another write. Exact retries read the
+current receipt; the durable worker owns pending publication retries.
+
+A timeout during metadata or file reads can occur before publication staging.
+The same request can repeat this preflight with its complete request identity.
+The saved assessment, unique publication key, and provider lease still prevent
+repeat external writes. `begin_review` retries return the run's current review
+result. They do not return a shortened audit preview.
 
 For a call that required human approval, the durable publication keeps that
 verified approval for its exact operation. An exact caller retry only reads the
