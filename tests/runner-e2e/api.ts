@@ -46,6 +46,14 @@ export class RunnerApi {
     return response.json() as Promise<T>;
   }
 
+  /** Fetch owned attachment bytes with the same authenticated actor as JSON reads. */
+  async getAttachmentContent(attachmentId: string): Promise<Buffer> {
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(attachmentId)) throw new Error("Invalid fixture attachment identity");
+    const response = await this.request.get(`/api/attachments/${attachmentId}/content`, this.sessionOptions());
+    if (!response.ok()) throw new RunnerApiHttpError(response.status(), await failureMessage(response, "GET"));
+    return response.body();
+  }
+
   async post<T>(path: string, data?: unknown, options?: { timeout: number }): Promise<T> {
     const response = await this.request.post(path, { data, ...this.sessionOptions(), ...options });
     if (!response.ok()) throw new Error(await failureMessage(response, "POST"));

@@ -1,3 +1,4 @@
+import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
 import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
 import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./chat-catalog-fingerprint.js";
 import { expect } from "@playwright/test";
@@ -21,12 +22,14 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   let grade: ChatCatalogGrade | undefined;
   let failed = false;
   let renderedQuery = scenario.query;
+  let persistedQuery = scenario.query;
+  let queryAttachments: ChatQueryAttachmentReceipt[] = [];
   let setupBoundary: ChatCatalogSetupBoundary = { humanCommentIds: [], runIds: [] };
   async function conversation() {
     await context.refreshIssue();
     const issue = context.issue();
     const runs = await context.allRuns();
-    const comments = issue ? await input.api.get<Array<{ id: string; body: string; authorAgentId?: string; createdByRunId?: string }>>(
+    const comments = issue ? await input.api.get<Array<{ id: string; body: string; authorAgentId?: string; authorUserId?: string; issueId?: string; companyId?: string; createdByRunId?: string }>>(
       `/api/issues/${issue.id}/comments?order=asc`,
     ) : [];
     const renderedLinks = [];
@@ -44,11 +47,17 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     observation = await implementation!.observe(context, state!);
     grade = validateChatCatalogGrade(implementation!.grade(observation));
     const human = evidence.comments.filter(comment => !comment.authorAgentId);
+    const canonicalHuman = human[implementation!.setupHumanMessageCount ?? 0];
+    const attachmentsValid = !queryAttachments.length || !!canonicalHuman && await verifyChatQueryAttachments(context, queryAttachments, canonicalHuman);
+    if (queryAttachments.length) await input.evidence("chat-catalog-query-attachment-receipts.json", { receipts: queryAttachments,
+      canonicalCommentId: canonicalHuman?.id ?? null, verified: attachmentsValid });
     const checks = [...grade.checks,
       { id: "catalog-complete-conditions", passed: !implementation!.coverageGaps?.length,
         detail: implementation!.coverageGaps?.length ? `Missing conditions: ${implementation!.coverageGaps.join(", ")}` : "No known catalog condition is omitted." },
-      { id: "catalog-original-human-query", passed: chatCatalogHumanHistoryMatches({ implementation: implementation!, human, runIds: evidence.runs.map(run => run.id), boundary: setupBoundary, renderedQuery }),
+      { id: "catalog-original-human-query", passed: chatCatalogHumanHistoryMatches({ implementation: implementation!, human, runIds: evidence.runs.map(run => run.id), boundary: setupBoundary, renderedQuery: persistedQuery }),
         detail: "The persisted request preserves the catalog query with only audited public-fixture identity bindings; all human turns were declared." },
+      { id: "catalog-query-attachment-receipts", passed: attachmentsValid,
+        detail: "Only declared production attachment suffixes are allowed, backed by same-source human receipts and independently retrieved matching bytes." },
       ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
         leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
     ];
@@ -63,6 +72,11 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     state = await implementation.setup(context);
     const query = await resolveChatCatalogQuery(context, implementation.queryBindings, state);
     renderedQuery = query.renderedQuery;
+    if (implementation.queryOutcome === "rejected" && implementation.queryAttachments?.length) throw new Error("Rejected-query attachment branches need an explicit contract");
+    queryAttachments = await resolveChatQueryAttachments(context, implementation.queryAttachments, state);
+    persistedQuery = chatQueryWithAttachments(renderedQuery, queryAttachments);
+    if (queryAttachments.length) await input.evidence("chat-catalog-query-attachments-before-send.json", {
+      originalQuery: scenario.query, renderedQuery, persistedQuery, receipts: queryAttachments });
     await input.evidence("chat-catalog-query-binding.json", { scenarioId: scenario.id, ...query });
     const company = `/api/companies/${input.fixtures.company.id}`;
     const agents = await input.api.get<Array<{ id: string }>>(`${company}/agents`);

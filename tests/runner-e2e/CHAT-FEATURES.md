@@ -173,3 +173,11 @@ in the history. Across the original final-definition batch and this recheck,
 backlog is 5/5 and delegation is 5/6. The local
 `results/chat-feature-recheck/verification.md` records the follow-up evidence;
 its standard dashboard is explicitly scoped to the latest campaign.
+
+## Full catalog campaign
+
+The frozen denominator is 244 requests across 35 areas and 191 capabilities. The [durable progress record](../../doc/plans/2026-10-26-chat-catalog-eval-progress.md) and `chat-campaign-manifest.json` distinguish complete, partial, unimplemented, blocked and actual measured results. Discovery and oracle calibration are not live acceptance. Each canonical scenario has one initial attempt and at most one coherent correction/rerun, with automatic retries zero; failures and unrun scenarios remain in the denominator.
+
+Domain descriptors declare real setup/actions/independent grading and exact bounds. `setupHumanMessageCount` defaults to zero; genuine earlier human turns and native setup runs remain in the declared total, with persisted comment/run IDs captured before the canonical query. No historical model reply is fabricated.
+
+Only `steering.preserve-draft` and `tasks.attachment-brief` may currently declare one `queryAttachments` receipt. The canonical typed query remains unchanged; the production composer appends its exact attachment reference. Before and after send, the harness independently reads the public same-source receipt and actual bytes, verifies SHA-256 and human attribution, and binds it to the real canonical comment. Extra markdown, text changes, foreign receipts and hidden followups fail. Attachment fingerprints pin both production composer source hashes as data, without importing the UI graph.

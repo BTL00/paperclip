@@ -26,6 +26,11 @@ export interface ChatCatalogQueryBinding {
   resourceKind: "issue";
   valueField: "identifier";
 }
+export interface ChatCatalogQueryAttachment {
+  /** A genuine UI upload receipt returned by setup; never arbitrary body text. */
+  stateKey: string;
+  filename: string;
+}
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
@@ -36,6 +41,7 @@ export interface ChatCatalogCase {
   queryOutcome?: "persisted" | "rejected";
   /** Audited substitution of an incidental catalog fixture token, never other prose. */
   queryBindings?: readonly ChatCatalogQueryBinding[];
+  queryAttachments?: readonly ChatCatalogQueryAttachment[];
   /** All case/grader helpers must be listed; the suite also fingerprints its complete source tree. */
   sourceFiles: readonly string[];
   oracleVersion: string;

@@ -93,16 +93,20 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     .find((row: { id: string }) => row.id === descriptor.scenarioId);
   if (!scenario) throw new Error(`Missing frozen scenario: ${descriptor.scenarioId}`);
   const { id, capabilities, context, query, expected_outcome } = scenario;
-  return fingerprintChatDependencyClosure({ root,
+  const attachmentFormatter = descriptor.queryAttachments?.length ? ["ui/src/components/IssueChatThread.tsx", "ui/src/components/task-chat/TaskChatComposer.tsx"].map(file => ({
+    file, sha256: hash(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")),
+  })) : null;
+  const result = fingerprintChatDependencyClosure({ root,
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
       "tests/runner-e2e/chat-scenarios/defaults.yaml", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, selectedExecution, lane, scenario: { id, capabilities, context, query, expected_outcome } },
+    selected: { descriptor, selectedExecution, lane, attachmentFormatter, scenario: { id, capabilities, context, query, expected_outcome } },
     reviewedDynamicResolutions,
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,
       "tests/runner-e2e/chat-campaign-manifest.json": { id, capabilities, context, query, expected_outcome } },
   });
+  return { ...result, attachmentFormatter };
 }
 
 export function normalizedChatCatalogExecution(execution: MatrixExecution) {

@@ -23,6 +23,7 @@ export interface CampaignAttempt {
   automaticRetries: 0;
   correction: string | null;
   classification: string | null;
+  diagnosisHistory?: Array<{ at: string; classification: string | null; detail: string | null; supersededBy: string }>;
   observedFailure: string | null;
   evidencePaths: string[];
   usage: { costUsd: number | null; coverage: string; tokens: number | null };
@@ -105,7 +106,8 @@ export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: Camp
 export function completeCampaignAttempt(scenario: CampaignScenario, completion: {
   outcome: CampaignOutcome; finishedAt: string; definitionDigest: string; graderDigest: string;
   evidencePaths: string[]; cleanup: CampaignAttempt["cleanup"]; usage: CampaignAttempt["usage"];
-  classification: string | null; observedFailure: string | null; corePrDependencies: string[];
+  classification: string | null;
+  diagnosisHistory?: Array<{ at: string; classification: string | null; detail: string | null; supersededBy: string }>; observedFailure: string | null; corePrDependencies: string[];
 }): void {
   const attempt = scenario.attempts.at(-1);
   if (!attempt || attempt.outcome !== "running") throw new Error("No running reserved attempt");
