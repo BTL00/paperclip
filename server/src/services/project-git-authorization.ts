@@ -18,6 +18,7 @@ import { normalizeProjectRepositoryUrl, projectRepositoryIsPrivate } from "./pro
 import { recordProjectLifecycleEvent } from "./resource-lifecycle-events.js";
 import { persistActivity, publishActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
+import { assertTaskWorkspaceExecutionAccess } from "./task-workspace-access.js";
 
 function transientGitToken(token: string | undefined): string {
   if (!token || token.length > 4096 || /[\0\r\n]/.test(token) || token.startsWith("secret://")) {
@@ -168,7 +169,7 @@ export function projectGitAuthorizationService(db: Db) {
             issueId: heartbeatRuns.issueId,
             contextIssueId: sql<string | null>`${heartbeatRuns.contextSnapshot}->>'issueId'`,
             taskId: sql<string | null>`${heartbeatRuns.contextSnapshot}->>'taskId'`,
-            projectId: sql<string | null>`${heartbeatRuns.contextSnapshot}->>'projectId'`,
+            responsibleUserId: heartbeatRuns.responsibleUserId,
             nativeIssueId: heartbeatRuns.nativeIssueId,
           })
           .from(heartbeatRuns)
@@ -183,12 +184,19 @@ export function projectGitAuthorizationService(db: Db) {
         const [issue] =
           typeof issueId === "string"
             ? await db
-                .select({ projectId: issues.projectId })
+                .select({ executionWorkspaceId: issues.executionWorkspaceId })
                 .from(issues)
                 .where(and(eq(issues.id, issueId), eq(issues.companyId, input.companyId)))
             : [];
-        if (!run || run.status !== "running" || (issue?.projectId ?? run.projectId) !== input.projectId)
-          throw forbidden("Run belongs to another project");
+        if (!run || run.status !== "running" || !issue || typeof issueId !== "string")
+          throw forbidden("Active task run is unavailable");
+        await assertTaskWorkspaceExecutionAccess(db, {
+          type: "agent", source: "agent_jwt", companyId: input.companyId,
+          agentId: scope.agentId, runId: scope.runId,
+          onBehalfOfUserId: run.responsibleUserId === "local-board" ? null : run.responsibleUserId,
+        }, input.companyId, {
+          issueId, workspaceId: issue.executionWorkspaceId, projectWorkspaceId: workspace.id,
+        });
         if (!isPrivate) return null;
         const result = await resolveGitHubOperationCredentials(db, {
           companyId: input.companyId,

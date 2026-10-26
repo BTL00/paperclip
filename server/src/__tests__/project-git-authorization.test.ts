@@ -3,7 +3,7 @@ import request from "supertest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { createDb, companyMemberships, connectionGrants, heartbeatRuns, issues, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
+import { createDb, authUsers, companyMemberships, connectionGrants, executionWorkspaces, heartbeatRuns, issues, projects, projectWorkspaces, resourceLifecycleEvents, toolConnectionInstalls, toolConnections } from "@paperclipai/db";
 import { LOW_TRUST_REVIEW_PRESET } from "@paperclipai/shared";
 import { ghFetch } from "../services/github-fetch.js";
 import { projectRoutes } from "../routes/projects.js";
@@ -27,6 +27,9 @@ const support = await getEmbeddedPostgresTestSupport();
   beforeAll(async () => {
     database = await startEmbeddedPostgresTestDatabase("paperclip-project-git-authorization-");
     db = createDb(database.connectionString);
+    await db.insert(authUsers).values(["A", "B"].map(id => ({
+      id, name: id, email: `${id}@example.invalid`, createdAt: new Date(), updatedAt: new Date(),
+    })));
   }, 30_000);
   afterAll(async () => { await database?.cleanup(); }, 60_000);
     async function projectAuthorizationFixture() {
@@ -35,7 +38,7 @@ const support = await getEmbeddedPostgresTestSupport();
       const [project] = await db.insert(projects).values({ companyId: input.companyId, name: "Authorized project" }).returning();
       const [workspace] = await db.insert(projectWorkspaces).values({ companyId: input.companyId, projectId: project.id,
         name: "Repository", repoUrl: "https://github.com/fixture/project.git" }).returning();
-      await db.update(issues).set({ projectId: project.id }).where(eq(issues.id, input.issueId));
+      await db.update(issues).set({ projectId: project.id, projectWorkspaceId: workspace.id }).where(eq(issues.id, input.issueId));
       await db.insert(toolConnectionInstalls).values({ companyId: input.companyId, connectionId: selected.connectionId, targetType: "company", targetId: input.companyId });
       const [saved] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, selected.id));
       await db.update(connectionGrants).set({ providerTenant: { ...saved.providerTenant, github: { ...saved.providerTenant!.github!,
@@ -140,11 +143,47 @@ const support = await getEmbeddedPostgresTestSupport();
       await expect(f.service.resolve({ ...f.request, workspaceId: randomUUID() }, f.scope)).rejects.toThrow();
       await expect(f.service.resolve({ ...f.request, companyId: randomUUID() }, f.scope)).rejects.toThrow();
     });
+    it.each(["configured", "bound"])("authorizes a %s workspace selected from another project, but not an unselected source", async selection => {
+      const f = await projectAuthorizationFixture();
+      const [taskProject] = await db.insert(projects).values({ companyId: f.input.companyId, name: "Task project" }).returning();
+      const [bound] = selection === "bound" ? await db.insert(executionWorkspaces).values({
+        companyId: f.input.companyId, projectId: f.project.id, projectWorkspaceId: f.workspace.id,
+        sourceIssueId: f.input.issueId, name: "Selected workspace", mode: "isolated_workspace", strategyType: "git_worktree", status: "idle",
+      }).returning() : [];
+      await db.update(issues).set({ projectId: taskProject.id,
+        projectWorkspaceId: selection === "configured" ? f.workspace.id : null,
+        executionWorkspaceId: bound?.id ?? null,
+      }).where(eq(issues.id, f.input.issueId));
+      const scope = { ...f.scope, workspaceId: f.workspace.id, runId: f.input.runId, agentId: f.input.agentId };
+      expect(await f.service.resolve(f.request, scope)).toBe("test-token-A");
+      const [unselected] = await db.insert(projectWorkspaces).values({ companyId: f.input.companyId,
+        projectId: f.project.id, name: "Unselected source", repoUrl: f.workspace.repoUrl,
+      }).returning();
+      vault.resolveUserSecretValue.mockClear();
+      await expect(f.service.resolve({ ...f.request, workspaceId: unselected.id }, { ...scope, workspaceId: unselected.id })).rejects.toThrow();
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+      await db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.input.runId));
+      await expect(f.service.resolve(f.request, scope)).rejects.toThrow();
+      expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+    });
     it.each(["", "secret://fixture", "invalid\ntoken"])("rejects invalid transient credential material", async token => {
       const f = await projectAuthorizationFixture();
       await f.service.set(f.input.companyId, f.project.id, "A", f.selected.id);
       vault.resolveUserSecretValue.mockResolvedValueOnce({ value: token });
       await expect(f.service.resolve(f.request, f.scope)).rejects.toThrow("credential unavailable");
+    });
+    it.each(["task", "source"])("checks access to the %s project before exporting foreground credentials", async privateProject => {
+      const f = await projectAuthorizationFixture();
+      const [taskProject] = await db.insert(projects).values({ companyId: f.input.companyId, name: "Task project" }).returning();
+      await db.update(issues).set({ projectId: taskProject.id }).where(eq(issues.id, f.input.issueId));
+      await db.update(projects).set({ visibility: "private" })
+        .where(eq(projects.id, privateProject === "task" ? taskProject.id : f.project.id));
+      vault.resolveUserSecretValue.mockClear();
+      vi.stubEnv("PAPERCLIP_ISSUE_PRIVACY_MODE", "enforce");
+      try {
+        await expect(f.service.resolve(f.request, { ...f.scope, runId: f.input.runId, agentId: f.input.agentId })).rejects.toThrow();
+        expect(vault.resolveUserSecretValue).not.toHaveBeenCalled();
+      } finally { vi.unstubAllEnvs(); }
     });
     it("never lends project consent to low-trust foreground preparation", async () => {
       const f = await projectAuthorizationFixture();
