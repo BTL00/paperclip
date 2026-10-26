@@ -8419,6 +8419,7 @@ async function verifyLiveRunnerAdoption(
   } : {}) };
   const first = createCapabilityRunnerdCodexTransport(options);
   let runnerPid: number | null = null;
+  let runnerStartedAt: string | null = null;
   let adopted: ReturnType<typeof createCapabilityRunnerdCodexTransport> | null =
     null;
   try {
@@ -8438,6 +8439,7 @@ async function verifyLiveRunnerAdoption(
       );
     }
     runnerPid = first.evidence().runnerPid;
+    runnerStartedAt = first.transport.processInfo().startedAt;
     expect(runnerPid).toEqual(expect.any(Number));
 
     if (goalMidTurn) {
@@ -8524,7 +8526,7 @@ async function verifyLiveRunnerAdoption(
       adoptExistingRunner: {
         pid: runnerPid!,
         processGroupId: runnerPid,
-        startedAt: new Date().toISOString(),
+        startedAt: runnerStartedAt,
         signal,
         isAlive: () => {
           try {
@@ -8598,6 +8600,7 @@ async function verifyLiveRunnerAdoption(
       }),
     );
     expect(adopted.evidence().runnerPid).toBe(runnerPid);
+    expect(adopted.transport.processInfo().startedAt).toBe(runnerStartedAt);
     if (startWithoutCheckpoint) {
       const retained = JSON.parse(await readFile(controlPlaneStatePath, "utf8"));
       for (const type of ["run.prepare", "session.open"]) {
