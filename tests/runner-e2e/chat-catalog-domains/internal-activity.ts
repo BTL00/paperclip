@@ -34,7 +34,7 @@ export function grade_activity(value: unknown) {
       const priorityEvents = (o.state.priorityEvents as Entity[] | undefined) ?? [];
       c.add("real-two-change-history", priorityEvents.length === 2 && priorityEvents.every(event => o.activity.some(row => row.id === event.id)), "Both fixture priority changes remain visible on the exact task.");
       c.add("attribution-and-values", priorityEvents.length === 2 && priorityEvents.every(event => !!event.actorId
-        && (o.reply.includes(event.actorId) || event.actorId === "local-board" && /\b(?:local board|board)\b/i.test(o.reply))
+        && mentionsRecordedActor(o.reply, event.actorId)
         && o.reply.toLowerCase().includes(String(event.details?.priority).toLowerCase())),
         "Editor identity is the recorded actor ID or the canonical Local board label, never a generic operator inference.");
       c.add("recorded-event-times", priorityEvents.length === 2 && priorityEvents.every(event => mentionsRecordedTime(o.reply, event.createdAt,
@@ -78,11 +78,17 @@ export function mentionsRecordedTime(reply: string, recordedAt: string | undefin
     const allTimes = allRecordedAt.length ? allRecordedAt.flatMap(value => zones.map(timeZone => new Intl.DateTimeFormat("en-GB", {
       timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     }).format(new Date(value ?? "")))) : times;
-    if (!explicitTimes.some(time => times.includes(time)) || explicitTimes.some(time => !allTimes.includes(time))) return false;
+    if (explicitTimes.length && (!explicitTimes.some(time => times.includes(time)) || explicitTimes.some(time => !allTimes.includes(time)))) return false;
+    const namedDates = [...reply.matchAll(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?\b/gi)]
+      .map(match => `${match[1]!.toLowerCase()} ${Number(match[2])}`);
+    const named = (value: string | undefined) => zones.map(timeZone => new Intl.DateTimeFormat("en-US", { timeZone, month: "long", day: "numeric" }).format(new Date(value ?? "")).toLowerCase());
+    if (namedDates.length && (!namedDates.some(day => named(recordedAt).includes(day))
+      || namedDates.some(day => !(allRecordedAt.length ? allRecordedAt.flatMap(named) : named(recordedAt)).includes(day)))) return false;
     if (explicitDates.length) return explicitDates.some(day => dates.includes(day)) && explicitDates.every(day => allDates.includes(day));
     if (/\btoday\b/i.test(reply)) return zones.some((timeZone, index) => dates[index] === new Intl.DateTimeFormat("en-CA", {
       timeZone, year: "numeric", month: "2-digit", day: "2-digit",
     }).format(observed));
+    if (explicitTimes.length) return true;
     return zones.some(timeZone => {
       const month = new Intl.DateTimeFormat("en-US", { timeZone, month: "long" }).format(date);
       const day = new Intl.DateTimeFormat("en-US", { timeZone, day: "numeric" }).format(date);
@@ -109,3 +115,14 @@ function companyOverview(): ChatCatalogCase {
   }, async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "hiddenCompany").id}`, { allowNotFound: true }); } };
 }
 import { observeInternal } from "./internal-support.js";
+
+function mentionsRecordedActor(reply: string, actorId: string): boolean {
+  const identities = actorId === "local-board" ? [actorId, "Local board", "Board"] : [actorId];
+  return identities.some(identity => {
+    const name = identity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${name}\\s+(?:changed|updated|set|made|raised|lowered|edited)\\b`, "i").test(reply)
+      || new RegExp(`\\b(?:by|actor|editor)\\s*[:=]?\\s*(?:the\\s+)?${name}\\b`, "i").test(reply)
+      || new RegExp(`\\|\\s*${name}\\s*\\|`, "i").test(reply)
+      || new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*|\\*\\*)?${name}(?:\\*\\*)?\\s*:`, "i").test(reply);
+  });
+}

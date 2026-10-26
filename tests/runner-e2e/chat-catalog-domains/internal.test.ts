@@ -15,6 +15,14 @@ function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
     case "projects.create-project": o.state = { firstIds: ["p"], retryQuery: "query" }; o.humanQueries = ["query", "query"]; o.tasks = []; o.activity = [event("project.created", "p")]; break;
+    case "projects.share-project": {
+      o.state.ownerId = "owner"; o.state.observerId = "riley"; o.state.protectedTask = { id: "protected", visibility: "private" };
+      o.tasks.push({ id: "protected", ...{ visibility: "private" } });
+      const p = { ...o.projects[0]!, name: "Acquisition research", ...{ visibility: "private" as const } }; o.projects[0] = p;
+      o.state.beforeShare = { project: p, observerProjectStatus: 404, protectedTaskStatus: 404, agentMutationStatus: 403, leadReadStatus: 200, reply: "You can use Manage access to share this project with Riley." };
+      Object.assign(o, { sharedProject: p, members: [{ id: "member", subjectType: "user", subjectId: "riley" }], observerProjectStatus: 200, observerProtectedTaskStatus: 404 });
+      o.activity = [{ ...event("project.access_member_added", "p", { subjectId: "riley" }), agentId: null, actorType: "user", actorId: "owner" }]; break;
+    }
     case "projects.private-project": {
       o.state.ownerId = "person"; o.state.inheritanceTask = { id: "probe", projectId: "p" }; o.state.privateMarker = "protected acquisition";
       o.tasks.push({ id: "probe", projectId: "p" }); o.activity = [event("project.created", "p")];
@@ -117,6 +125,7 @@ function valid(scenario: string): InternalObservation {
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
   "projects.create-project": o => o.projects.push({ ...o.projects[0]!, id: "duplicate" }),
+  "projects.share-project": o => { Object.assign(o, { observerProtectedTaskStatus: 200 }); },
   "projects.private-project": o => { Object.assign(o, { unrelatedAgentStatus: 200 }); },
   "projects.archive-project": o => { o.documents = []; },
   "tasks.website-task": o => { o.tasks[0]!.assigneeAgentId = "another-worker"; },
@@ -266,5 +275,25 @@ it("does not mistake an unusable observer search for privacy proof", () => {
 });
 it("does not accept an entirely unauthorized agent as the unrelated-agent control", () => {
   const o = valid("projects.private-project"); Object.assign(o, { unrelatedPublicStatus: 403 });
+  expect(gradeInternal(o).passed).toBe(false);
+});
+
+
+it("rejects a Board mention used as context for a different purported editor", () => {
+  const o = valid("activity.audit-change"); o.reply = "Board records show Morgan changed the priority to high and low today at 12:00 UTC.";
+  expect(gradeInternal(o).passed).toBe(false);
+});
+it("accepts an accurate relative event day without inventing clock precision", () => {
+  const o = valid("activity.audit-change"); o.reply = "Both edits were by Board: high, then low today.";
+  expect(gradeInternal(o).passed).toBe(true);
+});
+
+it("rejects a correct clock paired with a wrong named calendar date", () => {
+  const o = valid("activity.audit-change"); o.reply = "Board changed priority to high and low on October 25 at 12:00 UTC.";
+  expect(gradeInternal(o).passed).toBe(false);
+});
+it("rejects a premature sharing claim before the owner action", () => {
+  const o = valid("projects.share-project");
+  (o.state.beforeShare as { reply: string }).reply = "I've shared it with Riley; you can use Manage access.";
   expect(gradeInternal(o).passed).toBe(false);
 });

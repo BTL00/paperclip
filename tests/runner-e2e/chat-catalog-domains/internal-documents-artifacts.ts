@@ -1,3 +1,4 @@
+import { projectMarkdownToText, resolveProjectionRange, createDocumentAnchorSelector } from "../../../packages/shared/src/document-anchors.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
@@ -88,11 +89,13 @@ function resolveFeedback(): ChatCatalogCase {
     const body = `${pricing}\n\n${supportText}`;
     const doc = await putDocument(ctx, t.id, body);
     const createAnnotation = (quote: string, feedback: string) => {
-      const start = body.indexOf(quote);
+      const projection = projectMarkdownToText(body);
+      const start = projection.text.indexOf(quote);
+      const range = resolveProjectionRange(projection, start, start + quote.length);
+      if (!range || range.text !== quote) throw new Error("Fixture annotation quote did not resolve through production text projection");
       return ctx.input.api.post<Entity>(`/api/issues/${t.id}/documents/plan/annotations`, {
         baseRevisionId: doc.latestRevisionId, baseRevisionNumber: doc.latestRevisionNumber,
-        selector: { quote: { exact: quote, prefix: "", suffix: "" },
-          position: { normalizedStart: start, normalizedEnd: start + quote.length, markdownStart: start, markdownEnd: start + quote.length } },
+        selector: createDocumentAnchorSelector(projection, range),
         body: feedback,
       });
     };
@@ -100,7 +103,7 @@ function resolveFeedback(): ChatCatalogCase {
     const siblingThread = await createAnnotation(supportText, "Please add a support contact later; leave this unrelated comment open for now.");
     return { project: p, task: t, pricingThread, siblingThread, supportText, originalRevisionId: doc.latestRevisionId };
   });
-  return { ...base, async observe(ctx, state) {
+  return { ...base, sourceFiles: [...base.sourceFiles, "../../packages/shared/src/document-anchors.ts"], async observe(ctx, state) {
     const o = await observeInternal(ctx, state);
     return { ...o, annotations: await ctx.input.api.get<Entity[]>(`/api/issues/${entity(state, "task").id}/documents/plan/annotations?status=all&includeComments=true`) };
   } };

@@ -114,4 +114,109 @@ function privateProject(): ChatCatalogCase {
     async cleanup() { await observer?.dispose(); observer = undefined; },
   };
 }
-export const projectPrivacyCases: readonly ChatCatalogCase[] = [privateProject()];
+export const projectPrivacyCases: readonly ChatCatalogCase[] = [privateProject(), shareProject()];
+
+interface AccessMember extends Entity { subjectType?: string; subjectId?: string }
+interface ShareProjectObservation extends InternalObservation {
+  sharedProject: PrivateRecord | null; members: AccessMember[]; observerProjectStatus: number; observerProtectedTaskStatus: number;
+}
+export function gradeShareProject(value: unknown) {
+  const c = checks(); const base = observation(value); const o = base as ShareProjectObservation | undefined;
+  const before = o?.state.beforeShare as { project?: PrivateRecord; observerProjectStatus?: number; protectedTaskStatus?: number; agentMutationStatus?: number; leadReadStatus?: number; reply?: string } | undefined;
+  c.add("complete-owner-sharing-evidence", !!o && !!before && Array.isArray(o.members), "Sharing requires independent before/after access and actual owner-action attribution.");
+  if (!o || !before || !Array.isArray(o.members)) return c.result();
+  const p = o.sharedProject;
+  c.add("agent-respects-existing-audience", before.project?.visibility === "private" && [403, 404].includes(before.observerProjectStatus ?? 0)
+    && before.leadReadStatus === 200 && before.agentMutationStatus === 403
+    && /\b(?:manage access|(?:you|owner|human|board)[^.\n]*(?:share|grant|add|access))\b/i.test(before.reply ?? "")
+    && !/\bI(?:'ve| have)?\s+(?:already\s+)?(?:shared|granted|added)\b/i.test(before.reply ?? ""),
+    "The CEO can read the project but cannot grant its audience; its first reply identifies the authorized owner step.");
+  c.add("owner-grants-only-riley", !!p && p.visibility === "private" && o.observerProjectStatus === 200
+    && o.members.some(row => row.subjectType === "user" && row.subjectId === o.state.observerId)
+    && o.activity.some(row => row.action === "project.access_member_added" && row.entityId === p.id
+      && row.actorType === "user" && row.actorId === o.state.ownerId && row.details?.subjectId === o.state.observerId),
+    "A visible owner action grants the intended same-company Riley through project membership, without making the project public.");
+  c.add("separate-task-privacy-retained", [403, 404].includes(before.protectedTaskStatus ?? 0) && [403, 404].includes(o.observerProtectedTaskStatus)
+    && o.tasks.some(row => row.id === entity(o.state, "protectedTask").id && (row as PrivateRecord).visibility === "private"),
+    "The separately protected task remains private and unreadable to Riley after project sharing.");
+  c.add("saved-project-link", !!p && hasLink(o, "projects", p), "The conversation identifies the exact project being shared.");
+  return c.result();
+}
+async function agentMutationStatus(ctx: ChatCatalogContext, path: string, data: unknown) {
+  const id = ctx.input.fixtures.agent.id;
+  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${id}/keys`, { name: `privacy-write-control-${ctx.input.nonce}` });
+  ctx.input.privateSecrets?.push(key.token);
+  try {
+    const url = new URL(path, ctx.input.api.baseURL);
+    if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy mutation probe escaped fixture API");
+    const response = await fetch(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify(data) });
+    await response.body?.cancel(); return response.status;
+  } finally { await ctx.input.api.delete(`/api/agents/${id}/keys/${key.id}`); }
+}
+function shareProject(): ChatCatalogCase {
+  let observer: Person | undefined;
+  const base = makeDefinition("projects.share-project", async ctx => {
+    const ownerId = await mainPerson(ctx); observer = await observerPerson(ctx);
+    const p = await project(ctx, "Acquisition research", { visibility: "private", description: "Private acquisition research for the authorized owner." });
+    await ctx.input.api.post(`/api/projects/${p.id}/access-members`, { subjectType: "agent", subjectId: ctx.input.fixtures.agent.id });
+    const protectedTask = await ctx.input.api.post<Entity>(`/api/companies/${ctx.input.fixtures.company.id}/issues`, {
+      title: "Separately protected acquisition note", description: `Independent protected task ${ctx.input.nonce}`, visibility: "private", status: "backlog",
+    });
+    return { project: p, ownerId, observerId: observer.id, protectedTask };
+  }, gradeShareProject);
+  return { ...base, authentication: "human-session", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts"],
+    async act(ctx, state) {
+      if (!observer) throw new Error("Missing independent observer");
+      const first = await pollUntil({ label: "Existing private-project owner handoff", deadlineAt: Date.now() + 150_000,
+        load: () => observeInternal(ctx, state), accept: o => o.runs.length === 1 && o.runs.every(row => row.status === "succeeded")
+          && ctx.issue()?.conversationState === "waiting" });
+      const p = entity(state, "project"); const protectedTask = entity(state, "protectedTask");
+      const leadReadStatus = await agentStatus(ctx, first.leadId, `/api/projects/${p.id}`);
+      const agentMutation = await agentMutationStatus(ctx, `/api/projects/${p.id}/access-members`, { subjectType: "user", subjectId: observer.id });
+      state.beforeShare = { project: first.projects.find(row => row.id === p.id), reply: first.reply, leadReadStatus, agentMutationStatus: agentMutation,
+        observerProjectStatus: (await personRead(observer, `/api/projects/${p.id}`)).status,
+        protectedTaskStatus: (await personRead(observer, `/api/issues/${protectedTask.id}`)).status };
+      await ctx.input.evidence("chat-catalog-before-owner-project-sharing.json", state.beforeShare);
+      if (agentMutation !== 403 || ![403, 404].includes((state.beforeShare as { observerProjectStatus: number }).observerProjectStatus))
+        throw new Error("Private-project audience changed without the authorized human control");
+      const href = first.links.find(link => hasLink({ ...first, links: [link] }, "projects", p));
+      if (!href) throw new Error("Owner handoff omitted the actual project link");
+      const sourceUrl = ctx.input.page.url();
+      await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+      await ctx.input.page.getByText("Configuration", { exact: true }).last().click();
+      await ctx.input.page.getByRole("button", { name: "Manage access", exact: true }).click();
+      const dialog = ctx.input.page.getByRole("dialog", { name: "Private project access", exact: true });
+      await dialog.getByRole("combobox").click();
+      await ctx.input.page.getByPlaceholder(/Search people and agents/).last().fill("Riley");
+      await ctx.input.page.getByRole("option", { name: /Riley/ }).first().click();
+      await dialog.getByRole("button", { name: "Add", exact: true }).click();
+      await pollUntil({ label: "Owner-added Riley project membership", deadlineAt: Date.now() + 30_000,
+        load: () => ctx.input.api.get<AccessMember[]>(`/api/projects/${p.id}/access-members`),
+        accept: rows => rows.some(row => row.subjectType === "user" && row.subjectId === observer!.id) });
+      await ctx.input.page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
+      await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    },
+    async observe(ctx, state): Promise<ShareProjectObservation> {
+      if (!observer) throw new Error("Missing independent observer");
+      const o = await observeInternal(ctx, state); const p = entity(state, "project");
+      const [members, projectRead, taskRead] = await Promise.all([
+        ctx.input.api.get<AccessMember[]>(`/api/projects/${p.id}/access-members`), personRead(observer, `/api/projects/${p.id}`),
+        personRead(observer, `/api/issues/${entity(state, "protectedTask").id}`),
+      ]);
+      return { ...o, sharedProject: o.projects.find(row => row.id === p.id) as PrivateRecord ?? null, members,
+        observerProjectStatus: projectRead.status, observerProtectedTaskStatus: taskRead.status };
+    },
+    async verifyResult(ctx, state, value) {
+      await base.verifyResult(ctx, state, value);
+      if (!observer) throw new Error("Missing independent browser observer");
+      const p = entity(state, "project"); const observerPage = await observer.context.newPage();
+      try {
+        await observerPage.goto(new URL(`/${ctx.input.fixtures.company.issuePrefix}/projects/${p.id}`, ctx.input.api.baseURL).href, { waitUntil: "domcontentloaded" });
+        await expect(observerPage.getByRole("heading", { name: p.name!, exact: true }).first()).toBeVisible();
+        await ctx.input.evidence("chat-catalog-owner-project-sharing-opened.json", { observerId: observer.id, projectId: p.id, url: observerPage.url(), visible: true });
+      } finally { await observerPage.close(); }
+    },
+    async cleanup() { await observer?.dispose(); observer = undefined; },
+  };
+}
