@@ -72,6 +72,11 @@ database suite checks these states and revoked endpoints using stored provider
 receipts; live model adherence remains a separate check.
 It also checks saved monitors, disabled repositories, multiple reviewed heads,
 read-only finish validation, withdrawal rollback, and separate approval gates.
+Repeat the review wait after a tree resume and a same-agent continuation with
+no new provider message. Accepted requester lineage and the latest saved review
+publication keep the task in review without a self-wake or duplicate publication.
+A newer unreviewed head, changed requester/repository, or revoked access cannot
+inherit the prior head's passive wait.
 
 Manual: For each supported provider being changed, send a unique message, verify the intended agent/company receives it, and inspect the actual external reply in the original thread. Repeat with an unlinked/unauthorized sender, duplicate inbound delivery, and one supported attachment. Record provider-specific results separately.
 

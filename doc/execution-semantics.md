@@ -829,6 +829,7 @@ A healthy `in_review` issue has at least one valid action path:
 - a human owner via `assigneeUserId`
 - an active run or queued wake that is expected to process the review state
 - an active one-shot monitor for an external service or async review loop that the assignee owns
+- an authorized GitHub conversation waiting for its next provider event after a published review; a tree resume or same-agent continuation retains this path only through its accepted requester lineage and the latest saved review publication
 - an open explicit recovery action for an ambiguous review handoff
 
 Agent-assigned `in_review` with no typed participant is only healthy when one of the other paths exists. Assignment to the same agent that produced the handoff is not, by itself, a review path.

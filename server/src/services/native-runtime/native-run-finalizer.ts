@@ -3,7 +3,7 @@ import { notifyExecutionRunWork } from "../execution-control-notifications.js";
 import { reconcileMuseNativeTerminalRun } from "./muse-terminal-reconciliation.js";
 import { assertNativeCaseHandoffResult } from "./native-case-handoff.js";
 import { scheduledIssueMonitorWait } from "../issue-monitors.js";
-import { hasPublishedGitHubReview } from "../chat-channels/github/review-wait.js";
+import { hasPublishedGitHubReview, readInheritedGitHubReviewWait } from "../chat-channels/github/review-wait.js";
 import { readNativeMonitorDelivery, readNativePreservedMonitorWait } from "./native-monitor-delivery.js";
 import { isNativePlanWaitResult, readNativePlanWait } from "./native-plan-wait.js";
 import { hasPendingNativeChildCompletion } from "./native-child-completion-delivery.js";
@@ -1452,7 +1452,7 @@ export async function finalizeNativeRun(input: {
         (externalChatResponseWaitAuthorization === "authorized" || monitorWaitAt !== null)
         ? await hasPublishedGitHubReview(input.db, {
             companyId: run.companyId, issueId: authoritativeIssue.id, runId: run.id,
-          }) : false,
+          }) || (await readInheritedGitHubReviewWait(input.db, run))?.kind === "published" : false,
       boardResponseWaitAuthorized: boardResponseWait !== null,
       boardResponseWaitOrigin: boardResponseWaitOrigin !== null,
       isConversation: isConversation(authoritativeIssue),
