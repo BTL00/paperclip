@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { agentWakeupRequests, chatActions, chatConversations, chatDeliveries, chatEndpointResources, chatMessageLinks, issueComments, toolConnections } from "@paperclipai/db";
-import { forbidden } from "../../../errors.js";
+import { chatWakeAuthorityDenied } from "../inbound/wakeup-authorization-error.js";
 import type { DbOrTransaction, EndpointRow, LifecycleRuntimeFence } from "../runtime-types.js";
 import { credentialFingerprint } from "../credential-fingerprint.js";
 import { readTaskChatRetryIntent } from "../task-retry-authority.js";
@@ -50,28 +50,28 @@ export function githubTaskRetryDestinationMatches(delivery: typeof chatDeliverie
 export async function githubTaskRetryRuntimeFence(tx: DbOrTransaction, endpoint: EndpointRow,
   action: typeof chatActions.$inferSelect, delivery: typeof chatDeliveries.$inferSelect,
   authority: TaskRetryWakeAuthority): Promise<LifecycleRuntimeFence> {
-  const deny = () => forbidden("This accepted chat message is no longer authorized to start work",
-    { code: "chat_action_authorization_changed" });
+  const deny = chatWakeAuthorityDenied;
   const retry = await readTaskChatRetryIntent(tx as Parameters<typeof readTaskChatRetryIntent>[0], {
     companyId: action.companyId, issueId: String(action.payload.issueId),
     agentId: String(action.payload.agentId), sourceRunId: authority.sourceRunId, intentId: authority.intentId,
   });
   const skipped = await skippedTaskRetryInputs(tx, [action], authority);
-  if (!retry || endpoint.provider !== "github" || !endpoint.botExternalId || action.kind !== "inbound_wakeup"
-    || (action.status !== "processed" && !skipped.has(action.id)) || delivery.state !== "processed") throw deny();
+  if (!retry) throw deny("retry_intent");
+  if (endpoint.provider !== "github" || !endpoint.botExternalId || action.kind !== "inbound_wakeup"
+    || (action.status !== "processed" && !skipped.has(action.id)) || delivery.state !== "processed") throw deny("source_receipt");
   const [response] = await tx.select({ payload: chatActions.payload }).from(chatActions).where(and(
     eq(chatActions.companyId, action.companyId), eq(chatActions.endpointId, endpoint.id),
     eq(chatActions.conversationId, action.conversationId!), eq(chatActions.deliveryId, delivery.id),
     eq(chatActions.kind, "github_response_comment"),
   ));
-  if (!githubTaskRetryAppMatches(endpoint, delivery, response)) throw deny();
+  if (!githubTaskRetryAppMatches(endpoint, delivery, response)) throw deny("app_binding");
   const [connection] = await tx.select({ refs: toolConnections.credentialSecretRefs,
     enabled: toolConnections.enabled, status: toolConnections.status }).from(toolConnections).where(and(
     eq(toolConnections.companyId, endpoint.companyId), eq(toolConnections.id, endpoint.connectionId),
   ));
-  if (!connection?.enabled || connection.status !== "active") throw deny();
+  if (!connection?.enabled || connection.status !== "active") throw deny("connection_access");
   const generation = Number((endpoint.setup as { runtimeGeneration?: unknown }).runtimeGeneration ?? 0);
-  if (!Number.isSafeInteger(generation) || generation < 0) throw deny();
+  if (!Number.isSafeInteger(generation) || generation < 0) throw deny("runtime_generation");
   return authority.runtimeFence ?? { generation, credentialFingerprint: credentialFingerprint(connection.refs ?? []) };
 }
 
@@ -89,10 +89,9 @@ export function createGitHubTaskRetryBatchAuthority<T extends GitHubRetryBinding
 ) => Promise<T>) {
   async function authorizeGitHubTaskRetryBatch(tx: DbOrTransaction, actions: Array<typeof chatActions.$inferSelect>,
     notice: { nonblocking: true; terminal: boolean; taskRetry: TaskRetryWakeAuthority }) {
-    const deny = () => forbidden("This accepted chat message is no longer authorized to start work",
-      { code: "chat_action_authorization_changed" });
+    const deny = chatWakeAuthorityDenied;
     const first = actions[0];
-    if (!first) throw deny();
+    if (!first) throw deny("batch_scope");
     const skipped = await skippedTaskRetryInputs(tx, actions, notice.taskRetry);
     const commonScope = (action: typeof chatActions.$inferSelect) => JSON.stringify([
       action.companyId, action.endpointId, action.conversationId, action.principalId, action.kind,
@@ -100,7 +99,7 @@ export function createGitHubTaskRetryBatchAuthority<T extends GitHubRetryBinding
       ...["version", "issueId", "agentId", "sessionGeneration", "requestedByActorType", "requestedByActorId"]
         .map(key => action.payload[key]),
     ]);
-    if (actions.some(action => commonScope(action) !== commonScope(first))) throw deny();
+    if (actions.some(action => commonScope(action) !== commonScope(first))) throw deny("batch_scope");
     const deliveries = await tx.select().from(chatDeliveries).where(and(eq(chatDeliveries.companyId, first.companyId),
       inArray(chatDeliveries.id, actions.map(action => action.deliveryId!))));
     const byDelivery = new Map(deliveries.map(delivery => [delivery.id, delivery]));
@@ -122,21 +121,21 @@ export function createGitHubTaskRetryBatchAuthority<T extends GitHubRetryBinding
     const authorized = new Map<string, T>();
     for (const action of actions) {
       const delivery = byDelivery.get(action.deliveryId!);
-      if (!delivery || !linked.has(`${delivery.id}:${action.payload.commentId}`)) throw deny();
+      if (!delivery || !linked.has(`${delivery.id}:${action.payload.commentId}`)) throw deny("batch_source_link");
       // Reuse only the same live grant within this transaction. Automatic review
       // policies with different contexts still receive their own full check.
       const grant = JSON.stringify(delivery.normalizedEvent.githubAutomatic ?? delivery.normalizedEvent.githubIssue ?? null);
       let current = groups.get(grant);
       if (!current) {
         current = await authorize(tx, action, notice);
-        if (current.endpoint.provider !== "github") throw deny();
+        if (current.endpoint.provider !== "github") throw deny("app_binding");
         notice.taskRetry.runtimeFence ??= current.retryRuntimeFence;
         groups.set(grant, current);
       }
       if (delivery.state !== "processed" || delivery.endpointId !== current.endpoint.id ||
           delivery.conversationId !== current.conversation.id || delivery.principalId !== action.principalId ||
           !githubTaskRetryAppMatches(current.endpoint, delivery, legacyByDelivery.get(delivery.id)) ||
-          !githubTaskRetryDestinationMatches(delivery, current.conversation, current.resource)) throw deny();
+          !githubTaskRetryDestinationMatches(delivery, current.conversation, current.resource)) throw deny("destination_binding");
       authorized.set(action.id, { ...current, delivery });
     }
     return authorized;

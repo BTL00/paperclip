@@ -76,7 +76,11 @@ Repeat the review wait after a tree resume and a same-agent continuation with
 no new provider message. Accepted requester lineage and the latest saved review
 publication keep the task in review without a self-wake or duplicate publication.
 A newer unreviewed head, changed requester/repository, or revoked access cannot
-inherit the prior head's passive wait.
+inherit the prior head's passive wait. After this run publishes a current-head
+review, omitted/null yielded continuation is filled from authorized server task
+context. A malformed first report can recover by omitting the continuation;
+explicit malformed input remains rejected. Revocation between context read,
+finish and commit preserves the task without self-waking. Done policy is unchanged.
 
 Manual: For each supported provider being changed, send a unique message, verify the intended agent/company receives it, and inspect the actual external reply in the original thread. Repeat with an unlinked/unauthorized sender, duplicate inbound delivery, and one supported attachment. Record provider-specific results separately.
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { HttpError } from "../../../errors.js";
 import { chatRunSourceMessageId } from "../run-origin.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
-import { chatActions, chatConversations, chatEndpointResources, chatEndpoints, chatGitHubReviews, chatMessageLinks, heartbeatRuns, type Db } from "@paperclipai/db";
+import { chatActions, chatConversations, chatEndpointResources, chatEndpoints, chatGitHubReviews, chatMessageLinks, heartbeatRuns, toolConnections, type Db } from "@paperclipai/db";
 
 export async function hasPublishedGitHubReview(db: Db, binding: {
   companyId: string;
@@ -49,7 +49,8 @@ export async function readInheritedGitHubReviewWait(db: Db, run: WaitRun) {
     id: chatGitHubReviews.id, endpointId: chatGitHubReviews.endpointId,
     state: chatGitHubReviews.state, repository: chatGitHubReviews.repository,
     repositoryId: chatGitHubReviews.repositoryId, headSha: chatGitHubReviews.headSha,
-    assessment: chatGitHubReviews.assessment,
+    assessment: chatGitHubReviews.assessment, reviewRunId: chatGitHubReviews.runId,
+    connectionEnabled: toolConnections.enabled, connectionStatus: toolConnections.status,
     reviewAgentId: heartbeatRuns.agentId, reviewCompanyId: heartbeatRuns.companyId,
     resourceRepository: chatEndpointResources.providerResourceId,
     resourceRepositoryId: sql<string | null>`${chatEndpointResources.metadata}->>'providerRepositoryId'`,
@@ -60,6 +61,8 @@ export async function readInheritedGitHubReviewWait(db: Db, run: WaitRun) {
     .innerJoin(chatEndpoints, and(eq(chatEndpoints.id, chatConversations.endpointId),
       eq(chatEndpoints.companyId, run.companyId), eq(chatEndpoints.provider, "github"),
       eq(chatEndpoints.assignedAgentId, run.agentId)))
+    .leftJoin(toolConnections, and(eq(toolConnections.id, chatEndpoints.connectionId),
+      eq(toolConnections.companyId, run.companyId)))
     .innerJoin(chatEndpointResources, and(eq(chatEndpointResources.id, chatConversations.resourceId),
       eq(chatEndpointResources.companyId, run.companyId), eq(chatEndpointResources.endpointId, chatEndpoints.id)))
     .innerJoin(chatGitHubReviews, and(eq(chatGitHubReviews.endpointId, chatEndpoints.id),
@@ -70,7 +73,7 @@ export async function readInheritedGitHubReviewWait(db: Db, run: WaitRun) {
     .orderBy(desc(chatGitHubReviews.createdAt), desc(chatGitHubReviews.id)).limit(1);
   // A newer unreviewed head cannot inherit the prior head's publication.
   if (!review) return null;
-  if (review.state !== "completed" ||
+  if (!review.connectionEnabled || review.connectionStatus !== "active" || review.state !== "completed" ||
       review.reviewCompanyId !== run.companyId || review.reviewAgentId !== run.agentId ||
       review.assessment?.reviewedCommit !== review.headSha ||
       review.resourceRepository.toLowerCase() !== review.repository.toLowerCase() ||
@@ -84,7 +87,8 @@ export async function readInheritedGitHubReviewWait(db: Db, run: WaitRun) {
   if (!publication) return { kind: "revoked" as const };
   // The caller must still verify live task ownership, destination and principal
   // policy. This normalized source is used only by the passive-wait boundary.
-  return { kind: "published" as const, context: {
+  return { kind: "published" as const, reviewId: review.id, reviewRunId: review.reviewRunId,
+    headSha: review.headSha, context: {
     source: "chat:github", paperclipHarnessCheckedOut: true,
     wakeCommentId: commentId, wakeCommentIds: [commentId],
     paperclipWake: { checkedOutByHarness: true, externalChatProvider: "github",

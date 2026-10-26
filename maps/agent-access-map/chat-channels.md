@@ -296,6 +296,11 @@ or publication authority. Current task/agent/company binding, repository,
 principal and endpoint checks remain effective. PostgreSQL regressions cover
 quiet repeated finalization, historical publication reuse, newer unreviewed
 heads and revoked access; live GitHub delivery remains separate acceptance.
+Omitted/null yielded reports may use the current run's server-projected published
+review wait. The same proof is rechecked at feedback, finalization and commit;
+older/different-run review, pending publication and revoked connection cannot
+supply it. This grants no new publication/monitor authority and leaves Done policy
+unchanged; explicit malformed input is not coerced.
 
 ## `outbound-email`
 

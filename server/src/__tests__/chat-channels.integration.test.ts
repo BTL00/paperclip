@@ -1,3 +1,6 @@
+import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
+import { budgetPolicies } from "@paperclipai/db";
+import { budgetService } from "../services/budgets.js";
 import { idleWorkSnapshot } from "../services/task-admission.js";
 import { readFreshWorkspaceReadiness } from "../services/fresh-workspace-continuation.js";
 import { requestTaskRetry, reconcileTaskChatRetryReceipts } from "../services/task-retry.js";
@@ -60698,6 +60701,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     externalActorId?: string,
     linkedOriginalActor = false,
     githubUnavailableFile = false,
+    currentGitHubPr = false,
   ) {
     // Keep the policy under which the source was admitted. Inserting an
     // upgraded GitHub policy after receipt correctly invalidates retry proof.
@@ -60709,6 +60713,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       linkedOriginalActor,
       githubUnavailableFile,
       false,
+      currentGitHubPr,
     );
     const [issue] = await readIssuesById(context.conversation.issueId);
     const [action] = await db
@@ -61106,21 +61111,29 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
   );
 
   it.each([
-    ...(["accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
+    ...(["real_budget_ingress", "source_app_changed", "source_destination_changed", "accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
       .map(mode => ({ provider: "github" as const, mode })),
   ])("retries the newer saved $provider request instead of the failed request after a budget hold: $mode", async ({ provider, mode }) => {
-    const context = await failedChatRetryFixture(provider, undefined, true);
+    const context = await failedChatRetryFixture(provider, mode === "real_budget_ingress" ? "42" : undefined, true, false, mode === "real_budget_ingress");
     try {
       const companyId = context.fixture.companyId;
       const [skill] = await db.insert(companySkills).values({ companyId, key: `company/${companyId}/saved-review`,
         slug: "saved-review", name: "Saved review", markdown: "# Saved review" }).returning();
       if (provider === "github") {
         const configured = await githubChatManagementService(db).configuration(context.endpoint.id, "owner-user");
-        await db.insert(chatGitHubConfigurations).values({ companyId, endpointId: context.endpoint.id,
-          configuration: { ...configured.configuration, defaults: { ...configured.configuration.defaults,
-            instructions: `Use [/saved-review](skill://${skill.id}).` } }, updatedByUserId: "owner-user", revision: 2 });
+        const configuration = { ...configured.configuration, defaults: { ...configured.configuration.defaults,
+          instructions: `Use [/saved-review](skill://${skill.id}).` } };
+        if (mode === "real_budget_ingress") await githubChatManagementService(db).saveConfiguration(context.endpoint.id,
+          { expectedRevision: configured.revision, configuration }, "owner-user");
+        else await db.insert(chatGitHubConfigurations).values({ companyId, endpointId: context.endpoint.id,
+          configuration, updatedByUserId: "owner-user", revision: 2 });
       }
-      context.wakeup.mockImplementation(async (agentId, opts) => {
+      if (mode === "real_budget_ingress") {
+        await db.update(heartbeatRuns).set({ costAccountingPending: true }).where(eq(heartbeatRuns.id, context.runId));
+        await db.insert(budgetPolicies).values({ companyId, scopeType: "agent", scopeId: context.fixture.assignedAgentId,
+          metric: "billed_cents", windowKind: "lifetime", amount: 100, notifyEnabled: false });
+        context.wakeup.mockImplementation(heartbeatService(db).wakeup);
+      } else context.wakeup.mockImplementation(async (agentId, opts) => {
         const request = opts.durableChatRequest!;
         await request.authorize(db);
         await db.insert(agentWakeupRequests).values({ id: request.id, companyId,
@@ -61131,7 +61144,24 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           status: "skipped", finishedAt: new Date() });
         return null;
       });
-      await deliverMessage({ callbacks: context.runtime.configurations.get(context.endpoint.id)!.callbacks,
+      if (mode === "real_budget_ingress") {
+        const endpoint = await context.service.get(context.endpoint.id);
+        attachFakeGitHubIssueCommentWebhook({ botUsername: endpoint.botUsername!, callbacks: context.runtime.configurations.get(endpoint.id)!.callbacks,
+          endpointId: endpoint.id, runtime: context.runtime.endpoints.get(endpoint.id)! });
+        const ref = (await db.select().from(toolConnections).where(eq(toolConnections.id, endpoint.connectionId)))[0]!
+          .credentialSecretRefs.find(ref => ref.configPath === "credentials.webhookSecret")!;
+        const secret = await secretService(db).resolveSecretValue(companyId, ref.secretId, ref.versionSelector ?? "latest");
+        const response = await context.service.handleWebhook(endpoint.publicId, "github", signedGitHubWebhookRequest({
+          delivery: randomUUID(), event: "issue_comment", webhookSecret: secret,
+          payload: { action: "created", installation: { id: 2468 },
+            repository: { id: 97531, full_name: "paperclipai/paperclip", owner: { id: 1357, login: "paperclipai" } },
+            issue: { number: 791, pull_request: { url: "https://api.github.com/repos/paperclipai/paperclip/pulls/791" } },
+            sender: { id: 42, login: "octocat", type: "User" },
+            comment: { id: 990092, body: `@${endpoint.botUsername} review using the selected instructions`,
+              user: { id: 42, login: "octocat", type: "User" }, created_at: new Date().toISOString() } },
+        }));
+        expect(response.status).toBeLessThan(300);
+      } else await deliverMessage({ callbacks: context.runtime.configurations.get(context.endpoint.id)!.callbacks,
         endpointId: context.endpoint.id, provider, thread: context.thread.thread,
         message: makeMessage({ id: provider === "telegram" ? `${context.thread.thread.channelId}:102` : "saved-after-budget-hold", text: "@maya review using the selected instructions",
           userId: provider === "telegram" ? context.thread.thread.channelId : "U-SAFE-PROGRESS", mentioned: true }),
@@ -61147,8 +61177,20 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         .orderBy(asc(chatActions.createdAt), asc(chatActions.id));
       const saved = savedInputs.at(-1)!;
       const expectedComments = savedInputs.map(action => action.payload.commentId);
-      expect(saved).toMatchObject({ status: "failed", result: { receiptStatus: "skipped" } });
+      expect(saved, JSON.stringify((await db.select({ state: chatDeliveries.state, error: chatDeliveries.redactedError, event: chatDeliveries.eventKind }).from(chatDeliveries).where(eq(chatDeliveries.endpointId, context.endpoint.id))))).toMatchObject({ status: "failed", result: { receiptStatus: "skipped" } });
       expect(saved.payload.commentId).not.toBe(context.action.payload.commentId);
+      if (mode === "real_budget_ingress") {
+        expect((await readAgentWakeupRequestsById(saved.id))[0]).toMatchObject({ status: "skipped", reason: "budget.blocked",
+          runId: null, requestedByActorType: "user", requestedByActorId: "owner-user" });
+        await db.update(budgetPolicies).set({ isActive: false }).where(eq(budgetPolicies.companyId, companyId));
+        await budgetService(db).getInvocationBlock(companyId, context.fixture.assignedAgentId);
+        const lifecycle = configureAgentLifecycle(db, { requiredPluginIds: async () => [],
+          runPlugin: async () => "complete", runHost: async () => "complete" });
+        try { await lifecycle.process(context.fixture.assignedAgentId); } finally { await lifecycle.stop(); }
+        expect((await db.select().from(agents).where(eq(agents.id, context.fixture.assignedAgentId)))[0].lifecycleHolds).not.toContain("budget");
+        expect((await db.select().from(agents).where(eq(agents.id, context.fixture.assignedAgentId)))[0]).toMatchObject({status: "idle"});
+        expect((await readHeartbeatRunsById(context.runId))[0]).toMatchObject({status: "failed"});
+      }
       const unadmitted = () => db.select({ id: issues.id }).from(issues).where(and(eq(issues.id, context.issue.id),
         unadmittedChatWakeupCondition(issues.id, issues.companyId)));
       expect(await unadmitted()).toHaveLength(1);
@@ -61209,9 +61251,26 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       if (mode === "malformed_previous") await db.update(heartbeatRuns).set({ contextSnapshot: {
         ...((await readHeartbeatRunsById(context.runId))[0]).contextSnapshot, wakeCommentIds: ["unbound"],
       } }).where(eq(heartbeatRuns.id, context.runId));
+      if (mode === "source_app_changed" || mode === "source_destination_changed") {
+        const [delivery] = await db.select().from(chatDeliveries).where(eq(chatDeliveries.id, saved.deliveryId!));
+        await db.update(chatDeliveries).set({ normalizedEvent: { ...delivery.normalizedEvent,
+          ...(mode === "source_app_changed" ? { githubAuthority: { ...(delivery.normalizedEvent.githubAuthority as object), botExternalId: "different-app" } }
+            : { resource: { ...(delivery.normalizedEvent.resource as object), providerResourceId: "another/repository" } }),
+        } }).where(eq(chatDeliveries.id, delivery.id));
+      }
       const previousPublications = await readChatPublicationsByEndpointId(context.endpoint.id);
       const request = { db, companyId, issueId: context.issue.id, actorId: "owner-user", actorSource: "cloud_tenant",
         observedRunId: context.runId, idempotencyKey: randomUUID(), prepareChatRetry: context.service.prepareFailedChatRunRetry };
+      if (mode === "source_app_changed" || mode === "source_destination_changed") {
+        await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: {
+          code: "chat_failed_run_retry_not_authorized", reason: "source_authorization",
+          authorityReason: mode === "source_app_changed" ? "app_binding" : "destination_binding",
+        } });
+        expect((await readAgentWakeupRequestsById(saved.id))[0]).toMatchObject({ status: "skipped", runId: null });
+        expect((await readHeartbeatRunsById(context.runId))[0]).toMatchObject({ status: "failed" });
+        expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual(previousPublications);
+        return;
+      }
       if (mode.startsWith("committed_succeeded") || mode.startsWith("committed_consumed") || mode === "malformed_previous" || mode === "committed_unknown_publication" || mode === "committed_pending_publication" || mode === "committed_mixed_publication") {
         await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: {
           code: "chat_failed_run_retry_not_authorized",
@@ -61236,7 +61295,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         .where(eq(chatEndpoints.id, context.endpoint.id));
       if (mode === "principal_revoked") await db.update(companyMemberships).set({ status: "suspended" })
         .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.principalId, "owner-user")));
-      if (mode === "real_queue" || mode === "unreconciled" || mode.startsWith("committed_")) {
+      if (mode === "real_budget_ingress" || mode === "real_queue" || mode === "unreconciled" || mode.startsWith("committed_")) {
         // Capacity prevents a real provider start while exercising production
         // admission, persisted source identity, and queue ownership.
         await db.update(agents).set({ adapterType: "paperclip_runner", status: "running",
@@ -63558,6 +63617,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     linkedOriginalActor = false,
     githubUnavailableFile = false,
     upgradedGitHub = true,
+    currentGitHubPr = false,
   ) {
     const fixture = await seedCompany();
     const configured =
@@ -63598,8 +63658,8 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           })
         : provider === "github"
           ? makeThread({
-              channelId: "github:paperclipai/paperclip",
-              id: `github:paperclipai/paperclip:issue:${700 + Number(suffix)}`,
+              channelId: currentGitHubPr ? "paperclipai/paperclip" : "github:paperclipai/paperclip",
+              id: currentGitHubPr ? `github:paperclipai/paperclip:${700 + Number(suffix)}` : `github:paperclipai/paperclip:issue:${700 + Number(suffix)}`,
               name: "paperclipai/paperclip",
             })
           : provider === "discord"
@@ -63651,6 +63711,12 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         externalId: originalActorId,
       });
     }
+    if (provider === "github" && currentGitHubPr) {
+      const config = await githubChatManagementService(db).configuration(endpoint.id, "owner-user");
+      await db.insert(chatGitHubConfigurations).values({ companyId: fixture.companyId, endpointId: endpoint.id,
+        configuration: { ...config.configuration, toolsEnabled: true, defaults: { ...config.configuration.defaults,
+          invocation: "mentions_only", events: [] } }, updatedByUserId: "owner-user" });
+    }
     const sourceMessage = makeMessage({
       id: messageId,
       mentioned: !thread.thread.isDM,
@@ -63661,6 +63727,9 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         externalActorId ??
         (provider === "telegram" ? telegramChatId : "U-SAFE-PROGRESS"),
     });
+    if (currentGitHubPr) sourceMessage.raw = { action: "created", installation: { id: 2468 },
+      repository: { id: 97531, full_name: "paperclipai/paperclip" }, issue: { number: 791, pull_request: {} },
+      sender: { id: 42, login: "octocat", type: "User" }, comment: { id: Number(messageId), body: sourceMessage.text, user: { id: 42 } } };
     if (githubUnavailableFile) {
       const url =
         "https://github.com/user-attachments/files/31967808/private-current.txt";

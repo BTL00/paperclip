@@ -46,6 +46,7 @@ import {
   restoreNativeChatReviewPresentationInTransaction,
 } from "./native-chat-review-presentation.js";
 import {
+  readPublishedGitHubReviewCompletionContinuationInTransaction,
   isExternalChatWaitAuthorizationContention,
   resolveExternalChatResponseWaitAuthorizationInTransaction,
 } from "./chat-attachment-reuse.js";
@@ -1561,7 +1562,7 @@ export async function commitNativeStatusDecision(input: {
   preMaterializedEffects?: NativeMaterializedStatusEffect[];
   supersedesCommittedDecisionId?: string;
   supersededExternalReviewRequests?: { agentId: string; resultId: string; interactionIds: string[] };
-  requireExternalChatResponseWaitAuthorization?: { agentId: string };
+  requireExternalChatResponseWaitAuthorization?: { agentId: string; completionContinuationKey?: string };
   requirePlanWaitSource?: NativePlanWaitSource;
   requireMonitorWait?: { agentId: string; nextCheckAt: string };
   requireMonitorDelivery?: NativeMonitorDelivery;
@@ -1745,6 +1746,13 @@ export async function commitNativeStatusDecision(input: {
       }
       if (authorization !== "authorized") {
         throw new NativeStatusRaceError();
+      }
+      if (input.requireExternalChatResponseWaitAuthorization.completionContinuationKey) {
+        const current = await readPublishedGitHubReviewCompletionContinuationInTransaction(tx as unknown as Db,
+          { companyId: input.companyId, issueId: input.issueId, runId: input.runId,
+            agentId: input.requireExternalChatResponseWaitAuthorization.agentId }, "nonblocking");
+        if (current?.idempotencyKey !== input.requireExternalChatResponseWaitAuthorization.completionContinuationKey)
+          throw new NativeStatusRaceError();
       }
     }
     const passiveBoardResponseWait =

@@ -87,9 +87,24 @@ vi.mock("./installation-integrity.js", () => ({ verifyNativeAcpxInstallation: vi
 
 describe("Copilot build-owned installation", () => {
   it("admits the current profile with environment launch preparation", () => {
-    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(61);
+    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(62);
     expect(QUALIFIED_ACPX_PROFILES.copilot.qualificationStatus).toBeUndefined();
-    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:956276ebee59f880249fa6955adc224af9ca7b6a9da59bcc5da4a8667550c5b3");
+    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:1251b53cb4716273c74e5839eb112ef8ca639e0967eb90a9f1a5f5ddafdb642c");
+  });
+
+  it("preserves v61 while binding server-owned completion-wait fallback in v62", async () => {
+    const priorBytes = readFileSync(new URL("../../../test/fixtures/copilot-profile-v61-identity.json", import.meta.url));
+    expect(createHash("sha256").update(priorBytes).digest("hex")).toBe("ec3c8561bc123a599a01da356978b73e6d48ab030842af9f0d63d1f30413e1a5");
+    const prior = JSON.parse(priorBytes.toString("utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v62-identity.json", import.meta.url), "utf8"));
+    expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
+      "agentProfileVersion", "profileCompatibilitySourceSha256", "semanticCompletionContractSourceSha256", "semanticContinuationSourceSha256",
+    ]);
+    expect(Object.keys(current.declaration).sort()).toEqual(Object.keys(prior.declaration).sort());
+    expect(isSupportedAcpxProfileVersion("copilot", 61)).toBe(true);
+    expect(current.commandDigest).not.toBe(prior.commandDigest);
+    await expect(verifyCopilotInstallation({ ...QUALIFIED_ACPX_PROFILES.copilot,
+      agentProfileVersion: 61, commandDigest: prior.commandDigest })).rejects.toThrow("exact pinned");
   });
 
   it("preserves v60 while binding controller journal retirement in v61", async () => {

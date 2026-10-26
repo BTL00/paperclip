@@ -57,7 +57,7 @@ import {
 } from "./native-board-response-wait.js";
 import { emitAgentTaskRun } from "../agent-task-run-telemetry.js";
 import { isNewTerminalRunFailure, reportRunFailure } from "../run-failure-report.js";
-import { resolveExternalChatResponseWaitAuthorization } from "./chat-attachment-reuse.js";
+import { isPublishedGitHubReviewCompletionContinuation, readPublishedGitHubReviewCompletionContinuation, resolveExternalChatResponseWaitAuthorization } from "./chat-attachment-reuse.js";
 import {
   authorizeNativeChatReviewPresentation,
   hasMaterializedNativeReviewResponse,
@@ -1317,10 +1317,17 @@ export async function finalizeNativeRun(input: {
       .then((rows) => rows[0] ?? null);
     if (!authoritativeIssue)
       throw new Error("native_finalization_issue_missing");
+    const publishedReviewContinuation = assessment.reportedDisposition === "yielded" &&
+      isPublishedGitHubReviewCompletionContinuation(assessment.continuation)
+      ? await readPublishedGitHubReviewCompletionContinuation({ db: input.db,
+          binding: { companyId: run.companyId, issueId: authoritativeIssue.id, runId: run.id, agentId: run.agentId } })
+      : null;
     const externalChatResponseWaitAuthorization =
       assessment.reportedDisposition === "yielded" &&
       assessment.continuation?.kind === "response_wake"
-        ? await resolveExternalChatResponseWaitAuthorization({
+        ? isPublishedGitHubReviewCompletionContinuation(assessment.continuation)
+          ? publishedReviewContinuation?.idempotencyKey === assessment.continuation.idempotencyKey ? "authorized" : "revoked"
+          : await resolveExternalChatResponseWaitAuthorization({
             db: input.db,
             binding: {
               companyId: run.companyId,
@@ -1554,7 +1561,7 @@ export async function finalizeNativeRun(input: {
             : undefined,
         requireExternalChatResponseWaitAuthorization:
           decision.reasonCode === "external_chat_response_waiting"
-            ? { agentId: run.agentId }
+            ? { agentId: run.agentId, ...(publishedReviewContinuation ? { completionContinuationKey: publishedReviewContinuation.idempotencyKey } : {}) }
             : undefined,
         reviewResponsePresentation:
           decision.reasonCode === "governed_response_waiting" &&
