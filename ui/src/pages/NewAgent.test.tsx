@@ -41,6 +41,7 @@ describe("New agent setup", () => {
     await fill("API key", "setup-test-key");
     await click("Connect");
     expect(api.update).toHaveBeenCalledWith(setupId, expect.objectContaining({ runtimeConfig: expect.objectContaining({ aiConnection: expect.anything() }) }), "company-1");
+    expect(api.testEnvironment).toHaveBeenCalledWith("company-1", "codex_local", expect.objectContaining({ agentId: setupId }));
     await click("Finish setup");
     expect(api.hire.mock.calls[0][1].setupAgentId).toBe(setupId);
     expect(api.create).toHaveBeenCalledTimes(1);

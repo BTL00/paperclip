@@ -681,6 +681,7 @@ function Setup({
       const config = preparedConfig(nextConnection, qualified?.runner);
       const tested = await testAgentSetup({
         companyId,
+        agentId: created?.id,
         adapterType: requestAdapterType,
         providerAdapter: brandType,
         ...(["codex_local", "claude_local", "opencode_local", "pi_local"].includes(adapterType) && runner !== "auto" ? { runner } : {}),
