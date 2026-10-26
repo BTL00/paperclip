@@ -1479,6 +1479,7 @@ describe("remote provider pack manifest", () => {
       state.createBackend.mock.calls.at(-1)![1].codexTransportFactory!();
       const transport = state.createTransport.mock.calls.at(-1)![0] as RunnerTransportOptions & {
         controlPlaneRegistration: (authority: unknown) => Promise<unknown>;
+        environment?: NodeJS.ProcessEnv;
       };
       expect(transport.runnerBinary).toBe(state.bundledRunnerBinary);
       if (provider === "opencode") {
@@ -7805,7 +7806,7 @@ describe("bounded stopped instruction collection", () => {
 describe("native warm session supervision", () => {
   it.each(["collect", "close-failure", "stopped", "destroyed", "missing-lease", "foreign-run", "foreign-environment", "deleted-environment", "claim-edit", "claim-add", "claim-remove", "claim-remove-entry", "claim-canonical", "claim-config", "claim-uncertain"])("composes remote warm ownership with real DB successor leases and current-run collection: %s", async ending => {
     const tables = await import("@paperclipai/db");
-    const { eq } = await import("drizzle-orm");
+    const { eq, sql } = await import("drizzle-orm");
     const { randomUUID } = await import("node:crypto");
     const { promisify } = await import("node:util");
     const { execFile } = await import("node:child_process");
@@ -8059,7 +8060,7 @@ describe("native warm session supervision", () => {
       const cleanupFailures: unknown[] = [];
       try { await closeWarmNativeSessionsForEnvironment({ environmentId, reason: "test cleanup" }); } catch (error) { cleanupFailures.push(error); }
       if (externalUrl) {
-        try { await db.delete(tables.companies).where(eq(tables.companies.id, companyId)); await db.delete(tables.authUsers).where(eq(tables.authUsers.id, userId)); } catch (error) { cleanupFailures.push(error); }
+        try { await db.execute(sql`TRUNCATE TABLE companies, environments, auth_users CASCADE`); } catch (error) { cleanupFailures.push(error); }
       }
       try { await database.cleanup(); } catch (error) { cleanupFailures.push(error); }
       if (previousHome === undefined) delete process.env.PAPERCLIP_HOME; else process.env.PAPERCLIP_HOME = previousHome;
