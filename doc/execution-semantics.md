@@ -521,13 +521,21 @@ of the invalid call. Unauthorized tools still receive a generic rejection, and
 corrected calls retain the same permission and approval checks.
 
 A native provider may omit `continuation` (or send `null`) when it reports
-`yielded` after saving a monitor or requesting repository preparation. The controller reads current authorized task
+`yielded` after saving a monitor, requesting repository preparation, or publishing
+this run's current-head GitHub review. The controller reads current authorized task
 context and fills the canonical continuation only if that same task,
 run, assignee, and work mode remain eligible. An eligible monitor takes precedence.
 A pending repository requested by that task in its current workspace offers
 `same_agent`; the existing status arbiter and wake queue own the next admission.
 Prepared repositories and requests belonging to another task cannot offer it.
-An explicit `done` result does not acquire a continuation. Completion admission
+A completed GitHub review with its processed publication may offer `response_wake`
+only for that exact current run, head and accepted requester under current
+conversation and connection authority. Completion admission, finalization and
+status commit recheck the server-issued run/review/head binding; a pending
+publication, newer unreviewed head or revoked access cannot fall through to an
+immediate continuation. An explicit malformed continuation remains invalid.
+An explicit `done` result does not acquire a continuation or change its completion
+policy; review scores are not interpreted as task-completion instructions. Completion admission
 checks that persisted monitor again. This default does not create or renew a
 schedule. A consumed, cleared, exhausted, or ineligible monitor cannot authorize
 a passive wait. An explicit `response_wake` still identifies a real response

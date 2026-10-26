@@ -812,6 +812,36 @@ export async function resolveExternalChatResponseWaitAuthorization(input: {
   );
 }
 
+const publishedGitHubReviewWaitKey = "github-review-response:";
+
+export function isPublishedGitHubReviewCompletionContinuation(value: unknown): boolean {
+  const continuation = record(value);
+  return continuation.kind === "response_wake" && typeof continuation.idempotencyKey === "string" &&
+    continuation.idempotencyKey.startsWith(publishedGitHubReviewWaitKey);
+}
+
+/** Project a wait from the same saved publication and current authority used
+ * by finalization. An older run's review never assigns this turn a new wait. */
+export async function readPublishedGitHubReviewCompletionContinuationInTransaction(
+  tx: Db, binding: ChatReuseBinding, lockMode: AuthorizationLockMode = "read",
+) {
+  const [run] = await tx.select().from(heartbeatRuns).where(and(
+    eq(heartbeatRuns.id, binding.runId), eq(heartbeatRuns.companyId, binding.companyId),
+    eq(heartbeatRuns.agentId, binding.agentId), eq(heartbeatRuns.nativeIssueId, binding.issueId),
+    eq(heartbeatRuns.runtimeMode, "native"),
+  )).limit(1);
+  if (!run || run.status !== "running") return null;
+  const wait = await readInheritedGitHubReviewWait(tx, run);
+  if (wait?.kind !== "published" || wait.reviewRunId !== run.id ||
+      await resolveExternalChatResponseWaitAuthorizationInTransaction(tx, binding, lockMode) !== "authorized") return null;
+  return { kind: "response_wake" as const, summary: "Wait for the next authorized GitHub response to the published review.",
+    idempotencyKey: `${publishedGitHubReviewWaitKey}${run.id}:${wait.reviewId}:${wait.headSha}` };
+}
+
+export async function readPublishedGitHubReviewCompletionContinuation(input: { db: Db; binding: ChatReuseBinding }) {
+  return input.db.transaction(tx => readPublishedGitHubReviewCompletionContinuationInTransaction(tx as unknown as Db, input.binding));
+}
+
 async function sourceLineageExists(
   tx: Db,
   binding: ChatReuseBinding,

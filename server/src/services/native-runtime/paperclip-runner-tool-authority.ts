@@ -103,6 +103,7 @@ import {
   type CurrentWakeCommentsBinding,
 } from "./current-wake-comments.js";
 import {
+  readPublishedGitHubReviewCompletionContinuation,
   authorizeChatAttachmentReuse,
   authorizeChatConversationForBoundRun,
   LIST_CHAT_ATTACHMENTS_TOOL_DEFINITION,
@@ -687,6 +688,7 @@ export class PaperclipRunnerToolAuthority {
           } : !this.binding.nativeReview && context.issue.workMode === "standard" && context.issue.executionRunId === this.binding.runId
             ? await pendingTaskRepositoryContinuation(this.db, { companyId: this.binding.companyId, issueId: this.binding.issueId,
                 runId: this.binding.runId, workspaceId: context.issue.executionWorkspaceId })
+              ?? await readPublishedGitHubReviewCompletionContinuation({ db: this.db, binding: this.binding })
             : null,
           childTasks: visibleChildTasks.slice(0, 100).map(redactedTask),
           childTasksTruncated: childTasks.length > 100,
