@@ -62987,8 +62987,26 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
             fields?: Record<string, unknown>,
           ) => {
             if (!injected && fields?.status === agents.status) {
-              injected = true;
-              throw new Error("temporary source read unavailable");
+              const selection = select(fields as Parameters<typeof select>[0]);
+              const from = selection.from.bind(selection);
+              vi.spyOn(selection, "from").mockImplementation((table) => {
+                const query = from(table);
+                const where = query.where.bind(query);
+                vi.spyOn(query, "where").mockImplementation((condition) => {
+                  const scoped = where(condition);
+                  const { params } = scoped.toSQL();
+                  // Maintenance may inspect another task's queued notice first.
+                  // Fail only this final's own source-authorization read.
+                  if (!injected && params.includes(context.fixture.companyId) &&
+                      params.includes(context.fixture.assignedAgentId)) {
+                    injected = true;
+                    throw new Error("temporary source read unavailable");
+                  }
+                  return scoped;
+                });
+                return query;
+              });
+              return selection;
             }
             return fields
               ? select(fields as Parameters<typeof select>[0])
