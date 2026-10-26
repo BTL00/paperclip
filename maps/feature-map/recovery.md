@@ -96,6 +96,10 @@ there must be one successor and no duplicate publication. A second reconnect
 after admission, changed App, revoked sender or changed repository must prevent
 dispatch. An unadmitted rejection keeps the follow-up available for another
 deliberate Retry. Historical deliveries must remain unchanged.
+Repeat with legacy input that has no saved App ID and was refused by a budget
+before acknowledgement. An earlier processed response from the same endpoint,
+conversation and agent can prove its App claim. Missing, late, unlinked or
+conflicting proof must reject Retry. Verify actual execution separately.
 
 ### `post-stop-message`
 

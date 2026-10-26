@@ -522,15 +522,19 @@ corrected calls retain the same permission and approval checks.
 
 A native provider may omit `continuation` (or send `null`) when it reports
 `yielded` after saving a monitor, requesting repository preparation, or publishing
-this run's current-head GitHub review. The controller reads current authorized task
+an authorized current-head GitHub review. The controller reads current authorized task
 context and fills the canonical continuation only if that same task,
 run, assignee, and work mode remain eligible. An eligible monitor takes precedence.
 A pending repository requested by that task in its current workspace offers
 `same_agent`; the existing status arbiter and wake queue own the next admission.
 Prepared repositories and requests belonging to another task cannot offer it.
 A completed GitHub review with its processed publication may offer `response_wake`
-only for that exact current run, head and accepted requester under current
-conversation and connection authority. Completion admission, finalization and
+for that exact head and accepted requester under current conversation and
+connection authority. A normal tree resume may inherit the published review
+through its accepted parent identity. An ordinary GitHub follow-up may inherit it
+only after this run has a processed useful reply bound to its exact current
+inbound comment; acknowledgements, pending or ambiguous writes and partial
+assessment receipts do not suffice. Completion admission, finalization and
 status commit recheck the server-issued run/review/head binding; a pending
 publication, newer unreviewed head or revoked access cannot fall through to an
 immediate continuation. An explicit malformed continuation remains invalid.
@@ -1903,6 +1907,16 @@ and final dispatch gates. Queued and final native replacement dispatch also
 re-read dependency readiness, since new dependencies need not change the
 displayed task status. Old blocked rows without a receipt remain held; no
 historical status backfill is performed.
+
+For legacy GitHub input without a saved App ID or its own response receipt,
+Task Retry may prove the endpoint's earlier non-null App claim from a processed
+response ledger created before that input. The proof stays within the same
+company, endpoint, conversation and agent, with a processed prior delivery and
+its inbound source link. Supported setup and reconnect writers preserve an
+existing non-null App claim. This historical identity proof grants no publication
+replay or access: the saved input and current principal, repository, conversation,
+runtime fence and execution containment still pass normal admission. Explicit
+conflicting App bindings remain denials.
 
 ### Queued input after a native Stop
 
