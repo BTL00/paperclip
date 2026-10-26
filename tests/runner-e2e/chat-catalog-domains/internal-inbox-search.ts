@@ -7,19 +7,29 @@ interface Probe { status: number; body: unknown }
 interface InboxObservation extends InternalObservation {
   personalItems: Entity[]; policy: { mode: string; allowedAgentIds: string[] }; personalProbe: Probe; responsibleUserProbe: Probe; unreadProbe: Probe; archiveProbe?: Probe;
 }
-async function agentRequest(ctx: ChatCatalogContext, path: string, method = "GET", body?: unknown): Promise<Probe> {
-  const id = ctx.input.fixtures.agent.id;
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${id}/keys`, { name: `inbox-scope-control-${ctx.input.nonce}` });
+const inboxProbeKeys = new WeakMap<ChatCatalogContext, Promise<{ id: string; token: string }>>();
+async function inboxProbeKey(ctx: ChatCatalogContext) {
   if (!ctx.input.privateSecrets) throw new Error("Agent probe requires an attempt-private secret redactor");
-  ctx.input.privateSecrets.push(key.token);
-  try {
-    const url = new URL(path, ctx.input.api.baseURL);
-    if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Inbox probe escaped fixture API");
-    const response = await fetch(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
-      headers: { Authorization: `Bearer ${key.token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    return { status: response.status, body: await response.json() };
-  } finally { await ctx.input.api.delete(`/api/agents/${id}/keys/${key.id}`); }
+  let pending = inboxProbeKeys.get(ctx);
+  if (!pending) {
+    pending = ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${ctx.input.fixtures.agent.id}/keys`, { name: `inbox-scope-control-${ctx.input.nonce}` })
+      .then(key => { ctx.input.privateSecrets!.push(key.token); return key; });
+    inboxProbeKeys.set(ctx, pending);
+  }
+  return pending;
+}
+async function cleanupInboxProbe(ctx: ChatCatalogContext) {
+  const pending = inboxProbeKeys.get(ctx); inboxProbeKeys.delete(ctx);
+  if (pending) { const key = await pending; await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${key.id}`, { allowNotFound: true }); }
+}
+async function agentRequest(ctx: ChatCatalogContext, path: string, method = "GET", body?: unknown): Promise<Probe> {
+  const key = await inboxProbeKey(ctx);
+  const url = new URL(path, ctx.input.api.baseURL);
+  if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Inbox probe escaped fixture API");
+  const response = await fetch(url, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
+    headers: { Authorization: `Bearer ${key.token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  return { status: response.status, body: await response.json() };
 }
 function minePath(ctx: ChatCatalogContext) {
   return `/api/companies/${ctx.input.fixtures.company.id}/issues?touchedByUserId=me&inboxArchivedByUserId=me&includeAgentCreatedTasks=true&limit=500`;
@@ -74,6 +84,7 @@ export function gradeInbox(value: unknown) {
 }
 function inboxBoundary(scenarioId: string): ChatCatalogCase {
   const base = makeDefinition(scenarioId, async ctx => {
+    try {
     const session = await ctx.input.api.get<{ user?: { id: string } }>("/api/auth/get-session");
     if (!session.user?.id) throw new Error("Personal inbox fixture requires a real signed-in person");
     const p = await project(ctx); const tasks: Entity[] = [];
@@ -94,6 +105,7 @@ function inboxBoundary(scenarioId: string): ChatCatalogCase {
       throw new Error("Production Mine fixture does not reflect human participation independently of automated work");
     return { project: p, task: tasks[0], doneTask: tasks[2], personId: session.user.id, originalTasks: [...tasks, automatedTask],
       originalPersonalIds: personalItems.map(row => row.id), automatedTask };
+    } catch (error) { await cleanupInboxProbe(ctx); throw error; }
   }, gradeInbox);
   return { ...base, authentication: "human-session",
     async observe(ctx, state): Promise<InboxObservation> {
@@ -124,6 +136,7 @@ function inboxBoundary(scenarioId: string): ChatCatalogCase {
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
       await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     },
+    async cleanup(ctx) { await cleanupInboxProbe(ctx); },
   };
 }
 export const inboxSearchCases: readonly ChatCatalogCase[] = [inboxBoundary("inbox-search.show-my-work"), inboxBoundary("inbox-search.archive-without-grant")];

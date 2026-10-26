@@ -30,15 +30,30 @@ async function personRead(person: Person, path: string) {
   await response.body?.cancel();
   return { status: response.status, body };
 }
+const privacyProbeKeys = new WeakMap<ChatCatalogContext, Map<string, Promise<{ id: string; token: string }>>>();
+async function privacyProbeKey(ctx: ChatCatalogContext, agentId: string) {
+  if (!ctx.input.privateSecrets) throw new Error("Privacy probes require attempt-private credential redaction");
+  let keys = privacyProbeKeys.get(ctx); if (!keys) { keys = new Map(); privacyProbeKeys.set(ctx, keys); }
+  let pending = keys.get(agentId);
+  if (!pending) {
+    pending = ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${agentId}/keys`, { name: `privacy-probe-${ctx.input.nonce}` })
+      .then(key => { ctx.input.privateSecrets!.push(key.token); return key; });
+    keys.set(agentId, pending);
+  }
+  return pending;
+}
+async function cleanupPrivacyProbes(ctx: ChatCatalogContext) {
+  const keys = privacyProbeKeys.get(ctx); privacyProbeKeys.delete(ctx);
+  for (const [agentId, pending] of keys ?? []) {
+    const key = await pending; await ctx.input.api.delete(`/api/agents/${agentId}/keys/${key.id}`, { allowNotFound: true });
+  }
+}
 async function agentStatus(ctx: ChatCatalogContext, agentId: string, path: string) {
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${agentId}/keys`, { name: `privacy-probe-${ctx.input.nonce}` });
-  ctx.input.privateSecrets?.push(key.token);
-  try {
-    const url = new URL(path, ctx.input.api.baseURL);
-    if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy probe escaped its isolated API");
-    const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } });
-    await response.body?.cancel(); return response.status;
-  } finally { await ctx.input.api.delete(`/api/agents/${agentId}/keys/${key.id}`); }
+  const key = await privacyProbeKey(ctx, agentId);
+  const url = new URL(path, ctx.input.api.baseURL);
+  if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy probe escaped its isolated API");
+  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } });
+  await response.body?.cancel(); return response.status;
 }
 function privacyObservation(value: unknown): PrivacyObservation | undefined {
   const o = observation(value) as PrivacyObservation | undefined;
@@ -111,7 +126,7 @@ function privateProject(): ChatCatalogCase {
           denied: true, outcome: "The copied project link presents an access error, without the protected project heading." });
       } finally { await observerPage.close(); }
     },
-    async cleanup() { await observer?.dispose(); observer = undefined; },
+    async cleanup(ctx) { try { await cleanupPrivacyProbes(ctx); } finally { await observer?.dispose(); observer = undefined; } },
   };
 }
 export const projectPrivacyCases: readonly ChatCatalogCase[] = [privateProject(), shareProject()];
@@ -144,15 +159,12 @@ export function gradeShareProject(value: unknown) {
 }
 async function agentMutationStatus(ctx: ChatCatalogContext, path: string, data: unknown) {
   const id = ctx.input.fixtures.agent.id;
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${id}/keys`, { name: `privacy-write-control-${ctx.input.nonce}` });
-  ctx.input.privateSecrets?.push(key.token);
-  try {
-    const url = new URL(path, ctx.input.api.baseURL);
-    if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy mutation probe escaped fixture API");
-    const response = await fetch(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
-      headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify(data) });
-    await response.body?.cancel(); return response.status;
-  } finally { await ctx.input.api.delete(`/api/agents/${id}/keys/${key.id}`); }
+  const key = await privacyProbeKey(ctx, id);
+  const url = new URL(path, ctx.input.api.baseURL);
+  if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Privacy mutation probe escaped fixture API");
+  const response = await fetch(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
+    headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify(data) });
+  await response.body?.cancel(); return response.status;
 }
 function shareProject(): ChatCatalogCase {
   let observer: Person | undefined;
@@ -217,7 +229,7 @@ function shareProject(): ChatCatalogCase {
         await ctx.input.evidence("chat-catalog-owner-project-sharing-opened.json", { observerId: observer.id, projectId: p.id, url: observerPage.url(), visible: true });
       } finally { await observerPage.close(); }
     },
-    async cleanup() { await observer?.dispose(); observer = undefined; },
+    async cleanup(ctx) { try { await cleanupPrivacyProbes(ctx); } finally { await observer?.dispose(); observer = undefined; } },
   };
 }
 
@@ -272,7 +284,7 @@ function sharePrivateTask(): ChatCatalogCase {
         await ctx.input.evidence("chat-catalog-task-sharing-denied-browser.json", { taskId: t.id, observerId: observer.id, denied: true });
       } finally { await page.close(); }
     },
-    async cleanup() { await observer?.dispose(); observer = undefined; },
+    async cleanup(ctx) { try { await cleanupPrivacyProbes(ctx); } finally { await observer?.dispose(); observer = undefined; } },
   };
 }
 export const taskPrivacyCases: readonly ChatCatalogCase[] = [sharePrivateTask()];

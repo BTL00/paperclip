@@ -13,6 +13,7 @@ interface BriefObservation extends InternalObservation {
   workerTaskStatus?: number; workerDownloadStatus?: number; workerDownloadedHash?: string; durablePath?: string;
 }
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const workerProbeKeys = new WeakMap<ChatCatalogContext, { id: string; token: string; workerId: string }>();
 export function gradeAttachmentBrief(value: unknown) {
   const c = checks(); const o = observation(value) as BriefObservation | undefined;
   c.add("independent-upload-and-worker-evidence", !!o && Array.isArray(o.sourceAttachments) && Array.isArray(o.workAttachments) && Array.isArray(o.workDocuments),
@@ -41,23 +42,20 @@ export function gradeAttachmentBrief(value: unknown) {
   return c.result();
 }
 async function workerReads(ctx: ChatCatalogContext, workerId: string, taskId: string, path: string | undefined) {
-  if (!ctx.input.privateSecrets) throw new Error("Worker brief probe requires private secret redaction");
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${workerId}/keys`, { name: "delegated-brief-read-control" });
-  ctx.input.privateSecrets.push(key.token);
+  const key = workerProbeKeys.get(ctx);
+  if (!key || key.workerId !== workerId) throw new Error("Attempt-private Morgan probe credential is unavailable");
   const get = (value: string) => {
     const url = new URL(value, ctx.input.api.baseURL);
     if (url.origin !== ctx.input.api.baseURL || !/^\/api\/(?:issues|attachments)\//.test(url.pathname)) throw new Error("Worker brief read escaped isolated resources");
     return fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } });
   };
-  try {
-    const taskRead = await get(`/api/issues/${taskId}`); const workerTaskStatus = taskRead.status; await taskRead.body?.cancel();
-    if (!path) return { workerTaskStatus };
-    const response = await get(path); const workerDownloadStatus = response.status;
-    if (!response.ok) { await response.body?.cancel(); return { workerTaskStatus, workerDownloadStatus }; }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 65_536) throw new Error("Delegated brief unexpectedly exceeds its fixture size bound");
-    return { workerTaskStatus, workerDownloadStatus, workerDownloadedHash: hash(bytes) };
-  } finally { await ctx.input.api.delete(`/api/agents/${workerId}/keys/${key.id}`); }
+  const taskRead = await get(`/api/issues/${taskId}`); const workerTaskStatus = taskRead.status; await taskRead.body?.cancel();
+  if (!path) return { workerTaskStatus };
+  const response = await get(path); const workerDownloadStatus = response.status;
+  if (!response.ok) { await response.body?.cancel(); return { workerTaskStatus, workerDownloadStatus }; }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > 65_536) throw new Error("Delegated brief unexpectedly exceeds its fixture size bound");
+  return { workerTaskStatus, workerDownloadStatus, workerDownloadedHash: hash(bytes) };
 }
 const base = makeDefinition("tasks.attachment-brief", async ctx => {
   const worker = await fixtureWorker(ctx); const source = await openStandingChat(ctx);
@@ -70,7 +68,10 @@ const base = makeDefinition("tasks.attachment-brief", async ctx => {
   const receipt = uploaded.find(row => row.originalFilename === filename)!;
   await expect(ctx.input.page.getByTestId("task-chat-composer-attachments")).toContainText(filename);
   await expect(ctx.input.page.getByTestId("task-chat-composer-attachments")).not.toContainText("Uploading");
-  return { worker, sourceId: source.id, briefAttachment: receipt, briefHash: hash(Buffer.from(briefBody)) };
+  if (!ctx.input.privateSecrets) throw new Error("Worker brief probe requires private secret redaction");
+  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${worker.id}/keys`, { name: "delegated-brief-read-control" });
+  ctx.input.privateSecrets.push(key.token); workerProbeKeys.set(ctx, { ...key, workerId: worker.id });
+  return { worker, sourceId: source.id, briefAttachment: receipt, briefHash: hash(Buffer.from(briefBody)), workerProbeKeyId: key.id };
 }, gradeAttachmentBrief);
 export const taskAttachmentCases: readonly ChatCatalogCase[] = [{ ...base, authentication: "human-session",
   queryAttachments: [{ stateKey: "briefAttachment", filename: "website-brief.md" }], expectedRunCount: 3, minimumRunCount: 2,
@@ -92,5 +93,10 @@ export const taskAttachmentCases: readonly ChatCatalogCase[] = [{ ...base, authe
       ?? (context.includes(receipt.contentPath) ? receipt.contentPath : undefined);
     const reads = saved ? await workerReads(ctx, entity(state, "worker").id, saved.id, durablePath) : {};
     return { ...o, sourceId: source?.id, sourceAttachments, originalBytesHash, workAttachments, workDocuments, durablePath, ...reads };
+  },
+  async cleanup(ctx, state) {
+    const key = workerProbeKeys.get(ctx); workerProbeKeys.delete(ctx);
+    const id = key?.id ?? state.workerProbeKeyId;
+    if (id) await ctx.input.api.delete(`/api/agents/${entity(state, "worker").id}/keys/${id}`, { allowNotFound: true });
   },
 }];
