@@ -14,7 +14,7 @@ import type { ExecutionProjection } from "@paperclipai/shared";
 import { EXECUTION_CONTROL_DEADLINE_MS } from "./execution-control-deadline.js";
 import { executionFailureRetryCount } from "./execution-recovery-attempt.js";
 import { retryIdempotentDatabaseOperation } from "../database-retry.js";
-import { workspaceRecoveryDisplay } from "./workspace-recovery-receipt.js";
+import { readWorkspaceRecovery, workspaceRecoveryDisplay } from "./workspace-recovery-receipt.js";
 const text = (v: unknown) => (typeof v === "string" ? v : null);
 const executionRunColumns = {
   id: heartbeatRuns.id,
@@ -50,13 +50,25 @@ type Recovery = Pick<
     Pick<typeof issueRecoveryActions.$inferSelect, "status" | "evidence">
   >;
 
+export type RecoverySelectionDiagnostic = {
+  runId: string; selectedActionId: string | null; phase: ExecutionProjection["phase"];
+  candidateCount: number; matchingCandidateCount: number; truncated: boolean;
+  candidates: Array<{ actionId: string; status: string; runIdMatches: boolean; sourceRunIdMatches: boolean;
+    hasAutomaticRecovery: boolean; hasExecutionReconciliation: boolean; validWorkspaceRecovery: boolean;
+    workspaceRecoveryStatus: string | null; workspaceRecoveryRunMatches: boolean; selected: boolean }>;
+  selectedWorkspaceDisplay: string | null; projectionMatchesWorkspaceDisplay: boolean;
+  projectionMatchesSelectedInstruction: boolean;
+};
+type ProjectionReadOptions = { retryDatabaseReads?: boolean;
+  onRecoverySelection?: (diagnostic: RecoverySelectionDiagnostic) => void };
+
 /** Batched reads; list consumers do not perform per-task polling. */
 export async function executionProjectionsForRuns(
   db: Db,
   companyId: string,
   runIds: string[],
   now = new Date(),
-  options: { retryDatabaseReads?: boolean } = {},
+  options: ProjectionReadOptions = {},
 ) {
   const projections = new Map<string, ExecutionProjection>();
   if (!runIds.length) return projections;
@@ -108,6 +120,7 @@ export async function executionProjectionsForRuns(
   const recovery = issueIds.length
     ? await read(async () => db
         .select({
+          id: issueRecoveryActions.id,
           issueId: issueRecoveryActions.sourceIssueId,
           cause: issueRecoveryActions.cause,
           nextAction: issueRecoveryActions.nextAction,
@@ -185,17 +198,35 @@ export async function executionProjectionsForRuns(
     );
     const action =
       matching.find((row) => row.status !== "resolved") ?? matching[0];
-    projections.set(
-      run.id,
-      projectExecution(
+    const projection = projectExecution(
         run,
         coordinatorByRun.get(run.id),
         pending.filter((row) => row.issueId === issueId),
         action,
         now,
         waitingByRun.get(run.id),
-      ),
-    );
+      );
+    projections.set(run.id, projection);
+    if (options.onRecoverySelection) {
+      const candidates = recovery.filter(row => row.issueId === issueId);
+      const display = action ? workspaceRecoveryDisplay(action.evidence, run.id) : undefined;
+      options.onRecoverySelection({ runId: run.id, selectedActionId: action?.id ?? null,
+        phase: projection.phase, candidateCount: candidates.length, matchingCandidateCount: matching.length,
+        truncated: candidates.length > 20,
+        candidates: candidates.slice(0, 20).map(row => {
+          const state = readWorkspaceRecovery(row.evidence);
+          return { actionId: row.id, status: row.status, runIdMatches: row.evidence.runId === run.id,
+            sourceRunIdMatches: row.evidence.sourceRunId === run.id,
+            hasAutomaticRecovery: Boolean(row.evidence.automaticRecovery),
+            hasExecutionReconciliation: Boolean(row.evidence.executionReconciliation),
+            validWorkspaceRecovery: Boolean(state), workspaceRecoveryStatus: state?.status ?? null,
+            workspaceRecoveryRunMatches: state?.runId === run.id, selected: row === action };
+        }),
+        selectedWorkspaceDisplay: display?.status ?? null,
+        projectionMatchesWorkspaceDisplay: Boolean(display && projection.nextAction === display.message),
+        projectionMatchesSelectedInstruction: Boolean(action && projection.nextAction === action.nextAction),
+      });
+    }
   }
   return projections;
 }
@@ -204,9 +235,10 @@ export async function executionProjectionForRun(
   companyId: string,
   runId: string,
   now = new Date(),
+  options: ProjectionReadOptions = {},
 ): Promise<ExecutionProjection | null> {
   return (
-    (await executionProjectionsForRuns(db, companyId, [runId], now)).get(
+    (await executionProjectionsForRuns(db, companyId, [runId], now, options)).get(
       runId,
     ) ?? null
   );
