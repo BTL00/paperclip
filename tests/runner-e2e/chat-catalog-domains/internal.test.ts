@@ -15,6 +15,14 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "documents-artifacts.private-download": {
+      const privateTask = { ...o.tasks[0]!, visibility: "private" }; o.state.task = structuredClone(privateTask); o.tasks[0] = privateTask;
+      const file = { id: "private-file", issueId: "task", sha256: "a".repeat(64), contentPath: "/api/attachments/private-file/content" };
+      o.state.privateAttachment = file; o.state.originalHash = file.sha256; o.state.privateMarker = "PRIVATE-NIGHTJAR";
+      Object.assign(o, { privateTask, attachments: [file], originalHash: file.sha256, leadTaskStatus: 200,
+        observerCompanyStatus: 200, observerFileStatus: 403, observerSourceStatus: 404, otherAttachments: [], otherProducts: [] });
+      o.reply = "The file is private and keeps the task's access boundary. You as its owner must use sharing controls to change its visibility before everyone can download it."; break;
+    }
     case "tasks.private-task": {
       o.state.worker = { id: "morgan" }; o.state.confidentialMarker = "Confidential marker";
       o.tasks[0] = { ...o.tasks[0]!, title: "Confidential launch announcement", assigneeAgentId: "morgan" };
@@ -193,6 +201,7 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "documents-artifacts.private-download": o => { Object.assign(o, { observerFileStatus: 200 }); },
   "tasks.private-task": o => { Object.assign(o, { observerTaskStatus: 200 }); },
   "tasks.completion-with-gate": o => { o.tasks[0]!.status = "done"; },
   "tasks.attachment-brief": o => { Object.assign(o, { workerDownloadStatus: 403 }); },
@@ -230,7 +239,7 @@ describe("internal chat scenario independent oracles", () => {
       expect(gradeInternal(wrong).passed).toBe(false);
       expect(gradeInternal(undefined).passed).toBe(false);
       const noLinks = structuredClone(good); noLinks.links = [];
-      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate"].includes(definition.scenarioId));
+      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download"].includes(definition.scenarioId));
     });
   }
   it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-done")).passed).toBe(false));
@@ -522,5 +531,25 @@ describe("private delegation audience calibration", () => {
   });
   it("rejects protected task discovery in a healthy unrelated member's search", () => {
     const o = valid("tasks.private-task"); Object.assign(o, { observerSearchResults: '[{"id":"task"}]' }); expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("private attachment boundary calibration", () => {
+  it("accepts a sharing-help link without mistaking it for public file delivery", () => {
+    const o = valid("documents-artifacts.private-download"); o.links.push("https://docs.example.test/sharing"); expect(gradeInternal(o).passed).toBe(true);
+  });
+  it("rejects an alternate public HTML download link", () => {
+    const o = valid("documents-artifacts.private-download"); o.links.push("https://files.example.test/private-launch.html"); expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a copied alternate attachment even when the original remains private", () => {
+    const o = valid("documents-artifacts.private-download"); Object.assign(o, { otherAttachments: [{ id: "copy", sha256: o.state.originalHash }] });
+    expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a stale original file under the correct attachment identity", () => {
+    const o = valid("documents-artifacts.private-download"); Object.assign(o, { originalHash: "b".repeat(64) }); expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("rejects a public-download success claim when the real observer remains denied", () => {
+    const o = valid("documents-artifacts.private-download"); o.reply = "The private file has an owner access boundary. Everyone can now download it.";
+    expect(gradeInternal(o).passed).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { projectMarkdownToText, resolveProjectionRange, createDocumentAnchorSelector } from "../../../packages/shared/src/document-anchors.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
+import { privateDownloadCases } from "./internal-private-download.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
 
@@ -62,6 +63,7 @@ export function grade_documents_artifacts(value: unknown) {
 
 const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(id, setup, grade_documents_artifacts);
 export const documents_artifactsCases: readonly ChatCatalogCase[] = [
+  ...privateDownloadCases,
   resolveFeedback(),
   define("documents-artifacts.write-plan", async ctx => {
     const p = await project(ctx); const requirement = `Orchid ${ctx.input.nonce}`;
