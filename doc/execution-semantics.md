@@ -1672,6 +1672,23 @@ Delivery still requires the provider's verified stop receipt. Periodic queue
 retries do not gain extra cleanup attempts, and the queue displays the server's
 waiting reason while cleanup remains unresolved.
 
+A connected task can also fail while preparing an accepted board-authored
+message, before the provider starts. Its Retry belongs to the canonical task
+intent rather than the external inbound-message ledger. The server certifies
+its unchanged, undeleted comment, original user wake and accepted identity in
+the same company, task, agent and user scope. A settled bootstrap diagnostic
+must agree with the absence of a native result, coordinator, environment lease,
+controller, process or provider output. A previous session display hint does
+not establish that the failed attempt started a provider.
+
+That intent pins the saved comment and accepted identity. Queue admission
+rechecks the source; dispatch rechecks the coalesced intent and its exact claimed
+successor receipt before inheriting the accepted identity. Current permissions,
+assignment, pauses, budgets and containment remain normal queue requirements.
+This path neither fabricates external inbound provenance nor replays a recorded
+terminal result. If this source cannot be certified, Retry directs the user to
+send a new task message to continue from saved work.
+
 The legacy task recovery notice shows “Automatic recovery of this task stopped.” in
 a bordered container with Retry for a failed or timed-out run. A failed Retry
 shows its error in the same container. New user messages and saved undelivered

@@ -1,4 +1,4 @@
-import { assertTaskRetryConversationAllowed, readTaskRetryIntent, retireSupersededTaskRetry, taskRetryMutationAllowed } from "../task-retry.js";
+import { assertTaskRetryConversationAllowed, readTaskRetryIntent, readTaskRetryBoardMessageOrigin, retireSupersededTaskRetry, taskRetryMutationAllowed } from "../task-retry.js";
 import { insertIssueComment } from "../issue-comment-writes.js";
 import { withExternalAdmissionGuard, assertNoExternalOverlap } from "../../modules/external-agents/index.js";
 import { isAgentAwaitingSetup } from "../../modules/agent-lifecycle/index.js";
@@ -2195,6 +2195,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
     if (executionReconciliationWake && !issueId) return null;
     const durableRequest = opts.durableChatRequest;
     let taskRetryActorId: string | null = null;
+    delete enrichedContextSnapshot.boardMessageRetry;
     if (opts.taskRetryRequestId) {
       const [receipt] = await db.select().from(agentWakeupRequests).where(and(
         eq(agentWakeupRequests.id, opts.taskRetryRequestId), eq(agentWakeupRequests.agentId, agentId),
@@ -2213,6 +2214,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
       enrichedContextSnapshot.forceFreshSession = true;
       enrichedContextSnapshot.previousRunId = retry.sourceRunId;
       enrichedContextSnapshot.taskRetryRequestId = receipt.id;
+      if (retry.boardMessageOrigin) enrichedContextSnapshot.boardMessageRetry = true;
     }
 
 
@@ -2859,6 +2861,12 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
                 return { kind: "deferred" as const };
               if (!await taskRetryMutationAllowed(tx as unknown as Db, { companyId: agent.companyId, issueId,
                 actorId: retry.actorId, actorSource: retry.actorSource })) return { kind: "deferred" as const };
+              if (retry.boardMessageOrigin) {
+                const origin = await readTaskRetryBoardMessageOrigin(tx as unknown as Db, { companyId: agent.companyId,
+                  issueId, agentId, sourceRunId: retry.sourceRunId, actorId: retry.actorId });
+                if (!origin || origin.commentId !== retry.boardMessageOrigin.commentId ||
+                    origin.identityContextId !== retry.boardMessageOrigin.identityContextId) return { kind: "deferred" as const };
+              }
             }
             if (opts.queuedCommentRequestId) {
               const ids = await undeliveredLegacyUserCommentIds(tx as unknown as Db,

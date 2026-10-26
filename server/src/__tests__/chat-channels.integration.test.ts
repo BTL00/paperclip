@@ -47,6 +47,7 @@ import { createAssignedMcpTools } from "../services/native-runtime/assigned-mcp-
 import { createToolGatewayService } from "../services/tool-gateway.js";
 import { resolveGitHubOperationCredentials } from "../services/github-operation-credentials.js";
 import { initializeRunIdentity } from "../services/run-identity.js";
+import * as runIdentityModule from "../services/run-identity.js";
 import { chatGitHubRegistrations, chatGitHubReviews, chatGitHubConfigurations, toolCatalogEntries } from "@paperclipai/db";
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as cloudRuntimeIdentity from "../services/cloud-runtime-identity.js";
@@ -61229,6 +61230,176 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       } finally { await f.service.shutdown(); }
     },
   );
+
+  it("retries the saved board-message turn in a connected task after environment qualification failed before provider startup", async () => {
+    const f = await failedChatRetryFixture("github", "42", true, false, true);
+    try {
+      const companyId = f.fixture.companyId, agentId = f.fixture.assignedAgentId, issueId = f.issue.id;
+      await initializeRunIdentity(db, { companyId, runId: f.runId, issueId, responsibleUserId: "owner-user",
+        messageIds: [String(f.action.payload.commentId)], cause: "chat_message" });
+      const [comment] = await db.insert(issueComments).values({ companyId, issueId, authorType: "user",
+        authorUserId: "owner-user", body: "Continue from saved work and review the current head." }).returning();
+      await db.update(agents).set({ status: "running", runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } } })
+        .where(eq(agents.id, agentId));
+      const [capacity] = await db.insert(heartbeatRuns).values({ companyId, agentId, status: "running" }).returning();
+      const heartbeat = heartbeatService(db);
+      const current = await heartbeat.wakeup(agentId, { source: "automation", triggerDetail: "system",
+        reason: "issue_reopened_via_comment", requestedByActorType: "user", requestedByActorId: "owner-user",
+        payload: { issueId, commentId: comment.id }, contextSnapshot: { issueId, taskKey: issueId,
+          source: "issue.comment.reopen", wakeCommentId: comment.id, wakeCommentIds: [comment.id] } });
+      expect(current).toMatchObject({ status: "queued" });
+      await initializeRunIdentity(db, { companyId, runId: current!.id, issueId, responsibleUserId: "owner-user",
+        parentRunId: f.runId, messageIds: [comment.id], cause: "issue_reopened_via_comment" });
+      const diagnostic = 'Failed to acquire lease for environment "Managed computer" (sandbox): sandbox_snapshot_qualification_required: The snapshot qualification is missing or stale. Test this environment again before running Paperclip Runner.';
+      await db.update(heartbeatRuns).set({ status: "failed", finishedAt: new Date(), runtimeMode: "legacy",
+        errorCode: "setup_failed", error: diagnostic, sessionIdBefore: "prior-provider-session-hint",
+        runnerProfileJson: { adapterDispatch: { adapterType: "paperclip_runner" } },
+        usageJson: { ledgerScope: { issueId, projectId: null } },
+        resultJson: { executionRecovery: { kind: "bootstrap", providerWorkStarted: false }, stopReason: "adapter_failed" } })
+        .where(eq(heartbeatRuns.id, current!.id));
+      await db.update(agentWakeupRequests).set({ status: "failed", finishedAt: new Date() }).where(eq(agentWakeupRequests.id, current!.wakeupRequestId!));
+      await db.insert(heartbeatRunEvents).values([
+        { companyId, agentId, runId: current!.id, seq: 1, eventType: "agent_observability.unavailable", stream: "system", level: "warn",
+          message: "Company observability was not applied: this harness is not supported.", payload: { reason: "unsupported_harness", revision: randomUUID() } },
+        { companyId, agentId, runId: current!.id, seq: 2, eventType: "error", stream: "system", level: "error", message: diagnostic },
+        { companyId, agentId, runId: current!.id, seq: 3, eventType: "lifecycle", stream: "system", level: "info",
+          message: "task.run.measured", payload: { durableSettlement: true, durationMs: 18000, outcome: "failed", phase: "task.run.measured" } },
+      ]);
+      await db.update(heartbeatRuns).set({ status: "cancelled", finishedAt: new Date() }).where(eq(heartbeatRuns.id, capacity.id));
+      await db.update(issues).set({ status: "blocked", executionRunId: null }).where(eq(issues.id, issueId));
+      await db.update(agents).set({ status: "idle" }).where(eq(agents.id, agentId));
+      const [failed] = await readHeartbeatRunsById(current!.id);
+      await expect(chatRunSourceMessageId(db, failed, { provider: "github" })).resolves.toBe(f.action.payload.commentId);
+      const app = express();
+      app.use(express.json());
+      app.use((req, _res, next) => { req.actor = boardActor(companyId); next(); });
+      app.use("/api", issueRoutes(db, createStorageService().storage, { chatRunRetries: f.service }));
+      app.use(errorHandler);
+      const denySource = async (apply: () => Promise<unknown>, restore: () => Promise<unknown>, stale = false) => {
+        try {
+          await apply();
+          const denied = await request(app).post(`/api/issues/${issueId}/retry`).send({ idempotencyKey: randomUUID(), observedRunId: current!.id }).expect(stale ? 200 : 409);
+          if (stale) expect(denied.body).toMatchObject({ accepted: false, stale: true });
+          expect(await db.select({ id: agentWakeupRequests.id }).from(agentWakeupRequests).where(and(
+            eq(agentWakeupRequests.companyId, companyId), eq(agentWakeupRequests.reason, "task_retry")))).toHaveLength(0);
+        } finally { await restore(); }
+      };
+      await denySource(() => db.update(issueComments).set({ body: "Edited after acceptance", updatedAt: new Date() }).where(eq(issueComments.id, comment.id)),
+        () => db.update(issueComments).set({ body: comment.body, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id)));
+      await denySource(() => db.update(issueComments).set({ authorUserId: "another-user" }).where(eq(issueComments.id, comment.id)),
+        () => db.update(issueComments).set({ authorUserId: comment.authorUserId, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id)));
+      await denySource(() => db.update(issueComments).set({ deletedAt: new Date() }).where(eq(issueComments.id, comment.id)),
+        () => db.update(issueComments).set({ deletedAt: null, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id)));
+      const [sourceWake] = await readAgentWakeupRequestsById(current!.wakeupRequestId!);
+      await denySource(() => db.update(agentWakeupRequests).set({ requestedByActorId: "another-user" }).where(eq(agentWakeupRequests.id, sourceWake.id)),
+        () => db.update(agentWakeupRequests).set({ requestedByActorId: sourceWake.requestedByActorId }).where(eq(agentWakeupRequests.id, sourceWake.id)));
+      for (const patch of [
+        { responsibleUserId: "another-user" }, { agentId: f.fixture.replacementAgentId },
+        { contextSnapshot: { ...failed.contextSnapshot, issueId: randomUUID() } },
+        { activeIdentityContextId: null }, { sessionIdAfter: "provider-started" }, { processPid: 999999 },
+        { controllerLeaseExpiresAt: new Date(Date.now() + 60000) }, { stdoutExcerpt: "provider output" },
+        { resultJson: { executionRecovery: { kind: "bootstrap", providerWorkStarted: true } } },
+        { runnerProfileJson: { adapterDispatch: { adapterType: "paperclip_runner" }, unexpectedExecution: true } },
+      ]) {
+        const restore = Object.fromEntries(Object.keys(patch).map(key => [key, failed[key as keyof typeof failed]]));
+        await denySource(() => db.update(heartbeatRuns).set(patch).where(eq(heartbeatRuns.id, failed.id)),
+          () => db.update(heartbeatRuns).set(restore).where(eq(heartbeatRuns.id, failed.id)), "agentId" in patch);
+      }
+      const contractId = randomUUID(), resultId = randomUUID();
+      await db.insert(completionContracts).values({ id: contractId, companyId, issueId, revision: 1,
+        schemaVersion: "paperclip.completion-contract.v1", policyVersion: "test", risk: "standard",
+        completionAuthority: "server_arbiter", incompleteCriteriaPolicy: "preserve_non_terminal", contractJson: {},
+        canonicalSha256: contractId, createdByActorType: "system", createdByActorId: "test" });
+      await denySource(async () => {
+        await db.update(heartbeatRuns).set({ nativeIssueId: issueId, completionContractId: contractId }).where(eq(heartbeatRuns.id, failed.id));
+        await db.insert(nativeRunResults).values({ id: resultId, companyId, issueId, runId: failed.id,
+          completionContractId: contractId, schemaStatus: "accepted", serverFingerprint: resultId, canonicalSha256: resultId,
+          resultJson: { terminal: { runTerminalState: "succeeded" } } });
+      }, async () => {
+        await db.delete(nativeRunResults).where(eq(nativeRunResults.id, resultId));
+        await db.update(heartbeatRuns).set({ nativeIssueId: null, completionContractId: null }).where(eq(heartbeatRuns.id, failed.id));
+        await db.delete(completionContracts).where(eq(completionContracts.id, contractId));
+      });
+      const [liveLease] = await db.insert(environmentLeases).values({ companyId, issueId, heartbeatRunId: failed.id,
+        provider: "daytona", providerLeaseId: "contradictory-board-startup", status: "active", leasePolicy: "ephemeral" }).returning();
+      await denySource(async () => {}, () => db.delete(environmentLeases).where(eq(environmentLeases.id, liveLease.id)));
+      adapterExecutionControls.set(failed.id, createAdapterExecutionControl());
+      await denySource(async () => {}, async () => { adapterExecutionControls.get(failed.id)?.finish(); adapterExecutionControls.delete(failed.id); });
+      const idempotencyKey = randomUUID();
+      const response = await request(app).post(`/api/issues/${issueId}/retry`).send({ idempotencyKey, observedRunId: current!.id }).expect(202);
+      expect(response.body).toMatchObject({ accepted: true, observedRunId: current!.id });
+      expect(response.body.chatActionId).toBeUndefined();
+      const [retry] = await readAgentWakeupRequestsById(response.body.requestId);
+      expect(retry).toMatchObject({ reason: "task_retry", requestedByActorId: "owner-user",
+        payload: { issueId, taskRetry: { sourceRunId: current!.id } } });
+      expect(await db.select().from(chatActions).where(and(eq(chatActions.companyId, companyId), eq(chatActions.kind, "failed_run_retry")))).toHaveLength(0);
+      await db.update(agents).set({ status: "running" }).where(eq(agents.id, agentId));
+      const [dispatchCapacity] = await db.insert(heartbeatRuns).values({ companyId, agentId, status: "running" }).returning();
+      await db.update(issueComments).set({ body: "Changed after Retry acceptance", updatedAt: new Date() }).where(eq(issueComments.id, comment.id));
+      await heartbeat.resumeExecutionWaitComments();
+      expect((await readAgentWakeupRequestsById(retry.id))[0]).toMatchObject({ status: "deferred_issue_execution", runId: null });
+      await db.update(issueComments).set({ body: comment.body, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id));
+      await heartbeat.resumeExecutionWaitComments();
+      const [successor] = (await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.taskRetryRequestId === retry.id);
+      expect(successor).toMatchObject({ status: "queued", responsibleUserId: "owner-user",
+        contextSnapshot: { taskRetryRequestId: retry.id, previousRunId: current!.id } });
+      expect((await readAgentWakeupRequestsById(retry.id))[0]).toMatchObject({ runId: successor.id });
+      const realInitialize = runIdentityModule.initializeRunIdentity;
+      const initialized: string[] = [];
+      const probe = vi.spyOn(runIdentityModule, "initializeRunIdentity").mockImplementation(async (database, input) => {
+        if (input.runId !== successor.id) return realInitialize(database, input);
+        const [canonical] = await readAgentWakeupRequestsById(retry.id);
+        const [dispatch] = await readAgentWakeupRequestsById(successor.wakeupRequestId!);
+        const denyIdentity = async (apply: () => Promise<unknown>, restore: () => Promise<unknown>) => {
+          try { await apply(); await expect(realInitialize(database, input)).rejects.toThrow("This saved message can no longer be retried safely"); }
+          finally { await restore(); }
+          expect((await readHeartbeatRunsById(input.runId))[0].activeIdentityContextId).toBeNull();
+        };
+        await denyIdentity(() => db.update(agentWakeupRequests).set({ payload: { ...canonical.payload,
+          taskRetry: { ...(canonical.payload!.taskRetry as object), boardMessageOrigin: undefined } } }).where(eq(agentWakeupRequests.id, canonical.id)),
+          () => db.update(agentWakeupRequests).set({ payload: canonical.payload }).where(eq(agentWakeupRequests.id, canonical.id)));
+        await denyIdentity(() => db.update(agentWakeupRequests).set({ runId: failed.id }).where(eq(agentWakeupRequests.id, canonical.id)),
+          () => db.update(agentWakeupRequests).set({ runId: canonical.runId }).where(eq(agentWakeupRequests.id, canonical.id)));
+        await denyIdentity(() => db.update(agentWakeupRequests).set({ requestedByActorId: "another-user" }).where(eq(agentWakeupRequests.id, canonical.id)),
+          () => db.update(agentWakeupRequests).set({ requestedByActorId: canonical.requestedByActorId }).where(eq(agentWakeupRequests.id, canonical.id)));
+        await denyIdentity(() => db.update(agentWakeupRequests).set({ runId: failed.id }).where(eq(agentWakeupRequests.id, dispatch.id)),
+          () => db.update(agentWakeupRequests).set({ runId: dispatch.runId }).where(eq(agentWakeupRequests.id, dispatch.id)));
+        await denyIdentity(() => db.update(issueComments).set({ body: "Changed before provider dispatch", updatedAt: new Date() }).where(eq(issueComments.id, comment.id)),
+          () => db.update(issueComments).set({ body: comment.body, updatedAt: sql`${issueComments.createdAt}` }).where(eq(issueComments.id, comment.id)));
+        await denyIdentity(() => db.update(heartbeatRuns).set({ contextSnapshot: { ...successor.contextSnapshot, taskId: randomUUID() } }).where(eq(heartbeatRuns.id, successor.id)),
+          () => db.update(heartbeatRuns).set({ contextSnapshot: successor.contextSnapshot }).where(eq(heartbeatRuns.id, successor.id)));
+        await denyIdentity(() => db.update(issues).set({ executionRunId: failed.id }).where(eq(issues.id, issueId)),
+          () => db.update(issues).set({ executionRunId: successor.id }).where(eq(issues.id, issueId)));
+        const identity = await realInitialize(database, input);
+        expect(identity).toMatchObject({ responsibleUserId: "owner-user", parentContextId: retry.payload!.taskRetry &&
+          (retry.payload!.taskRetry as { boardMessageOrigin: { identityContextId: string } }).boardMessageOrigin.identityContextId });
+        const [executing] = await readHeartbeatRunsById(input.runId);
+        await expect(chatRunSourceMessageId(db, executing, { provider: "github" })).resolves.toBe(f.action.payload.commentId);
+        initialized.push(input.runId);
+        // This fixture tests the real dispatch and identity boundary, without
+        // allocating a provider or pretending its task work has completed.
+        throw new Error("board_retry_identity_probe_complete");
+      });
+      try {
+        await db.update(heartbeatRuns).set({ status: "cancelled", finishedAt: new Date() }).where(eq(heartbeatRuns.id, dispatchCapacity.id));
+        await db.update(agents).set({ status: "idle" }).where(eq(agents.id, agentId));
+        await heartbeat.resumeQueuedRuns();
+        await heartbeat.drainActiveRunExecutions();
+        expect(initialized).toEqual([successor.id]);
+        expect((await readHeartbeatRunsById(successor.id))[0]).toMatchObject({ status: "failed", error: "board_retry_identity_probe_complete" });
+        expect((await readHeartbeatRunsByCompanyId(companyId)).filter(run => run.contextSnapshot?.taskRetryRequestId === retry.id)).toHaveLength(1);
+        expect((await readHeartbeatRunsById(current!.id))[0]).toMatchObject({ status: "failed", activeIdentityContextId: failed.activeIdentityContextId });
+      } finally { probe.mockRestore(); await heartbeat.drainActiveRunExecutions(); }
+
+    } finally {
+      await db.update(agentWakeupRequests).set({ status: "failed", finishedAt: new Date() }).where(and(
+        eq(agentWakeupRequests.companyId, f.fixture.companyId), eq(agentWakeupRequests.reason, "task_retry"),
+        eq(agentWakeupRequests.status, "deferred_issue_execution")));
+      await db.update(heartbeatRuns).set({ status: "cancelled", finishedAt: new Date() }).where(and(
+        eq(heartbeatRuns.companyId, f.fixture.companyId), eq(heartbeatRuns.status, "queued")));
+      await f.service.shutdown();
+    }
+  });
 
   it("distinguishes an inherited GitHub requester from permission to replay a committed provider failure", async () => {
     const f = await failedChatRetryFixture("github", "42", true, false, true);
