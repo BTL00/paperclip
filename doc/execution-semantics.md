@@ -1904,6 +1904,16 @@ re-read dependency readiness, since new dependencies need not change the
 displayed task status. Old blocked rows without a receipt remain held; no
 historical status backfill is performed.
 
+For legacy GitHub input without a saved App ID or its own response receipt,
+Task Retry may prove the endpoint's earlier non-null App claim from a processed
+response ledger created before that input. The proof stays within the same
+company, endpoint, conversation and agent, with a processed prior delivery and
+its inbound source link. Supported setup and reconnect writers preserve an
+existing non-null App claim. This historical identity proof grants no publication
+replay or access: the saved input and current principal, repository, conversation,
+runtime fence and execution containment still pass normal admission. Explicit
+conflicting App bindings remain denials.
+
 ### Queued input after a native Stop
 
 A run-only Stop ends the current response. It does not discard queued user

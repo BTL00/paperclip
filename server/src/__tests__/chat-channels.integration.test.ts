@@ -1,3 +1,4 @@
+import * as githubTaskPreparation from "../services/chat-channels/github/task-preparation.js";
 import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
 import { budgetPolicies } from "@paperclipai/db";
 import { budgetService } from "../services/budgets.js";
@@ -61020,10 +61021,24 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
   );
 
   it.each([
-    ...(["real_budget_ingress", "source_app_changed", "source_destination_changed", "accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
+    ...(["real_budget_ingress", "legacy_budget_ingress", "legacy_prior_response", "legacy_no_prior", "legacy_prior_late", "legacy_prior_unprocessed", "legacy_prior_delivery_unprocessed", "legacy_prior_numeric_app", "legacy_response_conflict", "legacy_prior_wrong_app", "legacy_prior_wrong_agent", "legacy_prior_unlinked", "legacy_prior_retargeted", "legacy_explicit_null", "legacy_explicit_empty", "legacy_explicit_malformed", "legacy_explicit_mismatch", "legacy_current_app_changed", "source_app_changed", "source_destination_changed", "accepted", "multiple_saved", "real_queue", "committed_succeeded", "committed_consumed", "committed_failure", "committed_failed_publication", "committed_unknown_publication", "committed_pending_publication", "committed_mixed_publication", "committed_consumed_publication", "committed_succeeded_publication", "committed_delayed_cleanup", "committed_unknown_cleanup", "committed_live_controller", "unreconciled", "source_edited", "source_claimed", "malformed_previous", "endpoint_paused", "principal_revoked", "still_budget_blocked"] as const)
       .map(mode => ({ provider: "github" as const, mode })),
   ])("retries the newer saved $provider request instead of the failed request after a budget hold: $mode", async ({ provider, mode }) => {
-    const context = await failedChatRetryFixture(provider, mode === "real_budget_ingress" ? "42" : undefined, true, false, mode === "real_budget_ingress");
+    const legacyIngress = mode.startsWith("legacy_");
+    const realBudgetIngress = mode === "real_budget_ingress" || legacyIngress;
+    if (legacyIngress) {
+      // The legacy intake producer retained requester authority but no App ID.
+      // A budget refusal never reaches the acknowledgement which could bind it.
+      const historical = vi.spyOn(githubTaskPreparation, "retainGitHubDeliveryAuthority").mockImplementation(
+        async (tx, endpoint, deliveryId, linkedUserId, taskUserId) => {
+          const guest = !linkedUserId;
+          await tx.update(chatDeliveries).set({ normalizedEvent: sql`${chatDeliveries.normalizedEvent} || ${JSON.stringify({
+            githubAuthority: { guest, responsibleUserId: taskUserId, sponsorUserId: guest ? endpoint.sponsorUserId : null },
+          })}::jsonb` }).where(eq(chatDeliveries.id, deliveryId));
+        });
+      onTestFinished(() => historical.mockRestore());
+    }
+    const context = await failedChatRetryFixture(provider, realBudgetIngress ? "42" : undefined, true, false, realBudgetIngress);
     try {
       const companyId = context.fixture.companyId;
       const [skill] = await db.insert(companySkills).values({ companyId, key: `company/${companyId}/saved-review`,
@@ -61032,12 +61047,22 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         const configured = await githubChatManagementService(db).configuration(context.endpoint.id, "owner-user");
         const configuration = { ...configured.configuration, defaults: { ...configured.configuration.defaults,
           instructions: `Use [/saved-review](skill://${skill.id}).` } };
-        if (mode === "real_budget_ingress") await githubChatManagementService(db).saveConfiguration(context.endpoint.id,
+        if (realBudgetIngress) await githubChatManagementService(db).saveConfiguration(context.endpoint.id,
           { expectedRevision: configured.revision, configuration }, "owner-user");
         else await db.insert(chatGitHubConfigurations).values({ companyId, endpointId: context.endpoint.id,
           configuration, updatedByUserId: "owner-user", revision: 2 });
       }
-      if (mode === "real_budget_ingress") {
+      if (legacyIngress) {
+        await githubResponseCommentService(db, context.providerFetch).tryAcknowledge(context.action.deliveryId!);
+        const [prior] = await db.select().from(chatActions).where(and(
+          eq(chatActions.deliveryId, context.action.deliveryId!), eq(chatActions.kind, "github_response_comment")));
+        expect(prior).toMatchObject({ status: "processed", payload: {
+          botExternalId: (await context.service.get(context.endpoint.id)).botExternalId, agentId: context.fixture.assignedAgentId,
+        } });
+      }
+      if (mode === "legacy_no_prior") await db.delete(chatActions).where(and(
+        eq(chatActions.deliveryId, context.action.deliveryId!), eq(chatActions.kind, "github_response_comment")));
+      if (realBudgetIngress) {
         await db.update(heartbeatRuns).set({ costAccountingPending: true }).where(eq(heartbeatRuns.id, context.runId));
         await db.insert(budgetPolicies).values({ companyId, scopeType: "agent", scopeId: context.fixture.assignedAgentId,
           metric: "billed_cents", windowKind: "lifetime", amount: 100, notifyEnabled: false });
@@ -61053,7 +61078,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           status: "skipped", finishedAt: new Date() });
         return null;
       });
-      if (mode === "real_budget_ingress") {
+      if (realBudgetIngress) {
         const endpoint = await context.service.get(context.endpoint.id);
         attachFakeGitHubIssueCommentWebhook({ botUsername: endpoint.botUsername!, callbacks: context.runtime.configurations.get(endpoint.id)!.callbacks,
           endpointId: endpoint.id, runtime: context.runtime.endpoints.get(endpoint.id)! });
@@ -61088,7 +61113,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       const expectedComments = savedInputs.map(action => action.payload.commentId);
       expect(saved, JSON.stringify((await db.select({ state: chatDeliveries.state, error: chatDeliveries.redactedError, event: chatDeliveries.eventKind }).from(chatDeliveries).where(eq(chatDeliveries.endpointId, context.endpoint.id))))).toMatchObject({ status: "failed", result: { receiptStatus: "skipped" } });
       expect(saved.payload.commentId).not.toBe(context.action.payload.commentId);
-      if (mode === "real_budget_ingress") {
+      if (realBudgetIngress) {
         expect((await readAgentWakeupRequestsById(saved.id))[0]).toMatchObject({ status: "skipped", reason: "budget.blocked",
           runId: null, requestedByActorType: "user", requestedByActorId: "owner-user" });
         await db.update(budgetPolicies).set({ isActive: false }).where(eq(budgetPolicies.companyId, companyId));
@@ -61170,6 +61195,44 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       const previousPublications = await readChatPublicationsByEndpointId(context.endpoint.id);
       const request = { db, companyId, issueId: context.issue.id, actorId: "owner-user", actorSource: "cloud_tenant",
         observedRunId: context.runId, idempotencyKey: randomUUID(), prepareChatRetry: context.service.prepareFailedChatRunRetry };
+      if (legacyIngress) {
+        const [delivery] = await db.select().from(chatDeliveries).where(eq(chatDeliveries.id, saved.deliveryId!));
+        expect(delivery.normalizedEvent.githubAuthority).not.toHaveProperty("botExternalId");
+        expect(await db.select({ id: chatActions.id }).from(chatActions).where(and(
+          eq(chatActions.deliveryId, saved.deliveryId!), eq(chatActions.kind, "github_response_comment")))).toHaveLength(0);
+        const priorWhere = and(eq(chatActions.deliveryId, context.action.deliveryId!), eq(chatActions.kind, "github_response_comment"));
+        if (mode === "legacy_prior_late") await db.update(chatActions).set({ createdAt: new Date(delivery.createdAt.getTime() + 1) }).where(priorWhere);
+        if (mode === "legacy_prior_unprocessed") await db.update(chatActions).set({ status: "received" }).where(priorWhere);
+        if (mode === "legacy_prior_delivery_unprocessed") await db.update(chatDeliveries).set({ state: "failed" })
+          .where(eq(chatDeliveries.id, context.action.deliveryId!));
+        if (mode === "legacy_prior_numeric_app") await db.update(chatActions).set({
+          payload: sql`jsonb_set(${chatActions.payload}, '{botExternalId}', ${JSON.stringify(Number((await context.service.get(context.endpoint.id)).botExternalId))}::jsonb)`,
+        }).where(priorWhere);
+        if (mode === "legacy_response_conflict") await db.insert(chatActions).values({ companyId,
+          endpointId: context.endpoint.id, conversationId: context.conversation.id, deliveryId: delivery.id,
+          principalId: delivery.principalId, kind: "github_response_comment", providerActionId: `github_response:${delivery.id}`,
+          status: "processed", payload: { botExternalId: "conflicting-app", agentId: context.fixture.assignedAgentId } });
+        if (mode === "legacy_prior_wrong_app" || mode === "legacy_prior_wrong_agent") await db.update(chatActions).set({
+          payload: sql`jsonb_set(${chatActions.payload}, ${mode === "legacy_prior_wrong_app" ? "{botExternalId}" : "{agentId}"}, '"another-identity"'::jsonb)`,
+        }).where(priorWhere);
+        if (mode === "legacy_prior_unlinked") await db.delete(chatMessageLinks).where(eq(chatMessageLinks.deliveryId, context.action.deliveryId!));
+        if (mode === "legacy_prior_retargeted") await db.update(chatActions).set({ providerActionId: "github_response:unbound" }).where(priorWhere);
+        if (mode.startsWith("legacy_explicit_")) await db.update(chatDeliveries).set({ normalizedEvent: {
+          ...delivery.normalizedEvent, githubAuthority: { ...(delivery.normalizedEvent.githubAuthority as object),
+            botExternalId: mode === "legacy_explicit_null" ? null : mode === "legacy_explicit_empty" ? ""
+              : mode === "legacy_explicit_malformed" ? { appId: "untrusted" } : "another-app" },
+        } }).where(eq(chatDeliveries.id, delivery.id));
+        if (mode === "legacy_current_app_changed") await db.update(chatEndpoints).set({ botExternalId: randomUUID() })
+          .where(eq(chatEndpoints.id, context.endpoint.id));
+        if (mode !== "legacy_budget_ingress" && mode !== "legacy_prior_response") {
+          await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: {
+            code: "chat_failed_run_retry_not_authorized", reason: "source_authorization", authorityReason: "app_binding",
+          } });
+          expect((await readAgentWakeupRequestsById(saved.id))[0]).toMatchObject({ status: "skipped", runId: null });
+          expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual(previousPublications);
+          return;
+        }
+      }
       if (mode === "source_app_changed" || mode === "source_destination_changed") {
         await expect(requestTaskRetry(request)).rejects.toMatchObject({ details: {
           code: "chat_failed_run_retry_not_authorized", reason: "source_authorization",
@@ -61204,7 +61267,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         .where(eq(chatEndpoints.id, context.endpoint.id));
       if (mode === "principal_revoked") await db.update(companyMemberships).set({ status: "suspended" })
         .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.principalId, "owner-user")));
-      if (mode === "real_budget_ingress" || mode === "real_queue" || mode === "unreconciled" || mode.startsWith("committed_")) {
+      if (realBudgetIngress || mode === "real_queue" || mode === "unreconciled" || mode.startsWith("committed_")) {
         // Capacity prevents a real provider start while exercising production
         // admission, persisted source identity, and queue ownership.
         await db.update(agents).set({ adapterType: "paperclip_runner", status: "running",

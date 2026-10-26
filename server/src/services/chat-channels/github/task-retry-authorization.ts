@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { agentWakeupRequests, chatActions, chatConversations, chatDeliveries, chatEndpointResources, chatMessageLinks, issueComments, toolConnections } from "@paperclipai/db";
 import { chatWakeAuthorityDenied } from "../inbound/wakeup-authorization-error.js";
 import type { DbOrTransaction, EndpointRow, LifecycleRuntimeFence } from "../runtime-types.js";
@@ -35,6 +35,37 @@ export function githubTaskRetryAppMatches(endpoint: EndpointRow, delivery: typeo
     : response?.payload.botExternalId === endpoint.botExternalId && response.payload.agentId === endpoint.assignedAgentId;
 }
 
+/** Legacy intake did not persist an App ID when admission stopped before
+ * acknowledgement. An earlier request ledger proves this endpoint had already
+ * claimed the App: response payloads are server-owned and a non-null endpoint
+ * claim cannot be replaced by setup, reconnect, or lifecycle repair. This is
+ * identity evidence only; the earlier response is never replayed. */
+async function githubTaskRetryAppAuthorized(tx: DbOrTransaction, endpoint: EndpointRow,
+  delivery: typeof chatDeliveries.$inferSelect, response: { payload: Record<string, unknown> } | undefined) {
+  if (githubTaskRetryAppMatches(endpoint, delivery, response)) return true;
+  const original = delivery.normalizedEvent.githubAuthority as { botExternalId?: unknown } | undefined;
+  // Never substitute historical evidence for an explicit conflicting binding.
+  if (original?.botExternalId !== undefined || response || !endpoint.botExternalId || !delivery.conversationId) return false;
+  const [prior] = await tx.select({ id: chatActions.id }).from(chatActions)
+    .innerJoin(chatDeliveries, and(eq(chatDeliveries.id, chatActions.deliveryId),
+      eq(chatDeliveries.companyId, chatActions.companyId), eq(chatDeliveries.endpointId, chatActions.endpointId),
+      eq(chatDeliveries.conversationId, chatActions.conversationId), eq(chatDeliveries.principalId, chatActions.principalId)))
+    .innerJoin(chatMessageLinks, and(eq(chatMessageLinks.deliveryId, chatDeliveries.id),
+      eq(chatMessageLinks.companyId, chatDeliveries.companyId), eq(chatMessageLinks.endpointId, chatDeliveries.endpointId),
+      eq(chatMessageLinks.conversationId, chatDeliveries.conversationId), eq(chatMessageLinks.direction, "inbound")))
+    .where(and(eq(chatActions.companyId, endpoint.companyId), eq(chatActions.endpointId, endpoint.id),
+      eq(chatActions.conversationId, delivery.conversationId), eq(chatActions.kind, "github_response_comment"),
+      eq(chatActions.status, "processed"), eq(chatDeliveries.state, "processed"),
+      eq(chatActions.providerActionId, sql<string>`'github_response:' || ${chatDeliveries.id}::text`),
+      sql`jsonb_typeof(${chatActions.payload}->'botExternalId') = 'string'`,
+      sql`${chatActions.payload}->>'botExternalId' = ${endpoint.botExternalId}`,
+      sql`jsonb_typeof(${chatActions.payload}->'agentId') = 'string'`,
+      sql`${chatActions.payload}->>'agentId' = ${endpoint.assignedAgentId}`,
+      lt(chatActions.createdAt, delivery.createdAt), lt(chatDeliveries.createdAt, delivery.createdAt)))
+    .limit(1);
+  return Boolean(prior);
+}
+
 export function githubTaskRetryDestinationMatches(delivery: typeof chatDeliveries.$inferSelect,
   conversation: typeof chatConversations.$inferSelect, resource: typeof chatEndpointResources.$inferSelect | null) {
   const originalResource = delivery.normalizedEvent.resource as { providerResourceId?: unknown } | undefined;
@@ -64,7 +95,7 @@ export async function githubTaskRetryRuntimeFence(tx: DbOrTransaction, endpoint:
     eq(chatActions.conversationId, action.conversationId!), eq(chatActions.deliveryId, delivery.id),
     eq(chatActions.kind, "github_response_comment"),
   ));
-  if (!githubTaskRetryAppMatches(endpoint, delivery, response)) throw deny("app_binding");
+  if (!(await githubTaskRetryAppAuthorized(tx, endpoint, delivery, response))) throw deny("app_binding");
   const [connection] = await tx.select({ refs: toolConnections.credentialSecretRefs,
     enabled: toolConnections.enabled, status: toolConnections.status }).from(toolConnections).where(and(
     eq(toolConnections.companyId, endpoint.companyId), eq(toolConnections.id, endpoint.connectionId),
@@ -134,7 +165,7 @@ export function createGitHubTaskRetryBatchAuthority<T extends GitHubRetryBinding
       }
       if (delivery.state !== "processed" || delivery.endpointId !== current.endpoint.id ||
           delivery.conversationId !== current.conversation.id || delivery.principalId !== action.principalId ||
-          !githubTaskRetryAppMatches(current.endpoint, delivery, legacyByDelivery.get(delivery.id)) ||
+          !(await githubTaskRetryAppAuthorized(tx, current.endpoint, delivery, legacyByDelivery.get(delivery.id))) ||
           !githubTaskRetryDestinationMatches(delivery, current.conversation, current.resource)) throw deny("destination_binding");
       authorized.set(action.id, { ...current, delivery });
     }

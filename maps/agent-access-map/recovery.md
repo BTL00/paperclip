@@ -8,7 +8,10 @@ Ordinary board Retry can reauthorize saved GitHub input for the same App after
 reconnect. It pins current runtime authority and preserves sender, repository,
 conversation and task checks. Pending input takes precedence over the older
 failed request and transfers once to the retry owner. This grants no new agent
-Retry API or stale webhook authority. Local PostgreSQL and HTTP-route regressions
+Retry API or stale webhook authority. Legacy input can use a server-owned,
+processed earlier response ledger to prove the same endpoint's App claim before
+that input. Company, conversation, agent and prior delivery/source linkage remain
+required. Explicit conflicting App IDs cannot use that fallback. Local PostgreSQL and HTTP-route regressions
 cover these transitions; hosted execution and delivery remain separate acceptance.
 
 Source revision: `3bbc2104b65caf9f7763938a01260a5673e12f7a`.
