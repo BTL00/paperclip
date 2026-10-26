@@ -2442,9 +2442,41 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.goals.create-goal-tree",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.goals.create-goal-tree",
+          "startedAt": "2026-10-26T22:19:12.393Z",
+          "finishedAt": "2026-10-26T22:19:57.928Z",
+          "sourceRevision": "10d0ce63610dd85ae338b0cc4d9addcba2cd8f80",
+          "workingTreeDigest": "612cddbe7dee08bf913c475d01604b920cf60d0267e6f5a3e24ef105a6726d2c",
+          "definitionDigest": "b7213eef67c005adcd7d62c6ce0300f7da13adca226afbfbb4a1f997988c14d5",
+          "suiteDefinitionDigest": "afa382de81e8fd69fcb2da74c6ed06a5ddfbcded24cdf120b2e28ca4096a2ef0",
+          "graderDigest": "b7213eef67c005adcd7d62c6ce0300f7da13adca226afbfbb4a1f997988c14d5",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "eval_defect; machine=candidate_failure",
+          "observedFailure": "Selected domain .js dynamic import does not resolve source .ts in Playwright; report also rejects canonical dotted task IDs. No human query or goal action executed.",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/preflight-10d0ce63610.json",
+            "tests/runner-e2e/results/local-2026-10-26T22-19-23-608Z/chat-features/runner-codex-subscription/local/goals.create-goal-tree/attempt-1/result.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "coverage": "No accounted heartbeat runs; setup hello probes outside heartbeat accounting",
+            "tokens": null
+          },
+          "cleanup": "passed",
+          "corePrDependencies": []
+        }
+      ],
+      "qualifyingDefinitionDigest": "b7213eef67c005adcd7d62c6ce0300f7da13adca226afbfbb4a1f997988c14d5",
+      "qualifyingGraderDigest": "b7213eef67c005adcd7d62c6ce0300f7da13adca226afbfbb4a1f997988c14d5"
     },
     {
       "id": "goals.explain-purpose",

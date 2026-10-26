@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { ChatCatalogCase } from "./chat-catalog-contract.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
@@ -26,13 +26,18 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
     throw new Error(`Incomplete bounds/provenance for ${scenarioId}`);
   return descriptor;
 }
+/** Source-local Playwright imports need the real .ts URL; compiled consumers retain .js. */
+export function chatCatalogModuleUrl(modulePath: string): string {
+  const source = new URL(modulePath.replace(/\.js$/, ".ts"), import.meta.url);
+  return existsSync(source) ? source.href : new URL(modulePath, import.meta.url).href;
+}
 export async function loadChatCatalogImplementation(
   descriptor: ChatCatalogDescriptor,
   importer: (specifier: string) => Promise<Record<string, unknown>> = specifier => import(specifier),
 ): Promise<ChatCatalogCase> {
   if (descriptor.journeyKind === "browser-boundary") throw new Error("Browser boundary cannot enter ordinary Agent Chat dispatch");
   // The sole dynamic import boundary: only the selected descriptor's module executes.
-  const module = await importer(new URL(descriptor.modulePath, import.meta.url).href);
+  const module = await importer(chatCatalogModuleUrl(descriptor.modulePath));
   const implementations = module[descriptor.exportName];
   if (!Array.isArray(implementations)) throw new Error(`Missing domain export: ${descriptor.exportName}`);
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
@@ -58,7 +63,7 @@ export async function loadIdentityBoundaryImplementation(descriptor: ChatCatalog
     throw new Error("Only explicit catalog browser boundaries may bypass Agent Chat prerequisites");
   if (descriptor.expectedRunCount !== 0 || (descriptor.minimumRunCount ?? 0) !== 0 || descriptor.expectedHumanMessageCount !== 0)
     throw new Error("Pre-chat boundaries require zero agent admissions and zero persisted chat queries");
-  const module = await importer(new URL(descriptor.modulePath, import.meta.url).href);
+  const module = await importer(chatCatalogModuleUrl(descriptor.modulePath));
   const rows = module[descriptor.exportName];
   const selected = Array.isArray(rows) ? rows.filter(row => row.scenarioId === descriptor.scenarioId) : [];
   if (selected.length !== 1) throw new Error("Missing or duplicate browser boundary implementation");
