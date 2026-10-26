@@ -32,10 +32,20 @@ export function identityObservation(value: unknown): IdentityObservation | undef
     && [o.tasks, o.projects, o.goals, o.activity, o.documents, o.links, o.runs, o.companies, o.agents, o.interactions].every(Array.isArray) ? o : undefined;
 }
 export function identityDefinition(scenarioId: string, setup: ChatCatalogCase["setup"], grade: ChatCatalogCase["grade"], extra: Partial<ChatCatalogCase> = {}): ChatCatalogCase {
-  return { scenarioId, setup, grade, observe: observeIdentity, oracleVersion: "paperclip.chat-catalog.identity.v1",
+  const definition: ChatCatalogCase = { scenarioId, setup, grade, observe: observeIdentity, oracleVersion: "paperclip.chat-catalog.identity.v1",
     sourceFiles: ["chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", `chat-catalog-domains/identity-${scenarioId.split(".")[0]}.ts`, `chat-scenarios/${scenarioId.split(".")[0]}.yaml`],
     expectedRunCount: 1, turnTimeoutMs: 120_000, attemptTimeoutMs: 300_000,
     async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); }, ...extra };
+  return { ...definition,
+    async setup(ctx) {
+      try { return await definition.setup(ctx); }
+      catch (error) { await cleanupIdentityProbes(ctx); throw error; }
+    },
+    async cleanup(ctx, state) {
+      try { await cleanupIdentityProbes(ctx); }
+      finally { await definition.cleanup?.(ctx, state); }
+    },
+  };
 }
 export async function waitForReply(ctx: ChatCatalogContext) {
   const { pollUntil } = await import("../api.js");
@@ -56,27 +66,38 @@ export async function identityWorker(ctx: ChatCatalogContext, name = "Morgan") {
 }
 /** Real agent bearer, public route and HTTP status. Never pass bearer into
  * Playwright requests, case state, screenshots, model context or evidence. */
+const identityProbeKeys = new WeakMap<ChatCatalogContext, Promise<{ id: string; token: string }>>();
+async function identityProbeKey(ctx: ChatCatalogContext) {
+  if (!ctx.input.privateSecrets) throw new Error("Identity probes require attempt-private credential redaction");
+  let pending = identityProbeKeys.get(ctx);
+  if (!pending) {
+    pending = ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${ctx.input.fixtures.agent.id}/keys`, { name: `chat-eval-probe-${ctx.input.nonce}` })
+      .then(key => { ctx.input.privateSecrets!.push(key.token); return key; });
+    identityProbeKeys.set(ctx, pending);
+  }
+  return pending;
+}
+export async function cleanupIdentityProbes(ctx: ChatCatalogContext) {
+  const pending = identityProbeKeys.get(ctx); if (!pending) return;
+  const key = await pending;
+  await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${key.id}`, { allowNotFound: true });
+  identityProbeKeys.delete(ctx);
+}
 export async function probeAgentPermission(ctx: ChatCatalogContext, path: string, method: string, body?: unknown) {
-  const id = ctx.input.fixtures.agent.id;
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${id}/keys`, { name: `chat-eval-probe-${ctx.input.nonce}` });
-  try {
     const target = new URL(path, ctx.input.api.baseURL);
     if (target.origin !== ctx.input.api.baseURL || !target.pathname.startsWith("/api/")) throw new Error("Agent permission probe escaped fixture API");
+    const key = await identityProbeKey(ctx);
     const response = await fetch(target, { method, redirect: "error", signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     await response.body?.cancel(); return response.status;
-  } finally { await ctx.input.api.delete(`/api/agents/${id}/keys/${key.id}`); }
 }
 export async function readAgentResource(ctx: ChatCatalogContext, path: string): Promise<{ status: number; data?: unknown }> {
-  const id = ctx.input.fixtures.agent.id;
-  const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${id}/keys`, { name: `chat-eval-read-${ctx.input.nonce}` });
-  try {
     const target = new URL(path, ctx.input.api.baseURL);
     if (target.origin !== ctx.input.api.baseURL || !target.pathname.startsWith("/api/")) throw new Error("Agent read escaped fixture API");
+    const key = await identityProbeKey(ctx);
     const response = await fetch(target, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } });
     if (!response.ok) { await response.body?.cancel(); return { status: response.status }; }
     return { status: response.status, data: await response.json() };
-  } finally { await ctx.input.api.delete(`/api/agents/${id}/keys/${key.id}`); }
 }
 export async function followRenderedLink(ctx: ChatCatalogContext, href: string) {
   const link = ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first();
