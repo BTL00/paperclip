@@ -51,13 +51,16 @@ raw provider receipts into tracked files/public evidence.
 
 The two project repository scenarios use a `github` provider binding with an
 explicitly authorized token environment reference `tokenEnv` (also present in
-`credentialEnv`). Add-repository requires `siteRepositoryId`; replacement requires
-`oldRepositoryId` and `newRepositoryId`. Each numeric ID must occur in
-`resourceIds`. The scoped disposable credential must independently expose the
-canonical synthetic names `acorn/site`, `acorn/site-old`, and `acorn/site-new`
-needed by the selected query through the production GitHub connection. Different
-real names require a reviewed query identity binding; they are never silently
-substituted. The fixture creates a company-owned encrypted secret and public
+`credentialEnv`). Add-repository requires `siteRepositoryId` and
+`siteRepositoryFullName`; replacement requires `oldRepositoryId`,
+`oldRepositoryFullName`, `newRepositoryId`, and `newRepositoryFullName`. Each safe
+numeric ID must occur in `resourceIds`, and each full name must identify its
+authorized disposable owner/repository. The scoped credential must independently
+expose those identities through the production GitHub connection. The audited
+query binding replaces only `acorn/site`, `acorn/site-old`, or `acorn/site-new`
+with the corresponding current provider identity after independent public API
+readback validates its company, active connection and allowlisted numeric ID.
+The remaining catalog prose is unchanged. The fixture creates a company-owned encrypted secret and public
 connection, verifies current repository discovery, and deletes both on cleanup.
 Ambient `gh` authentication and personal credentials are never adopted.
 

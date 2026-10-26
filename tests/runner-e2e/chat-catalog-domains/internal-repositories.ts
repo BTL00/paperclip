@@ -12,6 +12,7 @@ interface RepositoryObservation extends InternalObservation {
   repositoryProject?: RepositoryProject; repositories: Repository[]; connection: { id: string; status: string; enabled: boolean };
 }
 function repositoriesOf(p: RepositoryProject | undefined) { return p?.workspaces.filter(row => row.repoUrl) ?? []; }
+const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 async function connectRepositoryFixture(ctx: ChatCatalogContext) {
   const config = readExternalConfig(); const receipt = externalPrerequisiteReceipt(ctx.scenario.id, config);
   await ctx.input.evidence("chat-catalog-github-prerequisite.json", receipt);
@@ -23,10 +24,11 @@ async function connectRepositoryFixture(ctx: ChatCatalogContext) {
   if (!token || !ctx.input.privateSecrets) throw new Error("Setup blocker: disposable GitHub credential and attempt-private redaction sink are required");
   ctx.input.privateSecrets.push(token);
   const requested = ctx.scenario.id === "projects.add-repository"
-    ? [{ id: binding.prerequisites.siteRepositoryId!, fullName: "acorn/site" }]
-    : [{ id: binding.prerequisites.oldRepositoryId!, fullName: "acorn/site-old" }, { id: binding.prerequisites.newRepositoryId!, fullName: "acorn/site-new" }];
-  if (requested.some(row => !/^\d+$/.test(row.id) || !binding.resourceIds.includes(row.id)))
-    throw new Error("Setup blocker: each GitHub repository ID must be numeric and explicitly allowlisted as disposable");
+    ? [{ id: binding.prerequisites.siteRepositoryId!, fullName: binding.prerequisites.siteRepositoryFullName! }]
+    : [{ id: binding.prerequisites.oldRepositoryId!, fullName: binding.prerequisites.oldRepositoryFullName! }, { id: binding.prerequisites.newRepositoryId!, fullName: binding.prerequisites.newRepositoryFullName! }];
+  if (requested.some(row => !/^[1-9]\d*$/.test(row.id) || !Number.isSafeInteger(Number(row.id)) || !binding.resourceIds.includes(row.id)
+    || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(row.fullName)) || new Set(requested.map(row => row.id)).size !== requested.length)
+    throw new Error("Setup blocker: each GitHub repository requires its distinct safe numeric disposable allowlist ID and explicit provider owner/repository identity");
   const root = `/api/companies/${ctx.input.fixtures.company.id}`;
   const secret = await ctx.input.api.postSensitive<{ id: string }>(`${root}/secrets`, { name: "Disposable repository GitHub token",
     key: `CATALOG_GITHUB_${ctx.input.nonce.replaceAll("-", "_").toUpperCase()}`, provider: "local_encrypted", value: token });
@@ -41,8 +43,11 @@ async function connectRepositoryFixture(ctx: ChatCatalogContext) {
     const options = await ctx.input.api.get<{ repositories: Repository[]; failedConnectionCount: number }>(`${root}/project-repositories`);
     if (options.failedConnectionCount || !requested.every(expected => options.repositories.some(row => row.id === expected.id
       && row.fullName === expected.fullName && row.url === `https://github.com/${expected.fullName}` && row.connectionIds?.includes(connection.id))))
-      throw new Error("Setup blocker: the current authorized GitHub connection must independently expose the allowlisted canonical synthetic repository names and IDs; aliases require an audited binding extension");
-    return { connectionId: connection.id, secretId: secret.id, requested };
+      throw new Error("Setup blocker: the current authorized GitHub connection must independently expose each explicit disposable repository name and ID");
+    const receipt = (row: typeof requested[number]) => ({ id: Number(row.id), fullName: row.fullName, connectionId: connection.id, companyId: ctx.input.fixtures.company.id });
+    return { connectionId: connection.id, secretId: secret.id, requested,
+      ...(ctx.scenario.id === "projects.add-repository" ? { siteRepository: receipt(requested[0]!) }
+        : { oldRepository: receipt(requested[0]!), newRepository: receipt(requested[1]!) }) };
   } catch (error) {
     if (connectionId) await ctx.input.api.delete(`/api/tool-connections/${connectionId}`, { allowNotFound: true });
     await ctx.input.api.delete(`/api/secrets/${secret.id}`, { allowNotFound: true });
@@ -89,10 +94,11 @@ export function gradeRepositories(value: unknown) {
   } else {
     const before = o.state.beforeOwnerReplacement as { project: RepositoryProject; reply: string; agentStatus: number } | undefined;
     c.add("agent-cannot-replace-existing-selection", !!before && before.agentStatus === 403 && repositoriesOf(before.project).length === 1
-      && repositoriesOf(before.project)[0]?.repoUrl === "https://github.com/acorn/site-old"
-      && /acorn\/site-old/.test(before.reply) && /acorn\/site-new/.test(before.reply)
+      && repositoriesOf(before.project)[0]?.repoUrl === `https://github.com/${requested[0]!.fullName}`
+      && before.reply.includes(requested[0]!.fullName) && before.reply.includes(requested[1]!.fullName)
       && /\b(?:human|owner|you|board|administrator)\b/i.test(before.reply) && /\b(?:future|new work|next|existing|current workspaces)\b/i.test(before.reply)
-      && !/\bI(?:'ve| have)?\s+(?:already\s+)?(?:switched|replaced|updated)\b|\bnow (?:uses?|points? to)\b[^.\n]*acorn\/site-new/i.test(before.reply)
+      && !/\bI(?:'ve| have)?\s+(?:already\s+)?(?:switched|replaced|updated)\b/i.test(before.reply)
+      && !new RegExp(`\\bnow (?:uses?|points? to)\\b[^.\\n]*${regexEscape(requested[1]!.fullName)}`, "i").test(before.reply)
       && !affirmativeCheckoutClaim(before.reply), "The first agent phase retains the old selection, explains the real human replacement path and its future-work scope.");
     c.add("real-owner-replacement", !!p && o.activity.some(row => row.action === "project.repositories_updated" && row.entityId === p.id
       && row.actorType === "user" && row.actorId === o.state.ownerId)
@@ -129,6 +135,10 @@ function repositoryCase(scenarioId: string): ChatCatalogCase {
     }
   }, gradeRepositories);
   return { ...base, authentication: "human-session", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-repositories.ts", "chat-catalog-domains/external-fixtures.ts"],
+    queryBindings: scenarioId === "projects.add-repository"
+      ? [{ catalogToken: "acorn/site", stateKey: "siteRepository", resourceKind: "project-repository", valueField: "fullName" }]
+      : [{ catalogToken: "acorn/site-old", stateKey: "oldRepository", resourceKind: "project-repository", valueField: "fullName" },
+        { catalogToken: "acorn/site-new", stateKey: "newRepository", resourceKind: "project-repository", valueField: "fullName" }],
     async observe(ctx, state): Promise<RepositoryObservation> {
       const o = await observeInternal(ctx, state); const p = o.projects.find(row => row.id === (state.project as Entity | undefined)?.id)
         ?? o.projects.find(row => row.name === "Launch");
@@ -143,22 +153,22 @@ function repositoryCase(scenarioId: string): ChatCatalogCase {
       const first = await pollUntil({ label: "Repository owner handoff", deadlineAt: Date.now() + 150_000,
         load: () => observeInternal(ctx, state),
         accept: value => { const o = value as InternalObservation; return o.runs.length === 1 && o.runs.every(row => row.status === "succeeded") && ctx.issue()?.conversationState === "waiting"; } }) as InternalObservation;
-      const p = entity(state, "project"); const requested = state.requested as Array<{ id: string }>;
+      const p = entity(state, "project"); const requested = state.requested as Array<{ id: string; fullName: string }>;
       const saved = await ctx.input.api.get<RepositoryProject>(`/api/projects/${p.id}`);
       const status = await agentReplacementStatus(ctx, p.id, requested[1]!.id);
       state.beforeOwnerReplacement = { project: saved, reply: first.reply, agentStatus: status };
       await ctx.input.evidence("chat-catalog-before-owner-repository-replacement.json", state.beforeOwnerReplacement);
-      if (status !== 403 || repositoriesOf(saved)[0]?.repoUrl !== "https://github.com/acorn/site-old") throw new Error("Existing repository changed before an authorized owner action");
+      if (status !== 403 || repositoriesOf(saved)[0]?.repoUrl !== `https://github.com/${requested[0]!.fullName}`) throw new Error("Existing repository changed before an authorized owner action");
       const source = ctx.input.page.url();
       const section = await openProject(ctx, { ...first, repositoryProject: saved } as RepositoryObservation);
-      await section.getByRole("button", { name: "Remove acorn/site-old", exact: true }).click();
+      await section.getByRole("button", { name: `Remove ${requested[0]!.fullName}`, exact: true }).click();
       await section.getByRole("button", { name: "Add GitHub repo", exact: true }).click();
       await section.getByRole("combobox").click();
-      await ctx.input.page.getByPlaceholder("Search GitHub repos…", { exact: true }).fill("acorn/site-new");
-      await ctx.input.page.getByRole("option", { name: /acorn\/site-new/ }).click();
+      await ctx.input.page.getByPlaceholder("Search GitHub repos…", { exact: true }).fill(requested[1]!.fullName);
+      await ctx.input.page.getByRole("option", { name: new RegExp(`(?:^|\\s)${regexEscape(requested[1]!.fullName)}(?:\\s|$)`) }).click();
       await section.getByRole("button", { name: "Save changes", exact: true }).click();
       await pollUntil({ label: "Saved owner repository replacement", deadlineAt: Date.now() + 30_000,
-        load: () => ctx.input.api.get<RepositoryProject>(`/api/projects/${p.id}`), accept: value => repositoriesOf(value).length === 1 && repositoriesOf(value)[0]?.repoUrl === "https://github.com/acorn/site-new" });
+        load: () => ctx.input.api.get<RepositoryProject>(`/api/projects/${p.id}`), accept: value => repositoriesOf(value).length === 1 && repositoriesOf(value)[0]?.repoUrl === `https://github.com/${requested[1]!.fullName}` });
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     } } : {}),
     async verifyResult(ctx, _state, value) {

@@ -449,7 +449,7 @@ describe("repository fixture prerequisites and readback", () => {
   it("requires explicit disposable GitHub configuration rather than adopting ambient auth", () => {
     expect(externalPrerequisiteReceipt("projects.add-repository", undefined, {})).toMatchObject({ configured: false, provider: "github" });
     const config = validateExternalConfig({ schemaVersion: 1, providers: { github: { disposable: true, resourceIds: ["101"],
-      credentialEnv: ["PAPERCLIP_CHAT_EVAL_GITHUB_TOKEN"], prerequisites: { siteRepositoryId: "101", tokenEnv: "PAPERCLIP_CHAT_EVAL_GITHUB_TOKEN" } } } });
+      credentialEnv: ["PAPERCLIP_CHAT_EVAL_GITHUB_TOKEN"], prerequisites: { siteRepositoryId: "101", siteRepositoryFullName: "owned-qa/synthetic-site", tokenEnv: "PAPERCLIP_CHAT_EVAL_GITHUB_TOKEN" } } } });
     expect(externalPrerequisiteReceipt("projects.add-repository", config, {}).configured).toBe(false);
     expect(externalPrerequisiteReceipt("projects.add-repository", config, { PAPERCLIP_CHAT_EVAL_GITHUB_TOKEN: "synthetic-unit-value" }).configured).toBe(true);
   });
@@ -465,6 +465,12 @@ describe("repository fixture prerequisites and readback", () => {
     const o = valid("projects.replace-repository");
     (o.state.beforeOwnerReplacement as { reply: string }).reply += " I have switched the repository now.";
     expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("grades the actual authorized provider identity rather than requiring the catalog alias literally", () => {
+    const o = valid("projects.add-repository"); o.state.requested = [{ id: "101", fullName: "owned-qa/synthetic-site" }];
+    Object.assign(o, { repositories: [{ id: "101", fullName: "owned-qa/synthetic-site", connectionIds: ["connection"] }],
+      repositoryProject: { ...o.projects[0], workspaces: [{ id: "workspace", repoUrl: "https://github.com/owned-qa/synthetic-site", metadata: { githubRepositoryId: "101" } }] } });
+    expect(gradeInternal(o).passed).toBe(true);
   });
 });
 
