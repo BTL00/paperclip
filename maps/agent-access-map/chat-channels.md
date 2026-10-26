@@ -283,6 +283,15 @@ real human dependencies retain the ordinary attention-request path. A timed
 wait requires a confirmed `set_task_monitor` schedule. Database coverage lives
 in `external-chat-wait.integration.test.ts`; this is not live model evidence.
 
+Inherited GitHub review waits (2026-10-26): an explicit native `response_wake`
+after tree resume or same-agent continuation may retain the provider-event path
+through accepted requester identity lineage and the latest processed review
+publication for that task/conversation. This does not grant monitor management
+or publication authority. Current task/agent/company binding, repository,
+principal and endpoint checks remain effective. PostgreSQL regressions cover
+quiet repeated finalization, historical publication reuse, newer unreviewed
+heads and revoked access; live GitHub delivery remains separate acceptance.
+
 ## `outbound-email`
 
 Capability ID: `chat-channels/outbound-email`.

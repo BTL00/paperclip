@@ -32,6 +32,7 @@ import { loadConfig } from "../../config.js";
 import { HttpError } from "../../errors.js";
 import { voiceSessionStore, type VoiceTransaction } from "../voice/voice-session-store.js";
 import { issueService } from "../issues.js";
+import { readInheritedGitHubReviewWait } from "../chat-channels/github/review-wait.js";
 import { boundExternalChatProvider } from "./external-chat-provider.js";
 import { resolveExternalChatQuestionResponse } from "./external-chat-question-response.js";
 
@@ -684,12 +685,12 @@ export async function resolveExternalChatResponseWaitAuthorizationInTransaction(
     !answerContext
   )
     return "revoked";
-  const candidate = run
-    ? externalChatWaitCandidate(
-        answerContext?.authorizationContext ?? run.contextSnapshot,
-        binding,
-      )
-    : null;
+  const directContext = answerContext?.authorizationContext ?? run?.contextSnapshot;
+  const inheritedReviewWait = run && !externalChatWaitCandidate(directContext, binding)
+    ? await readInheritedGitHubReviewWait(tx, run) : null;
+  if (inheritedReviewWait?.kind === "revoked") return "revoked";
+  const authorizationContext = inheritedReviewWait?.context ?? directContext;
+  const candidate = run ? externalChatWaitCandidate(authorizationContext, binding) : null;
   if (!candidate) return "not_applicable";
 
   const actorQuery = tx
@@ -779,7 +780,7 @@ export async function resolveExternalChatResponseWaitAuthorizationInTransaction(
     await authorizeChatConversationForBoundRun(
       tx,
       binding,
-      run.contextSnapshot,
+      authorizationContext,
       lockMode,
     );
     return "authorized";
