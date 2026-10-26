@@ -4388,6 +4388,7 @@ describe("native external-chat response wait", () => {
     [3, "yielded", "in_review", "response_wake", true],
     [3, "yielded", "in_review", "response_wake", false, "tree_resume"],
     [3, "yielded", "in_review", "response_wake", false, "continued_review"],
+    [3, "yielded", "in_review", "monitor", false, "continued_review"],
     [3, "yielded", "in_progress", "response_wake", false, "new_head"],
   ] as const)("settles a published %s/5 review reporting %s in %s with %s, separate approval: %s, resume: %s", async (score, disposition, status, continuationKind, separateApproval, resumeMode?: "tree_resume" | "continued_review" | "new_head") => {
     const resumed = resumeMode !== undefined;
