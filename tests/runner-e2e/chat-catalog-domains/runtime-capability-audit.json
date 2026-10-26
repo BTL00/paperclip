@@ -16,8 +16,8 @@
     },
     {
       "scenarioId": "agents.hire-needs-approval",
-      "readinessClass": "local",
-      "needs": "Company hire approval policy, real pending proposal, two independent accepted/rejected branches and no worker execution before decision."
+      "readinessClass": "implemented",
+      "needs": "Actual company approval policy; real pending Morgan proposal rejected by human; explicit changed Jules request accepted against same proposed identity; counted exact decision notifications and no premature worker runs."
     },
     {
       "scenarioId": "agents.hire-denied",
@@ -291,8 +291,8 @@
     },
     {
       "scenarioId": "workspaces.inspect-git",
-      "readinessClass": "local",
-      "needs": "Owned task-bound Git fixture with two genuine uncommitted changes; independently compare actual diff/file paths and preserve both edits."
+      "readinessClass": "implemented",
+      "needs": "Genuine native task workspace, owned synthetic Git baseline and two actual uncommitted edits; speaking agent admitted into that exact bound workspace; independent HEAD/diff/status/bytes and real file browser."
     },
     {
       "scenarioId": "workspaces.close-and-reopen",
