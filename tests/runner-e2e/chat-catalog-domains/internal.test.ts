@@ -15,6 +15,14 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "activity.find-runs": {
+      o.tasks[0] = { ...o.tasks[0]!, status: "done", assigneeAgentId: "morgan" }; o.state.task = o.tasks[0];
+      const first = { id: "interrupted", companyId: "company", agentId: "morgan", status: "cancelled", contextSnapshot: { issueId: "task" } };
+      const later = { id: "continuation", companyId: "company", agentId: "morgan", status: "succeeded", contextSnapshot: { issueId: "task" } };
+      Object.assign(o.state, { worker: { id: "morgan" }, interruptedRun: first, continuationRun: later, interruptedTask: { ...o.tasks[0], executionRunId: "interrupted" }, gateCalls: [{ authorized: true, operation: "read_website_brief" }] });
+      Object.assign(o, { currentTask: o.tasks[0], agentRunReadStatuses: [200, 200] }); o.runs.push(first, later); o.links.push("/ACORN/agents/morgan/runs/interrupted", "/ACORN/agents/morgan/runs/continuation");
+      o.reply = "Morgan interrupted was cancelled.\nMorgan continuation succeeded."; break;
+    }
     case "activity.agent-feedback": {
       const hidden = { id: "hidden-task", title: "Restricted source" };
       const entries = ["complaint", "suggestion"].map(kind => ({ id: kind, kind, preview: `${kind} about tools`, runId: "morgan-run", agent: { id: "morgan", name: "Morgan" }, task: o.tasks[0] }));
@@ -281,6 +289,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
   "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
+  "activity.find-runs": o => { o.runs = o.runs.filter(run => run.id !== "interrupted"); },
   "activity.agent-feedback": o => { o.reply = "I browsed all feedback and Morgan complained about everything."; },
   "activity.company-overview": o => { o.reply = o.reply.replace("1 blocked", "3 blocked"); },
   "activity.audit-change": o => { o.reply = "Morgan, the current assignee, probably changed it today."; },
