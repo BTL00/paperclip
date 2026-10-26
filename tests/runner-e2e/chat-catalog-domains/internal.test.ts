@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { gradeInternal, internalChatCatalogCases } from "./internal.js";
 import type { Entity, InternalObservation } from "./internal-support.js";
@@ -15,6 +16,19 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "documents-artifacts.produce-download":
+    case "documents-artifacts.revise-delivery": {
+      const revising = scenario === "documents-artifacts.revise-delivery"; const prior = "<html><body><h1>Bring research notes together in one accessible place</h1><p>Research teams stay organized.</p><a href='https://example.test/signup'>Signup</a><footer>ORCHID</footer></body></html>";
+      const body = revising ? prior.replace("Bring research notes together in one accessible place", "Notes, together") : prior;
+      const sha = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
+      const original = { id: "original", issueId: "task", sha256: sha(prior), originatingRunId: "build", contentPath: "/api/attachments/original/content" };
+      const file = { id: "new", issueId: "task", sha256: sha(body), originatingRunId: "run", contentPath: "/api/attachments/new/content" };
+      Object.assign(o.state, { worker: { id: "morgan" }, priorRunId: "build", producedBody: prior, producedHash: sha(prior), bodyFact: "Research teams stay organized.", signupHref: "https://example.test/signup", marker: "ORCHID", originalAttachment: original, originalProductId: "old-product" });
+      const product = (id: string, attachmentId: string, run: string) => ({ id, issueId: "task", type: "artifact", provider: "paperclip", status: "active", createdByRunId: run, metadata: { attachmentId } });
+      Object.assign(o, { attachments: [file, ...(revising ? [original] : [])], products: [product("new-product", "new", "run"), ...(revising ? [product("old-product", "original", "build")] : [])], downloaded: [{ id: "new", sha256: sha(body), body }, ...(revising ? [{ id: "original", sha256: sha(prior), body: prior }] : [])] });
+      o.runs.push({ id: "build", companyId: "company", agentId: "morgan", status: "succeeded" }); o.links.push("/api/attachments/new/content?download=1");
+      o.reply = "The updated shorter version is available; the original remains available."; break;
+    }
     case "tasks.assignment-conflict": {
       o.tasks[0] = { ...o.tasks[0]!, assigneeAgentId: "riley", status: "backlog" }; o.state.task = structuredClone(o.tasks[0]);
       o.reply = "Riley owns the backlog task. Observed old brief."; o.state.firstRead = structuredClone(o);
@@ -298,6 +312,8 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
   "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
+  "documents-artifacts.produce-download": o => { o.links = ["/ACORN/issues/task", "/tmp/website.html"]; },
+  "documents-artifacts.revise-delivery": o => { o.reply = "Here is the old version again."; },
   "tasks.assignment-conflict": o => { o.tasks[0]!.assigneeAgentId = "riley"; },
   "activity.find-runs": o => { o.runs = o.runs.filter(run => run.id !== "interrupted"); },
   "activity.agent-feedback": o => { o.reply = "I browsed all feedback and Morgan complained about everything."; },
