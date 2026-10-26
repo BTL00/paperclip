@@ -96,8 +96,8 @@
     },
     {
       "scenarioId": "agent-chat.track-delegated-work",
-      "readinessClass": "local",
-      "needs": "Real website task linked to conversation with active worker; no duplicate task; independent execution status and output when present."
+      "readinessClass": "implemented",
+      "needs": "Genuine native prior source handoff; real Morgan active process; canonical status/run/link attribution; actual released brief and automatic source-correlated completion with saved result and no duplicate work."
     },
     {
       "scenarioId": "agent-chat.multiple-handoffs",
