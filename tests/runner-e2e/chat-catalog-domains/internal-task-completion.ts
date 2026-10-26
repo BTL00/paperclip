@@ -11,7 +11,7 @@ interface ReviewTask extends Entity {
   executionPolicy?: { stages: Array<{ id: string; type: string; participants: Array<{ type: string; userId?: string; agentId?: string }> }> };
   executionState?: { status: string; currentStageId: string; currentStageType: string; currentParticipant?: { type: string; userId?: string; agentId?: string }; completedStageIds?: string[] };
 }
-interface Delivery extends Entity { sha256: string; createdByRunId?: string; originalFilename?: string; contentPath?: string }
+interface Delivery extends Entity { sha256: string; originatingRunId?: string; originalFilename?: string; contentPath?: string }
 interface CompletionObservation extends InternalObservation {
   reviewTask: ReviewTask; attachments: Delivery[]; downloaded: Array<{ id: string; sha256: string; body: string }>;
   interactions: Array<Entity & { kind: string; status: string; resolvedByAgentId?: string }>;
@@ -24,7 +24,7 @@ export function gradeCompletionGate(value: unknown) {
   const worker = entity(o.state, "worker"); const before = entity(o.state, "task") as ReviewTask; const current = o.reviewTask;
   const implementationRuns = o.runs.filter(row => row.agentId === worker.id && (row.contextSnapshot?.issueId === before.id || row.contextSnapshot?.taskId === before.id));
   c.add("real-morgan-delivery-before-request", implementationRuns.length === 1 && implementationRuns[0]?.status === "succeeded"
-    && o.attachments.some(file => file.createdByAgentId === worker.id && file.createdByRunId === implementationRuns[0]?.id
+    && o.attachments.some(file => file.createdByAgentId === worker.id && file.originatingRunId === implementationRuns[0]?.id
       && o.downloaded.some(bytes => bytes.id === file.id && bytes.sha256 === file.sha256 && /<html\b/i.test(bytes.body) && /<body\b/i.test(bytes.body))),
     "The prerequisite is a real prior Morgan run with an independently downloaded, attributed HTML delivery.");
   const pending = (record: ReviewTask) => record.status === "in_review" && record.reviewPolicy === "human_only"
@@ -64,7 +64,7 @@ function completionGate(): ChatCatalogCase {
       accept: value => value.task.status === "in_review" && value.task.executionState?.status === "pending"
         && value.task.executionState.currentParticipant?.userId === reviewer!.id
         && value.runs.length === 1 && value.runs[0]?.agentId === worker.id && value.runs[0]?.status === "succeeded"
-        && value.attachments.some(file => file.createdByAgentId === worker.id && file.createdByRunId === value.runs[0]?.id),
+        && value.attachments.some(file => file.createdByAgentId === worker.id && file.originatingRunId === value.runs[0]?.id),
       reject: value => value.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "Prerequisite Morgan implementation did not complete; retain actual setup evidence" : undefined });
     await ctx.input.evidence("chat-catalog-prior-morgan-delivery-review.json", { task: saved.task, runIds: saved.runs.map(row => row.id), attachments: saved.attachments });
     return { project: p, task: saved.task, worker, reviewerId: reviewer.id };
