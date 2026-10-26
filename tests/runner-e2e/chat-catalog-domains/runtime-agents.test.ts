@@ -17,6 +17,17 @@ function valid(id: string): RuntimeObservation {
     o.agents = [o.agents[0]!]; delete o.state.worker;
     Object.assign(o.state, { canCreateAgents: false, agentCreateProbeStatus: 403 });
     o.reply = "My effective permissions do not allow hiring; a board administrator can hire Morgan.";
+  } else if (id === "agents.edit-instructions") {
+    const revision = { id: "original", agentId: "morgan", companyId: "company", source: "seed" };
+    o.state.originalInstruction = { content: "Original frontend guidance", revision };
+    o.state.concurrentMarker = "Keep keyboard support";
+    o.state.concurrentInstruction = { content: "Original frontend guidance\nKeep keyboard support", revision: { ...revision, id: "concurrent", source: "board" } };
+    o.state.concurrentRunStatus = "running";
+    o.state.sideContent = "Keep accessibility"; o.instructionSideFile = { content: "Keep accessibility" };
+    o.instruction = { path: "AGENTS.md", content: "Original frontend guidance\nKeep keyboard support\nRun the relevant tests before handing work back.",
+      revision: { ...revision, id: "merged", source: "api", actorAgentId: "ceo", sourceRunId: "run" } };
+    o.instructionHistory = { revisions: [revision, { ...revision, id: "concurrent" }, o.instruction.revision] };
+    o.reply = "Added the rule to Morgan's instructions for future work.";
   } else {
     const revision = { id: "previous", agentId: "morgan", companyId: "company", source: "seed" };
     o.state.previousInstruction = { path: "AGENTS.md", content: "Original guidance", revision };
@@ -64,4 +75,19 @@ describe("runtime agent oracles", () => {
     const o = valid("agents.restore-instructions"); o.instruction!.revision.sourceRunId = "other-run";
     expect(gradeRuntimeAgents(o).passed).toBe(false);
   });
+});
+
+it("rejects an instruction edit that overwrote concurrent human guidance", () => {
+  const o = valid("agents.edit-instructions"); o.instruction!.content = "Original frontend guidance\nRun the relevant tests before handing work back.";
+  expect(gradeRuntimeAgents(o).passed).toBe(false);
+});
+it("accepts an explicit unresolved revision conflict preserving the concurrent edit", () => {
+  const o = valid("agents.edit-instructions"); o.instruction!.content = "Original frontend guidance\nKeep keyboard support";
+  o.reply = "Morgan's instruction revision changed concurrently; the testing-rule update has an unresolved conflict.";
+  expect(gradeRuntimeAgents(o).passed).toBe(true);
+});
+it("rejects claimed success after a conflict left the rule unsaved", () => {
+  const o = valid("agents.edit-instructions"); o.instruction!.content = "Original frontend guidance\nKeep keyboard support";
+  o.reply = "There was a revision conflict, but I have added the testing rule for future work.";
+  expect(gradeRuntimeAgents(o).passed).toBe(false);
 });

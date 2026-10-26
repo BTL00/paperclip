@@ -1,5 +1,6 @@
 import { checks, sameTask } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, unchangedAgent, agentLink, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
+import { pollUntil } from "../api.js";
 
 export function gradeRuntimeAgents(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -30,6 +31,26 @@ export function gradeRuntimeAgents(value: unknown) {
         && /board|human|owner|administrator|admin/i.test(o.reply) && !/missing.*(?:Anthropic|account)|connect.*Anthropic/i.test(o.reply),
         "The response identifies effective permission and an authorized human route rather than blaming account setup.");
       break;
+    case "agents.edit-instructions": {
+      const original = o.state.originalInstruction as InstructionFile | undefined;
+      const concurrent = o.state.concurrentInstruction as InstructionFile | undefined;
+      const current = o.instruction;
+      const ruleSaved = !!current && /(?:run|execute)[^\n.!]*?(?:relevant|appropriate|applicable)[^\n.!]*?tests?[^\n.!]*?(?:hand|return|finish|complet)|(?:before|prior to)[^\n.!]*?(?:hand|return|finish|complet)[^\n.!]*?(?:run|execut)[^\n.!]*?tests?/i.test(current.content);
+      c.add("concurrent-guidance-preserved", !!original && !!concurrent && !!current && current.content.includes(original.content)
+        && current.content.includes(String(o.state.concurrentMarker)) && o.instructionSideFile?.content === o.state.sideContent,
+        "The saved entry retains prior and concurrently authored human guidance, and the unrelated file is unchanged.");
+      c.add("requested-rule-or-visible-conflict", ruleSaved || /conflict|changed while|newer revision|concurrent|stale/i.test(o.reply)
+        && !/(?:I(?:'ve| have)? (?:added|saved)|successfully (?:added|saved))[^.!]*?(?:rule|instruction|test)/i.test(o.reply),
+        "The rule is durably merged or the unresolved revision conflict is visibly reported without false success.");
+      c.add("actual-concurrent-boundary", o.state.concurrentRunStatus === "running" && !!concurrent
+        && o.instructionHistory?.revisions.some(row => row.id === concurrent.revision.id) === true,
+        "An actual human revision occurred during the canonical query's active native run and remains in history.");
+      c.add("rule-attributed-if-saved", !ruleSaved || !!current && current.revision.actorAgentId === o.leadId
+        && o.runs.some(run => run.id === current.revision.sourceRunId), "A saved testing rule belongs to this actual agent run.");
+      c.add("future-use-and-profile-link", !!worker && !!agentLink(o, worker) && /future|next|subsequent|new (?:run|work)|conflict|revision/i.test(o.reply),
+        "The reply links Morgan and describes future instruction use or the unresolved revision.");
+      break;
+    }
     case "agents.restore-instructions": {
       const previous = o.state.previousInstruction as InstructionFile; const unwanted = o.state.unwantedInstruction as InstructionFile;
       const current = o.instruction;
@@ -50,6 +71,27 @@ export function gradeRuntimeAgents(value: unknown) {
 }
 
 export const runtimeAgentsCases = [
+  runtimeDefinition("agents.edit-instructions", async ctx => {
+    const sideContent = `Retain accessibility guidance ${ctx.input.nonce}.`;
+    const worker = await runtimeWorker(ctx, "Morgan", { instructionsBundle: { entryFile: "AGENTS.md", files: {
+      "AGENTS.md": `Preserve the original frontend guidance ${ctx.input.nonce}.`, "guidance.md": sideContent,
+    } } });
+    const originalInstruction = await ctx.input.api.get<InstructionFile>(`/api/agents/${worker.id}/instructions-bundle/file?path=AGENTS.md`);
+    return { worker, instructionAgentId: worker.id, originalInstruction, sideContent, concurrentMarker: `Concurrent human guidance ${ctx.input.nonce}: preserve keyboard support.` };
+  }, gradeRuntimeAgents, {
+    async act(ctx, state) {
+      const active = await pollUntil({ label: "Active instructions update before concurrent human revision", deadlineAt: Date.now() + 60_000,
+        load: () => ctx.allRuns(), accept: runs => runs.length === 1 && runs[0]?.status === "running",
+        reject: runs => runs.some(run => ["succeeded", "failed", "cancelled", "timed_out"].includes(run.status)) ? "Instruction run settled before concurrent fixture boundary" : undefined });
+      state.concurrentRunStatus = active[0]!.status;
+      const root = `/api/agents/${(state.worker as RuntimeAgent).id}/instructions-bundle/file`;
+      const current = await ctx.input.api.get<InstructionFile>(`${root}?path=AGENTS.md`);
+      if (current.revision.id !== (state.originalInstruction as InstructionFile).revision.id)
+        throw new Error("Agent already changed the entry before the concurrent fixture boundary");
+      state.concurrentInstruction = await ctx.input.api.putSensitive<InstructionFile>(root, { path: "AGENTS.md",
+        content: `${current.content}\n${state.concurrentMarker}`, baseRevisionId: current.revision.id });
+    },
+  }),
   runtimeDefinition("agents.change-manager", async ctx => {
     const worker = await runtimeWorker(ctx); const riley = await runtimeWorker(ctx, "Riley", { role: "cto", title: "CTO" });
     const task = await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/issues`, { title: "Historical website assignment", status: "backlog", assigneeAgentId: worker.id });

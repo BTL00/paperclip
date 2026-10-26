@@ -31,8 +31,8 @@
     },
     {
       "scenarioId": "agents.edit-instructions",
-      "readinessClass": "local",
-      "needs": "Versioned file with unrelated guidance; agent edit plus genuine concurrent revision conflict/fresh merge branch."
+      "readinessClass": "implemented",
+      "needs": "Versioned instructions with genuine concurrent public human revision during active query; preserve unrelated guidance, merge testing rule or expose conflict."
     },
     {
       "scenarioId": "agents.restore-instructions",
@@ -46,8 +46,8 @@
     },
     {
       "scenarioId": "agents.choose-primary",
-      "readinessClass": "local",
-      "needs": "Authenticated human preference and existing primary; profile replacement confirmation, other user/company scope and recent-chat precedence."
+      "readinessClass": "implemented",
+      "needs": "Real authenticated primary replacement, visible confirmation, independently unchanged secondary person/company and recent-chat precedence without new runs."
     },
     {
       "scenarioId": "agents.pause-agent",
@@ -86,8 +86,8 @@
     },
     {
       "scenarioId": "agent-chat.reopen-conversation",
-      "readinessClass": "source",
-      "needs": "Existing human-owned Morgan conversation and history; current shared source fixed to lead chat, cross-agent navigation must not duplicate or run."
+      "readinessClass": "implemented",
+      "needs": "Genuine native setup history and declared canonical query boundary; same owned Morgan source, actual final-run result link, private-list denial and no navigation execution."
     },
     {
       "scenarioId": "agent-chat.remember-and-follow-up",

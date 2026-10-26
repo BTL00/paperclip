@@ -1,0 +1,88 @@
+import { expect } from "@playwright/test";
+import { checks, type Entity } from "./internal-support.js";
+import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { probeAgentPermission, waitForReply } from "./identity-support.js";
+import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime, agentLink, type RuntimeAgent } from "./runtime-support.js";
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+interface Primary { companyId: string; userId: string; primaryAgentId: string | null }
+type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
+const people = new WeakMap<ChatCatalogContext, Person>();
+const endpoint = (companyId: string) => `/api/companies/${companyId}/primary-agent/me`;
+async function personPrimary(person: Person, companyId: string): Promise<Primary> {
+  const response = await person.request(endpoint(companyId));
+  if (!response.ok) { await response.body?.cancel(); throw new Error(`Secondary primary read returned ${response.status}`); }
+  return response.json() as Promise<Primary>;
+}
+export function gradePrimary(value: unknown) {
+  const c = checks(); const o = runtimeObservation(value);
+  c.add("complete-human-primary-evidence", !!o, "Real user-scoped saved preferences and human replacement control are required."); if (!o) return c.result();
+  const worker = o.state.worker as RuntimeAgent; const before = o.state.primaryBefore as Primary;
+  const after = o.state.primaryAfter as Primary | undefined; const otherBefore = o.state.otherPersonBefore as Primary;
+  const otherAfter = o.state.otherPersonAfter as Primary | undefined;
+  c.add("only-human-replaces-existing-primary", !!before && before.primaryAgentId === o.leadId
+    && o.state.beforeHumanPrimary === o.leadId && o.state.replacementConfirmed === true
+    && after?.primaryAgentId === worker.id && after.companyId === o.companyId && after.userId === before.userId,
+    "The original primary survives the chat response and is replaced only after the visible human confirmation.");
+  c.add("agent-preference-write-denied", o.state.agentWriteStatus === 403, "The preference endpoint rejects the real CEO agent bearer.");
+  c.add("other-person-company-unaffected", !!otherAfter && !!otherBefore && otherAfter.userId !== before.userId
+    && JSON.stringify(otherAfter) === JSON.stringify(otherBefore)
+    && JSON.stringify(o.state.otherCompanyAfter) === JSON.stringify(o.state.otherCompanyBefore),
+    "Independent authenticated person and company preference readbacks do not change.");
+  c.add("recent-chat-precedence-without-work", o.state.reopenedRecentAgent === o.leadId
+    && o.state.runsAfterNavigation === 1 && o.state.chatCountBeforeNavigation === o.state.chatCountAfterNavigation,
+    "Opening Chat may reopen this valid recent source conversation and creates no duplicate chat or execution.");
+  c.add("honest-human-control-guidance", /primary|go.to/i.test(o.reply) && /confirm|profile|you can|choose|set as my primary/i.test(o.reply)
+    && !/I(?:'ve| have)? (?:set|made|changed).*(?:primary|go.to)/i.test(o.reply), "The model directs the personal action and does not falsely claim an agent preference write.");
+  return c.result();
+}
+export const runtimePrimaryCases = [runtimeDefinition("agents.choose-primary", async ctx => {
+  const secrets = ctx.input.privateSecrets; if (!secrets) throw new Error("Primary fixture requires private credential sink");
+  const browser = ctx.input.page.context().browser(); if (!browser) throw new Error("Real browser required");
+  const primaryBefore = await ctx.input.api.get<Primary>(endpoint(ctx.input.fixtures.company.id));
+  if (primaryBefore.primaryAgentId !== ctx.input.fixtures.agent.id) throw new Error("Catalog requires an existing primary agent");
+  const worker = await runtimeWorker(ctx);
+  const person = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets, name: "Second primary reader" }); people.set(ctx, person);
+  await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, person, secrets);
+  const otherCompany = await ctx.input.api.post<Entity>("/api/companies", { name: `Other primary company ${ctx.input.nonce}` });
+  return { worker, primaryBefore, otherCompany, otherPersonBefore: await personPrimary(person, ctx.input.fixtures.company.id),
+    otherCompanyBefore: await ctx.input.api.get<Primary>(endpoint(otherCompany.id)) };
+}, gradePrimary, {
+  authentication: "human-session",
+  sourceFiles: ["chat-catalog-domains/runtime-primary.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agents.yaml"],
+  async act(ctx, state) {
+    await waitForReply(ctx); const worker = state.worker as RuntimeAgent;
+    state.beforeHumanPrimary = (await ctx.input.api.get<Primary>(endpoint(ctx.input.fixtures.company.id))).primaryAgentId;
+    state.agentWriteStatus = await probeAgentPermission(ctx, endpoint(ctx.input.fixtures.company.id), "PUT", { primaryAgentId: worker.id });
+    const o = await observeRuntime(ctx, state); const href = agentLink(o, worker); if (!href) throw new Error("Primary guidance lacks Morgan's real profile link");
+    const source = ctx.input.page.url();
+    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    await ctx.input.page.getByRole("button", { name: "Set as my primary", exact: true }).click();
+    const dialog = ctx.input.page.getByRole("alertdialog");
+    await expect(dialog).toContainText("Change your primary agent?"); await expect(dialog).toContainText("Morgan");
+    await dialog.getByRole("button", { name: "Set as my primary", exact: true }).click();
+    await expect(ctx.input.page.getByRole("img", { name: "My primary agent", exact: true }).first()).toBeVisible();
+    state.replacementConfirmed = true;
+    // Revisit the valid recent source before opening the normal Chat landing.
+    await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+    await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    const chats = `/api/companies/${ctx.input.fixtures.company.id}/chats`;
+    state.chatCountBeforeNavigation = (await ctx.input.api.get<Entity[]>(chats)).length;
+    await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/chats`, { waitUntil: "domcontentloaded" });
+    const lead = o.agents.find(row => row.id === ctx.input.fixtures.agent.id)!;
+    await ctx.input.page.waitForURL(url => [lead.id, lead.urlKey].includes(decodeURIComponent(url.pathname.split("/").at(-1)!)));
+    state.reopenedRecentAgent = ctx.input.fixtures.agent.id;
+    state.runsAfterNavigation = (await ctx.allRuns()).length;
+    state.chatCountAfterNavigation = (await ctx.input.api.get<Entity[]>(chats)).length;
+  },
+  async observe(ctx, state) {
+    const person = people.get(ctx); if (!person) throw new Error("Secondary authenticated person missing");
+    state.primaryAfter = await ctx.input.api.get<Primary>(endpoint(ctx.input.fixtures.company.id));
+    state.otherPersonAfter = await personPrimary(person, ctx.input.fixtures.company.id);
+    state.otherCompanyAfter = await ctx.input.api.get<Primary>(endpoint((state.otherCompany as Entity).id));
+    return observeRuntime(ctx, state);
+  },
+  async cleanup(ctx, state) {
+    const person = people.get(ctx); people.delete(ctx); await person?.dispose();
+    await ctx.input.api.delete(`/api/companies/${(state.otherCompany as Entity).id}`, { allowNotFound: true });
+  },
+})];
