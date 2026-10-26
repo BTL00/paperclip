@@ -72,10 +72,12 @@ import {
   selectNativeSessionResumeRun,
 } from "./native-session-resume.js";
 import { nativeRuntimeContextFixture } from "./runtime-context.test-fixture.js";
+import { resolveExternalTestDatabaseUrl } from "../../__tests__/helpers/external-test-database.js";
+
+const externalTestDatabaseUrl = resolveExternalTestDatabaseUrl("PAPERCLIP_TEST_DATABASE_URL");
 
 async function startEmbeddedPostgresTestDatabase(prefix: string) {
-  const { resolveExternalTestDatabaseUrl } = await import("../../__tests__/helpers/external-test-database.js");
-  const externalUrl = resolveExternalTestDatabaseUrl("PAPERCLIP_TEST_DATABASE_URL");
+  const externalUrl = externalTestDatabaseUrl;
   if (!externalUrl) return startEmbeddedDatabase(prefix);
   const { closeRegisteredClients } = await import("@paperclipai/db");
   return { connectionString: externalUrl, cleanup: async () => {
@@ -295,12 +297,13 @@ it("wires exact-session recovery and guarded selected identity into heartbeat pe
 });
 
 const embeddedSupport = await getEmbeddedPostgresTestSupport();
+const databaseSupported = Boolean(externalTestDatabaseUrl) || embeddedSupport.supported;
 const recoveryFakeCodex = resolve(
   import.meta.dirname,
   "../../../../packages/paperclip-runner/test/fixtures/fake-final-burst-codex-app-server.mjs",
 );
 
-(embeddedSupport.supported && existsSync(defaultCapabilityRunnerdBinary())
+(databaseSupported && existsSync(defaultCapabilityRunnerdBinary())
   ? it
   : it.skip)(
   "keeps actual normalized driver events separate from raw maintenance receipts",
@@ -532,7 +535,7 @@ const recoveryFakeCodex = resolve(
   30_000,
 );
 
-(embeddedSupport.supported &&
+(databaseSupported &&
   existsSync(defaultCapabilityRunnerdBinary()) &&
   existsSync(recoveryFakeCodex)
   ? it
@@ -1074,7 +1077,7 @@ const recoveryFakeCodex = resolve(
   60_000,
 );
 
-(embeddedSupport.supported ? describe : describe.skip)(
+(databaseSupported ? describe : describe.skip)(
   "native session recovery database orchestration",
   () => {
     it("uses scoped latest checkpoints, preserves progress barriers, and guards bootstrap persistence after the row lock", async () => {
