@@ -86,6 +86,8 @@ export async function createAssignedMcpTools(input: {
   gatewayPublicId: string;
   bearerToken: string;
   workMode?: WorkMode;
+  /** Bound provider grammar complexity independently of protocol byte capacity. */
+  delivery?: "on_demand";
 }) {
   const listed = await input.gateway.listToolsForNamedGateway({
     gatewayPublicId: input.gatewayPublicId,
@@ -161,9 +163,9 @@ export async function createAssignedMcpTools(input: {
   return {
     definitions(fits?: (definitions: ToolDefinition[]) => boolean): ToolDefinition[] {
       const direct = [...tools].filter(([, tool]) => permits(tool)).map(([name, tool]) => definition(name, tool));
-      if (!fits || fits(direct)) return direct;
+      if (input.delivery !== "on_demand" && (!fits || fits(direct))) return direct;
       const compact = structuredClone(ON_DEMAND_TOOLS);
-      if (!fits(compact)) throw new Error("assigned_mcp_tool_catalog_capacity_exceeded");
+      if (fits && !fits(compact)) throw new Error("assigned_mcp_tool_catalog_capacity_exceeded");
       return compact;
     },
     has(name: string): boolean {

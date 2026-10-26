@@ -18,6 +18,49 @@ describe("assigned MCP runner tools", () => {
   const searchName = "paperclip_search_assigned_tools";
   const callName = "paperclip_call_assigned_tool";
 
+  it.each([1, 741])("uses bounded on-demand delivery for %i tools even when the direct catalog fits", async count => {
+    const f = fixture(Array.from({ length: count }, (_, i) => descriptor(`app.operation_${i}`)));
+    const direct = await createAssignedMcpTools(f);
+    const assigned = await createAssignedMcpTools({ ...f, delivery: "on_demand" });
+    const fits = vi.fn(() => true);
+    expect(assigned.definitions(fits).map(tool => tool.name)).toEqual([searchName, callName]);
+    expect(fits).toHaveBeenCalledExactlyOnceWith(assigned.definitions());
+    expect(() => assigned.definitions(() => false)).toThrow("assigned_mcp_tool_catalog_capacity_exceeded");
+    const page = await assigned.execute({ tool: searchName, arguments: { query: "", limit: 1 } }) as { tools: Array<{ name: string }> };
+    expect(page.tools[0]!.name).toBe(direct.definitions().map(tool => String(tool.name)).sort()[0]);
+    await assigned.execute({ tool: callName, arguments: { name: page.tools[0]!.name, arguments: { query: "fixture" }, gatewayPublicId: "untrusted", bearerToken: "untrusted" } });
+    expect(f.executeTool).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ gatewayPublicId: f.gatewayPublicId, sessionToken: f.bearerToken }));
+    f.listToolsForNamedGateway.mockResolvedValue([]);
+    await expect(assigned.execute({ tool: searchName, arguments: { query: "" } })).resolves.toEqual({ tools: [], nextOffset: null });
+  });
+
+  it("keeps on-demand aliases pinned, mode restricted, revocable and approval gated", async () => {
+    const read = descriptor("mcp.first:search");
+    const write = descriptor("mcp.second:search", "write");
+    const f = fixture([read, write]);
+    const assigned = await createAssignedMcpTools({ ...f, delivery: "on_demand" });
+    const page = await assigned.execute({ tool: searchName, arguments: { query: "" } }) as { tools: Array<{ name: string; description: string }> };
+    expect(new Set(page.tools.map(tool => tool.name)).size).toBe(2);
+    const writeAlias = page.tools.find(tool => tool.description.includes(write.name))!.name;
+    const call = { tool: callName, arguments: { name: writeAlias, arguments: {} } };
+    await expect(assigned.execute(call, "planning")).rejects.toThrow("paperclip_runner_tool_mode_denied");
+    await expect(assigned.execute(call, "ask")).rejects.toThrow("paperclip_runner_tool_mode_denied");
+    expect(f.executeTool).not.toHaveBeenCalled();
+    const denied = new ToolGatewayHttpError(403, "Approval required", "approval_required");
+    f.executeTool.mockRejectedValueOnce(denied);
+    await expect(assigned.execute(call)).rejects.toBe(denied);
+    f.listToolsForNamedGateway.mockResolvedValue([read, descriptor("newly.granted")]);
+    const refreshed = await assigned.execute({ tool: searchName, arguments: { query: "" } }) as { tools: Array<{ name: string }> };
+    expect(refreshed.tools).toHaveLength(1);
+    expect(refreshed.tools[0]!.name).not.toBe(writeAlias);
+    // Execution still goes through the original gateway, which reauthorizes
+    // each call; discovery never grants an added tool to this pinned session.
+    const revoked = new ToolGatewayHttpError(403, "Revoked", "connection_revoked");
+    f.executeTool.mockRejectedValueOnce(revoked);
+    await expect(assigned.execute(call)).rejects.toBe(revoked);
+    await expect(assigned.execute({ tool: callName, arguments: { name: "newly.granted", arguments: {} } })).rejects.toThrow("assigned_mcp_tool_unknown");
+  });
+
   it("deduplicates repeated app tools in direct and on-demand catalogs while retaining revocation", async () => {
     const read = descriptor("memory.search");
     const write = descriptor("memory.store", "write");
