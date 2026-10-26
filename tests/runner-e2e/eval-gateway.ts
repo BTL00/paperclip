@@ -72,11 +72,11 @@ function boundedPayload(value: unknown, route: EvalGatewayRoute) {
   if (body.speed !== undefined && body.speed !== "standard" || body.inference_geo !== undefined) throw new EvalRequestError("unqualified_billing_mode");
   if (body.tools !== undefined && (!Array.isArray(body.tools) || body.tools.some(tool => {
     const definition = row(tool), type = definition.type;
-    if (route.provider !== "openai") return type !== undefined && type !== "custom";
+    if (route.provider !== "openai") return type !== undefined && type !== "custom" || Object.hasOwn(definition, "tools");
     if (type === "namespace") return typeof definition.name !== "string" || !definition.name
       || !Array.isArray(definition.tools) || !definition.tools.length
-      || definition.tools.some(nested => !["function", "custom"].includes(String(row(nested).type)));
-    return !["function", "custom"].includes(String(type));
+      || definition.tools.some(nested => !["function", "custom"].includes(String(row(nested).type)) || Object.hasOwn(row(nested), "tools"));
+    return !["function", "custom"].includes(String(type)) || Object.hasOwn(definition, "tools");
   }))) throw new EvalRequestError("unqualified_hosted_tool");
   const inspect = (item: unknown): void => {
     if (Array.isArray(item)) { item.forEach(inspect); return; }

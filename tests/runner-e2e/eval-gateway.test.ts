@@ -139,6 +139,9 @@ it.each([
   { type: "namespace", name: "local", tools: [{ type: "web_search" }] },
   { type: "namespace", name: "local", tools: [{ type: "namespace", name: "nested", tools: [{ type: "web_search" }] }] },
   { type: "namespace", name: "local" },
+  { type: "namespace", name: "local", tools: [{ type: "custom", name: "x", tools: [{ type: "web_search" }] }] },
+  { type: "namespace", name: "local", tools: [{ type: "function", name: "x", tools: [{ type: "web_search" }] }] },
+  { type: "custom", name: "x", tools: [{ type: "web_search" }] },
 ])("rejects unqualified tools inside namespaces before reservation", async tool => {
   const f = await fixture(), transport = vi.fn<typeof fetch>();
   await expect(forwardEvalRequest({ ...f, payload: { ...f.payload, tools: [tool] }, transport })).rejects.toThrow();

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "@paperclipai/db";
 import { ToolGatewayHttpError, type ToolGatewayDescriptor, type ToolGatewayService } from "../tool-gateway.js";
 import { createAssignedMcpTools, getAssignedMcpGateway, registerAssignedMcpGateway } from "./assigned-mcp-tools.js";
+import { startOpenCodeMcpBridge } from "../../vendor/paperclip-runner/testing.js";
 
 function descriptor(name: string, risk: ToolGatewayDescriptor["risk"] = "read"): ToolGatewayDescriptor {
   return { name, displayName: name, description: `Use ${name}`, parametersSchema: { type: "object", properties: { query: { type: "string" } } }, pluginId: "fixture", providerType: "mcp_remote_http", risk };
@@ -17,6 +18,50 @@ function fixture(tools: ToolGatewayDescriptor[]) {
 describe("assigned MCP runner tools", () => {
   const searchName = "paperclip_search_assigned_tools";
   const callName = "paperclip_call_assigned_tool";
+
+  it.each(["page", "escaped schema"])("keeps on-demand %s results valid through the OpenCode MCP bridge", async variant => {
+    const schema = { type: "object", description: variant === "page" ? "x".repeat(20_000) : "\"\\\u0000🙂".repeat(30_000) };
+    const f = fixture(Array.from({ length: variant === "page" ? 5 : 1 }, (_, i) => ({
+      ...descriptor(`large_${i}`), parametersSchema: schema,
+    })));
+    const assigned = await createAssignedMcpTools({ ...f, delivery: "on_demand" });
+    const bridge = await startOpenCodeMcpBridge({ tools: assigned.definitions(), handler: call => assigned.execute(call) });
+    let id = 0;
+    const search = async (args: Record<string, unknown>) => {
+      const response = await fetch(bridge.url, {
+        method: "POST", headers: { Authorization: `Bearer ${bridge.secret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method: "tools/call", params: { name: searchName, arguments: args } }),
+      });
+      const rpc = await response.json() as { result: { isError?: boolean; content: Array<{ text: string }> } };
+      expect(rpc.result.isError).not.toBe(true);
+      return JSON.parse(rpc.result.content[0]!.text);
+    };
+    try {
+      let page = await search({ query: "", limit: 20 });
+      if (variant === "page") {
+        const seen = [...page.tools];
+        while (page.nextOffset !== null) {
+          page = await search({ query: "", offset: page.nextOffset, limit: 20 });
+          seen.push(...page.tools);
+        }
+        expect(seen).toHaveLength(5);
+        expect(seen.every(tool => JSON.stringify(tool.inputSchema) === JSON.stringify(schema))).toBe(true);
+      } else {
+        const name = page.tools[0]!.inputSchemaRef;
+        expect(name).toBeTypeOf("string");
+        let offset: number | null = 0;
+        let reconstructed = "";
+        do {
+          const chunk = await search({ query: "", schemaTool: name, schemaOffset: offset });
+          reconstructed += chunk.schemaJson;
+          offset = chunk.nextSchemaOffset;
+        } while (offset !== null);
+        expect(JSON.parse(reconstructed)).toEqual(schema);
+      }
+    } finally {
+      await bridge.close();
+    }
+  });
 
   it.each([1, 741])("uses bounded on-demand delivery for %i tools even when the direct catalog fits", async count => {
     const f = fixture(Array.from({ length: count }, (_, i) => descriptor(`app.operation_${i}`)));

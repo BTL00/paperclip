@@ -4,6 +4,8 @@ import { lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'n
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { startControlledObservability } from './observability.mjs';
+import { limitFor, readRegularFile, replaceEvidenceFile } from './evidence-files.mjs';
 import { bindRequest, canonical, costRuntime, readJson, sha256, validateManifest } from './manifest.mjs';
 
 async function atomicJson(file, value) {
@@ -17,7 +19,8 @@ const absent = pid => { try { process.kill(pid, 0); return false; } catch (error
 export const attemptDirectory = (manifest, attemptId) => join(manifest.outputDirectory, sha256(attemptId));
 
 async function runChild(input) {
-  const child = spawn(process.execPath, ['--import', input.loader, input.cli, '--request', input.requestPath, '--output', input.artifactPath, '--gateway-config', input.descriptorPath], {
+  const child = spawn(process.execPath, ['--import', input.loader, input.cli, '--request', input.requestPath, '--output', input.artifactPath, '--gateway-config', input.descriptorPath,
+    ...(input.observabilityPath ? ['--observability-config', input.observabilityPath] : [])], {
     cwd: input.cwd, env: input.environment, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stopped = null, force, escalation;
@@ -42,18 +45,25 @@ async function runChild(input) {
   if (input.signal?.aborted) onAbort();
   try {
     const [code, signal] = await once(child, 'exit');
-    if (stopped) {
-      let groupPresent = true;
-      try { process.kill(-child.pid, 0); } catch (error) { if (error.code === 'ESRCH') groupPresent = false; }
-      if (groupPresent) await escalation;
-    }
+    const groupPresent = !absent(-child.pid);
+    if (groupPresent && !stopped) stop('provider_group_survived_cli_exit');
+    if (groupPresent) await escalation;
     return { code, signal, pid: child.pid, stopped, stdout: Buffer.concat(output.stdout).toString(), stderr: Buffer.concat(output.stderr).toString() };
   } finally {
     clearTimeout(timeout); clearTimeout(force); input.signal?.removeEventListener('abort', onAbort);
+    child.stdout.destroy(); child.stderr.destroy();
   }
 }
 
-export async function runControlledEval({ manifestPath, requestPath, outputPath, environment = process.env, signal, transport }) {
+export function controlledResultArtifact(artifact, report, attempt) {
+  return { ...(artifact ?? { schema: 'paperclip-runner/eval-session-artifact/v1', attemptId: attempt.attemptId,
+    requestedModel: attempt.model, infrastructureError: 'Controlled provider did not retain an artifact' }),
+    ...(report.failure ? { accountingError: 'Controlled request accounting or cleanup is incomplete',
+      accountingFailure: { class: 'provider_budget_coverage_unknown', category: 'provider_budget', retryable: false } } : {}),
+    controllerAccounting: report };
+}
+
+export async function runControlledEval({ manifestPath, requestPath, outputPath, environment = process.env, signal, transport, otlpTransport }) {
   if (!['linux', 'darwin'].includes(process.platform)) throw new Error('Controlled eval process ownership requires Linux or macOS');
   signal?.throwIfAborted();
   const { manifest, manifestSha256 } = validateManifest(await readJson(manifestPath));
@@ -75,6 +85,8 @@ export async function runControlledEval({ manifestPath, requestPath, outputPath,
   const keyName = manifest.route === 'braintrust' ? 'BRAINTRUST_API_KEY' : provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
   const key = environment[keyName];
   if (!key || /[\r\n]/.test(key)) throw new Error('Missing controlled eval upstream credential');
+  const observabilityKey = manifest.observability ? environment.BRAINTRUST_API_KEY : undefined;
+  if (manifest.observability && (!observabilityKey || /[\r\n]/.test(observabilityKey))) throw new Error('Missing controlled observability credential');
   const model = manifest.models.find(item => item.provider === provider && item.price.model === attempt.model);
   const root = attemptDirectory(manifest, attempt.attemptId);
   await mkdir(manifest.outputDirectory, { recursive: true, mode: 0o700 });
@@ -107,12 +119,14 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   await mkdir(join(root, 'tmp'), { mode: 0o700 });
   const ledgerPath = join(root, 'ledger.jsonl');
   const ledger = await costRuntime.openEvalCostLedger(ledgerPath, limits);
-  let gateway, child, artifact, failure = null, cleanupVerified = false, secretExcluded = true;
-  let providerArtifactSha256;
-  const secrets = [key];
+  let gateway, observability, observabilityEvidence, child, artifact, failure = null, cleanupVerified = false, secretExcluded = true;
+  let providerArtifactSha256, failureStage = 'controlled_attempt_incomplete';
+  const secrets = [...new Set([key, observabilityKey].filter(Boolean))];
   const redact = raw => secrets.reduce((text, secret) => text.split(secret).join('[redacted]'), raw);
   try {
+    failureStage = 'request_admission_failed';
     await ledger.admitAttempt(attempt.executionId, attempt.attemptId);
+    failureStage = 'gateway_start_failed';
     gateway = await costRuntime.startEvalGateway({ ledger, identity: { executionId: attempt.executionId, attemptId: attempt.attemptId, phase: 'agent' },
       route: { ...model, mode: manifest.route, projectId: manifest.projectId, endpointName: provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY', apiKey: key },
       deadlineAt, transport, persist: receipt => atomicJson(join(root, 'receipts', `${receipt.requestId}.json`), receipt),
@@ -121,24 +135,35 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     const descriptor = { schema: 'paperclip.runner-eval.gateway/v1', provider, model: attempt.model, baseUrl: gateway.baseUrl,
       campaignId: manifest.campaignId, executionId: attempt.executionId, attemptId: attempt.attemptId, upstreamRoute: manifest.route };
     const descriptorPath = join(root, 'gateway.json'), descriptorRaw = JSON.stringify(descriptor) + '\n';
+    failureStage = 'gateway_descriptor_failed';
     await writeFile(descriptorPath, descriptorRaw, { flag: 'wx', mode: 0o600 });
     const childEnvironment = Object.fromEntries(['PATH', 'LANG', 'LANGUAGE', 'LC_ALL', 'TZ'].flatMap(name => environment[name] === undefined ? [] : [[name, environment[name]]]));
     Object.assign(childEnvironment, { HOME: join(root, 'home'), TMPDIR: join(root, 'tmp'), TMP: join(root, 'tmp'), TEMP: join(root, 'tmp'), PAPERCLIP_RUNNER_EVAL_GATEWAY_TOKEN: gateway.token });
+    if (manifest.observability) {
+      failureStage = 'observability_start_failed';
+      observability = await startControlledObservability({ manifest, attempt, request, root, apiKey: observabilityKey, deadlineAt, startedAt, transport: otlpTransport, signal });
+      secrets.push(...observability.secrets);
+      childEnvironment.PAPERCLIP_RUNNER_EVAL_OTLP_TOKEN = observability.token;
+    }
     const artifactPath = join(root, 'provider-artifact.json');
+    failureStage = 'child_failed';
     signal?.throwIfAborted();
     if (Date.now() >= deadlineAt) throw new Error('Controlled attempt deadline reached before spawn');
-    child = await runChild({ cli: stagedCli, loader, requestPath: retainedRequestPath, artifactPath, descriptorPath,
-      cwd: request.session.workingDirectory ?? root, environment: childEnvironment, deadlineAt, signal, closeGateway: () => gateway.close() });
+    child = await runChild({ cli: stagedCli, loader, requestPath: retainedRequestPath, artifactPath, descriptorPath, observabilityPath: observability?.descriptorPath,
+      cwd: request.session.workingDirectory ?? root, environment: childEnvironment, deadlineAt, signal, closeGateway: () => Promise.all([gateway.close(), observability?.close()]) });
+    failureStage = 'output_retention_failed';
     for (const stream of ['stdout', 'stderr']) await writeFile(join(root, `${stream}.log`), redact(child[stream]), { flag: 'wx', mode: 0o600 });
-    const raw = await readFile(artifactPath, 'utf8');
-    if (Buffer.byteLength(raw) > 16_777_216) throw new Error('Provider artifact exceeds its byte limit');
+    failureStage = child.code === 0 ? 'artifact_invalid' : 'child_failed';
+    const raw = (await readRegularFile(artifactPath, limitFor('provider-artifact.json'))).toString('utf8');
     secretExcluded = secrets.every(secret => !raw.includes(secret));
-    if (!secretExcluded) await writeFile(artifactPath, redact(raw), { mode: 0o600 });
+    if (!secretExcluded) await replaceEvidenceFile(artifactPath, redact(raw));
     providerArtifactSha256 = sha256(redact(raw));
     artifact = JSON.parse(redact(raw));
     const expected = { mode: 'controller_gateway', provider, declaredUpstreamRoute: manifest.route, campaignId: manifest.campaignId,
       executionId: attempt.executionId, attemptId: attempt.attemptId, descriptorSha256: sha256(descriptorRaw) };
     if (canonical(artifact.requestRouting) !== canonical(expected) || artifact.attemptId !== attempt.attemptId || artifact.requestedModel !== attempt.model) throw new Error('Provider did not retain the assigned route');
+    if (observability && canonical(artifact.nativeObservability) !== canonical(observability.expectedEvidence)) throw new Error('Provider did not retain the assigned observability route');
+    failureStage = 'provider_cleanup_or_credential_unverified';
     const processInfo = artifact.snapshot?.process;
     const pids = [...new Set([child.pid, processInfo?.runnerPid, processInfo?.providerPid, processInfo?.sidecarPid, processInfo?.agentPid].filter(pid => Number.isSafeInteger(pid) && pid > 0))];
     cleanupVerified = !child.stopped && artifact.snapshot?.status === 'closed' && processInfo?.runnerExited === true
@@ -146,36 +171,46 @@ registerHooks({ resolve(specifier, context, nextResolve) {
       && Number.isSafeInteger(processInfo.providerPid) && processInfo.providerPid > 0 && pids.every(absent);
     if (!cleanupVerified || !secretExcluded) throw new Error('Controlled provider cleanup or credential exclusion is unverified');
   } catch {
-    failure = 'controlled_attempt_incomplete';
+    failure = failureStage;
   } finally {
     try { await gateway?.close(); } catch { failure = 'gateway_cleanup_unverified'; }
     try { await ledger.close(); } catch { failure = 'ledger_close_failed'; }
+    try { await observability?.closeNative(); } catch { failure ??= 'observability_cleanup_unverified'; }
   }
-  if (cleanupVerified) {
-    try { await rm(executables, { recursive: true }); }
-    catch { cleanupVerified = false; failure ??= 'executable_cleanup_unverified'; }
-  }
-  const snapshot = ledger.snapshot();
-  if (snapshot.overBudget || snapshot.conflictingRequests || snapshot.inflight || snapshot.unknownRequests !== snapshot.boundedUnresolvedRequests) failure ??= 'request_accounting_unbounded';
-  const receiptHashes = {};
   try {
-    for (const request of snapshot.requests) receiptHashes[request.requestId] = sha256(await readFile(join(root, 'receipts', `${request.requestId}.json`)));
-  } catch { failure ??= 'request_receipt_missing'; }
-  const ledgerSha256 = sha256(await readFile(ledgerPath));
-  const report = { schema: 'paperclip.runner-eval.control-result/v1', campaignId: manifest.campaignId, manifestSha256,
-    executionId: attempt.executionId, attemptId: attempt.attemptId, requestSha256: attempt.requestSha256,
-    allocationUsd: attempt.maxUsd, limits, startedAt, finishedAt: new Date().toISOString(), status: failure ? 'incomplete' : 'closed', failure,
-    child: child ? { code: child.code, signal: child.signal, stopped: child.stopped } : null,
-    cleanupVerified, secretExcluded, providerArtifactSha256, ledgerSha256, receiptHashes, accounting: snapshot };
-  await atomicJson(join(root, 'result.json'), report);
-  const resultArtifact = artifact ?? { schema: 'paperclip-runner/eval-session-artifact/v1', attemptId: attempt.attemptId,
-    requestedModel: attempt.model, infrastructureError: 'Controlled provider did not retain an artifact' };
-  if (failure) Object.assign(resultArtifact, { accountingError: 'Controlled request accounting or cleanup is incomplete',
-    accountingFailure: { class: 'provider_budget_coverage_unknown', category: 'provider_budget', retryable: false } });
-  resultArtifact.controllerAccounting = report;
-  await mkdir(dirname(resolve(outputPath)), { recursive: true, mode: 0o700 });
-  await writeFile(outputPath, JSON.stringify(resultArtifact, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-  return { code: failure ? 2 : child?.code ?? 2, report };
+    if (cleanupVerified) {
+      try { await rm(executables, { recursive: true }); }
+      catch { cleanupVerified = false; failure ??= 'executable_cleanup_unverified'; }
+    }
+    const snapshot = ledger.snapshot();
+    if (snapshot.overBudget || snapshot.conflictingRequests || snapshot.inflight || snapshot.unknownRequests !== snapshot.boundedUnresolvedRequests) failure ??= 'request_accounting_unbounded';
+    const receiptHashes = {};
+    try {
+      for (const request of snapshot.requests) receiptHashes[request.requestId] = sha256(await readRegularFile(join(root, 'receipts', `${request.requestId}.json`), limitFor(`receipts/${request.requestId}.json`)));
+    } catch { failure ??= 'request_receipt_missing'; }
+    let ledgerSha256;
+    try { ledgerSha256 = sha256(await readRegularFile(ledgerPath, limitFor('ledger.jsonl'))); }
+    catch { failure ??= 'ledger_evidence_invalid'; }
+    if (observability) {
+      try {
+        observabilityEvidence = await observability.finish({ artifact, cleanupVerified, failure });
+        if (observabilityEvidence.status !== 'accepted') failure ??= 'observability_export_incomplete';
+      } catch { failure ??= 'observability_evidence_incomplete'; }
+    }
+    if (signal?.aborted) failure = 'controller_cancelled';
+    const report = { schema: 'paperclip.runner-eval.control-result/v1', campaignId: manifest.campaignId, manifestSha256,
+      executionId: attempt.executionId, attemptId: attempt.attemptId, requestSha256: attempt.requestSha256,
+      allocationUsd: attempt.maxUsd, limits, startedAt, finishedAt: new Date().toISOString(), status: failure ? 'incomplete' : 'closed', failure,
+      child: child ? { code: child.code, signal: child.signal, stopped: child.stopped } : null,
+      ...(manifest.observability ? { observability: observabilityEvidence ?? { status: 'incomplete', verification: 'unverified' } } : {}),
+      cleanupVerified, secretExcluded, providerArtifactSha256, ledgerSha256, receiptHashes, accounting: snapshot };
+    await atomicJson(join(root, 'result.json'), report);
+    const resultArtifact = controlledResultArtifact(artifact, report, attempt);
+    await mkdir(dirname(resolve(outputPath)), { recursive: true, mode: 0o700 });
+    await writeFile(outputPath, JSON.stringify(resultArtifact, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    return { code: failure ? 2 : child?.code ?? 2, report };
+  } finally { try { await observability?.close(); } catch {} }
+
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

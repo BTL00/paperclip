@@ -105,6 +105,11 @@ export async function createAssignedMcpTools(input: {
     tools.set(name, descriptor);
   }
   const permits = (tool: ToolGatewayDescriptor, mode: WorkMode = input.workMode ?? "standard") => mode === "standard" || tool.risk === "read";
+  // OpenCode's HTTP bridge returns at most 64K JSON characters. Leave room
+  // for the envelope and for JSON escaping when returning a schema chunk.
+  // Other harnesses retain the larger PRP page and chunk budgets.
+  const searchPageBytes = input.delivery === "on_demand" ? 32 * 1024 : SEARCH_PAGE_BYTES;
+  const schemaChunkCharacters = input.delivery === "on_demand" ? 16 * 1024 : SCHEMA_CHUNK_CHARACTERS;
 
   async function search(argumentsValue: unknown, currentWorkMode?: WorkMode) {
     const args = object(argumentsValue);
@@ -134,7 +139,7 @@ export async function createAssignedMcpTools(input: {
       const selected = authorized.find(([name]) => name === args.schemaTool);
       if (!selected) throw new Error("assigned_mcp_tool_unknown");
       const schema = JSON.stringify(selected[1].parametersSchema);
-      const end = schemaOffset + SCHEMA_CHUNK_CHARACTERS;
+      const end = schemaOffset + schemaChunkCharacters;
       return {
         name: selected[0], schemaJson: schema.slice(schemaOffset, end),
         nextSchemaOffset: end < schema.length ? end : null,
@@ -146,13 +151,13 @@ export async function createAssignedMcpTools(input: {
     const page: ToolDefinition[] = [];
     for (const [name, tool] of matches.slice(offset, offset + limit)) {
       let next = definition(name, tool);
-      if (Buffer.byteLength(JSON.stringify([next]), "utf8") > SEARCH_PAGE_BYTES) {
+      if (Buffer.byteLength(JSON.stringify([next]), "utf8") > searchPageBytes) {
         // One large schema must not block browsing the tools after it. Expose
         // a reference whose schema can be fetched in bounded, reauthorized
         // chunks, without weakening the gateway's argument validation.
         next = { name, description: String(next.description).slice(0, 2000), inputSchemaRef: name };
       }
-      if (Buffer.byteLength(JSON.stringify([...page, next]), "utf8") > SEARCH_PAGE_BYTES) {
+      if (Buffer.byteLength(JSON.stringify([...page, next]), "utf8") > searchPageBytes) {
         break;
       }
       page.push(next);
