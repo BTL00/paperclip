@@ -14,6 +14,11 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "tasks.share-private-task": {
+      const t = { ...o.tasks[0]!, ...{ visibility: "private" as const } }; o.tasks[0] = t; o.state.task = structuredClone(t); o.state.observerId = "riley";
+      Object.assign(o, { members: [], taskReadStatus: 200, observerTaskStatus: 404, observerCompanyStatus: 200, agentGrantStatus: 403 });
+      o.reply = "Riley is in this company. You can use Share on this task to grant Riley access as its owner."; break;
+    }
     case "projects.create-project": o.state = { firstIds: ["p"], retryQuery: "query" }; o.humanQueries = ["query", "query"]; o.tasks = []; o.activity = [event("project.created", "p")]; break;
     case "projects.share-project": {
       o.state.ownerId = "owner"; o.state.observerId = "riley"; o.state.protectedTask = { id: "protected", visibility: "private" };
@@ -124,6 +129,7 @@ function valid(scenario: string): InternalObservation {
   return o;
 }
 const corrupt: Record<string, (o: InternalObservation) => void> = {
+  "tasks.share-private-task": o => { Object.assign(o, { observerTaskStatus: 200 }); },
   "projects.create-project": o => o.projects.push({ ...o.projects[0]!, id: "duplicate" }),
   "projects.share-project": o => { Object.assign(o, { observerProtectedTaskStatus: 200 }); },
   "projects.private-project": o => { Object.assign(o, { unrelatedAgentStatus: 200 }); },
