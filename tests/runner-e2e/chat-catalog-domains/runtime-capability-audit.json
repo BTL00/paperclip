@@ -51,7 +51,7 @@
     },
     {
       "scenarioId": "agents.pause-agent",
-      "readinessClass": "local",
+      "readinessClass": "implemented",
       "needs": "Genuine active worker; board profile Pause; observe pause state and actual old-run settlement without acknowledgement credit."
     },
     {
@@ -171,7 +171,7 @@
     },
     {
       "scenarioId": "recovery.controller-restart",
-      "readinessClass": "setup-turn",
+      "readinessClass": "implemented",
       "needs": "Existing input.restart supports action; native saved file/instruction before canonical query requires declared setup-human boundary."
     },
     {
