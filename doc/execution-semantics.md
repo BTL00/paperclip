@@ -2150,3 +2150,12 @@ blocker does. Recovery in progress, a failed repair, and recovered files must
 remain distinct. This read-only instruction does not release the replay hold,
 change the stopped run, or authorize another provider turn. A recorded explicit
 successor still takes precedence over the old recovery instruction.
+
+
+A terminal native run can leave an older exact-session retry action behind when
+workspace recovery takes ownership. The existing execution disposition worker
+retires that action only after the exact run and coordinator are terminal, no
+controller lease, result, successor or retry remains, and a separate source-bound
+workspace hold records that uncertain actions cannot replay. The worker keeps
+that hold and all saved work. It does not change the task or start a provider.
+The same bounded reconciliation pass handles historical actions after restart.
