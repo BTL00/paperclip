@@ -202,3 +202,15 @@ access and refresh calls must fail, the other grant remains usable with unchange
 scope, and the same worker stays running for five seconds after revocation. A
 neutral release then lets that original worker finish normally. No provider
 account is discovered, adopted, or mutated by this fixture.
+
+`secrets.secret-proposal` uses a synthetic local-encrypted company secret and
+Morgan's missing publishing reference; it needs no external account. The actual
+admitted model creates one binding proposal per explicit request. The first is
+rejected through the public Proposals review UI and its delivery state is read
+again. Only then does the human repeat the unchanged catalog request to test
+approval of a fresh proposal. Four native phases are declared: proposal,
+rejection continuation, repeated proposal, and approval continuation. The four
+persisted human comments comprise the two original-query turns and the product's
+two human-attributed proposal-resolution notices. Approval proves the exact
+saved reference and consumer, with no Morgan task run or task-delivery event;
+it never proves that a later task already consumed or validated the value.
