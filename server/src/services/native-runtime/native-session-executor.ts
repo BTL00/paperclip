@@ -4931,14 +4931,16 @@ async function recoverPluginRunnerCheckpoint(input: {
     return;
   }
   const direct = runnerdAuthorityLifecycle(root, identity);
+  const verifiedPluginReceipt = direct === "suspended" &&
+    !existsSync(resolve(root, "runner", "runner-state.json")) && pluginRunnerdAuthorityLifecycle(root, identity) === "suspended";
   // Never hide contradictory direct authority behind a remote checkpoint.
-  if (direct !== "absent" && !(quarantined && direct === "suspended")) {
+  if (direct !== "absent" && !(quarantined && direct === "suspended") && !verifiedPluginReceipt) {
     if (quarantined) return deny();
     return;
   }
   await assertCleanupActivationCommitted(input.db, root, input.execution);
   const prior = await verifyPriorRunnerdStateForSessionScope({ ...input, root, identity, allowVerifiedBackup: true });
-  if (prior !== "terminal_state_indeterminate" && !(quarantined && prior === "verified")) {
+  if (prior !== "terminal_state_indeterminate" && !((quarantined || verifiedPluginReceipt) && prior === "verified")) {
     if (quarantined) return deny();
     return;
   }
@@ -8072,10 +8074,7 @@ async function executePaperclipNativeSessionWithinScope(
       // Inspection can replace a stopped retained task before deciding between adoption and checkpoint recovery.
       await taskTarget.runnerTask({kind:"describe"});
       if (taskTarget.sandboxLeaseAcquisition?.outcome !== "resumed") {
-        const resumeFrom=await resolvePluginTaskResume(input.db,{companyId:input.execution.binding.companyId,leaseId:taskTarget.leaseId,priorIdentity:identity});
-        const checkpoint=environmentTaskResultSchema.parse(await taskTarget.runnerTask({kind:"read_state",identity,resumeFrom}));
-        if(checkpoint.kind!=="state") throw new Error("Plugin Runner checkpoint unavailable");
-        savePluginRunnerCheckpoint(root,checkpoint.state,identity);
+        await recoverPluginRunnerCheckpoint(input, root);
       }
     }
     if (durableIdentityMatchesSession(identity, input.execution) && identity.runId !== input.execution.binding.runId &&

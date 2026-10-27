@@ -11864,7 +11864,7 @@ describe("runnerd provider runtime wiring", () => {
     }
   });
 
-  it.each(["claude", "codex"].flatMap(provider => (["per_turn", "warm"] as const).flatMap(policy => ["canonical", "quarantined", "empty-runner", "empty-runner-quarantined", "nonempty-runner", "wrong-identity", "active", "foreign-scope", "no-stop-proof", "not-suspended", "pending-outbox", "pending-command", "missing-terminal", "ambiguous", "contradictory"].map(mode => [provider, policy, mode] as const))))(
+  it.each(["claude", "codex"].flatMap(provider => (["per_turn", "warm"] as const).flatMap(policy => ["canonical", "local-receipt", "local-receipt-missing-terminal", "local-receipt-pending-command", "quarantined", "empty-runner", "empty-runner-quarantined", "nonempty-runner", "wrong-identity", "active", "foreign-scope", "no-stop-proof", "not-suspended", "pending-outbox", "pending-command", "missing-terminal", "ambiguous", "contradictory"].map(mode => [provider, policy, mode] as const))))(
     "recovers a blocked %s %s plugin checkpoint on a replacement lease: %s", async (provider, policy, mode) => {
       const { permissionPolicy: _permissionPolicy, ...claudeProfile } = QUALIFIED_ACPX_PROFILES.claude;
       const first = { ...scopedNativeExecution(`plugin-${provider}-${policy}-${mode}`),
@@ -11879,13 +11879,14 @@ describe("runnerd provider runtime wiring", () => {
         runnerInstanceId: "plugin-runner", environmentLeaseId: "old-lease", turnId: "old-turn", itemId: "old-item" };
       const scoped = await initializeScopedRunnerRoot(first, identity.runnerInstanceId);
       await mkdir(join(scoped, "control-plane"), { recursive: true });
-      const journal = JSON.stringify({ ...durableControlPlaneState(identity), commands: [{ status: mode === "pending-command" ? "pending" : "completed" }],
-        committedEvents: mode === "missing-terminal" ? [] : [{ eventType: "run.terminal", envelope: { ...identity, payload: { reportedWorkDisposition: "blocked" } } }] });
+      const journal = JSON.stringify({ ...durableControlPlaneState(identity), commands: [{ status: mode.endsWith("pending-command") ? "pending" : "completed" }],
+        committedEvents: mode.endsWith("missing-terminal") ? [] : [{ eventType: "run.terminal", envelope: { ...identity, payload: { reportedWorkDisposition: "blocked" } } }] });
       await writeFile(join(scoped, "control-plane/control-plane-state.json"), journal);
       if (mode.startsWith("empty-runner") || mode === "nonempty-runner") {
         await mkdir(join(scoped, "runner"));
         if (mode === "nonempty-runner") await writeFile(join(scoped, "runner", "unknown.json"), "{}");
       }
+      if (mode.startsWith("local-receipt")) await writeFile(join(scoped, "plugin-runner-state.json"), JSON.stringify(durableRunnerState(identity, "suspended")));
       let root = scoped;
       if (["quarantined", "empty-runner-quarantined", "ambiguous"].includes(mode)) {
         await mkdir(join(isolatedStateDirectory, "quarantine"), { recursive: true });
@@ -11903,7 +11904,11 @@ describe("runnerd provider runtime wiring", () => {
         ? priorNativeRunDb(mode === "foreign-scope" ? { ...first, binding: { ...first.binding, agentId: "foreign" } } : first,
           mode === "active" ? "running" : "succeeded").select(fields as never)
         : ordinarySelect(fields as never)) as Db["select"];
-      const resume = vi.spyOn(environmentTaskRuntime, "resolvePluginTaskResume").mockImplementation(async () => {
+      const throughExecutor = policy === "warm" && ["canonical", "local-receipt", "pending-outbox"].includes(mode);
+      let inspected = false;
+      const resume = vi.spyOn(environmentTaskRuntime, "resolvePluginTaskResume").mockImplementation(async (_db, request) => {
+        if (request.inspectCheckpoint) inspected = true;
+        else if (throughExecutor && !inspected) throw new Error("stale negative checkpoint availability");
         if (mode === "no-stop-proof") throw new Error("Plugin Runner retained session is not authorized");
         return "old-task";
       });
@@ -11923,12 +11928,22 @@ describe("runnerd provider runtime wiring", () => {
       await mkdir(home, { recursive: true });
       await writeFile(join(home, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "synthetic-fixture" }), { mode: 0o600 });
       try {
-        const backend = createRunnerdBackend({ db, execution: next, runnerInstanceId: "replacement-runner", runnerIngressAuthorized: true,
+        const launch = { db, execution: next, runnerInstanceId: "replacement-runner", runnerIngressAuthorized: true,
           managedAiCredentialHome: home, managedAiCredentialIdentity: "revision", managedAiAccountIdentity: "account",
           runnerEnvironment: { ANTHROPIC_API_KEY: "synthetic-fixture" },
           runnerExecutionTarget: { kind: "remote", transport: "sandbox", remoteCwd: ".", leaseId: "replacement-lease", runnerTask: task,
-            sandboxLeaseAcquisition: { outcome: "replacement", providerLeaseId: "replacement-task" } } as never });
-        if (["canonical", "quarantined", "empty-runner", "empty-runner-quarantined"].includes(mode)) {
+            sandboxLeaseAcquisition: { outcome: "replacement", providerLeaseId: "replacement-task" } } as never };
+        if (throughExecutor) {
+          const validated = validatePrpStructuredRunResult({ schema: "paperclip.run_result.v1", reportedWorkDisposition: "done", summary: "done",
+            completionClaim: { contractRevision: next.completionContract.contract.revision, objectiveSatisfied: true, criteria: [], remainingWork: [] },
+            evidence: [], verification: [], artifacts: [], attentionRequests: [] });
+          if (!validated.ok) throw new Error("Invalid completion fixture");
+          state.execute.mockResolvedValueOnce({ result: validated.result, terminal: { runTerminalState: "succeeded" }, turnId: "turn",
+            normalizedSessionId: next.session.normalizedSessionId, providerSessionId: "original-provider-history", driverKind: next.session.driverKind,
+            driverVersion: "1", nativeEventCount: 1, highestContiguousSourceSeq: 1, usage: null });
+        }
+        const backend = throughExecutor ? executePaperclipNativeSession({ ...launch, useRunnerd: true }) : createRunnerdBackend(launch);
+        if (["canonical", "local-receipt", "quarantined", "empty-runner", "empty-runner-quarantined"].includes(mode)) {
           await expect(backend).resolves.toBeDefined();
           expect(state.createBackend).toHaveBeenCalledOnce();
           expect(owner).toHaveBeenCalledWith(expect.objectContaining({ resumeFrom: "old-task", priorIdentity: identity }));
@@ -11938,7 +11953,7 @@ describe("runnerd provider runtime wiring", () => {
         } else {
           await expect(backend).rejects.toThrow();
           expect(state.createBackend).not.toHaveBeenCalled();
-          if (["active", "foreign-scope", "pending-command", "missing-terminal", "ambiguous", "contradictory", "nonempty-runner", "no-stop-proof"].includes(mode)) {
+          if (["local-receipt-missing-terminal", "local-receipt-pending-command", "active", "foreign-scope", "pending-command", "missing-terminal", "ambiguous", "contradictory", "nonempty-runner", "no-stop-proof"].includes(mode)) {
             expect(task).not.toHaveBeenCalled();
           }
           if (mode === "ambiguous") expect(await readFile(join(root, "control-plane/control-plane-state.json"), "utf8")).toBe(journal);
