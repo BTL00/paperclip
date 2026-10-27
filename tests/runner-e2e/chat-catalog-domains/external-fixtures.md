@@ -93,6 +93,22 @@ relation within a bounded passage. The grader accepts ordinary month-name dates
 and validates Notion links by approved host and exact page UUID rather than
 requiring a title slug, hyphenation style or query string.
 
+Secure API-key entry uses `external-private-browser.ts` and its fixed worker in
+a separate Node process. The selected human cookie and synthetic provider key
+cross only a private `0600` request file, removed in `finally`. Child environment
+inheritance is limited to tool paths and disposable process directories; no
+credential appears in argv, environment or the closed receipt. The worker has
+no Playwright Test execution context and never requests tracing, video or
+screenshots. The normal source-chat browser never receives the key.
+
+An offline browser canary under the actual human-session reporter settings
+confirmed that disabling trace/video/screenshots alone does not make a Test
+context safe for credential entry: a controlled failing fill retained a synthetic
+value in stdout, JUnit, blob/HTML reports and error context. The structured JSON
+sanitizer removed the same value, but it does not rewrite these raw reporter
+sinks. The separate worker's controlled entry passed without Test API-step
+collection. These are harness privacy controls, not provider or scenario passes.
+
 Synthetic notes apps, MCP gateways, local plugins, team packages, local encrypted
 secrets and test endpoints do not require this file. They use real public
 Paperclip APIs and controlled fixture implementations; they cannot count as live
