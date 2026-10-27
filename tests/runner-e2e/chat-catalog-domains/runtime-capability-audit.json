@@ -221,8 +221,8 @@
     },
     {
       "scenarioId": "steering.steer-active",
-      "readinessClass": "local",
-      "needs": "Real compatible active harness and explicit Steer; delivered acknowledgement and actual output; provider rejection continuation branch."
+      "readinessClass": "implemented",
+      "needs": "Actual running native owner and saved human message with real advertised steering; canonical human-control guidance and ordinary-agent403, actual Steer click, independently retained same-run ACK/audit and idempotent replay, or actual provider rejection retaining visible exact message for one normal continuation. Actual registered HTML is rendered offline with network and JavaScript disabled and computed visible blue colors plus latest native-attributed design revision. Both outcome branches authored; neither branch live qualified."
     },
     {
       "scenarioId": "steering.interrupt-with-direction",
