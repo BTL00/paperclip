@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
-import { repositoryProjectCases } from "./internal-repositories.js";
+import { connectRepositoryFixture, repositoryProjectCases } from "./internal-repositories.js";
 import { externalRequirements } from "./external-fixtures.js";
 describe("repository selected-input integration", () => {
+  it.each(["workspaces.prepare-repository", "workspaces.private-repository-no-access"])("%s requires selected GitHub inputs before any provider/discovery operation", async scenarioId => {
+    expect(externalRequirements[scenarioId]).toEqual(externalRequirements["projects.add-repository"]);
+    const postSensitive = vi.fn();
+    await expect(connectRepositoryFixture({ scenario: { id: scenarioId }, input: { api: { postSensitive } } } as unknown as ChatCatalogContext)).rejects.toThrow("selected-case private inputs are unavailable");
+    expect(postSensitive).not.toHaveBeenCalled();
+  });
   for (const definition of repositoryProjectCases) it(`${definition.scenarioId} declares its selected GitHub inputs and never falls back to ambient configuration`, async () => {
     expect(definition.externalInput).toEqual(externalRequirements[definition.scenarioId]);
     const postSensitive = vi.fn();

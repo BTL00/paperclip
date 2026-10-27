@@ -13,7 +13,9 @@ interface RepositoryObservation extends InternalObservation {
 }
 function repositoriesOf(p: RepositoryProject | undefined) { return p?.workspaces.filter(row => row.repoUrl) ?? []; }
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-async function connectRepositoryFixture(ctx: ChatCatalogContext) {
+export async function connectRepositoryFixture(ctx: ChatCatalogContext) {
+  const siteOnly = ["projects.add-repository", "workspaces.prepare-repository", "workspaces.private-repository-no-access"].includes(ctx.scenario.id);
+  if (!siteOnly && ctx.scenario.id !== "projects.replace-repository") throw new Error("Repository fixture is not declared for this selected scenario");
   const binding = selectedExternalBinding(ctx);
   await ctx.input.evidence("chat-catalog-github-prerequisite.json", { scenarioId: ctx.scenario.id, provider: "github", configured: true, missing: [] });
   const envName = binding.prerequisites.tokenEnv!;
@@ -21,7 +23,7 @@ async function connectRepositoryFixture(ctx: ChatCatalogContext) {
     throw new Error("Setup blocker: GitHub tokenEnv must name an explicitly authorized scoped credentialEnv binding");
   if (!ctx.input.privateSecrets) throw new Error("Setup blocker: disposable GitHub credential and attempt-private redaction sink are required");
   const token = selectedExternalCredential(ctx, binding, "tokenEnv");
-  const requested = ctx.scenario.id === "projects.add-repository"
+  const requested = siteOnly
     ? [{ id: binding.prerequisites.siteRepositoryId!, fullName: binding.prerequisites.siteRepositoryFullName! }]
     : [{ id: binding.prerequisites.oldRepositoryId!, fullName: binding.prerequisites.oldRepositoryFullName! }, { id: binding.prerequisites.newRepositoryId!, fullName: binding.prerequisites.newRepositoryFullName! }];
   if (requested.some(row => !/^[1-9]\d*$/.test(row.id) || !Number.isSafeInteger(Number(row.id)) || !binding.resourceIds.includes(row.id)
@@ -44,7 +46,7 @@ async function connectRepositoryFixture(ctx: ChatCatalogContext) {
       throw new Error("Setup blocker: the current authorized GitHub connection must independently expose each explicit disposable repository name and ID");
     const receipt = (row: typeof requested[number]) => ({ id: Number(row.id), fullName: row.fullName, connectionId: connection.id, companyId: ctx.input.fixtures.company.id });
     return { connectionId: connection.id, secretId: secret.id, requested,
-      ...(ctx.scenario.id === "projects.add-repository" ? { siteRepository: receipt(requested[0]!) }
+      ...(siteOnly ? { siteRepository: receipt(requested[0]!) }
         : { oldRepository: receipt(requested[0]!), newRepository: receipt(requested[1]!) }) };
   } catch (error) {
     if (connectionId) await ctx.input.api.delete(`/api/tool-connections/${connectionId}`, { allowNotFound: true });

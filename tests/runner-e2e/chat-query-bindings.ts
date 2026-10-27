@@ -3,9 +3,11 @@ import type { ChatCatalogContext, ChatCatalogQueryBinding } from "./chat-catalog
 const allowedCatalogTokens: Readonly<Record<string, readonly string[]>> = {
   "access.other-company": ["BIRCH-42"], "projects.add-repository": ["acorn/site"],
   "projects.replace-repository": ["acorn/site-old", "acorn/site-new"],
+  "workspaces.prepare-repository": ["acorn/site"], "workspaces.private-repository-no-access": ["acorn/site"],
 };
 const allowedResourceKinds: Readonly<Record<string, string>> = { "access.other-company": "issue",
-  "projects.add-repository": "project-repository", "projects.replace-repository": "project-repository" };
+  "projects.add-repository": "project-repository", "projects.replace-repository": "project-repository",
+  "workspaces.prepare-repository": "project-repository", "workspaces.private-repository-no-access": "project-repository" };
 export interface RenderedChatQuery {
   originalQuery: string; renderedQuery: string;
   bindings: Array<{ catalogToken: string; fixtureValue: string; resourceKind: "issue" | "project-repository"; resourceId: string | number; companyId: string; connectionId?: string }>;
