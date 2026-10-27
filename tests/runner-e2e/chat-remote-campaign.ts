@@ -72,7 +72,7 @@ export function validateRemoteCell(input: {
     result, definitionDigest: definition.definitionDigest, graderDigest: definition.graderDigest, databaseLane };
 }
 /** A pre-attempt qualification refusal is an operation, never a case reservation.
- * Only the source-qualified On-Demand branch proves this exact zero-admission stage. */
+ * Only these two source-qualified host-gate branches prove this zero-admission stage. */
 export function validateRemoteHostRefusal(input: {
   intent: RemoteCellIntent; provenance: RemoteArtifactProvenance; host: RemoteArtifactDocument;
 }) {
@@ -82,11 +82,12 @@ export function validateRemoteHostRefusal(input: {
   requireProof(/^[a-f0-9]{40}$/.test(intent.sourceRevision) && p.targetSourceRevision === intent.sourceRevision
     && host.sourceRevision === intent.sourceRevision && host.workflowRunId === p.runId && host.workflowAttempt === p.runAttempt
     && host.workflowRef === "paperclipai/paperclip/.github/workflows/runner-full-stack-e2e.yml@refs/heads/master", "qualification source/run mismatch");
+  const knownRefusal = host.lifecycle === "on-demand" && host.reason === "on-demand-or-unknown-host-refused-before-evaluation"
+    || host.lifecycle === "spot" && host.reason === "owned-linux-amd64-postgres-image-unqualified";
   requireProof(host.schema === "paperclip.chat-remote-host/v1" && host.status === "blocked" && host.scope === "before-evaluation"
-    && host.evaluationAdmitted === false && host.automaticRetries === 0 && host.lifecycle === "on-demand"
-    && host.reason === "on-demand-or-unknown-host-refused-before-evaluation" && !host.postgres && !host.dockerEngineSha256
+    && host.evaluationAdmitted === false && host.automaticRetries === 0 && knownRefusal && !host.postgres && !host.dockerEngineSha256
     && host.region === "us-east-1" && host.architecture === "x86_64" && /^i-[a-f0-9]{8,17}$/.test(host.instanceId)
-    && /^ami-[a-f0-9]{8,17}$/.test(host.imageId), "not the proven pre-evaluation On-Demand refusal");
+    && /^ami-[a-f0-9]{8,17}$/.test(host.imageId), "not a proven pre-evaluation host refusal");
   requireProof(Array.isArray(host.executionIds) && host.executionIds.length === intent.selected.length
     && new Set(host.executionIds).size === host.executionIds.length
     && intent.selected.every(row => host.executionIds.includes(row.executionId)), "qualification selection mismatch");
@@ -96,7 +97,7 @@ export function validateRemoteHostRefusal(input: {
     outcome: "infrastructure-blocked-before-evaluation", reason: host.reason,
     evaluationAdmitted: false, canonicalQueries: 0, nativeRuns: 0, providerCalls: 0,
     caseMeasurements: 0, caseOrdinalsConsumed: 0, initialIntentConsumed: false,
-    caseExecutionIds: host.executionIds as string[], actualHost: { lifecycle: "on-demand", region: host.region, architecture: host.architecture },
+    caseExecutionIds: host.executionIds as string[], actualHost: { lifecycle: host.lifecycle as "on-demand" | "spot", region: host.region, architecture: host.architecture },
     reporterConclusionIsIndependent: true } as const;
 }
 export function remoteCellUsage(result: RunnerE2EResult): CampaignAttempt["usage"] {

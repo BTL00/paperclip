@@ -42,8 +42,17 @@ describe("remote Actions cell import", () => {
     delete f.host.postgres; delete f.host.dockerEngineSha256;
     const operation = validateRemoteHostRefusal(f.input());
     expect(operation.caseMeasurements).toBe(0); expect(operation.caseOrdinalsConsumed).toBe(0); expect(operation.initialIntentConsumed).toBe(false);
-    f.host.evaluationAdmitted = true; expect(() => validateRemoteHostRefusal(f.input())).toThrow("On-Demand refusal");
-    f.host.evaluationAdmitted = false; f.host.lifecycle = "spot"; expect(() => validateRemoteHostRefusal(f.input())).toThrow("On-Demand refusal");
+    f.host.evaluationAdmitted = true; expect(() => validateRemoteHostRefusal(f.input())).toThrow("host refusal");
+    f.host.evaluationAdmitted = false; f.host.lifecycle = "spot"; expect(() => validateRemoteHostRefusal(f.input())).toThrow("host refusal");
+  });
+  it("retains Spot image-qualification refusal separately and rejects invented admission", () => {
+    const f = fixture(); Object.assign(f.host, { status: "blocked", lifecycle: "spot", reason: "owned-linux-amd64-postgres-image-unqualified", instanceId: "i-12345678", imageId: "ami-12345678" });
+    delete f.host.postgres; delete f.host.dockerEngineSha256;
+    const operation = validateRemoteHostRefusal(f.input());
+    expect(operation.actualHost.lifecycle).toBe("spot"); expect(operation.caseOrdinalsConsumed).toBe(0);
+    f.host.reason = "unknown-failure"; expect(() => validateRemoteHostRefusal(f.input())).toThrow("host refusal");
+    f.host.reason = "owned-linux-amd64-postgres-image-unqualified"; f.host.postgres = {};
+    expect(() => validateRemoteHostRefusal(f.input())).toThrow("host refusal");
   });
   it("keeps unknown billing unknown and reported OpenRouter billing separate", () => {
     const f = fixture(); expect(remoteCellUsage(f.result)).toEqual({ costUsd: null, tokens: null, coverage: "unavailable" });
