@@ -7,7 +7,7 @@ import { beginConnection, connect, mcp, origin, type Tokens } from "../public-mc
 
 const requests = new WeakMap<ChatCatalogContext, Awaited<ReturnType<typeof beginConnection>>>();
 const grants = new WeakMap<ChatCatalogContext, { tokens: Tokens }>();
-async function prepare(ctx: ChatCatalogContext) {
+export async function prepareAssistantSetup(ctx: ChatCatalogContext) {
   if (origin !== ctx.input.api.baseURL) throw new Error("Public MCP fixture origin differs from the disposable server");
   if (!ctx.input.privateSecrets) throw new Error("Public MCP requires the attempt-private redaction sink");
   await ctx.input.api.patch("/api/instance/settings/experimental", { enablePublicMcp: true });
@@ -38,7 +38,7 @@ export function gradeAssistantSetup(value: unknown) {
   return c.result();
 }
 export const assistantConnectionExternalCases = [definition("assistant-connections.connect-external-assistant", async ctx => {
-  const setup = await prepare(ctx);
+  const setup = await prepareAssistantSetup(ctx);
   const response = await fetch(setup.serverUrl, { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { companyId: ctx.input.fixtures.company.id } }) });
   const unauthenticatedMcpStatus = response.status; await response.body?.cancel();
@@ -64,7 +64,7 @@ export const assistantConnectionExternalCases = [definition("assistant-connectio
   async observe(ctx, state) { state.assistantConnections = await ctx.input.api.get<McpConnection[]>("/api/mcp/connections"); return observeExternal(ctx, state); },
   async cleanup(ctx) { for (const grant of await ctx.input.api.get<McpConnection[]>("/api/mcp/connections")) await ctx.input.api.delete(`/api/mcp/connections/${grant.id}`); grants.delete(ctx); },
 }), definition("assistant-connections.decline-consent", async ctx => {
-  await prepare(ctx); const source = ctx.input.page.url();
+  await prepareAssistantSetup(ctx); const source = ctx.input.page.url();
   const other = await connect(ctx.input.page.context(), { ...ctx.input.fixtures.company, issuePrefix: ctx.input.fixtures.company.issuePrefix ?? "EVAL" }, false, ctx.input.page, ctx.input.privateSecrets!); grants.set(ctx, other);
   const before = await ctx.input.api.get<McpConnection[]>("/api/mcp/connections");
   const request = await beginConnection(true); requests.set(ctx, request); ctx.input.privateSecrets!.push(request.verifier, request.state);

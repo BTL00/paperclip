@@ -4,6 +4,7 @@ import { chatChannelExternalCases } from "./external-chat-channels.js";
 import { gatewayClientExternalCases } from "./external-gateway-client.js";
 import { pluginInstallExternalCases } from "./external-plugin-install.js";
 import { mcpFailureExternalCases } from "./external-mcp-failure.js";
+import { assistantConsentExternalCases } from "./external-assistant-consent.js";
 import { assistantDeviceExternalCases } from "./external-assistant-device.js";
 import { pluginExternalCases } from "./external-plugins.js";
 import { appCatalogExternalCases } from "./external-app-catalog.js";
@@ -15,7 +16,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -23,7 +24,12 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id === "connection-setup.unreachable-mcp") {
+  if (id === "assistant-connections.consent-read-only") {
+    Object.assign(o.state, { requestedWrite: true, readOnlyRoleVisible: true, writeCheckboxDisabled: true, writeCheckboxUnchecked: true, companyVisible: true, viewerEscalationStatus: 403,
+      viewerConnections: [{ id: "grant", companyId: "company", scopes: ["paperclip:read", "offline_access"] }], tokenScopesReadOnly: true, viewerGrantId: "grant", humanConsented: true, viewerId: "viewer",
+      readTaskId: "task", taskId: "task", readTaskCompanyId: "company", readMarkerMatched: true, createDeniedForScope: true, updateDeniedForScope: true, taskPreserved: true, forbiddenTaskCount: 0 });
+    o.activity = [{ id: "authorization", action: "mcp.connection_authorized", entityId: "grant", actorType: "user", actorId: "viewer" }];
+  } else if (id === "connection-setup.unreachable-mcp") {
     Object.assign(o.state, { serverUrl: "http://127.0.0.1:8848/", fixtureServerClosed: true, setupStatus: 400, visibleConnectivityError: true, checkAgainAvailable: true, displayedServerPreserved: true, editableUrlPreserved: true, abandonedDraft: true, noUnexpectedConnection: true });
     o.reply = "Open the supported MCP server connection setup and check its address.";
   } else if (id === "plugins.install-plugin") {
@@ -94,6 +100,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "assistant-connections.consent-read-only": o => { o.state.viewerConnections = [{ id: "grant", companyId: "company", scopes: ["paperclip:read", "paperclip:write"] }]; },
   "connection-setup.unreachable-mcp": o => { o.connections = [{ id: "phantom", status: "active" }]; },
   "plugins.install-plugin": o => { o.state.pluginAfter = { id: "plugin", pluginKey: "synthetic.preview", status: "error" }; },
   "gateways-profiles.connect-client": o => { o.state.providerWriteCalls = 1; },

@@ -43,7 +43,8 @@ export async function beginConnection(write = true, redirect = origin + "/eval-c
   return { clientId, verifier, state, redirect, params, consentUrl, requestId: new URL(consentUrl).pathname.split("/").at(-1)! };
 }
 
-export async function connect(context: BrowserContext, team: Team, write = true, page?: Page, secrets: string[] = [], configure = false) {
+export async function connect(context: BrowserContext, team: Team, write = true, page?: Page, secrets: string[] = [], configure = false,
+  options: { requestedWrite?: boolean; inspectConsent?: (page: Page) => Promise<void> } = {}) {
   // A real assistant callback has its own origin. A same-origin fake callback
   // would be intercepted by Paperclip's service worker and render the board.
   const callbackServer = page ? createServer((_req, res) => { res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" }); res.end("<h1>Assistant connected</h1>"); }) : undefined;
@@ -51,13 +52,18 @@ export async function connect(context: BrowserContext, team: Team, write = true,
   const address = callbackServer?.address();
   const redirect = address && typeof address !== "string" ? `http://127.0.0.1:${address.port}/callback` : undefined;
   try {
-  const request = await beginConnection(write, redirect, configure);
+  const request = await beginConnection(options.requestedWrite ?? write, redirect, configure);
   let redirectUrl: string;
   if (page) {
     await page.goto(request.consentUrl);
     await expect(page.getByRole("heading", { name: /^Connect .+ to Paperclip$/ })).toBeVisible();
     await page.getByRole("radio", { name: team.name, exact: true }).check();
     if (write || configure) await page.getByRole("checkbox", { name: "Write all of your Paperclip data", exact: true }).check();
+    if (!write && !configure && options.requestedWrite) {
+      const writes = page.getByRole("checkbox", { name: "Write all of your Paperclip data", exact: true });
+      if (await writes.isEnabled()) await writes.uncheck();
+    }
+    await options.inspectConsent?.(page);
     await page.getByRole("button", { name: "Connect organization", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Assistant connected" })).toBeVisible();
     redirectUrl = page.url();

@@ -13,3 +13,4 @@ export { assistantDeviceExternalCases } from "./external-assistant-device.js";
 export { gatewayClientExternalCases } from "./external-gateway-client.js";
 export { pluginInstallExternalCases } from "./external-plugin-install.js";
 export { mcpFailureExternalCases } from "./external-mcp-failure.js";
+export { assistantConsentExternalCases } from "./external-assistant-consent.js";
