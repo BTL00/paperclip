@@ -1,0 +1,12 @@
+import { expect, it } from "vitest";
+import { grade_tasks } from "./internal-tasks.js";
+import type { InternalObservation } from "./internal-support.js";
+function observation(body: string): InternalObservation {
+  const task = { id: "task", companyId: "company", title: "Landing page", status: "backlog" }, design = { id: "design", identifier: "ACO-2", companyId: "company", title: "Approved design", status: "done" };
+  return { scenarioId: "tasks.comment-with-reference", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { task: structuredClone(task), design: structuredClone(design) }, tasks: [task, design], projects: [], goals: [], documents: [], revisions: [], activity: [], reply: "Note added.", humanQueries: [], links: ["/ACO/issues/task"], comments: [{ id: "note", authorAgentId: "ceo", createdByRunId: "run", body }], runs: [{ id: "run", status: "succeeded" }] };
+}
+for (const body of ["Follow [the approved design](/ACO/issues/design).", "Please use [this design](https://fixture.test/ACO/issues/ACO-2) for implementation.", "Adhere to [the approved design](/ACO/issues/design?tab=documents).", "Implement according to [the design](/ACO/issues/design).", "Build in line with [the approved design](/ACO/issues/design)."])
+  it(`accepts affirmative actual design instruction: ${body}`, () => expect(grade_tasks(observation(body)).passed).toBe(true));
+for (const body of ["Do not follow [the design](/ACO/issues/design).", "Never use [the design](/ACO/issues/design).", "Follow [the wrong task](/ACO/issues/other); the intended design ID is design.", "Follow [the design](https://foreign.test/ACO/issues/design).", "Follow [the design](/ACO/issues/design), but do not follow it.", "Here is [the design](/ACO/issues/design).", "Follow [another task](/ACO/issues/other). Reference [the design](/ACO/issues/design)."])
+  it(`rejects negated, unrelated or merely mentioned reference: ${body}`, () => expect(grade_tasks(observation(body)).passed).toBe(false));
+it("preserves exact note authorship and duplicate rejection", () => { const o = observation("Follow [the design](/ACO/issues/design)."); o.comments[0]!.authorAgentId = "other"; expect(grade_tasks(o).passed).toBe(false); o.comments[0]!.authorAgentId = "ceo"; o.comments.push(structuredClone(o.comments[0]!)); expect(grade_tasks(o).passed).toBe(false); });
