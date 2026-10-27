@@ -549,15 +549,6 @@ existing private attempt evidence and registered-artifact verification pipeline.
 A failed attempt remains retained. These development checks are not staging or
 Slack qualification, and they do not publish trusted archives or credentials.
 
-Trusted report and publication jobs check out the workflow SHA. They first try a
-frozen, script-free install in a job-local store. Only pnpm's stale-lockfile
-errors permit script-free resolution from that same trusted tree, followed by
-another frozen install. They never use the target branch's resolved lockfile.
-A warning marks each repair. Network failures do not trigger resolution. Cold
-installs use the existing job deadline, without an added per-call timeout.
-This runs before AWS credential
-exchange and does not change target execution or retained results.
-
 Report identities preserve legacy chat tasks and exact `area.case` chat catalog
 tasks. Additional task segments, path separators and dotted nonchat tasks remain
 invalid. This parsing does not qualify a result or grant a new execution.

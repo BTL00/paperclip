@@ -1274,7 +1274,7 @@ jobs:
           version: 9.15.4
 
       - name: Install pinned reporting dependencies
-        run: node scripts/install-trusted-eval-dependencies.mjs "${{ runner.temp }}/eval-report-store"
+        run: pnpm install --frozen-lockfile --ignore-scripts --store-dir "${{ runner.temp }}/eval-report-store"
 
       - name: Resolve workflow job attempts
         env:
@@ -1501,7 +1501,7 @@ jobs:
       # Use a job-local store and disable lifecycle scripts throughout install.
       # OIDC is available to every step, even before the AWS credential exchange.
       - name: Install pinned publication dependencies
-        run: node scripts/install-trusted-eval-dependencies.mjs "${{ runner.temp }}/eval-publisher-store"
+        run: pnpm install --frozen-lockfile --ignore-scripts --store-dir "${{ runner.temp }}/eval-publisher-store"
 
       - name: Install publisher-only Chromium
         run: pnpm exec playwright install --with-deps --only-shell chromium
