@@ -14,6 +14,10 @@ import { agentFeedbackCases } from "./internal-agent-feedback.js";
 import { decisionSearchCases } from "./internal-decision-search.js";
 import { designSearchCases } from "./internal-design-search.js";
 import { inboxTriageCases } from "./internal-inbox-triage.js";
+import { projectDefaultsCases } from "./internal-project-defaults.js";
+import { routineAuditCases } from "./internal-routine-audit.js";
+import { workTimelineCases } from "./internal-work-timeline.js";
+import { archivePartialCases } from "./internal-archive-partial.js";
 
 export const internalChatCatalogCases = [
   ...projectsCases,
@@ -31,6 +35,10 @@ export const internalChatCatalogCases = [
   ...websiteDeliveryCases,
   ...artifactSearchCases,
   ...notificationAudienceCases,
+  ...projectDefaultsCases,
+  ...routineAuditCases,
+  ...workTimelineCases,
+  ...archivePartialCases,
 ];
 export function gradeInternal(value: unknown) {
   const o = observation(value);

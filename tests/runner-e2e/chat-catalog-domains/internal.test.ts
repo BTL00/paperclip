@@ -354,7 +354,10 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "activity.audit-change": o => { o.reply = "Morgan, the current assignee, probably changed it today."; },
 };
 describe("internal chat scenario independent oracles", () => {
-  for (const definition of internalChatCatalogCases) {
+  // These four have dedicated valid, natural-language, wrong-state and missing-evidence
+  // calibrations in internal-remaining.test.ts; they use distinct observation extensions.
+  const separatelyCalibrated = new Set(["projects.project-defaults", "activity.routine-audit", "activity.work-timeline", "inbox-search.archive-partial-failure"]);
+  for (const definition of internalChatCatalogCases.filter(row => !separatelyCalibrated.has(row.scenarioId))) {
     it(`${definition.scenarioId}: valid result and plausible wrong outcome`, () => {
       const good = valid(definition.scenarioId);
       expect(gradeInternal(good), JSON.stringify(gradeInternal(good).checks)).toMatchObject({ passed: true });
