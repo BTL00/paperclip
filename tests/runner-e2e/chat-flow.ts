@@ -295,7 +295,7 @@ export async function readRunningChatLog(
 /** Reset/blocked runs and proven pre-provider failures may have no provider log.
  * Preserve their durable events; missing logs for real provider work still fail. */
 export async function collectChatRunEvidence(
-  api: Pick<RunnerApi, "get">,
+  api: Pick<RunnerApi, "get" | "getRunObservation">,
   run: ChatRun,
 ) {
   const recovery = run.resultJson?.executionRecovery as Record<string, unknown> | undefined;
@@ -309,7 +309,7 @@ export async function collectChatRunEvidence(
       ? null
       : await api.get(`/api/heartbeat-runs/${run.id}/log?limitBytes=1048576`),
     events: await collectRunEvents((afterSeq, limit) =>
-      api.get(`/api/heartbeat-runs/${run.id}/events?afterSeq=${afterSeq}&limit=${limit}`),
+      api.getRunObservation(`/api/heartbeat-runs/${run.id}/events?afterSeq=${afterSeq}&limit=${limit}`),
     ),
   };
 }
@@ -397,11 +397,11 @@ export async function runChatFlow(input: ChatFlowInput) {
     "/api/instance/settings/experimental",
   );
   const allRuns = async () => {
-    const rows = await api.get<ChatRun[]>(
+    const rows = await api.getRunObservation<ChatRun[]>(
       `/api/companies/${f.company.id}/heartbeat-runs?limit=100`,
     );
     return Promise.all(
-      rows.map((row) => api.get<ChatRun>(`/api/heartbeat-runs/${row.id}`)),
+      rows.map((row) => api.getRunObservation<ChatRun>(`/api/heartbeat-runs/${row.id}`)),
     );
   };
   if (catalogDescriptor?.journeyKind === "native-slack-thread") {

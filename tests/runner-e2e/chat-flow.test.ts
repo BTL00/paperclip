@@ -267,7 +267,7 @@ If you only have the club name, audience, and tone, that is enough to begin; I c
   it("retains reset events without requesting a provider log, and does not hide missing real logs", async () => {
     const get = vi.fn().mockResolvedValue([{ seq: 1, type: "session_reset" }]);
     const reset = { ...run, resultJson: { conversationReset: true } };
-    await expect(collectChatRunEvidence({ get }, reset)).resolves.toEqual({
+    await expect(collectChatRunEvidence({ get, getRunObservation: get }, reset)).resolves.toEqual({
       runId: run.id,
       log: null,
       events: [{ seq: 1, type: "session_reset" }],
@@ -276,7 +276,7 @@ If you only have the club name, audience, and tone, that is enough to begin; I c
       [`/api/heartbeat-runs/${run.id}/events?afterSeq=0&limit=1000`],
     ]);
     get.mockRejectedValue(new Error("Run log not found"));
-    await expect(collectChatRunEvidence({ get }, run)).rejects.toThrow(
+    await expect(collectChatRunEvidence({ get, getRunObservation: get }, run)).rejects.toThrow(
       "Run log not found",
     );
   });
@@ -285,7 +285,7 @@ If you only have the club name, audience, and tone, that is enough to begin; I c
     const tail = { seq: 1001, eventType: "run.terminal" };
     const get = vi.fn().mockResolvedValueOnce({ content: "fixture log" })
       .mockResolvedValueOnce(firstPage).mockResolvedValueOnce([tail]);
-    const evidence = await collectChatRunEvidence({ get }, run);
+    const evidence = await collectChatRunEvidence({ get, getRunObservation: get }, run);
     expect(evidence.events).toEqual([...firstPage, tail]);
     expect(get.mock.calls).toEqual([
       [`/api/heartbeat-runs/${run.id}/log?limitBytes=1048576`],
@@ -297,22 +297,22 @@ If you only have the club name, audience, and tone, that is enough to begin; I c
     const stopped = { ...run, status: "interrupted", runtimeMode: "legacy", runtimeModeResolvedAt: null, logStore: null, logRef: null,
       resultJson: { executionRecovery: { kind: "bootstrap", providerWorkStarted: false } } };
     const get = vi.fn().mockResolvedValue([]);
-    expect(await collectChatRunEvidence({ get }, stopped)).toMatchObject({ log: null, logOmissionReason: "provider_not_started", events: [] });
+    expect(await collectChatRunEvidence({ get, getRunObservation: get }, stopped)).toMatchObject({ log: null, logOmissionReason: "provider_not_started", events: [] });
     expect(get).toHaveBeenCalledTimes(1);
     get.mockRejectedValue(new Error("Run log not found"));
     for (const change of [{ resultJson: {} }, { runtimeMode: "native" }, { logRef: "recorded-log" }, { logStore: undefined },
       { runtimeModeResolvedAt: "2026-09-28T00:00:00Z" }, { resultJson: { executionRecovery: { kind: "bootstrap", providerWorkStarted: true } } }]) {
-      await expect(collectChatRunEvidence({ get }, { ...stopped, ...change })).rejects.toThrow("Run log not found");
+      await expect(collectChatRunEvidence({ get, getRunObservation: get }, { ...stopped, ...change })).rejects.toThrow("Run log not found");
     }
   });
   it("retains events for an unstarted dependency-blocked wake without asking for a nonexistent log", async () => {
     const get = vi.fn().mockResolvedValue([]);
     const suppressed = { ...run, status: "cancelled", errorCode: "issue_dependencies_blocked", startedAt: null };
-    expect((await collectChatRunEvidence({ get }, suppressed)).log).toBeNull();
+    expect((await collectChatRunEvidence({ get, getRunObservation: get }, suppressed)).log).toBeNull();
     expect(get).toHaveBeenCalledTimes(1);
     get.mockRejectedValue(new Error("Run log not found"));
-    await expect(collectChatRunEvidence({ get }, { ...suppressed, startedAt: "2026-09-18T00:00:00Z" })).rejects.toThrow("Run log not found");
-    await expect(collectChatRunEvidence({ get }, { ...suppressed, errorCode: "provider_transport_failed" })).rejects.toThrow("Run log not found");
+    await expect(collectChatRunEvidence({ get, getRunObservation: get }, { ...suppressed, startedAt: "2026-09-18T00:00:00Z" })).rejects.toThrow("Run log not found");
+    await expect(collectChatRunEvidence({ get, getRunObservation: get }, { ...suppressed, errorCode: "provider_transport_failed" })).rejects.toThrow("Run log not found");
   });
   it("waits for a newly running provider's log file without swallowing server failures", async () => {
     const get = vi.fn().mockResolvedValue({ status: () => 404 });

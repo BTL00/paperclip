@@ -47,6 +47,20 @@ export class RunnerApi {
     return response.json() as Promise<T>;
   }
 
+  /** Repeated native observation reads retain explicit snapshots, without duplicating full DTO bodies in the browser trace. */
+  async getRunObservation<T>(path: string, options?: { timeout: number }): Promise<T> {
+    const url = new URL(path, this.baseURL);
+    const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+    const companyRuns = new RegExp(`^/api/companies/${uuid}/heartbeat-runs$`, "i").test(url.pathname)
+      && [...url.searchParams.keys()].every(key => key === "limit") && url.searchParams.get("limit") === "100";
+    const run = new RegExp(`^/api/heartbeat-runs/${uuid}$`, "i").test(url.pathname) && !url.search;
+    const events = new RegExp(`^/api/heartbeat-runs/${uuid}/events$`, "i").test(url.pathname)
+      && [...url.searchParams.keys()].every(key => ["afterSeq", "limit"].includes(key))
+      && /^\d+$/.test(url.searchParams.get("afterSeq") ?? "") && /^[1-9]\d*$/.test(url.searchParams.get("limit") ?? "");
+    if (url.origin !== this.baseURL || url.username || url.password || url.hash || !(companyRuns || run || events)) throw new Error("Run observation requires an allowlisted same-origin GET endpoint");
+    return this.authenticatedJson<T>("GET", path, undefined, options);
+  }
+
   /** Fetch owned attachment bytes with the same authenticated actor as JSON reads. */
   async getAttachmentContent(attachmentId: string): Promise<Buffer> {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(attachmentId)) throw new Error("Invalid fixture attachment identity");
