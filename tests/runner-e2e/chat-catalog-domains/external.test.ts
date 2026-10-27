@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 import { chatChannelExternalCases } from "./external-chat-channels.js";
+import { gatewayClientExternalCases } from "./external-gateway-client.js";
 import { assistantDeviceExternalCases } from "./external-assistant-device.js";
 import { pluginExternalCases } from "./external-plugins.js";
 import { appCatalogExternalCases } from "./external-app-catalog.js";
@@ -12,7 +13,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -20,7 +21,13 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id === "assistant-connections.device-login") {
+  if (id === "gateways-profiles.connect-client") {
+    Object.assign(o.state, { profileId: "profile", readEntryId: "read", writeEntryId: "write", connectionId: "connection", sourceIssueId: "source", probeRunId: "initial",
+      effective: { agentId: "ceo", profiles: [{ id: "profile" }], allowedTools: [{ id: "read" }] }, sessionCreated: true, discoveredRead: true, discoveredWrite: false,
+      decisions: [{ runId: "initial", decisions: [{ invocation: { runId: "initial", agentId: "ceo", issueId: "source", connectionId: "connection", catalogEntryId: "read", status: "succeeded" } }] }],
+      providerReadCalls: 1, marker: "Unpredictable launch result", writeProbeStatus: 403, writeProbeReason: "deny_default", providerWriteCalls: 0, written: null, tokenScanComplete: true, privateTokenLeaked: false });
+    o.reply = "The launch profile returned Unpredictable launch result.";
+  } else if (id === "assistant-connections.device-login") {
     Object.assign(o.state, { verificationPath: "/mcp-device", currentCodeVisible: true, companyConsentVisible: true, readScopeVisible: true, humanApproved: true,
       clientCompanyId: "company", clientReadOnly: true, pendingError: "authorization_pending", wrongResourceDenied: true, wrongClientDenied: true,
       correctExchangeSucceeded: true, reusedCodeDenied: true, expirationWaitMs: 600000, elapsedBeforeExpiryProbe: 600501, expiredCodeDenied: true, expiredPageVisible: true });
@@ -78,6 +85,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "gateways-profiles.connect-client": o => { o.state.providerWriteCalls = 1; },
   "assistant-connections.device-login": o => { o.state.elapsedBeforeExpiryProbe = 500; },
   "plugins.configure-plugin": o => { o.state.configuredReadback = false; },
   "plugins.disable-plugin": o => { o.state.previewStatusAfter = 200; },
@@ -94,6 +102,12 @@ const wrong: Record<string, (o: ExternalObservation) => void> = {
   "connection-setup.notion-declined": o => { o.interactions[0]!.resolvedByUserId = "someone-else"; },
 };
 describe("external domain independent oracles", () => {
+  it("an inactive or expired gateway session cannot prove profile write denial", () => {
+    for (const reason of ["run_inactive", "session_run_inactive", "gateway_token_expired", "tool_not_found", undefined]) {
+      const o = valid("gateways-profiles.connect-client"); o.state.writeProbeReason = reason;
+      expect(gatewayClientExternalCases[0]!.grade(o).passed).toBe(false);
+    }
+  });
   for (const definition of definitions) it(`${definition.scenarioId} accepts valid, rejects plausible wrong and missing evidence`, () => {
     const good = valid(definition.scenarioId); expect(definition.grade(good), JSON.stringify(definition.grade(good))).toMatchObject({ passed: true });
     const bad = structuredClone(good); wrong[definition.scenarioId]!(bad); expect(definition.grade(bad).passed).toBe(false);
