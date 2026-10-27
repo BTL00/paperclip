@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
-import { assertChatCatalogFingerprintLane, chatCatalogCaseFingerprint, fingerprintChatDependencyClosure } from "./chat-catalog-fingerprint.js";
+import { assertChatCatalogFingerprintLane, chatCatalogCaseFingerprint, chatCatalogSpawnedSourceEntries, fingerprintChatDependencyClosure } from "./chat-catalog-fingerprint.js";
 import { findChatCatalogCase, loadChatCatalogImplementation, type ChatCatalogDescriptor } from "./chat-catalog-registry.js";
 const directories: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -21,6 +21,17 @@ it("invalidates shared, selected and transitive dependencies while ignoring an u
     const f = fixture(); const before = f.fingerprint();
     f.write("unselected.ts", "export const changed = true;"); expect(f.fingerprint()).toBe(before);
     f.write(target, "export const changed = true;"); expect(f.fingerprint()).not.toBe(before);
+  }
+});
+it("binds actual spawned supervisor and entry bytes even when launch refers to them only by path", () => {
+  expect(chatCatalogSpawnedSourceEntries).toEqual(["tests/runner-e2e/server.ts", "tests/runner-e2e/server-entry.ts"]);
+  for (const changed of chatCatalogSpawnedSourceEntries) {
+    const f = fixture(); mkdirSync(path.join(f.root, "tests/runner-e2e"), { recursive: true });
+    for (const file of chatCatalogSpawnedSourceEntries) f.write(file, "export const behavior = 'original';");
+    const fingerprint = () => fingerprintChatDependencyClosure({ root: f.root, entries: ["selected.ts", ...chatCatalogSpawnedSourceEntries], selected: {} });
+    const before = fingerprint();
+    expect(before.sources.map(row => row.file)).toEqual(expect.arrayContaining([...chatCatalogSpawnedSourceEntries]));
+    f.write(changed, "export const behavior = 'changed executable';"); expect(fingerprint().digest).not.toBe(before.digest);
   }
 });
 it("conservatively binds unknown dynamic imports", () => {
@@ -59,16 +70,16 @@ it("refuses formerly inactive launch targets and source drift falls back conserv
   expect(fingerprintChatDependencyClosure({ root: f.root, entries: ["selected.ts"], selected: lane }).digest).not.toBe(before.digest);
 });
 
-it("binds the real selected area and reviewed worker closure without importing unrelated domain areas", () => {
+it("binds selected and spawned code, conservatively closing unresolved CLI and production loaders", () => {
   const descriptor = findChatCatalogCase("projects.create-project")!;
   const result = chatCatalogCaseFingerprint(descriptor, { suiteId: "chat-features", flow: "agent_chat", environment: "local" });
   const files = result.sources.map(source => source.file);
   expect(files).toContain("tests/runner-e2e/chat-catalog-domains/internal-projects.ts");
   expect(files).toContain("tests/runner-e2e/chat-catalog-domains/internal-support.ts");
   expect(files).toContain("packages/adapter-utils/src/workspace-snapshot-thread-worker.ts");
-  expect(files).not.toContain("tests/runner-e2e/chat-catalog-domains/internal-goals.ts");
+  expect(files).toEqual(expect.arrayContaining([...chatCatalogSpawnedSourceEntries, "tests/runner-e2e/chat-catalog-domains/internal-goals.ts"]));
   expect(files).toContain("tests/runner-e2e/chat-catalog-domains/identity-auth.ts");
-  expect(result.unknownDynamicImports).toEqual([]);
+  expect(result.unknownDynamicImports).toEqual(expect.arrayContaining(["cli/src/commands/run.ts", "server/src/adapters/plugin-loader.ts"]));
 });
 it("fails closed when preserved prerequisites or a rejected query lack their independent verifier", async () => {
   const base: ChatCatalogDescriptor = { scenarioId: "selected", modulePath: "./chat-catalog-domains/selected.js", exportName: "cases",

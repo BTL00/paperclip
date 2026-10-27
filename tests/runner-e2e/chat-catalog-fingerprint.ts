@@ -11,6 +11,8 @@ import { buildSync } from "esbuild";
 import type { MatrixExecution } from "./types.js";
 import type { ChatCatalogDescriptor } from "./chat-catalog-registry.js";
 
+export const chatCatalogSpawnedSourceEntries = ["tests/runner-e2e/server.ts", "tests/runner-e2e/server-entry.ts"] as const;
+
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 function resolveSource(specifier: string, parent: string): string {
   const absolute = path.resolve(path.dirname(parent), specifier);
@@ -116,7 +118,7 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
   const originIdentity = publicOriginFingerprintIdentity((selectedExecution as { executionId: string }).executionId, descriptor.scenarioId);
   const originReaders = originIdentity.selected ? ["server/src/config.ts", "server/src/auth/better-auth.ts", "server/src/routes/tool-access.ts", "server/src/services/chat-task-url.ts", "server/src/services/muse-setup.ts", "server/src/services/workspace-runtime.ts", "tests/runner-e2e/chat-catalog-domains/external-public-signin-worker.ts", "tests/runner-e2e/chat-catalog-domains/external-public-signin-contract.ts", "ui/src/pages/Auth.tsx"] : [];
   const result = fingerprintChatDependencyClosure({ root,
-    entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
+    entries: [selectedModule, ...chatCatalogSpawnedSourceEntries, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
       "tests/runner-e2e/chat-scenarios/defaults.yaml", ...originReaders, ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
     selected: { descriptor, selectedExecution, lane, publicOriginIdentity: originIdentity, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, installedIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
