@@ -99,3 +99,18 @@ describe("saved card state and truthful generation controls", () => {
     expect(gradeIntegratorCards({ ...o, reply: checkpoint.reply + " The refresh could not finish. The last good output was kept unchanged." }).passed).toBe(true);
   });
 });
+
+import { explainsSavedStaleness } from "./integrator-status-cards.js";
+it("accepts natural saved-wording/live-status distinction without requiring the literal word card", () => {
+  expect(explainsSavedStaleness("It's stale wording, not a current blocker. RUN-1 is done and says the payment approval was received.")).toBe(true);
+  expect(explainsSavedStaleness("The wording is not stale. Payment approval is completed.")).toBe(false);
+  expect(explainsSavedStaleness("The summary is fresh. Payment approval is resolved.")).toBe(false);
+  expect(explainsSavedStaleness("The older summary is stale, but Launch is still blocked. Payment approval is completed.")).toBe(false);
+});
+it("a paraphrase cannot replace required saved-card link or source-access evidence", () => {
+  const o = valid("status-cards.explain-card"); const first = (o.state as Record<string, unknown>).accessCheckpoint as ReturnType<typeof valid>;
+  first.reply = "It's stale wording, not a current blocker. The source task is done and the payment approval was received.";
+  o.reply = first.reply + "\nI can no longer read or verify its current state; only the older saved summary remains.";
+  expect(gradeIntegratorCards(o).passed).toBe(true);
+  expect(gradeIntegratorCards({ ...o, links: ["/ACORN/issues/source"] }).passed).toBe(false);
+});

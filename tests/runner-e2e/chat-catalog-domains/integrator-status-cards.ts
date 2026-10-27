@@ -28,9 +28,9 @@ function freshSummary(o: CardsObservation, card: StatusCard) {
     && o.runs.some(run => run.id === row.runId && run.status === "succeeded") && row.generationIssueId != null)
     && o.summaries[card.id]?.some(row => row.body === card.summaryBody);
 }
-function explainsSavedStaleness(reply: string) {
-  return groundedStatement(reply, /\b(?:card|summary|observation)\b/i, /\b(?:stale|older|previous|last|outdated)\b/i,
-    /\b(?:still|currently|remains)\s+(?:is\s+)?blocked\b|\b(?:summary|card)\s+(?:is\s+)?(?:current|up.to.date|fresh)\b/i)
+export function explainsSavedStaleness(reply: string) {
+  return groundedStatement(reply, /\b(?:card|summary|observation|wording)\b/i, /\b(?:stale|older|previous|last|outdated)\b/i,
+    /\b(?:still|currently|remains)\s+(?:is\s+)?blocked\b|\b(?:summary|card)\s+(?:is\s+)?(?:current|up.to.date|fresh)\b|\b(?:not|isn.t|is not)\s+(?:stale|older|outdated)\b/i)
     && /payment approval/i.test(reply) && /\b(?:done|resolved|completed|approved)\b/i.test(reply);
 }
 export function gradeIntegratorCards(value: unknown) {
