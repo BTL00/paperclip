@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import type { ChatCatalogContext, NativeStopBoundaryReceipt } from "../chat-catalog-contract.js";
 import type { IssueComment } from "../../../packages/shared/src/types/issue.js";
 import { pollUntil } from "../api.js";
@@ -8,7 +8,7 @@ import { collectRunEvents } from "../run-observations.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { checks } from "./internal-support.js";
 import { openStandingChat } from "./identity-support.js";
-import { prepareRuntimeWorkerGate } from "./runtime-busy-worker.js";
+import { prepareRuntimeWorkerGate, readRuntimeTaskGate } from "./runtime-busy-worker.js";
 import { suspendOwnedProviderForCleanup, releaseOwnedCleanupProvider, ownedCleanupProviderHasExited } from "./runtime-provider-cleanup.js";
 import type { NativeFaultRun } from "./runtime-native-fault.js";
 import { hasSimplerWebsite, renderRuntimeArtifact } from "./runtime-rendered-artifact.js";
@@ -48,13 +48,13 @@ export function gradePostStop(value: unknown) {
 }
 export const runtimePostStopCases = [runtimeDefinition("recovery.post-stop-message", async ctx => {
   const source = await openStandingChat(ctx), lead = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${ctx.input.fixtures.agent.id}`);
-  const { gate } = await prepareRuntimeWorkerGate(ctx, { worker: lead });
+  const { gate } = await prepareRuntimeWorkerGate(ctx, { worker: lead, taskBound: true });
   const secondary = await ctx.input.page.context().newPage(); handles.set(ctx, { page: secondary });
   try {
-  const first = `Build an Acorn Notes website with a visible heading, product paragraph and labelled signup action. Initially use several panels and tabs. Work directly in this conversation; save and register the actual website.html artifact here, without delegating another task. First run the bounded command node ${gate.scriptPath} once and wait for its output before implementing the website. Do not replace the command or invent its output. Preserve later human changes to this same website.`;
+  const first = `Build an Acorn Notes website with a visible heading, product paragraph and labelled signup action. Initially use several panels and tabs. Work directly in this conversation; save and register the actual website.html artifact here, without delegating another task. First run the bounded command ${gate.command} once and wait for its output before implementing the website. Do not replace the command or invent its output. Preserve later human changes to this same website.`;
   await sendChatMessage(ctx.input.page, first);
   const running = await pollUntil({ label: "Genuine initial source Website request executing its bounded native tool", deadlineAt: Date.now() + 150000,
-    load: async () => ({ runs: await ctx.allRuns(), waiting: await readFile(gate.ready, "utf8").catch(() => "") }),
+    load: async () => ({ runs: await ctx.allRuns(), waiting: await readRuntimeTaskGate(ctx, gate, source.id, lead.id) }),
     accept: v => v.waiting === "waiting" && v.runs.length === 1 && v.runs[0]?.agentId === lead.id && v.runs[0].status === "running",
     reject: v => v.runs.some(row => row.status !== "running" && row.status !== "queued") ? "The genuine initial source execution ended before Stop setup" : undefined });
   const original = await ctx.input.api.get<NativeFaultRun>(`/api/heartbeat-runs/${running.runs[0]!.id}`);
@@ -64,7 +64,7 @@ export const runtimePostStopCases = [runtimeDefinition("recovery.post-stop-messa
   if (initial.length !== 1 || initial[0]?.body !== first || initial[0].authorUserId !== people.user.id) throw new Error("The initial Website request is not the exact genuine signed-in human setup turn");
   await secondary.goto(ctx.input.page.url(), { waitUntil: "domcontentloaded" }); await expect(secondary.getByTestId("task-chat-composer-stop")).toBeEnabled();
   return { gate, sourceId: source.id, workerRunId: original.id, initialHuman: initial[0], humanId: people.user.id };
-  } catch (error) { await writeFile(gate.gate, "The pending fixture tool has been released.", "utf8"); await secondary.close(); handles.delete(ctx); throw error; }
+  } catch (error) { if (gate.gate) await writeFile(gate.gate, "The pending fixture tool has been released.", "utf8"); await secondary.close(); handles.delete(ctx); throw error; }
 }, gradePostStop, {
   canonicalBoundary: "native-stop-cleanup", authentication: "human-session", setupHumanMessageCount: 1, expectedHumanMessageCount: 2, expectedRunCount: 2, attemptTimeoutMs: 720000,
   runPolicy: { kind: "terminal-counts", terminalStatusCounts: { cancelled: 1, succeeded: 1 } },
