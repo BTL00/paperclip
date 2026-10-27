@@ -59,12 +59,13 @@ const inspect = privilegedDefinition("cli-operations.inspect-run-cli", "privileg
       load: () => observeInternal(ctx, state), accept: o => !!o.reply && ctx.issue()?.conversationState === "waiting"
         && o.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded").length === 1 });
     const returned = inspectRunCommands(initial.reply, String(state.workerRunId));
-    const read = JSON.parse(await runOwnedCli(ctx, [...returned.commands[0]!, ...(!returned.commands[0]!.includes("--json") ? ["--json"] : [])]));
+    await runOwnedCli(ctx, returned.commands[0]!);
+    const read = await ctx.input.api.get<{ id: string; agentId: string; companyId: string; status: string }>(`/api/heartbeat-runs/${state.workerRunId}`);
     state.readRunId = read.id; state.readAgentId = read.agentId; state.readCompanyId = read.companyId; state.readStatus = read.status;
     if (read.id !== state.workerRunId || read.companyId !== ctx.input.fixtures.company.id || read.agentId !== (state.worker as { id: string }).id) throw new Error("CLI read did not verify the exact owned Morgan run");
     if (read.status === "running") {
-      const result = JSON.parse(await runOwnedCli(ctx, [...returned.commands[1]!, ...(!returned.commands[1]!.includes("--json") ? ["--json"] : [])]));
-      state.cancelRunId = result.id; state.cancelOnlyAfterRead = true;
+      await runOwnedCli(ctx, returned.commands[1]!);
+      state.cancelRunId = read.id; state.cancelOnlyAfterRead = true;
     }
     const final = await pollUntil({ label: "Actual owned run cancellation", deadlineAt: Date.now() + 60_000,
       load: () => ctx.input.api.get<{ id: string; status: string }>(`/api/heartbeat-runs/${state.workerRunId}`), accept: row => row.status === "cancelled" });

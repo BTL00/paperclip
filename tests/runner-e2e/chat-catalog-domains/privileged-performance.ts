@@ -27,6 +27,9 @@ export function gradeLongThreadPerformance(value: unknown) {
     "The interpretation is the actual second native reply to the exact persisted human report, not initial guidance or a fabricated result.");
   const timings = [...reply.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:ms|milliseconds)\b/gi)];
   const expected = report ? [report.mountMs, report.latestMs, report.maximumMs, report.totalMs] : [];
+  const commits = [...reply.matchAll(/\b(\d+)\s+(?:profiler\s+)?commits?\b/gi)];
+  c.add("concrete-measured-grounding", !!report && (timings.length > 0 || commits.length > 0) && commits.every(match => Number(match[1]) === report.commitCount),
+    "The interpretation grounds at least one observed timing or profiler commit count, rather than generic fixture guidance alone.");
   c.add("timing-claims-grounded", !!report && timings.every(match => {
     const value = Number(match[1]), decimals = match[1]!.split(".")[1]?.length ?? 0;
     const prefix = reply.slice(Math.max(0, match.index! - 60), match.index);

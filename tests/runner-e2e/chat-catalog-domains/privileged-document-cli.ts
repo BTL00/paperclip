@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import { checks, putDocument, type Entity } from "./internal-support.js";
+import type { IssueDocument } from "../../../packages/shared/src/types/issue.js";
+import { checks, putDocument } from "./internal-support.js";
 import { privilegedDefinition, privilegedObservation, settlePrivilegedChat } from "./privileged-support.js";
 import { prepareOwnedCli, runOwnedCli, cleanupOwnedCli } from "./privileged-cli-support.js";
 
@@ -44,7 +45,7 @@ const exportPlan = privilegedDefinition("cli-operations.export-document-cli", "p
   async act(ctx, state) {
     const reply = await settlePrivilegedChat(ctx), sourceId = String(state.sourceIssueId);
     const command = documentExportCommand(reply.reply, sourceId);
-    const json = await runOwnedCli(ctx, command.argv), document = JSON.parse(json) as Entity;
+    const json = await runOwnedCli(ctx, command.argv), document = JSON.parse(json) as IssueDocument;
     // Execute the actual finite jq filter from the returned command; never a shell.
     const bytes = execFileSync("jq", command.filterArgs, { input: json, timeout: 5_000, maxBuffer: 1_048_576 });
     const destination = path.join(String(state.operatorDirectory), command.filename);
@@ -53,7 +54,7 @@ const exportPlan = privilegedDefinition("cli-operations.export-document-cli", "p
     state.actualFileSha256 = createHash("sha256").update(actual).digest("hex"); state.fileReadBack = true;
     state.fileWithinOwnedDirectory = path.dirname(destination) === state.operatorDirectory;
     state.exportRevisionId = document.latestRevisionId; state.exportIssueId = document.issueId;
-    const saved = await ctx.input.api.get<Entity>(`/api/issues/${sourceId}/documents/plan`);
+    const saved = await ctx.input.api.get<IssueDocument>(`/api/issues/${sourceId}/documents/plan`);
     state.documentUnchanged = saved.latestRevisionId === state.documentRevisionId && createHash("sha256").update(saved.body ?? "").digest("hex") === state.savedBodySha256;
     state.exportStructuredResult = typeof document.body === "string" && typeof document.latestRevisionId === "string";
     state.onlyExpectedDocumentReturned = document.key === "plan" && document.issueId === sourceId;

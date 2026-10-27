@@ -35,7 +35,10 @@ const create = privilegedDefinition("cli-operations.create-from-cli", "privilege
       agent: entity(state, "worker").id, apiBase: ctx.input.api.baseURL };
     const bindings: Array<{ flag: string; placeholder: string; fixtureValue: string }> = [];
     const argv = websiteCreateArgv(reply.reply, fixture, bindings);
-    const result = JSON.parse(await runOwnedCli(ctx, argv)) as Entity;
+    await runOwnedCli(ctx, argv);
+    const created = await ctx.input.api.get<Entity[]>(`/api/companies/${fixture.company}/issues`);
+    if (reply.tasks.length || created.length !== 1) throw new Error("Actual returned CLI command did not create exactly one later task");
+    const result = created[0]!;
     state.cliResult = { id: result.id, companyId: result.companyId, title: result.title, identifier: result.identifier,
       projectId: result.projectId, assigneeAgentId: result.assigneeAgentId, status: result.status };
     state.executedArgv = argv.filter((value, index) => index < 2 || value.startsWith("-"));

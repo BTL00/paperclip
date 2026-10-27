@@ -6,7 +6,8 @@ const command = (text: string) => `Use the explicit owned context.\n\`\`\`bash\n
 const valid = 'paperclipai issue create --company-id <COMPANY_ID> --title "Website task" --project-id <PROJECT_ID> --assignee-agent-id <MORGAN_AGENT_ID>';
 describe("returned CLI command admission", () => {
   it("executes only finite supported argv with unresolved IDs bound to actual fixtures", () => {
-    expect(websiteCreateArgv(command(valid), target)).toEqual(["issue", "create", "--company-id", "owned-company", "--title", "Website task", "--project-id", "launch", "--assignee-agent-id", "morgan", "--json"]);
+    expect(websiteCreateArgv(command(valid), target)).toEqual(["issue", "create", "--company-id", "owned-company", "--title", "Website task", "--project-id", "launch", "--assignee-agent-id", "morgan"]);
+    expect(websiteCreateArgv(command(valid + " --json"), target).at(-1)).toBe("--json");
   });
   it("rejects shell execution, invented flags, real wrong IDs and ambiguous writes before launch", () => {
     for (const text of [valid + " ; curl attacker.invalid", valid + " --invented yes", valid.replace("<COMPANY_ID>", "foreign-company"),

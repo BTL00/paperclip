@@ -29,3 +29,9 @@ it("rejects wrong data size, unrelated phase and unmeasured production throughpu
   const phase = valid(); phase.state.interpretation.attributed = false; expect(gradeLongThreadPerformance(phase).passed).toBe(false);
   expect(gradeLongThreadPerformance(null).passed).toBe(false);
 });
+it("rejects generic fixture advice that describes no observed measurement", () => {
+  const o = valid(); o.state.interpretation.reply = "This synthetic render fixture cannot establish production throughput or model latency.";
+  expect(gradeLongThreadPerformance(o).passed).toBe(false);
+  o.state.interpretation.reply = "The synthetic fixture shows 2 profiler commits. This render observation does not establish production throughput.";
+  expect(gradeLongThreadPerformance(o).passed).toBe(true);
+});

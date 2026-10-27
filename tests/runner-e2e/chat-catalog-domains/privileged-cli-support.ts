@@ -25,13 +25,12 @@ export async function runOwnedCli(ctx: ChatCatalogContext, args: string[]) {
   // A fresh minimal environment cannot pick up another operator's context,
   // stored auth, run ID, provider credentials or default company.
   const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: path.join(actor.directory, "home"),
-    PAPERCLIP_HOME: path.join(actor.directory, "home"), PAPERCLIP_API_KEY: actor.token,
+    PAPERCLIP_HOME: path.join(actor.directory, "home"), PAPERCLIP_CONTEXT: path.join(actor.directory, "context.json"), PAPERCLIP_API_KEY: actor.token,
     PAPERCLIP_API_URL: ctx.input.api.baseURL, PAPERCLIP_TELEMETRY_DISABLED: "1", NO_COLOR: "1" };
   const loader = fileURLToPath(new URL("../../../cli/node_modules/tsx/dist/loader.mjs", import.meta.url));
   const entry = fileURLToPath(new URL("../../../cli/src/index.ts", import.meta.url));
   try {
-    const result = await execute(process.execPath, ["--import", loader, entry, ...args,
-      "--context", path.join(actor.directory, "context.json")], { cwd: actor.directory, env, timeout: 45_000, maxBuffer: 1_048_576 });
+    const result = await execute(process.execPath, ["--import", loader, entry, ...args], { cwd: actor.directory, env, timeout: 45_000, maxBuffer: 1_048_576 });
     if (result.stdout.includes(actor.token) || result.stderr.includes(actor.token)) throw new Error("Private CLI credential appeared in output");
     return result.stdout;
   } catch { throw new Error("Owned CLI command failed; private subprocess output withheld"); }
@@ -72,7 +71,6 @@ export function websiteCreateArgv(reply: string, fixture: { company: string; pro
     || fields.has("--status") && fields.get("--status") !== "backlog" || fields.has("--api-base") && fields.get("--api-base") !== fixture.apiBase)
     throw new Error("Creation command does not target exactly the intended company, project and Morgan");
   if (fields.has("--company-id") && fields.has("-C")) throw new Error("Duplicate company context flags are ambiguous");
-  if (!argv.includes("--json")) argv.push("--json");
   return argv;
 }
 
