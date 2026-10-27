@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { gradeRuntimeAgents, runtimeAgentsCases } from "./runtime-agents.js";
+import { gradeRuntimeAgents, hiringDeniedPermissions, runtimeAgentsCases } from "./runtime-agents.js";
+import { updateAgentPermissionsSchema } from "../../../packages/shared/src/validators/agent.js";
 import type { RuntimeObservation } from "./runtime-support.js";
 
 function valid(id: string): RuntimeObservation {
@@ -39,6 +40,14 @@ function valid(id: string): RuntimeObservation {
   return o;
 }
 describe("runtime agent oracles", () => {
+  it("disables hiring with the public permission contract while preserving existing task authority", () => {
+    for (const canAssignTasks of [true, false]) {
+      const payload = hiringDeniedPermissions({ canCreateAgents: true, canAssignTasks, canCreateSkills: true });
+      expect(updateAgentPermissionsSchema.safeParse(payload).success).toBe(true);
+      expect(payload).toMatchObject({ canCreateAgents: false, canAssignTasks, canCreateSkills: true });
+    }
+    expect(() => hiringDeniedPermissions({ canCreateAgents: true })).toThrow();
+  });
   it("accepts substantive paraphrases for each authored agent outcome", () => {
     const replies: Record<string, string> = {
       "agents.change-manager": "Morgan now reports to Riley; the reporting relationship is saved.",

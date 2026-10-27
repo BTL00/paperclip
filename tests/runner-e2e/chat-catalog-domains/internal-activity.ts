@@ -33,11 +33,8 @@ export function grade_activity(value: unknown) {
     case "activity.audit-change": {
       const priorityEvents = (o.state.priorityEvents as Entity[] | undefined) ?? [];
       c.add("real-two-change-history", priorityEvents.length === 2 && priorityEvents.every(event => o.activity.some(row => row.id === event.id)), "Both fixture priority changes remain visible on the exact task.");
-      c.add("attribution-and-values", priorityEvents.length === 2 && priorityEvents.every(event => !!event.actorId
-        && mentionsRecordedActor(o.reply, event.actorId)
-        && o.reply.split(/[;\n]|\.(?:\s|$)/).some(part => new RegExp(`\\b${String(event.details?.priority)}\\b`, "i").test(part) && mentionsRecordedActor(part, event.actorId!))
-        && o.reply.toLowerCase().includes(String(event.details?.priority).toLowerCase())),
-        "Editor identity is the recorded actor ID or the canonical Local board label, never a generic operator inference.");
+      c.add("attribution-and-values", attributedPriorityChanges(o.reply, priorityEvents, before),
+        "Recorded actors bind each actual transition, including a truthful common actor header; wrong actors, tasks or changes cannot pass.");
       c.add("recorded-event-times", priorityEvents.length === 2 && priorityEvents.every(event => mentionsRecordedTime(o.reply, event.createdAt,
         String(o.state.observedAt ?? ""), String(o.state.timezone ?? "UTC"), priorityEvents.map(row => row.createdAt))),
         "Reported calendar and clock times match the actual retained events in UTC or the browser's declared timezone.");
@@ -125,5 +122,46 @@ function mentionsRecordedActor(reply: string, actorId: string): boolean {
       || new RegExp(`\\b(?:by|actor|editor)\\s*[:=]?\\s*(?:the\\s+)?${name}\\b`, "i").test(reply)
       || new RegExp(`\\|\\s*${name}\\s*\\|`, "i").test(reply)
       || new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*|\\*\\*)?${name}(?:\\*\\*)?\\s*:`, "i").test(reply);
+  });
+}
+
+/** A common actor header scopes following bullets; repeating the actor in every
+ * line is unnecessary. Explicit contrary actor/transition claims still fail. */
+export function attributedPriorityChanges(reply: string, events: Entity[], target?: Entity): boolean {
+  if (events.length !== 2 || events.some(event => !event.actorId || !event.details?.priority)) return false;
+  const plain = reply.replace(/[`*]/g, "");
+  const taskRefs = plain.match(/\b[A-Z]{2,10}-\d+\b/g) ?? [];
+  if (target?.identifier && taskRefs.some(id => id !== target.identifier)) return false;
+  let cursor = 0;
+  const parts = plain.split(/[;\n]|\.(?:\s|$)/).filter(part => part.trim()).map(text => { const start = plain.indexOf(text, cursor); cursor = start + text.length; return { text, start, end: cursor }; });
+  const tokens = [...plain.matchAll(/\b(low|medium|high|critical)\b/gi)];
+  const pairs: Array<{ from: string; to: string; start: number; end: number }> = [];
+  for (let i = 0; i + 1 < tokens.length; i++) {
+    const left = tokens[i]!, right = tokens[i + 1]!;
+    if (/^\s*(?:→|->|to)\s*$/i.test(plain.slice(left.index! + left[0].length, right.index))) pairs.push({ from: left[1]!.toLowerCase(), to: right[1]!.toLowerCase(), start: left.index!, end: right.index! });
+  }
+  const change = (event: Entity) => {
+    const changes = event.details?.changes as { priority?: { from?: unknown } } | undefined;
+    const previous = event.details?._previous as { priority?: unknown } | undefined;
+    const raw = changes?.priority?.from ?? previous?.priority;
+    return { to: String(event.details!.priority).toLowerCase(), from: typeof raw === "string" ? raw.toLowerCase() : undefined };
+  };
+  if (pairs.some(pair => !events.some(event => { const expected = change(event); return pair.to === expected.to && (!expected.from || pair.from === expected.from); }))) return false;
+  return events.every(event => {
+    const actor = event.actorId!, expected = change(event);
+    const headerAt = parts.findIndex(part => mentionsRecordedActor(part.text, actor) && /\b(?:twice|both|two|priority|edits?|changes?)\b/i.test(part.text));
+    const aliases = actor === "local-board" ? [actor, "board"] : [actor.toLowerCase()];
+    return parts.some((entry, partIndex) => {
+      const part = entry.text;
+      if (!new RegExp(`\\b${expected.to}\\b`, "i").test(part)) return false;
+      const contraryActor = [...part.matchAll(/\b([a-z0-9_-]+)\s+(?:changed|updated|set|made|raised|lowered|edited)\b/gi)]
+        .some(match => !aliases.includes(match[1]!.toLowerCase()) && !["priority", "it", "they", "both", "changes", "edits"].includes(match[1]!.toLowerCase()));
+      if (contraryActor) return false;
+      if (!mentionsRecordedActor(part, actor) && !(headerAt >= 0 && partIndex >= headerAt)) return false;
+      // A priority named only as the starting value of another transition is
+      // not a report that this priority change occurred.
+      return tokens.some(token => token[1]!.toLowerCase() === expected.to && token.index! >= entry.start && token.index! < entry.end
+        && (!pairs.some(pair => pair.start === token.index) || pairs.some(pair => pair.end === token.index)));
+    });
   });
 }

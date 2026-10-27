@@ -203,6 +203,7 @@ function valid(scenario: string): InternalObservation {
     }
     case "projects.archive-project": {
       o.projects[0] = { ...o.projects[0]!, archivedAt: "2026-10-26T12:00:00Z" }; o.state.originalBody = "Delivered"; o.state.originalActivityId = "original";
+      o.state.historicalProjectReadId = "p"; o.state.historicalTaskReadId = "task"; o.reply = "Archived the Launch project. Its tasks and history remain intact; nothing was deleted.";
       o.documents = [{ id: "doc", body: "Delivered" }]; o.activity = [{ id: "original", action: "issue.created", entityId: "task" }, event("project.updated", "p")]; break;
     }
     case "tasks.website-task":
@@ -264,7 +265,7 @@ function valid(scenario: string): InternalObservation {
     }
     case "documents-artifacts.write-plan": {
       o.state.requirement = "Orchid 42";
-      const body = "Implement the Orchid 42 website, then verify accessible signup.";
+      const body = "Implement the single-page Orchid website with accessible signup and responsive layout, then verify keyboard navigation and mobile presentation.";
       o.documents = [{ id: "doc", key: "plan", body, latestRevisionId: "revision" }];
       o.revisions = [{ id: "revision", body, createdByAgentId: "ceo", createdByRunId: "run" }]; o.activity = [event("issue.document_created", "task")]; break;
     }
@@ -365,7 +366,7 @@ describe("internal chat scenario independent oracles", () => {
       expect(gradeInternal(wrong).passed).toBe(false);
       expect(gradeInternal(undefined).passed).toBe(false);
       const noLinks = structuredClone(good); noLinks.links = [];
-      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download", "inbox-search.archive-done", "inbox-search.restore-archive", "documents-artifacts.restore-document"].includes(definition.scenarioId));
+      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.archive-project", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download", "inbox-search.archive-done", "inbox-search.restore-archive", "documents-artifacts.restore-document"].includes(definition.scenarioId));
     });
   }
   it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-partial-failure")).passed).toBe(false));
@@ -708,5 +709,42 @@ describe("personal inbox operation calibration", () => {
   it("rejects changes to another person's inbox preference", () => {
     const o = valid("inbox-search.archive-done"); Object.assign(o, { otherPersonItems: [{ id: "other-person", title: "Riley work", status: "done", archivedAt: "2026-10-26T13:00:00Z" }] });
     expect(gradeInternal(o).passed).toBe(false);
+  });
+});
+
+describe("measured initial counterexamples calibrated for coherent B", () => {
+  it("accepts saved archival without a mandatory model hyperlink, with real history readbacks", () => {
+    const o = valid("projects.archive-project"); o.links = [];
+    expect(gradeInternal(o)).toMatchObject({ passed: true });
+    delete o.state.historicalProjectReadId; expect(gradeInternal(o).passed).toBe(false);
+  });
+  it.each(["Archived Launch and deleted its tasks.", "Archived Launch; I cancelled all unfinished execution."])("rejects false destructive archival claim: %s", reply => {
+    const o = valid("projects.archive-project"); o.reply = reply; expect(gradeInternal(o).passed).toBe(false);
+  });
+  it("accepts an actor header over both actual priority transitions", () => {
+    const o = valid("activity.audit-change");
+    o.state.task = { ...(o.state.task as Entity), identifier: "RUN-1" };
+    const events = o.state.priorityEvents as Entity[];
+    events[0]!.details = { priority: "high", _previous: { priority: "medium" } };
+    events[1]!.details = { priority: "low", _previous: { priority: "high" } };
+    o.reply = "The user actor **`local-board`** changed RUN-1’s priority twice:\n\n- Medium → High\n- High → Low\n\nBoth changes occurred at 12:00:00 UTC.";
+    expect(gradeInternal(o), JSON.stringify(gradeInternal(o).checks)).toMatchObject({ passed: true });
+    for (const reply of [
+      "Morgan changed RUN-1’s priority twice: Medium → High; High → Low. At 12:00 UTC.",
+      "Board changed RUN-99’s priority twice: Medium → High; High → Low. At 12:00 UTC.",
+      "Board changed RUN-1’s priority twice: Medium → Low; Low → High. At 12:00 UTC.",
+      "Board changed RUN-1’s priority: High → Low. At 12:00 UTC.",
+      "Board changed RUN-1’s priority twice: Medium → High; High → Low. At 13:00 UTC.",
+      "Board changed RUN-1’s priority twice:\nMorgan changed Medium → High\nBoard changed High → Low. At 12:00 UTC.",
+    ]) { o.reply = reply; expect(gradeInternal(o).passed, reply).toBe(false); }
+  });
+  it("accepts the observed substantive plan without requiring a random nonce", () => {
+    const o = valid("documents-artifacts.write-plan");
+    const body = "# Implementation Plan\n1. Define the single-page structure and Orchid visual direction, including clear content hierarchy and responsive breakpoints.\n2. Build the semantic page sections and an accessible signup form with explicit labels, useful validation states, and clear success/error feedback.\n3. Add responsive styling for mobile through desktop, ensuring readable typography, comfortable spacing, and usable touch targets.\n4. Verify the complete keyboard path, visible focus states, form behavior, and mobile presentation; fix any accessibility or layout regressions found.";
+    o.state.requirement = "Orchid old-random-nonce"; o.documents[0]!.body = body; o.revisions[0]!.body = body;
+    expect(gradeInternal(o), JSON.stringify(gradeInternal(o).checks)).toMatchObject({ passed: true });
+    for (const changed of [body.replaceAll("Orchid", "Otherbrand"), "Implement Orchid website. Verify it.", body.replaceAll(/accessible|accessibility|semantic|labels/g, "plain"), body.replaceAll(/responsive|breakpoints/g, "fixed"), body.replaceAll("keyboard", "pointer"), body.replaceAll("mobile", "desktop"), body.replaceAll("single-page", "multi-page")]) {
+      o.documents[0]!.body = changed; o.revisions[0]!.body = changed; expect(gradeInternal(o).passed, changed).toBe(false);
+    }
   });
 });

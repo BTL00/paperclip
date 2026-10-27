@@ -2,6 +2,11 @@ import { checks, sameTask } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, unchangedAgent, agentLink, verifyRuntimeResult, type RuntimeObservation, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
 import { pollUntil } from "../api.js";
 import { expect } from "@playwright/test";
+import { updateAgentPermissionsSchema } from "../../../packages/shared/src/validators/agent.js";
+
+export function hiringDeniedPermissions(permissions: RuntimeAgent["permissions"]) {
+  return updateAgentPermissionsSchema.parse({ ...permissions, canCreateAgents: false });
+}
 
 export function gradeRuntimeAgents(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -120,7 +125,8 @@ export const runtimeAgentsCases = [
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
   } }),
   runtimeDefinition("agents.hire-denied", async ctx => {
-    await ctx.input.api.patch(`/api/agents/${ctx.input.fixtures.agent.id}/permissions`, { canCreateAgents: false });
+    const original = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${ctx.input.fixtures.agent.id}`);
+    await ctx.input.api.patch(`/api/agents/${ctx.input.fixtures.agent.id}/permissions`, hiringDeniedPermissions(original.permissions));
     const { probeAgentPermission } = await import("./identity-support.js");
     // Invalid payload would only prove validation. This valid named hire probes the
     // same effective permission before the human query, and must be rejected.

@@ -18,8 +18,7 @@ export function grade_documents_artifacts(value: unknown) {
   switch (o.scenarioId) {
     case "documents-artifacts.write-plan": {
       const plans = o.documents.filter(row => row.key === "plan"); const plan = plans[0];
-      c.add("saved-implementation-plan", plans.length === 1 && !!plan && !!plan.latestRevisionId && /\b(?:implement|build|develop)\b/i.test(plan.body ?? "")
-        && /\b(?:test|verify|validation)\b/i.test(plan.body ?? "") && (plan.body ?? "").includes(String(o.state.requirement)), "A durable plan reflects the website's actual prerequisite brief and verification, rather than merely chat prose.");
+      c.add("saved-implementation-plan", plans.length === 1 && !!plan && !!plan.latestRevisionId && meaningfulOrchidPlan(plan.body ?? ""), "A durable plan reflects the website's actual prerequisite brief and verification, rather than merely chat prose.");
       c.add("versioned-author", !!plan && o.revisions.some(row => row.id === plan.latestRevisionId && row.body === plan.body && row.createdByAgentId === o.leadId
         && o.runs.some(run => run.id === row.createdByRunId)), "The current document revision is attributed to this real agent run.");
       c.add("plan-audit", !!before && authored("issue.document_created", before.id), "The API audit records the CEO creating the plan after the request.");
@@ -67,7 +66,7 @@ export const documents_artifactsCases: readonly ChatCatalogCase[] = [
   ...privateDownloadCases,
   resolveFeedback(),
   define("documents-artifacts.write-plan", async ctx => {
-    const p = await project(ctx); const requirement = `Orchid ${ctx.input.nonce}`;
+    const p = await project(ctx); const requirement = "Orchid";
     const t = await task(ctx, "Website task", p.id, { assigneeAgentId: ctx.input.fixtures.agent.id,
       description: `Build a single-page website for ${requirement}, with accessible signup and responsive layout. Verify keyboard navigation and mobile presentation.` });
     return { project: p, task: t, requirement };
@@ -112,3 +111,10 @@ function resolveFeedback(): ChatCatalogCase {
   } };
 }
 import { observeInternal } from "./internal-support.js";
+
+export function meaningfulOrchidPlan(body: string): boolean {
+  return /\b(?:implement|build|develop)\b/i.test(body) && /\b(?:test|verify|verification|validation)\b/i.test(body)
+    && /\bOrchid\b/i.test(body) && /\b(?:single|one)[- ]page\b/i.test(body)
+    && /\b(?:signup|sign.up|registration)\b/i.test(body) && /\b(?:accessible|accessibility|labels?|semantic)\b/i.test(body)
+    && /\b(?:responsive|breakpoints?)\b/i.test(body) && /\bkeyboard\b/i.test(body) && /\bmobile\b/i.test(body);
+}
