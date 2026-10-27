@@ -1,3 +1,4 @@
+import { savedDesignInstruction, withRenderedCommentReference, validRenderedCommentReference } from "./internal-comment-reference.js";
 import { withEditOwnership } from "./internal-edit-ownership.js";
 import { verifyDistinctTaskFixtures } from "./internal-distinct-fixtures.js";
 import { delegatedTaskCases } from "./internal-task-creation.js";
@@ -10,26 +11,6 @@ import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
 
-function savedDesignInstruction(o: InternalObservation, body: string, design: Entity) {
-  const targets: string[] = [];
-  const prose = body.replace(/\[[^\]]+\]\(<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\)/g, (_link, href: string) => {
-    const token = `{{DESIGNREF${targets.length}}}`; targets.push(href); return token;
-  });
-  const valid = targets.map((href, index) => hasLink({ ...o, links: [href] }, "issues", design) ? `{{DESIGNREF${index}}}` : null).filter((x): x is string => !!x);
-  if (!valid.length) return false;
-  const directive = /\b(?:follow|use|adhere\s+to|implement\s+(?:according\s+to|in\s+line\s+with)|build\s+(?:according\s+to|in\s+line\s+with))\b/i;
-  const governsNegativeReference = (prefix: string) => {
-    const text = prefix.replace(/\b(?:do not|don't) forget to\b/gi, "remember to");
-    return /\b(?:do not|don't|must not|should not|never|not to|not)\b[^{}.;!\n]{0,60}\b(?:follow|use|adhere|implement|build)\b[^{}.;!\n]{0,80}$/i.test(text)
-      || /\b(?:avoid|ignore|disregard|stop)\b[^{}.;!\n]{0,80}$/i.test(text);
-  };
-  const clauses = prose.split(/[.;!\n]+/).filter(clause => valid.some(token => clause.includes(token)));
-  if (clauses.some(clause => valid.some(token => { const at = clause.indexOf(token); return at >= 0 && governsNegativeReference(clause.slice(0, at)); }))) return false;
-  if (/\b(?:(?:do not|don't|never|must not|should not)\s+(?:follow|use|adhere\s+to)|ignore|disregard)\s+(?:it|this|that|the\s+(?:approved\s+)?design)\b/i.test(prose)) return false;
-  return clauses.some(clause => directive.test(clause) && valid.some(token => {
-    const instruction = directive.exec(clause); return !!instruction && clause.indexOf(token) > instruction.index;
-  }));
-}
 export function grade_tasks(value: unknown) {
   const c = checks(); const o = observation(value);
   c.add("complete-independent-observation", !!o, "Missing API, document, audit or rendered-link evidence cannot pass.");
@@ -67,7 +48,7 @@ export function grade_tasks(value: unknown) {
     case "tasks.comment-with-reference": {
       const design = entity(o.state, "design");
       const added = o.comments.filter(row => row.authorAgentId === o.leadId && row.createdByRunId && o.runs.some(run => run.id === row.createdByRunId));
-      c.add("one-attributed-note", added.length === 1 && savedDesignInstruction(o, added[0]?.body ?? "", design), "One CEO-authored note retains a usable reference to the actual approved design task.");
+      c.add("one-attributed-note", added.length === 1 && savedDesignInstruction(o, added[0]?.body ?? "", design) && validRenderedCommentReference(o, added[0]!, design), "One CEO-authored note retains a usable reference to the actual approved design task.");
       c.add("records-preserved", !!before && sameTask(before, current) && sameTask(design, o.tasks.find(row => row.id === design.id)) && o.tasks.length === 2,
         "The note neither changes either task nor creates another task.");
       c.add("task-link", linkedTask(), "The original conversation links back to the task containing the note.");
@@ -92,11 +73,11 @@ export const tasksCases: readonly ChatCatalogCase[] = [
     const t = await task(ctx, "Landing page", p.id, { description: "Build the Launch landing page; this work is saved for later." });
     return { project: p, worker, task: t };
   })),
-  define("tasks.comment-with-reference", async ctx => {
+  withRenderedCommentReference(define("tasks.comment-with-reference", async ctx => {
     const p = await project(ctx); const design = await task(ctx, "Approved design", p.id, { status: "done", description: "Approved design: semantic HTML, clear contrast, one primary signup action." });
     const t = await task(ctx, "Landing page", p.id, { description: "Build the launch website." });
     return { project: p, design, task: t };
-  }),
+  })),
 
 ];
 

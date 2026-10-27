@@ -241,7 +241,8 @@ function valid(scenario: string): InternalObservation {
     }
     case "tasks.comment-with-reference": {
       const design = { id: "design", title: "Approved design", status: "done" }; o.state.design = design; o.tasks.push(design);
-      o.comments = [{ id: "comment", authorAgentId: "ceo", createdByRunId: "run", body: "Follow the [approved design](/ACORN/issues/design)." }]; break;
+      o.comments = [{ id: "comment", issueId: "task", authorAgentId: "ceo", createdByRunId: "run", body: "Follow the [approved design](/ACORN/issues/design)." }];
+      o.state.savedCommentReference = { commentId: "comment", taskId: "task", designId: "design", bodySha256: createHash("sha256").update(o.comments[0]!.body!).digest("hex"), href: "/ACORN/issues/design", visible: true, destinationMatched: true, publicReadMatched: true }; break;
     }
     case "goals.create-goal-tree": {
       o.state = { firstIds: ["growth", "team"], retryQuery: "query" }; o.humanQueries = ["query", "query"]; o.tasks = []; o.projects = [];
