@@ -4,10 +4,12 @@ import { createServer } from "node:net";
 import { mkdtemp, mkdir, readFile, readdir, rm, open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, type Browser, type Page } from "@playwright/test";
-import { installedReleaseLaunch } from "../installed-release.js";
+import { fileURLToPath } from "node:url";
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { installedReleaseEnvironment, installedReleaseLaunch } from "../installed-release.js";
 import { pollUntil } from "../api.js";
 import { checks } from "./internal-support.js";
+import { ONBOARDING_FIRST_TASK_ORIGIN_KIND } from "../../../packages/shared/src/constants.js";
 
 export interface EmptyInstallationReceipt {
   journeyKind: "operator-before-chat"; query: "Help me set up Paperclip on this machine."; querySent: false;
@@ -25,39 +27,43 @@ export async function runEmptyInstallationBoundary(input: {
   /** Attempt-owned ignored/private result path; raw operator logs can contain bootstrap tokens. */
   privateLogPath: string;
   deadlineAt: number; evidence(name: string, value: unknown): Promise<void>;
-  finishWizard(target: { origin: string; page: Page; deadlineAt: number }): Promise<{ companyId: string; firstAgentId: string }>;
+  finishWizard(target: { origin: string; page: Page; deadlineAt: number }): Promise<{ companyId: string; firstAgentId: string; conversationPath: string }>;
 }): Promise<EmptyInstallationReceipt> {
   const launch = installedReleaseLaunch(input.installedCli);
   const cliSha256 = createHash("sha256").update(await readFile(launch.cli)).digest("hex");
   if (cliSha256 !== input.expectedCliSha256 || launch.version !== input.expectedCliVersion) throw new Error("Empty installation candidate differs from its declared immutable CLI pin");
+  if (!path.isAbsolute(input.privateLogPath)) throw new Error("Operator logs require an absolute attempt-owned private result path");
   const directory = await mkdtemp(path.join(tmpdir(), "paperclip-chat-onboarding-"));
-  const home = path.join(directory, "instance"); await mkdir(home, { mode: 0o700 });
+  const home = path.join(directory, "instance"); await mkdir(home, { mode: 0o700 }).catch(async error => { await rm(directory, { recursive: true, force: true }); throw error; });
   const initialHomeEntries = (await readdir(home)).length;
   if (initialHomeEntries !== 0) throw new Error("Operator installation did not start from an empty isolated home");
-  const config = path.join(home, "config.json"); const port = await unusedLoopbackPort();
+  const config = path.join(home, "config.json"); const port = await unusedLoopbackPort().catch(async error => { await rm(directory, { recursive: true, force: true }); throw error; });
   const origin = `http://127.0.0.1:${port}`;
-  if (!path.isAbsolute(input.privateLogPath) || path.relative(directory, input.privateLogPath).startsWith("..") === false) throw new Error("Operator logs require an external attempt-owned private result path");
-  const log = await open(input.privateLogPath, "wx", 0o600);
+  if (path.relative(directory, input.privateLogPath).startsWith("..") === false) { await rm(directory, { recursive: true, force: true }); throw new Error("Operator logs require an external attempt-owned private result path"); }
+  const log = await open(input.privateLogPath, "wx", 0o600).catch(async error => { await rm(directory, { recursive: true, force: true }); throw error; });
   // Closed environment prevents the existing instance, DB, provider credentials
   // or eval qualification flags from becoming a prerequisite of this install.
-  const environment: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, USER: process.env.USER,
+  const environment = installedReleaseEnvironment({ PATH: process.env.PATH, HOME: home, USER: process.env.USER,
     TMPDIR: process.env.TMPDIR, SHELL: process.env.SHELL, LANG: process.env.LANG,
     PAPERCLIP_HOME: home, PAPERCLIP_CONFIG: config, PAPERCLIP_INSTANCE_ID: `onboarding-${randomUUID()}`,
     PORT: String(port), PAPERCLIP_OPEN_ON_LISTEN: "false", PAPERCLIP_DEPLOYMENT_MODE: "local_trusted",
-    PAPERCLIP_BIND: "loopback", PAPERCLIP_BIND_HOST: "127.0.0.1", SERVE_UI: "true", DO_NOT_TRACK: "1" };
+    PAPERCLIP_BIND: "loopback", PAPERCLIP_BIND_HOST: "127.0.0.1", SERVE_UI: "true", DO_NOT_TRACK: "1" },
+    fileURLToPath(new URL("../../../", import.meta.url)), path.join(process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? directory, "provider-bin"));
   const processHandle = spawn(process.execPath, [...launch.args, "--config", config], {
     cwd: launch.cwd, env: environment, detached: true, stdio: ["ignore", log.fd, log.fd],
   });
   let spawnFailed = false; processHandle.once("error", () => { spawnFailed = true; });
   const exited = new Promise<void>(resolve => processHandle.once("exit", () => resolve()));
-  const context = await input.browser.newContext({ baseURL: origin }); const page = await context.newPage();
+  let context: BrowserContext | undefined;
   let receipt: EmptyInstallationReceipt | undefined; let failed = false;
   async function get<T>(endpoint: string): Promise<T> {
+    if (!context) throw new Error("Owned operator browser is not available");
     const response = await context.request.get(origin + endpoint, { timeout: 5_000 });
     if (!response.ok()) throw new Error(`Owned installation read returned HTTP ${response.status()}`);
     return response.json() as Promise<T>;
   }
   try {
+    context = await input.browser.newContext({ baseURL: origin }); const page = await context.newPage();
     const health = await pollUntil({ label: "operator-created installation readiness", deadlineAt: Math.min(input.deadlineAt, Date.now() + 180_000), intervalMs: 1_000,
       load: () => get<{ status: string; deploymentMode: string }>("/api/health"),
       accept: result => result.status === "ok", reject: () => spawnFailed || processHandle.exitCode !== null ? "Public onboarding CLI exited before readiness" : undefined });
@@ -74,8 +80,14 @@ export async function runEmptyInstallationBoundary(input: {
     const agent = await get<{ id: string; companyId: string; lifecycleState: string; status: string }>(`/api/agents/${chosen.firstAgentId}`);
     expect(company.id).toBe(chosen.companyId); expect(agent.companyId).toBe(company.id); expect(agent.lifecycleState).toBe("ready");
     expect(["idle", "active"]).toContain(agent.status);
-    await page.goto(`/${company.issuePrefix}/chats/${agent.id}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("task-chat-composer-input")).toBeVisible();
+    const destination = new URL(chosen.conversationPath, origin); const parts = destination.pathname.split("/");
+    if (destination.origin !== origin || parts[1] !== company.issuePrefix || !["issues", "chats"].includes(parts[2]!)) throw new Error("Later conversation path does not belong to the actual new company");
+    if (parts[2] === "issues") {
+      const conversation = await get<{ companyId: string; assigneeAgentId: string; originKind: string }>(`/api/issues/${parts[3]}`);
+      expect(conversation.companyId).toBe(company.id); expect(conversation.assigneeAgentId).toBe(agent.id); expect(conversation.originKind).toBe(ONBOARDING_FIRST_TASK_ORIGIN_KIND);
+    } else expect(parts[3]).toBe(agent.id);
+    await page.goto(destination.href, { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("task-chat-composer-input").or(page.getByTestId("task-chat-composer-takeover")).first()).toBeVisible();
     const runs = await get<unknown[]>(`/api/companies/${company.id}/heartbeat-runs?limit=100`);
     expect(runs).toHaveLength(0);
     receipt = { journeyKind: "operator-before-chat", query: "Help me set up Paperclip on this machine.", querySent: false,
@@ -85,7 +97,8 @@ export async function runEmptyInstallationBoundary(input: {
     return receipt;
   } catch (error) { failed = true; throw error; }
   finally {
-    await context.close();
+    let browserCloseFailed = false;
+    try { await context?.close(); } catch { browserCloseFailed = true; }
     // This child owns its new process group; signals never target the harness
     // controller, an attached instance, or an unverified database process.
     if (processHandle.pid && processHandle.exitCode === null) {
@@ -95,8 +108,9 @@ export async function runEmptyInstallationBoundary(input: {
       if (processHandle.exitCode === null) { try { process.kill(-processHandle.pid, "SIGKILL"); } catch { /* Already exited. */ } await exited; }
     }
     await log.close(); await rm(directory, { recursive: true, force: true });
-    if (receipt) { receipt.cleanup = "complete"; await input.evidence("identity-empty-installation-result.json", receipt); }
-    else await input.evidence("identity-empty-installation-result.json", { journeyKind: "operator-before-chat", querySent: false, failed, cleanup: "complete" });
+    if (receipt) { receipt.cleanup = browserCloseFailed ? "failed" : "complete"; await input.evidence("identity-empty-installation-result.json", receipt); }
+    else await input.evidence("identity-empty-installation-result.json", { journeyKind: "operator-before-chat", querySent: false, failed, cleanup: browserCloseFailed ? "failed" : "complete" });
+    if (browserCloseFailed && !failed) throw new Error("Owned installation browser cleanup failed after the target process and private home were removed");
   }
 }
 export function gradeEmptyInstallation(value: unknown) {
