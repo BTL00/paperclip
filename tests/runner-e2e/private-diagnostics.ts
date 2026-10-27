@@ -48,7 +48,7 @@ export function trackedPrivateSecrets(initial: string[], executionId: string, en
 export function diagnosticSecrets(values: readonly string[]): string[] {
   const variants = normalizedSecrets(values).flatMap(value => {
     let structured = false; try { const parsed = JSON.parse(value); structured = parsed !== null && typeof parsed === "object"; } catch { /* Ordinary secret. */ }
-    return [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value),
+    return [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url"),
     value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"),
     // Short nonempty password/key lines are private too. JSON punctuation is
     // structural; its actual string credential values are separately indexed

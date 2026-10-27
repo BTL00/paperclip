@@ -213,6 +213,7 @@ export function buildPaperclipServerEnvironment(
   }
   for (const key of [...GENERATED_SERVER_SECRET_KEYS, ...installedCliKeys, ...installedDaytonaPluginKeys]) delete result[key];
   Object.assign(result, overrides);
+  delete result[PRIVATE_DIAGNOSTICS_ENV];
   return result;
 }
 

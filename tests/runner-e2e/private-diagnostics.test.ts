@@ -11,7 +11,7 @@ describe("private diagnostic output boundary", () => {
     const password = 'synthetic-credential-<&"-12345678';
     const pem = "-----BEGIN PRIVATE KEY-----\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUx\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUy\n-----END PRIVATE KEY-----"; const short = "Ax4\nBy5\nCz6";
     const outputs: string[] = []; const stream = createPrivateDiagnosticStream(() => [password, pem, short], value => outputs.push(value));
-    const input = `HTTP503: π provider unavailable ${password}\n${pem}\n${short}\nJSON ${JSON.stringify(password)}\nHTML ${password.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}\nURI ${encodeURIComponent(password)}\n`;
+    const input = `HTTP503: π provider unavailable ${password}\n${pem}\n${short}\nJSON ${JSON.stringify(password)}\nHTML ${password.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}\nURI ${encodeURIComponent(password)}\nBASE64 ${Buffer.from(password).toString("base64")}\n`;
     const bytes = Buffer.from(input); for (let i = 0; i < bytes.length; i += 3) stream.write(bytes.subarray(i, i + 3)); stream.end();
     const safe = outputs.join(""); for (const value of diagnosticSecrets([password, pem, short])) expect(safe).not.toContain(value);
     expect(safe).toContain("HTTP503: π provider unavailable"); expect(stream.redactedSecret()).toBe(true); expect(stream.failed()).toBe(false);
@@ -19,6 +19,7 @@ describe("private diagnostic output boundary", () => {
   it("synchronously registers a generated cookie before first output and rereads at final flush", () => {
     const { root, file } = registry(); const secrets = trackedPrivateSecrets([], "selected-case", { [PRIVATE_DIAGNOSTICS_ENV]: file, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root });
     expect(buildPaperclipServerEnvironment({ [PRIVATE_DIAGNOSTICS_ENV]: file })[PRIVATE_DIAGNOSTICS_ENV]).toBeUndefined();
+    expect(buildPaperclipServerEnvironment({}, { [PRIVATE_DIAGNOSTICS_ENV]: file })[PRIVATE_DIAGNOSTICS_ENV]).toBeUndefined();
     const outputs: string[] = []; const stream = createPrivateDiagnosticStream(() => readPrivateDiagnosticSecrets(file, root), value => outputs.push(value));
     const cookie = "generated-session-canary-982726351"; secrets.push(cookie);
     expect(readPrivateDiagnosticSecrets(file, root)).toContain(cookie);
