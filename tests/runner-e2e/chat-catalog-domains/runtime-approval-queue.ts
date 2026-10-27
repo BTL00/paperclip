@@ -8,6 +8,13 @@ import { checks, type Entity } from "./internal-support.js";
 import { prepareRuntimeWorkerGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
 import { runtimeQueueCases } from "./runtime-queue.js";
 import { runtimeDefinition, observeRuntime, runtimeObservation } from "./runtime-support.js";
+export function acornNamingDirection(reply: string) {
+  if (/\b(?:not|instead of|rather than|avoid|reject)\s+(?:the name\s+)?Acorn\b|\bAcorn\s+(?:is|was|would be)\s+(?:the\s+)?(?:wrong|incorrect|invalid|rejected)\b/i.test(reply)) return false;
+  const selectedNames = [...reply.matchAll(/\b(?:[Uu]se|[Cc]hoose|[Nn]ame it|[Cc]all it|[Aa]nswer with)\s+["']?([A-Z][a-zA-Z0-9-]*)/g)].filter(match => !/\b(?:not|don't|avoid)\s*$/i.test(reply.slice(Math.max(0, (match.index ?? 0) - 12), match.index))).map(match => match[1]!);
+  if (selectedNames.some(name => !["Acorn", "The", "Submit", "That", "Its", "This"].includes(name))) return false;
+  return /\bAcorn\b/i.test(reply) && /question|answer|respond|decision|nam(?:e|ing)/i.test(reply);
+}
+export function ordinaryApprovalEntries(queue: Pick<IssueQueuedCommentQueue, "entries">) { return queue.entries.filter(row => !row.source); }
 export function gradeApprovalQueue(value: unknown) {
   const c = checks(), o = runtimeObservation(value);
   c.add("real-question-response-and-ordinary-queue-evidence", !!o, "The actual native question, human response, separate queue mutations and once-only consuming native input are required."); if (!o) return c.result();
@@ -21,9 +28,9 @@ export function gradeApprovalQueue(value: unknown) {
     && JSON.stringify(answered.payload) === JSON.stringify(question.payload) && results?.answers?.some(row => row.questionId === "name" && row.otherText === "Acorn") === true
     && s.responseRetainedAcrossOrdinaryMutations === true && s.responseUneditable === true,
   "Acorn remains the same immutable typed interaction response, distinct from the editable/deletable ordinary comment queue.");
-  c.add("human-guidance-and-real-ordinary-mutations", /Acorn/i.test(String(s.queryReply)) && /question|answer|respond|decision|name/i.test(String(s.queryReply))
+  c.add("human-guidance-and-real-ordinary-mutations", acornNamingDirection(String(s.queryReply))
     && (s.canonicalAnswerAttributed === true || !/I(?:'ve| have)? (?:already )?(?:answered|submitted|accepted)/i.test(String(s.queryReply)))
-    && s.actualOrdinaryEdit === true && s.actualOrdinaryReorder === true && s.actualOrdinaryDiscard === true && (s.humanAnswerSubmitted === true || s.canonicalAnswerAttributed === true),
+    && s.actualOrdinaryEdit === true && (s.actualOrdinaryReorder === true || s.ordinaryReorderRestricted === true) && s.actualOrdinaryDiscard === true && (s.humanAnswerSubmitted === true || s.canonicalAnswerAttributed === true),
   "Canonical chat identifies the intended answer and actual human response control; editing, ordering and discarding ordinary messages cannot impersonate or cancel it.");
   const response = s.responseQueue as IssueQueuedCommentQueue;
   c.add("response-own-delivery-semantics-and-once-only-admission", response?.entries.length === 1 && response.entries[0]?.source?.kind === "interaction"
@@ -86,7 +93,7 @@ export const runtimeApprovalQueueCases = [runtimeDefinition("steering.approval-d
     let retained = true;
     async function verifyResponse() { const row = (await ctx.input.api.get<IssueThreadInteraction[]>(`/api/issues/${task.id}/interactions`)).find(row => row.id === question.id);
       retained &&= row?.status === "answered" && JSON.stringify(row.result) === JSON.stringify((state.questionAfter as IssueThreadInteraction).result); }
-    let queue = await ctx.input.api.get<IssueQueuedCommentQueue>(endpoint); const ordinary = queue.entries.filter(row => !row.source);
+    let queue = await ctx.input.api.get<IssueQueuedCommentQueue>(endpoint); const ordinary = ordinaryApprovalEntries(queue);
     if (ordinary.length !== 2 || !queue.queueId) throw new Error("The bound answer replaced rather than remained separate from the ordinary waiting queue");
     const target = ordinary[0]!, edited = `${target.comment.body} Retain the original layout note.`;
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
@@ -97,12 +104,13 @@ export const runtimeApprovalQueueCases = [runtimeDefinition("steering.approval-d
     queue = await pollUntil({ label: "Actual ordinary full-text edit persists independently of the accepted response", deadlineAt: Date.now() + 15_000,
       load: () => ctx.input.api.get<IssueQueuedCommentQueue>(endpoint), accept: q => q.entries.some(row => row.comment.id === target.comment.id && row.comment.body === edited) });
     state.actualOrdinaryEdit = true; await verifyResponse();
-    const order = queue.entries.map(row => row.comment.id).reverse(), moved = queue.entries[1]!;
+    const order = ordinaryApprovalEntries(queue).map(row => row.comment.id).reverse(), moved = ordinaryApprovalEntries(queue)[1]!, wholeOrderBefore = queue.entries.map(row => row.comment.id);
+    const mixed = queue.entries.some(row => row.source?.kind === "interaction");
     const handle = ctx.input.page.getByRole("button", { name: `Reorder queued message: ${moved.comment.body}`, exact: true });
     await handle.focus(); await handle.press("Space"); await handle.press("ArrowUp"); await handle.press("Space");
     queue = await pollUntil({ label: "Real keyboard queue reorder persists without replaying the decision", deadlineAt: Date.now() + 15_000,
-      load: () => ctx.input.api.get<IssueQueuedCommentQueue>(endpoint), accept: q => q.entries.map(row => row.comment.id).join() === order.join() });
-    state.actualOrdinaryReorder = true; await verifyResponse();
+      load: () => ctx.input.api.get<IssueQueuedCommentQueue>(endpoint), accept: q => mixed ? q.entries.map(row => row.comment.id).join() === wholeOrderBefore.join() : ordinaryApprovalEntries(q).map(row => row.comment.id).join() === order.join() });
+    state.actualOrdinaryReorder = !mixed; state.ordinaryReorderRestricted = mixed && queue.entries.map(row => row.comment.id).join() === wholeOrderBefore.join(); await verifyResponse();
     for (const id of order) {
       await ctx.input.page.getByTestId(`task-chat-queued-discard-${id}`).click();
       await pollUntil({ label: "Supported human discard removes only this ordinary comment", deadlineAt: Date.now() + 15_000,

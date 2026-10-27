@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { gradeApprovalQueue } from "./runtime-approval-queue.js";
+import { gradeApprovalQueue, acornNamingDirection, ordinaryApprovalEntries } from "./runtime-approval-queue.js";
 function valid() {
   const payload = { questionSet: { questions: [{ id: "name", prompt: "What is the product name?" }] } };
   return { scenarioId: "steering.approval-delivery", companyId: "company", leadId: "ceo", agents: [], links: [], humanQueries: [], reply: "", tasks: [{ id: "website" }], activity: [],
@@ -8,7 +8,7 @@ function valid() {
       questionBefore: { id: "question", kind: "ask_user_questions", status: "pending", issueId: "website", createdByAgentId: "morgan", sourceRunId: "prior", payload },
       questionAfter: { id: "question", status: "answered", resolvedByUserId: "human" as string | null, resolvedByAgentId: null as string | null, payload, result: { answers: [{ questionId: "name", otherText: "Acorn" }] } },
       responseRetainedAcrossOrdinaryMutations: true, responseUneditable: true, queryReply: "Use Acorn for the existing naming question; submit that bound answer through its supported response control.",
-      actualOrdinaryEdit: true, actualOrdinaryReorder: true, actualOrdinaryDiscard: true, humanAnswerSubmitted: true, canonicalAnswerAttributed: false,
+      actualOrdinaryEdit: true, actualOrdinaryReorder: true, ordinaryReorderRestricted: false, actualOrdinaryDiscard: true, humanAnswerSubmitted: true, canonicalAnswerAttributed: false,
       responseQueue: { entries: [{ source: { kind: "interaction", interactionId: "question" }, canEdit: false, canDiscard: false }] }, consumingRunCount: 1, responseNativeInputBound: true, queueEmptyAfterDelivery: true, actualAcornResult: true, initialWorkRetained: true } };
 }
 it("accepts real human response retained separately from mutated ordinary comments", () => expect(gradeApprovalQueue(valid()).passed).toBe(true));
@@ -26,3 +26,14 @@ it("rejects duplicate decision consumers", () => { const o = valid(); o.state.co
 it("rejects native input lacking the bound question ID and answer", () => { const o = valid(); o.state.responseNativeInputBound = false; expect(gradeApprovalQueue(o).passed).toBe(false); });
 it("rejects loss of earlier settled work", () => { const o = valid(); o.state.initialWorkRetained = false; expect(gradeApprovalQueue(o).passed).toBe(false); });
 it("rejects missing actual response evidence", () => expect(gradeApprovalQueue(undefined).passed).toBe(false));
+
+it.each(["Use Birch, not Acorn, as the name", "Acorn is wrong; use Birch for the product name", "The requested name was Acorn; Use Birch instead to answer the question"])("rejects contradictory named direction without rescue by later human input", reply => { const o = valid(); o.state.queryReply = reply; expect(gradeApprovalQueue(o).passed).toBe(false); });
+it.each(["Use Acorn, not Birch, as the product name", "The answer is Acorn; submit it on the naming question", "Name it Acorn and retain the actual answer on the response card"])("accepts natural correct naming direction", reply => expect(acornNamingDirection(reply)).toBe(true));
+it("restricts every mutating ID to ordinary entries in a mixed two-comment plus response queue", () => {
+  const ordinary = { comment: { id: "ordinary" } }, response = { source: { kind: "interaction" }, comment: { id: "decision" } };
+  const ids = ordinaryApprovalEntries({ entries: [ordinary, response, { comment: { id: "other" } }] } as Parameters<typeof ordinaryApprovalEntries>[0]).map(row => row.comment.id);
+  expect(ids).toEqual(["ordinary", "other"]); expect(ids).not.toContain("decision");
+});
+it("accepts the real mixed-queue UI reorder refusal while preserving immutable decision placement", () => { const o = valid(); o.state.actualOrdinaryReorder = false; o.state.ordinaryReorderRestricted = true; expect(gradeApprovalQueue(o).passed).toBe(true); });
+
+it("accepts explicit rejection of a different name while selecting the actual answer", () => expect(acornNamingDirection("Do not use Birch; the product name is Acorn.")).toBe(true));
