@@ -42,9 +42,13 @@ function valid(id: string) {
   } else if (["questions-and-approvals.approve-tool-once", "questions-and-approvals.decline-tool"].includes(id)) {
     const decline = id.endsWith("decline-tool");
     o.interactions = [{ id: "tool-card", kind: "request_confirmation", status: decline ? "rejected" : "accepted", resolvedByUserId: "person",
-      payload: { toolAction: { connectionId: "connection", actionRequestId: "action" } } }];
+      payload: { toolAction: { connectionId: "connection", actionRequestId: "action" } }, ...(decline ? {} : { result: { toolAction: { status: "executed" } } }) }];
     Object.assign(o.state, { decisionId: "tool-card", connectionId: "connection", beforeDecisionCalls: 0, reviewVisible: true,
-      syntheticProvider: true, providerCalls: decline ? 0 : 1, policyStillAskFirst: true, marker: "Orchid receipt" });
+      syntheticProvider: true, providerCalls: decline ? 0 : 2, policyStillAskFirst: true, marker: "Orchid receipt", pendingBeforeCanonicalQuery: true, setupProviderCalls: 0,
+      afterDecisionReply: decline ? "I did not read the app because you declined." : "The diagnostic read failed: Fixture provider unavailable.",
+      firstReply: "Launch notes contain Orchid receipt.", secondDecisionId: "second", beforeSecondDecisionCalls: 1, secondReviewVisible: true, secondFailureVisible: true });
+    if (!decline) o.interactions.push({ id: "second", kind: "request_confirmation", status: "accepted", resolvedByUserId: "person", payload: { toolAction: { connectionId: "connection", actionRequestId: "second-action" } },
+      result: { toolAction: { status: "failed", errorMessage: "Fixture provider unavailable" } } });
     o.reply = decline ? "I did not read the app because you declined." : "Launch notes contain Orchid receipt.";
   } else if (id === "companies.rename-company") {
     o.state.otherCompany = { id: "other", name: "Acorn Studios" }; o.state.companyCount = 2;
@@ -56,9 +60,11 @@ function valid(id: string) {
   } else if (id === "navigation-preferences.quick-search") {
     Object.assign(o.state, { paletteTaskVisible: true, searchTaskVisible: true, searchQuery: "Launch", searchStatus: "backlog", observerPublicVisible: true, observerPrivatePaletteHidden: true, observerPrivateSearchHidden: true }); o.reply = "Open quick search with Cmd+K.";
   } else if (id === "questions-and-approvals.ambiguous-yes") {
-    o.tasks = []; o.projects = []; o.state.proposals = [{ id: "note" }, { id: "poster" }];
+    o.tasks = []; o.projects = []; o.state.proposals = [{ id: "note", payload: { prompt: "Welcome note?" } }, { id: "poster", payload: { prompt: "Launch poster?" } }];
     o.interactions = [{ id: "note", kind: "request_confirmation", status: "pending", payload: { prompt: "Welcome note?" } },
       { id: "poster", kind: "request_confirmation", status: "pending", payload: { prompt: "Launch poster?" } }]; o.reply = "Which proposal: Welcome note or Launch poster?";
+    Object.assign(o.state, { staleAttemptStatus: 409, expiredAttemptStatus: 409, staleErrorCode: "interaction_stale_target", staleOldRevisionId: "revision-1", staleCurrentRevisionId: "revision-2", staleCurrentRevisionAfter: "revision-2", staleInteractionId: "stale" });
+    o.interactions.push({ id: "stale", kind: "request_confirmation", status: "expired", payload: { prompt: "Old Welcome note?" }, result: { outcome: "stale_target" } });
   } else if (id.startsWith("questions-and-approvals.")) {
     const multipart = id.endsWith("multi-part-question"); const original = question(multipart); o.state.original = original; o.state.answer = "Acorn 42";
     o.interactions = [{ ...original, status: "answered", resolvedAt: "2026-10-26T12:00:00.000Z", resolvedByUserId: "person", result: { answers: multipart ? [
@@ -117,6 +123,16 @@ describe("identity catalog independent oracle calibration", () => {
     expect(gradeQuestions(o).passed).toBe(true);
     original.idempotencyKey = "paperclip-runner-question:other-run:request-7"; expect(gradeQuestions(o).passed).toBe(false);
     original.idempotencyKey = "paperclip-runner-question:run:request-7"; (o.state.taskBrief as { createdAt: string }).createdAt = "2026-10-25T12:00:00.000Z";
+    expect(gradeQuestions(o).passed).toBe(false);
+  });
+  it("tool approval cannot cover a second action or turn provider failure into success", () => {
+    const o = valid("questions-and-approvals.approve-tool-once"); o.interactions[1]!.payload.toolAction!.actionRequestId = "action";
+    expect(toolReviewIdentityCases[0]!.grade(o).passed).toBe(false);
+    const failed = valid("questions-and-approvals.approve-tool-once"); failed.interactions[1]!.result!.toolAction!.status = "executed";
+    expect(toolReviewIdentityCases[0]!.grade(failed).passed).toBe(false);
+  });
+  it("ambiguity rejects a superficially denied stale request whose current document changed anyway", () => {
+    const o = valid("questions-and-approvals.ambiguous-yes"); o.state.staleCurrentRevisionAfter = "unexpected-revision";
     expect(gradeQuestions(o).passed).toBe(false);
   });
   it("empty installation requires a full real later wizard outcome, not an empty-server screen", () => {

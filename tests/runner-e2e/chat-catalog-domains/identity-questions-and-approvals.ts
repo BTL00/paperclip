@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
 import { pollUntil } from "../api.js";
-import { checks, project, entity, hasLink } from "./internal-support.js";
+import { checks, project, entity, hasLink, putDocument } from "./internal-support.js";
 import { identityDefinition, identityObservation, observeIdentity, openStandingChat, waitForReply, type Interaction } from "./identity-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
@@ -69,13 +69,18 @@ export function gradeQuestions(value: unknown) {
   }
   if (o.scenarioId === "questions-and-approvals.ambiguous-yes") {
     const originals = o.state.proposals as Interaction[] | undefined;
-    c.add("two-original-proposals-pending", originals?.length === 2 && originals.every(before => o.interactions.some(row => row.id === before.id && row.status === "pending" && !row.result)),
+    c.add("two-original-proposals-pending", originals?.length === 2 && originals.every(before => o.interactions.some(row => row.id === before.id && row.status === "pending" && !row.result
+      && JSON.stringify(row.payload) === JSON.stringify(before.payload))),
       "The ambiguous message does not accept either current proposal.");
     c.add("neither-action-executed", o.tasks.length === 0 && o.projects.length === 0, "Neither candidate action has a durable side effect.");
     c.add("specific-disambiguation", /\b(?:which|choose|select)\b/i.test(o.reply) && /welcome note/i.test(o.reply) && /launch poster/i.test(o.reply)
       || o.interactions.some(row => row.kind === "ask_user_questions" && row.status === "pending" && row.createdByAgentId === o.leadId
         && /welcome note/i.test(JSON.stringify(row.payload)) && /launch poster/i.test(JSON.stringify(row.payload))),
       "The reply or a real question names the two actual alternatives and requests a selection.");
+    c.add("stale-and-expired-cannot-authorize", o.state.staleAttemptStatus === 409 && o.state.expiredAttemptStatus === 409 && o.state.staleErrorCode === "interaction_stale_target"
+      && o.state.staleOldRevisionId !== o.state.staleCurrentRevisionId && typeof o.state.staleCurrentRevisionId === "string" && o.state.staleCurrentRevisionAfter === o.state.staleCurrentRevisionId
+      && o.interactions.some(row => row.id === o.state.staleInteractionId && row.status === "expired" && row.result?.outcome === "stale_target" && !row.resolvedByAgentId),
+      "A real revision change makes a matching old proposal stale; both its first stale accept and repeated expired accept reject, retaining the current document without authority.");
     return c.result();
   }
   const original = o.state.original as Interaction | undefined;
@@ -228,9 +233,35 @@ export const questionIdentityCases = [
     const source = await openStandingChat(ctx); const proposals = [];
     for (const [title, prompt] of [["Welcome note", "Create a welcome note task?"], ["Launch poster", "Create a launch poster task?"]]) {
       proposals.push(await ctx.input.api.post<Interaction>(`/api/issues/${source.id}/interactions`, createIssueThreadInteractionSchema.parse({
-        kind: "request_confirmation", title, continuationPolicy: "none", payload: { version: 1, prompt },
+        kind: "request_confirmation", title, continuationPolicy: "none", payload: { version: 1, prompt, supersedeOnUserComment: false },
       })));
     }
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" }); return { proposals };
-  }, gradeQuestions, { coverageGaps: ["stale-and-expired-proposal-rejection"] }),
+  }, gradeQuestions, {
+    async act(ctx, state) {
+      await waitForReply(ctx);
+      // Only after the canonical ambiguity response, exercise the additional
+      // stale/expired variant against a real document and its public revisions.
+      const source = ctx.issue()!; const old = await putDocument(ctx, source.id, "Old welcome note: publish immediately.");
+      const stale = await ctx.input.api.post<Interaction>(`/api/issues/${source.id}/interactions`, createIssueThreadInteractionSchema.parse({
+        kind: "request_confirmation", title: "Welcome note (old reviewed revision)", resolverPolicy: "human_only", continuationPolicy: "none",
+        payload: { version: 1, prompt: "Approve this older welcome note?", supersedeOnUserComment: false,
+          target: { type: "issue_document", issueId: source.id, documentId: old.id, key: "plan", revisionId: old.latestRevisionId, revisionNumber: old.latestRevisionNumber } },
+      }));
+      const current = await putDocument(ctx, source.id, "Current welcome note: remain a local draft until a later explicit decision.", old.latestRevisionId!);
+      state.staleInteractionId = stale.id; state.staleOldRevisionId = old.latestRevisionId; state.staleCurrentRevisionId = current.latestRevisionId;
+      const accept = () => ctx.input.page.context().request.post(`${ctx.input.api.baseURL}/api/issues/${source.id}/interactions/${stale.id}/accept`, { data: {}, headers: { Origin: ctx.input.api.baseURL } });
+      const rejected = await accept(); state.staleAttemptStatus = rejected.status();
+      const body = await rejected.json() as { details?: { code?: string }; code?: string }; state.staleErrorCode = body.details?.code ?? body.code;
+      const repeated = await accept(); state.expiredAttemptStatus = repeated.status();
+      const saved = await ctx.input.api.get<{ latestRevisionId: string }>(`/api/issues/${source.id}/documents/plan`);
+      state.staleCurrentRevisionAfter = saved.latestRevisionId;
+      if (saved.latestRevisionId !== current.latestRevisionId) throw new Error("Rejected stale approval altered the current document");
+      await ctx.input.evidence("identity-ambiguous-stale-rejection.json", { interactionId: stale.id, oldRevisionId: old.latestRevisionId, currentRevisionId: saved.latestRevisionId,
+        staleAttemptStatus: state.staleAttemptStatus, expiredAttemptStatus: state.expiredAttemptStatus, staleErrorCode: state.staleErrorCode });
+      await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(ctx.input.page.getByText("Welcome note", { exact: true }).first()).toBeVisible();
+      await expect(ctx.input.page.getByText("Launch poster", { exact: true }).first()).toBeVisible();
+    },
+  }),
 ] as const;
