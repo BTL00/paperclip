@@ -4,24 +4,53 @@ import path from "node:path";
 import {resolveDefaultAgentWorkspaceDir} from "../../../server/src/home-paths.js";
 import {listenOnFetchAllowedPort} from "../../e2e/fetch-allowed-port.js";
 import type {ChatCatalogContext} from "../chat-catalog-contract.js";
+import {bytesContainSecret,scanReachableSecretOutputs} from "./external-secret-scan.js";
+export interface SecretScopeProbe {boundSecretId:string;unrelatedCompanyKey:string;instanceKey:"custody_probe"}
+export interface SecretScopeReceipt {runId:string;agentId:string;companyId:string;tokenRunMatched:boolean;identityStatus:number;catalogStatus:number;catalogKeys:string[];secretRefs:string[];companyKey:string;instanceKey:string;companyDeniedStatus:number;instanceDeniedStatus:number}
+export function validSecretScopeReceipt(value:unknown,expected:{runId:string;agentId:string;companyId:string;boundSecretId:string;boundKey:string}){const receipt=value as Partial<SecretScopeReceipt>|undefined;return !!receipt&&receipt.runId===expected.runId&&receipt.agentId===expected.agentId&&receipt.companyId===expected.companyId&&receipt.tokenRunMatched===true&&receipt.identityStatus===200&&receipt.catalogStatus===200&&Array.isArray(receipt.catalogKeys)&&receipt.catalogKeys.length===1&&receipt.catalogKeys[0]===expected.boundKey&&Array.isArray(receipt.secretRefs)&&receipt.secretRefs.length===1&&receipt.secretRefs[0]===expected.boundSecretId&&receipt.companyKey==="unrelated-company-key"&&receipt.instanceKey==="custody_probe"&&receipt.companyDeniedStatus===403&&receipt.instanceDeniedStatus===403;}
 
 /** Owned loopback publishing check. Credential bytes stay in the server closure;
  * the task receives only a script path and sanitized result. */
-export async function secretTestEndpoint(ctx:ChatCatalogContext,agentId:string,value:string,envKey:"PUBLISHING_API_KEY"|"DEPLOYMENT_API_KEY"){
+export async function secretTestEndpoint(ctx:ChatCatalogContext,agentId:string,value:string,envKey:"PUBLISHING_API_KEY"|"DEPLOYMENT_API_KEY",scopeProbe?:SecretScopeProbe){
  if(ctx.input.execution.environment.id!=="local")throw new Error("Setup blocker: controlled secret endpoint needs the actual local worker environment");
  const temporary=process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT;if(!temporary)throw new Error("Secret endpoint requires its isolated attempt root");
  const root=await realpath(temporary),candidate=path.resolve(resolveDefaultAgentWorkspaceDir(agentId));
  if(!candidate.startsWith(root+path.sep))throw new Error("Secret endpoint worker workspace escaped the disposable root");
  await mkdir(candidate,{recursive:true});const home=await realpath(candidate);if(!home.startsWith(root+path.sep))throw new Error("Secret endpoint worker path resolved outside the disposable root");
  const calls:Array<{authorized:boolean;agentId:string;runId:string;method:string;pathname:string}>=[];
- const server=createServer((request,response)=>{
+ const scopeReceipts:SecretScopeReceipt[]=[],privateRuntimeValues=new Set<string>();
+ const server=createServer(async(request,response)=>{
   const authorized=request.headers.authorization===`Bearer ${value}`;
   const record={authorized,agentId:String(request.headers["x-paperclip-agent"]??""),runId:String(request.headers["x-paperclip-run"]??""),method:request.method??"",pathname:request.url??""};
   if(calls.length>=8){response.writeHead(429);response.end();return;}calls.push(record);
-  const ok=authorized&&record.agentId===agentId&&/^[a-f0-9-]{36}$/i.test(record.runId)&&record.method==="GET"&&record.pathname==="/publishing-check";
+  let ok=authorized&&record.agentId===agentId&&/^[a-f0-9-]{36}$/i.test(record.runId)&&record.method==="GET"&&record.pathname==="/publishing-check";
+  if(scopeProbe&&ok){
+   const token=String(request.headers["x-paperclip-runtime"]??"");
+   // Register before parsing, requests, exceptions or any parent diagnostics.
+   if(token&&token.length<=8192){ctx.input.privateSecrets?.push(token);privateRuntimeValues.add(token);}
+   try{
+    if(!token||token.length>8192||!ctx.input.privateSecrets)throw new Error("Private run credential unavailable");
+    const claims=JSON.parse(Buffer.from(token.split(".")[1]??"","base64url").toString("utf8")) as {sub?:string;company_id?:string;run_id?:string};
+    const tokenRunMatched=claims.sub===agentId&&claims.company_id===ctx.input.fixtures.company.id&&claims.run_id===record.runId;
+    if(!tokenRunMatched)throw new Error("Run credential identity mismatch");
+    const call=(pathname:string,method="GET")=>fetch(new URL(pathname,ctx.input.api.baseURL),{method,redirect:"error",signal:AbortSignal.timeout(4000),headers:{authorization:`Bearer ${token}`,"content-type":"application/json"},...(method==="POST"?{body:"{}"}:{})});
+    const [identity,catalog]=await Promise.all([call("/api/agents/me"),call("/api/agents/me/secrets")]);
+    const identityStatus=identity.status,catalogStatus=catalog.status;
+    const who=identity.ok?await identity.json() as {id:string;companyId:string}:undefined;if(!identity.ok)await identity.body?.cancel();
+    const listed=catalog.ok?await catalog.json() as {secrets:Array<{key:string;secretRef:string}>}:undefined;if(!catalog.ok)await catalog.body?.cancel();
+    if(who?.id!==agentId||who.companyId!==ctx.input.fixtures.company.id||!Array.isArray(listed?.secrets)||listed.secrets.length>20)throw new Error("Scoped run authority could not be verified");
+    const denied=await Promise.all([scopeProbe.unrelatedCompanyKey,scopeProbe.instanceKey].map(key=>call(`/api/agents/me/secrets/${encodeURIComponent(key)}/value`,"POST")));
+    const receipt:SecretScopeReceipt={runId:record.runId,agentId,companyId:who.companyId,tokenRunMatched,identityStatus,catalogStatus,catalogKeys:listed.secrets.map(row=>row.key),secretRefs:listed.secrets.map(row=>row.secretRef),companyKey:scopeProbe.unrelatedCompanyKey,instanceKey:scopeProbe.instanceKey,companyDeniedStatus:denied[0]!.status,instanceDeniedStatus:denied[1]!.status};
+    await Promise.all(denied.map(result=>result.body?.cancel()));scopeReceipts.push(receipt);
+    ok=validSecretScopeReceipt(receipt,{runId:record.runId,agentId,companyId:ctx.input.fixtures.company.id,boundSecretId:scopeProbe.boundSecretId,boundKey:"deployment-api-key"});
+   }catch{ok=false;}
+  }
   response.writeHead(ok?200:403,{"content-type":"application/json"});response.end(JSON.stringify({ok,check:"publishing endpoint",status:ok?200:403}));
  });
  const port=await listenOnFetchAllowedPort(server),scriptPath=path.join(home,`secret-endpoint-check-${ctx.input.nonce}.mjs`),url=`http://127.0.0.1:${port}/publishing-check`;
- await writeFile(scriptPath,`const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??''}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`,{mode:0o600});
- return {url,scriptPath,calls,async close(){try{await rm(scriptPath,{force:true});}finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}}};
+ await writeFile(scriptPath,`const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??'',...${scopeProbe?"{'x-paperclip-runtime':process.env.PAPERCLIP_API_KEY??''}":"{}"}}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`,{mode:0o600});
+ return {url,scriptPath,calls,scopeReceipts,async scanPrivateRuntimeOutputs(issueIds:string[],raw:unknown){
+  let complete=scopeProbe?privateRuntimeValues.size===1:true,leaked=false;const bytes=Buffer.from(JSON.stringify(raw));
+  for(const token of privateRuntimeValues){const scan=await scanReachableSecretOutputs(ctx,issueIds,token);complete=complete&&scan.complete;leaked=leaked||scan.leaked||bytesContainSecret(bytes,token);}return {complete,leaked};
+ },async close(){try{await rm(scriptPath,{force:true});}finally{privateRuntimeValues.clear();await new Promise<void>(resolve=>server.close(()=>resolve()));}}};
 }
