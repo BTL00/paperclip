@@ -1,3 +1,4 @@
+import { grantCaseTaskAssignment } from "./integrator-case-prerequisites.js";
 import type { cases, caseEvents } from "../../../packages/db/src/schema/cases.js";
 import type { CaseHandoff, HandoffCaseResult } from "../../../packages/shared/src/case-handoffs.js";
 import type { Issue, IssueDocument, DocumentRevision } from "../../../packages/shared/src/types/issue.js";
@@ -57,8 +58,9 @@ export const integratorCaseHistoryCases = [integratorDefinition("cases", "cases.
   try {
     await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: true }); const p = await project(ctx, "Launch");
     const worker = await fixtureWorker(ctx); const reviewer = await fixtureWorker(ctx);
-    await ctx.input.api.patch(`/api/agents/${reviewer.id}`, { name: "Riley", permissions: { canAssignTasks: true } });
-    await ctx.input.api.patch(`/api/agents/${worker.id}`, { permissions: { canAssignTasks: true } });
+    await ctx.input.api.patch(`/api/agents/${reviewer.id}`, { name: "Riley" });
+    await grantCaseTaskAssignment(ctx, reviewer.id);
+    await grantCaseTaskAssignment(ctx, worker.id);
     for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, ...[worker.id, reviewer.id].map(scopeId => ({ scopeType: "agent", scopeId }))])
       await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
     const kickoff = await ctx.input.api.post<HandoffCaseResult>(`/api/companies/${ctx.input.fixtures.company.id}/case-handoffs`, {

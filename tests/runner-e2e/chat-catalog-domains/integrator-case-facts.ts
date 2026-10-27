@@ -1,3 +1,4 @@
+import { waitCaseCancellationAccounting } from "./integrator-case-prerequisites.js";
 import { randomUUID } from "node:crypto";
 import type { cases } from "../../../packages/db/src/schema/cases.js";
 import type { HandoffCaseResult } from "../../../packages/shared/src/case-handoffs.js";
@@ -75,6 +76,7 @@ export const integratorCaseFactsCases = [integratorDefinition("cases", "cases.up
       load: async () => ({ task: await ctx.input.api.get<Issue>(`/api/issues/${kickoff.taskId}`), runs: await ctx.allRuns() }),
       accept: v => v.runs.length === 1 && v.runs[0]?.status === "cancelled" && v.task.status === "in_progress" && !v.task.executionRunId && !v.task.checkoutRunId });
     gate.release();
+    await waitCaseCancellationAccounting(ctx, { companyId: ctx.input.fixtures.company.id, agentId: worker.id, issueId: kickoff.taskId, runId: initial.runs[0]!.id });
     return { initialRunId: initial.runs[0]!.id, project: p, worker: { id: worker.id }, reviewer: { id: reviewer.id }, case: await ctx.input.api.get<CaseRecord>(`/api/cases/${kickoff.caseId}`),
       brief: await ctx.input.api.get<IssueDocument>(`/api/issues/${kickoff.taskId}/documents/brief`), collaboratorValue: `support-${ctx.input.nonce}` };
   } catch (error) { await cleanup(ctx); throw error; }
