@@ -30,8 +30,9 @@ export async function oauthPost(route: string, body: unknown) {
   return fetch(origin + "/mcp/oauth/" + route, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
 
-export async function beginConnection(write = true, redirect = origin + "/eval-client-callback", configure = false) {
-  const registration = await oauthPost("register", { client_name: "Paperclip acceptance client", redirect_uris: [redirect] });
+export async function beginConnection(write = true, redirect = origin + "/eval-client-callback", configure = false, clientName = "Paperclip acceptance client") {
+  if (!clientName.trim() || clientName.length > 160 || /[\u0000-\u001f\u007f]/.test(clientName)) throw new Error("Disposable client label is invalid");
+  const registration = await oauthPost("register", { client_name: clientName, redirect_uris: [redirect] });
   expect(registration.status, "public client registration").toBe(201);
   const { client_id: clientId } = await registration.json() as { client_id: string };
   const verifier = randomBytes(32).toString("base64url");

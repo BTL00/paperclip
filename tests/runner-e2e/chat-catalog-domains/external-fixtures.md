@@ -188,3 +188,17 @@ is replayed once to test idempotency. Cleanup restores the app manifest, removes
 the new endpoint, restores the instance experiment flag, and deletes only
 creation-receipted messages/uploads plus this app's replies within owned threads.
 Provider response/account metadata and original manifest contents stay private.
+
+`assistant-connections.revoke-personal-grant` needs no external account. Two
+labelled generic assistant grants are genuinely registered and consented through
+the current signed-in person's sensitive public API transport. This is labelled
+fixture grant creation, not named ChatGPT setup or a completed consent wizard.
+The old grant then creates the actual Website task through public MCP. A stable
+owned runtime gate proves that its admitted worker is genuinely awaiting a tool
+result before the canonical disconnect request. The actual model must identify
+the old client, preserve its task, and direct a supported personal management
+page before the human clicks the matching visible Revoke control. Fresh revoked
+access and refresh calls must fail, the other grant remains usable with unchanged
+scope, and the same worker stays running for five seconds after revocation. A
+neutral release then lets that original worker finish normally. No provider
+account is discovered, adopted, or mutated by this fixture.

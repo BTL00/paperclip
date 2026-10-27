@@ -30,3 +30,4 @@ export { companySecretExternalCases } from "./external-company-secret.js";
 export { profileDefinitionExternalCases } from "./external-profile-definition.js";
 export { slackThreadExternalCases } from "./external-slack-thread.js";
 export { wrongResolverExternalCases } from "./external-wrong-resolver.js";
+export { personalRevokeExternalCases } from "./external-assistant-revoke.js";
