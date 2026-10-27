@@ -61,7 +61,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { getActorInfo, assertBoard, assertCompanyAccess, assertInstanceAdmin, getAccessibleResource, hasCompanyAccess } from "./authz.js";
 import { badRequest, forbidden, HttpError, notFound, unprocessable } from "../errors.js";
-import { accessService, logActivity, toolAccessPolicyService, toolAccessService, vercelConnectIntegrationStatus } from "../services/index.js";
+import { accessService, logActivity, toolAccessPolicyService, toolAccessService, vercelConnectSetupAvailability } from "../services/index.js";
 import { ToolGatewayHttpError, type ToolGatewayService } from "../services/tool-gateway.js";
 import { RailwayError } from "../services/railway.js";
 import type { VercelConnectClient } from "../services/vercel-connect.js";
@@ -819,7 +819,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
       : options.paperclipCloudConnector
         ? await options.paperclipCloudConnector.getCapabilities()
         : [];
-    const vercelConnect = vercelConnectIntegrationStatus();
+    const vercelConnect = vercelConnectSetupAvailability();
     const settings = await instanceSettingsService(db).getExperimental();
     let oauthCallbackUrl: string | undefined;
     try {
@@ -839,17 +839,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
       ...(oauthCallbackUrl ? { oauthCallbackUrl } : {}),
       capabilities: await describeConnectionCreateCapabilities(req, companyId),
       credentialSources: {
-        vercelConnect: {
-          available: vercelConnect.enabled && vercelConnect.configured,
-          enabled: vercelConnect.enabled,
-          authentication: vercelConnect.authentication,
-          manageUrl: vercelConnect.manageUrl,
-          reason: vercelConnect.enabled
-            ? vercelConnect.configured
-              ? null
-              : "Vercel Connect needs workload OIDC or PAPERCLIP_VERCEL_CONNECT_ACCESS_TOKEN."
-            : "Vercel Connect setup is disabled on this Paperclip instance.",
-        },
+        vercelConnect,
       },
       apps: [...APP_STORE_DEFINITIONS.filter((app) => (settings.enableMemoryConnectors || !isMemoryConnectorId(app.slug))
         && isConnectorFeatureEnabled(app, settings)).map((app) =>

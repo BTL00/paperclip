@@ -95,6 +95,15 @@ export function vercelConnectIntegrationStatus(env: NodeJS.ProcessEnv = process.
   };
 }
 
+/** Public setup availability shared by board catalog and agent discovery.
+ * This projection contains no credential values or connector identifiers. */
+export function vercelConnectSetupAvailability(status = vercelConnectIntegrationStatus()) {
+  return { available: status.enabled && status.configured, enabled: status.enabled,
+    authentication: status.authentication, manageUrl: status.manageUrl,
+    reason: status.enabled ? status.configured ? null : "Vercel Connect needs workload OIDC or PAPERCLIP_VERCEL_CONNECT_ACCESS_TOKEN."
+      : "Vercel Connect setup is disabled on this Paperclip instance." };
+}
+
 /**
  * Vercel permits plaintext callbacks only on the literal `localhost` host.
  * Paperclip's local board commonly runs on 127.0.0.1, which is the same

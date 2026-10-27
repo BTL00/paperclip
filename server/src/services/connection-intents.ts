@@ -1,3 +1,5 @@
+import { connectionMethodDiscoveryMetadata, connectionSetupAdviceInstruction } from "./connection-method-discovery.js";
+import { vercelConnectSetupAvailability } from "./vercel-connect.js";
 import { updateAgentConfigurationInTransaction } from "./agent-configuration-transaction.js";
 import { emailChannelService } from "./email-channels.js";
 import { emailConnectionService } from "./email-connections.js";
@@ -422,6 +424,7 @@ export function connectionIntentService(db: Db) {
     const serviceQuery = explicit?.serviceQuery ?? query;
     const preparedQuery = prepareConnectionSearch(serviceQuery);
     const inventory = await connectionInventory(run.companyId);
+    const credentialSourceAvailability = vercelConnectSetupAvailability();
     const candidates: Array<{ item: ConnectionSearchResultItem; score: number; nameScore: number }> = [];
     const authorizedCatalogs = new Map<string, Awaited<ReturnType<typeof indexedCatalog>>>();
     const discoveryMethods = (app: (typeof APP_STORE_DEFINITIONS)[number]) => getAvailableConnectionMethods(app)
@@ -442,6 +445,7 @@ export function connectionIntentService(db: Db) {
         app = { ...app, searchCapabilities: methods.map(method => `${method.whenToUse} ${method.label ?? ""} ${method.capabilityProfile?.description ?? ""}`).join(" "),
           methods: methods.map(method => ({ key: method.key, label: method.label ?? method.key, auth: method.auth,
             purpose: method.purpose ?? "tool",
+            ...connectionMethodDiscoveryMetadata(method, service, company.prefix, credentialSourceAvailability),
             ...(method.purpose === "channel" && method.provider ? {
               setupPath: `/${company.prefix}/apps/chat/connect?${new URLSearchParams({ provider: method.provider, purpose: "chat", agentId: agent.id })}`,
             } : method.purpose === "ai" ? { setupPath: `/${company.prefix}/apps/connect?${new URLSearchParams({ source: service })}` } : {}),
@@ -634,7 +638,7 @@ export function connectionIntentService(db: Db) {
         ? "Choose the method relevant to the task using its purpose and label. Share its setupPath with the user to open the existing channel or AI setup flow. These methods do not use the tool connection_request card. Do not claim tools or an inbox are ready before setup finishes."
       : results[0]!.state === "ready" ? "Use the installed connection. Do not create another connection request."
       : results[0]!.state === "unavailable" ? "This connection is unavailable or administratively restricted. Explain the reason. Do not bypass it using another provider."
-      : "Call connection_request with the returned service identifier. The user already asked to connect: do not ask a generic confirmation or imitate the setup card. Follow the returned instruction." };
+      : connectionSetupAdviceInstruction };
   }
 
   async function providerSelections(companyId: string, issueId: string, agentId: string, userId: string, questionId: string) {

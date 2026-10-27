@@ -2718,6 +2718,12 @@ separate from the user-authorized Slack MCP connection.
 `connections_search` owns the next-step guidance. Its `instruction` is authored by
 Paperclip, never copied from provider tool descriptions. Core agent guidance only
 needs to call search, follow that instruction, and respect saved user choices.
+For setup advice or comparison, explain the reviewed method guidance and current
+credential-source availability before starting setup. Discovery includes only
+reviewed credential-source alternatives and uses the same readiness reasons as
+the board catalog. An informational search alone is not a request to connect.
+An explicit setup request or selected method still uses `connection_request` and
+its real human setup card. Company-scoped setup paths do not grant access.
 
 Exact built-in matches (including reviewed aliases) take precedence over external
 routes. An explicit query such as “HubSpot through Arcade” keeps the named

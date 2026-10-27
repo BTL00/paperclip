@@ -35,7 +35,9 @@ API: `present` — representative operation IDs:
 Agent access: `available` — Native connections_search / run-bound runtime-tools MCP.
 
 Policy: Setup and credentials belong to the addressed authorized human; active-run tools
-can search/request access.
+can search/request access. Discovery includes reviewed method guidance and current
+credential-source availability. Advice and comparison do not themselves start
+setup; an explicit setup request or selected method uses the human connection card.
 
 Evidence: `source-only` —
 [implementation](../../server/src/routes/connection-intents.ts#L130) at the reviewed

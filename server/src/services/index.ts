@@ -95,6 +95,7 @@ export { googleSheetsRobotEmailFromEnv, toolAccessService } from "./tool-access.
 export {
   createVercelConnectClient,
   vercelConnectIntegrationStatus,
+  vercelConnectSetupAvailability,
   VercelConnectClientError,
   type VercelConnectClient,
 } from "./vercel-connect.js";
