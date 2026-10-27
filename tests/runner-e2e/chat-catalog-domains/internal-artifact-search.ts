@@ -7,6 +7,7 @@ import type { CompanyPortabilityFileEntry } from "../../../packages/shared/src/t
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { makeDefinition } from "./internal-definition.js";
 import { mainPerson } from "./internal-privacy.js";
+import { readSearchProbeResponse } from "./internal-search-response.js";
 import { checks, entity, hasLink, observation, observeInternal, project, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
 const sha = (body: string | Buffer) => createHash("sha256").update(body).digest("hex");
 interface HistoricalTask extends Entity { completedAt?: string | null }
@@ -118,7 +119,7 @@ function findArtifact(): ChatCatalogCase {
     async observe(ctx, state): Promise<SearchObservation> {
       if (!key) throw new Error("Historical search probe was not created during setup"); const o = await observeInternal(ctx, state); const file = state.finalAttachment as IssueAttachment;
       const read = async (path: string) => { const url = new URL(path, ctx.input.api.baseURL); if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Historical probe escaped fixture API");
-        const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${key!.token}` } }); const body: unknown = response.ok ? await response.json() : undefined; await response.body?.cancel(); return { status: response.status, body }; };
+        const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${key!.token}` } }); return readSearchProbeResponse(response); };
       const [currentSource, attachments, deliveryComments, bytes, search] = await Promise.all([
         ctx.input.api.get<HistoricalTask>(`/api/issues/${entity(state, "task").id}`), ctx.input.api.get<IssueAttachment[]>(`/api/issues/${entity(state, "task").id}/attachments`),
         ctx.input.api.get<Entity[]>(`/api/issues/${entity(state, "task").id}/comments?order=asc`), ctx.input.api.getAttachmentContent(file.id), read(`/api/companies/${o.companyId}/search?q=website`),

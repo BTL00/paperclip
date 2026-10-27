@@ -1,6 +1,7 @@
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { makeDefinition } from "./internal-definition.js";
 import { mainPerson } from "./internal-privacy.js";
+import { readSearchProbeResponse } from "./internal-search-response.js";
 import { checks, entity, hasLink, observation, observeInternal, project, putDocument, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface DesignObservation extends InternalObservation {
@@ -66,7 +67,7 @@ function findDesign(): ChatCatalogCase {
       const read = async (path: string) => {
         const url = new URL(path, ctx.input.api.baseURL); if (url.origin !== ctx.input.api.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Design probe escaped fixture API");
         const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key!.token}` } });
-        const body: unknown = response.ok ? await response.json() : null; await response.body?.cancel(); return { status: response.status, body };
+        return readSearchProbeResponse(response);
       };
       const o = await observeInternal(ctx, state); const hidden = entity(state, "privateTask"); const target = entity(state, "task");
       const [privateRead, search] = await Promise.all([read(`/api/issues/${hidden.id}`), read(`/api/companies/${o.companyId}/search?q=launch%20website%20design`)]);
