@@ -48,7 +48,7 @@ it.each([
   ["documents-artifacts.produce-download", "selected-source.md"], ["documents-artifacts.revise-delivery", "selected-source.md"],
   ["skills.author-skill", "skill-context.md"], ["skills.studio-test", "skill-context.md"], ["skills.review-update", "skill-context.md"],
   ["skills.find-and-install", "skill-context.md"], ["skills.fork-read-only", "skill-context.md"],
-  ["cases.create-case", "customer-bug-brief.md"], ["app-permissions.ask-before-action", "launch-update.md"],
+  ["cases.create-case", "customer-bug-brief.md"], ["app-permissions.ask-before-action", "launch-update.md"], ["connection-setup.secure-api-key", "provider-account.md"],
 ])("binds only the exact factual file for %s", async (scenarioId, filename) => {
   const actual = { ...receipt, originalFilename: filename };
   const ctx = { scenario: { id: scenarioId }, refreshIssue: async () => {}, issue: () => ({ id: "source" }), input: {
