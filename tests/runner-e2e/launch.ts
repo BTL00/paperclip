@@ -503,6 +503,7 @@ async function runAttempt(input: {
   const sharedMemoryBaseline = snapshotDarwinSharedMemory();
   const temporaryParent = await realpath(os.tmpdir());
   const temporaryRoot = await createRunnerE2ETemporaryRoot(temporaryParent);
+  const selectedPrivateInputsDirectory = path.join(temporaryRoot, "selected-private-inputs");
   const publishedResults: RunnerE2EResult[] = [];
   const publishedResultPaths = new Map<string, string>();
   let attemptSecrets: string[] = [];
@@ -553,7 +554,8 @@ async function runAttempt(input: {
     const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
     const needsPrivateInputs = selectedDescriptor && ((selectedDescriptor.requiredCredentials?.length ?? 0) > 0 || selectedDescriptor.externalInput);
     if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
-    const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir, env: process.env, secrets: credentials }) : undefined;
+    if (needsPrivateInputs) await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
+    const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir: selectedPrivateInputsDirectory, env: process.env, secrets: credentials }) : undefined;
     if (installedCli) await writeFile(path.join(privateDir, "installed-cli-admission.json"), `${JSON.stringify(installedCli, null, 2)}\n`, { mode: 0o600 });
     if (installedPlugin) await writeFile(path.join(privateDir, "installed-daytona-plugin-admission.json"), `${JSON.stringify(installedPlugin, null, 2)}\n`, { mode: 0o600 });
     const runnerBinary = installedCli ? undefined : resolvePaperclipRunnerBinaryForHarness(
@@ -882,6 +884,9 @@ async function runAttempt(input: {
     try { await gateway?.close(); } catch (error) { gatewayCleanupError = error; }
     if (!processCleanupFailed) reapNewDetachedDarwinSharedMemory(sharedMemoryBaseline);
     let cleanupError: unknown;
+    // Raw selected keys are never diagnostic/archive artifacts, even when recovery state is retained.
+    try { await rm(selectedPrivateInputsDirectory, { recursive: true, force: true }); }
+    catch { cleanupError = new Error("Selected private credential cleanup failed; contents withheld"); }
     const resourceAdmissionStarted = await access(path.join(temporaryRoot, "artifacts-private", "resource-admission-started"))
       .then(() => true).catch((error: NodeJS.ErrnoException) => error.code !== "ENOENT");
     if (mustPreserveRecoveryState({ processCleanupFailed, resourceAdmissionStarted, results: rawCleanupResults })) {

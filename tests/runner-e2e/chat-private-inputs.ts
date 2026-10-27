@@ -72,7 +72,7 @@ export function readChatPrivateInputs(executionId: string, secrets: string[], en
     configuration: name => name === "external-provider" ? envelope.external : undefined };
 }
 export function scrubChatPrivateEnvironment(env: NodeJS.ProcessEnv, executions: readonly MatrixExecution[], removeReference = false) {
-  for (const key of Object.keys(env)) if (key.startsWith("PAPERCLIP_CHAT_EVAL_") || key === externalConfigEnv || removeReference && key === CHAT_PRIVATE_INPUTS_ENV) delete env[key];
+  for (const key of Object.keys(env)) if (key.startsWith("PAPERCLIP_CHAT_EVAL_") || key === externalConfigEnv || removeReference && [CHAT_PRIVATE_INPUTS_ENV, "PAPERCLIP_CHAT_INSTALLED_PLAN", "PAPERCLIP_CHAT_OPERATOR_INSTALL_RECEIPT", "PAPERCLIP_CHAT_INSTALLED_SOURCE_CONFIG"].includes(key)) delete env[key];
   if (executions.length) {
     const profileNames = new Set(executions.flatMap(execution => [execution.profile.credential, execution.environment.credential].filter(Boolean)));
     for (const name of CREDENTIAL_NAMES) if (!profileNames.has(name)) delete env[name];

@@ -9,9 +9,10 @@ import type { ChatCatalogDescriptor } from "./chat-catalog-registry.js";
 import type { MatrixExecution } from "./types.js";
 
 /** Independent boundary lane: never relax assertChatCatalogFingerprintLane. */
-export function chatBoundaryFingerprint(descriptor: ChatCatalogDescriptor, execution: MatrixExecution, env: NodeJS.ProcessEnv = process.env) {
+export function chatBoundaryFingerprint(descriptor: ChatCatalogDescriptor, execution: MatrixExecution, env: NodeJS.ProcessEnv = process.env, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>) {
   if (descriptor.journeyKind !== "browser-boundary" || execution.environment.id !== "local" || execution.suite.id !== "chat-features")
     throw new Error("Boundary fingerprint requires an explicitly selected local browser boundary");
+  const privateInputNameIdentity = retainedPrivateInputNames === undefined ? chatPrivateInputNameIdentity(execution.id, env) : retainedPrivateInputNames;
   let installedIdentity: unknown = null;
   if (descriptor.boundaryTarget === "empty-installed-target") {
     const cli = env.PAPERCLIP_CHAT_BOUNDARY_CLI; const expectedCli = env.PAPERCLIP_CHAT_BOUNDARY_CLI_SHA256;
@@ -30,11 +31,12 @@ export function chatBoundaryFingerprint(descriptor: ChatCatalogDescriptor, execu
     installedIdentity = { version: cliManifest.version, cliSha256, serverSha256 };
   } else if (descriptor.boundaryTarget !== "authenticated-harness") throw new Error("Boundary target identity is undeclared");
   const root = fileURLToPath(new URL("../../", import.meta.url));
-  return fingerprintChatDependencyClosure({ root,
+  const result = fingerprintChatDependencyClosure({ root,
     entries: [`tests/runner-e2e/${descriptor.modulePath.slice(2)}`, "tests/runner-e2e/chat-boundary-flow.ts", "tests/runner-e2e/chat-boundary-fingerprint.ts",
       "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, journeyKind: "browser-boundary", executionId: execution.id, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity: chatPrivateInputNameIdentity(execution.id, env), requiredCredentialNames: execution.requiredCredentials, environment: execution.environment.id, installedIdentity },
+    selected: { descriptor, journeyKind: "browser-boundary", executionId: execution.id, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, requiredCredentialNames: execution.requiredCredentials, environment: execution.environment.id, installedIdentity },
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor },
   });
+  return { ...result, privateInputNameIdentity, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
 }

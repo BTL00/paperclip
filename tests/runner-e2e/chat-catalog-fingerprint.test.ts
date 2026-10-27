@@ -2,11 +2,11 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { assertChatCatalogFingerprintLane, chatCatalogCaseFingerprint, fingerprintChatDependencyClosure } from "./chat-catalog-fingerprint.js";
 import { findChatCatalogCase, loadChatCatalogImplementation, type ChatCatalogDescriptor } from "./chat-catalog-registry.js";
 const directories: string[] = [];
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 function fixture() {
   const root = mkdtempSync(path.join(tmpdir(), "chat-fingerprint-")); directories.push(root);
   const write = (file: string, body: string) => writeFileSync(path.join(root, file), body);
@@ -78,4 +78,14 @@ it("fails closed when preserved prerequisites or a rejected query lack their ind
   await expect(loadChatCatalogImplementation(setup, async () => ({ cases: [{ ...setup, ...callbacks }] }))).rejects.toThrow("independent prerequisite assertions");
   const rejected = { ...base, queryOutcome: "rejected" as const };
   await expect(loadChatCatalogImplementation(rejected, async () => ({ cases: [{ ...rejected, ...callbacks }] }))).rejects.toThrow("independent rejection evidence");
+});
+
+it("replays the retained public name-only identity after raw selected inputs have been removed", () => {
+  const descriptor = findChatCatalogCase("projects.create-project")!;
+  const execution = { executionId: "offline-selected", suiteId: "chat-features", flow: "agent_chat", environment: "local" };
+  const names = { credentialNames: ["OPENAI_API_KEY"], referenceNames: [], externalRequirements: [] };
+  const before = chatCatalogCaseFingerprint(descriptor, execution, names).digest;
+  vi.stubEnv("PAPERCLIP_CHAT_PRIVATE_INPUTS", "/removed/owned-secret-file.json");
+  expect(chatCatalogCaseFingerprint(descriptor, execution, names).digest).toBe(before);
+  expect(() => chatCatalogCaseFingerprint(descriptor, execution)).toThrow();
 });

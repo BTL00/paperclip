@@ -85,8 +85,9 @@ export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.
     installedLane: false, externalJourneyDispatch: false };
 }
 
-export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown) {
+export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
+  const privateInputNameIdentity = retainedPrivateInputNames === undefined ? chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId) : retainedPrivateInputNames;
   const lane = assertChatCatalogFingerprintLane(selectedExecution);
   const reviewedDynamicResolutions = JSON.parse(readFileSync(new URL("./chat-catalog-dynamic-resolutions.json", import.meta.url), "utf8"));
   const selectedModule = `tests/runner-e2e/${descriptor.modulePath.slice(2)}`;
@@ -101,13 +102,13 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
       "tests/runner-e2e/chat-scenarios/defaults.yaml", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity: chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId), scenario: { id, capabilities, context, query, expected_outcome } },
+    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
     reviewedDynamicResolutions,
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,
       "tests/runner-e2e/chat-campaign-manifest.json": { id, capabilities, context, query, expected_outcome } },
   });
-  return { ...result, attachmentFormatter };
+  return { ...result, attachmentFormatter, privateInputNameIdentity, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
 }
 
 export function normalizedChatCatalogExecution(execution: MatrixExecution) {
