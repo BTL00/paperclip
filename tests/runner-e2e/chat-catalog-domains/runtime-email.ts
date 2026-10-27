@@ -27,9 +27,15 @@ export async function prepareOwnedEmailConnection(ctx: ChatCatalogContext) {
   if (!endpoint || endpoint.companyId !== input.companyId || endpoint.assignedAgentId !== input.agentId || endpoint.address !== input.inboxId || endpoint.status !== "active" || receipt.personId !== session.user.id) throw new Error("The exact real QA inbox endpoint/fixture person failed independent public ownership checks");
   return { endpoint, emailConnectionId: receipt.connectionId, personId: receipt.personId, externalIdentity: { email: input.recipient }, providerProbes: [{ phase: "owned-email-setup", operation: "actual-private-account-and-inbox-setup", publicSetupOperationCount: receipt.publicSetupOperationCount, directProviderProbeCount: receipt.directProviderProbeCount, status: "active", usage: "unavailable", cost: "unavailable" }] };
 }
-export async function inspectOwnedEmailPublication(ctx: ChatCatalogContext, publication: EmailPublicationSummary, after: string) {
+export async function inspectOwnedEmailPublication(ctx: ChatCatalogContext, publication: EmailPublicationSummary, after: string, expectedRecipient?: string, expectedReply?: { threadId: string; messageId: string }) {
   const input = privateFixtures.get(ctx); if (!input || !ctx.input.privateSecrets || !publication.request || !publication.providerMessageId) throw new Error("Actual public email acceptance and private owned inbox binding are required");
-  return privateEmailOperation({ ...input, operation: "inspect-publication", subject: publication.request.subject!, textSha256: hash(publication.request.text.replace(/\r\n/g, "\n").trim()), after, publicationId: publication.id, expectedPublicReceipt: { publicationId: publication.id, providerMessageId: publication.providerMessageId } }, ctx.input.privateSecrets);
+  return privateEmailOperation({ ...input, operation: "inspect-publication", expectedRecipient, expectedReply, subject: publication.request.subject!, textSha256: hash(publication.request.text.replace(/\r\n/g, "\n").trim()), after, publicationId: publication.id, expectedPublicReceipt: { publicationId: publication.id, providerMessageId: publication.providerMessageId } }, ctx.input.privateSecrets);
+}
+export async function seedOwnedReviewMessages(ctx: ChatCatalogContext) {
+  const input = privateFixtures.get(ctx), binding = selectedExternalBinding(ctx), p = binding.prerequisites;
+  if (!input || !ctx.input.privateSecrets || ctx.scenario.id !== "chat-channels.reply-to-email" || p.reviewerAuthorization !== "reply-to-selected-synthetic-only" || !p.reviewerAddress || p.reviewerAddress === input.inboxId || !/^PAPERCLIP_CHAT_EVAL_[A-Z0-9_]+$/.test(p.senderCredentialEnv ?? "")) throw new Error("Setup blocker: an explicitly authorized distinct synthetic reviewer mailbox and private sender credential are required; self-mail permission is insufficient");
+  const credential = ctx.input.privateInputs?.read(p.senderCredentialEnv!); if (!credential) throw new Error("Selected synthetic reviewer private credential reference is unavailable");
+  return privateEmailOperation({ ...input, operation: "seed-review", reviewer: { address: p.reviewerAddress, credential, authorization: "reply-to-selected-synthetic-only", nonce: randomUUID() } }, ctx.input.privateSecrets);
 }
 async function providerOperation(ctx: ChatCatalogContext, operation: "inspect" | "resolve", state: Record<string, unknown>) {
   const input = privateFixtures.get(ctx); if (!input || !ctx.input.privateSecrets) throw new Error("Original private email fixture identity is unavailable");
