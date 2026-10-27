@@ -11,13 +11,18 @@ of credential environment variables belong there. The file schema is:
   "providers": {
     "notion": {
       "disposable": true,
-      "resourceIds": ["authorized-disposable-workspace-id"],
-      "credentialEnv": ["PAPERCLIP_CHAT_EVAL_NOTION_AUTH"],
+      "resourceIds": ["authorized-disposable-workspace-id", "synthetic-launch-update-page-id", "synthetic-background-page-id"],
+      "credentialEnv": ["PAPERCLIP_CHAT_EVAL_NOTION_API", "PAPERCLIP_CHAT_EVAL_NOTION_MCP"],
       "prerequisites": {
         "workspaceId": "authorized-disposable-workspace-id",
         "recentPageId": "synthetic-launch-update-page-id",
         "olderPageId": "synthetic-background-page-id",
-        "mcpUrl": "https://mcp.notion.com/mcp"
+        "mcpUrl": "https://mcp.notion.com/mcp",
+        "apiVersion": "2022-06-28",
+        "apiTokenEnv": "PAPERCLIP_CHAT_EVAL_NOTION_API",
+        "mcpTokenEnv": "PAPERCLIP_CHAT_EVAL_NOTION_MCP",
+        "recentMarker": "approved synthetic current launch fact",
+        "olderMarker": "approved synthetic older background fact"
       }
     }
   }
@@ -63,6 +68,20 @@ readback validates its company, active connection and allowlisted numeric ID.
 The remaining catalog prose is unchanged. The fixture creates a company-owned encrypted secret and public
 connection, verifies current repository discovery, and deletes both on cleanup.
 Ambient `gh` authentication and personal credentials are never adopted.
+
+The named `notion-connected` case requires separate references for the official
+Notion REST oracle and official Notion MCP authorization. The API version is an
+explicit coordinator choice; its validity is not inferred from the example.
+Workspace and both page UUIDs must occur in `resourceIds`. At execution, the
+official [token bot-user endpoint](https://developers.notion.com/reference/get-self)
+must report the selected workspace, and both allowlisted page bodies must contain
+their distinct approved synthetic facts with the current page actually newer.
+Only minimal page/source/date projections and workspace-match booleans enter
+case observations. Raw account receipts, names and email remain private.
+The model must independently perform a successful MCP read in its own source run;
+the oracle's REST reads cannot satisfy that requirement. No generic or synthetic
+MCP host is accepted as a named Notion proof. Missing bindings remain executable
+setup blockers; source-reference availability is not provider validity evidence.
 
 Synthetic notes apps, MCP gateways, local plugins, team packages, local encrypted
 secrets and test endpoints do not require this file. They use real public

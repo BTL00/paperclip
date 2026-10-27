@@ -14,7 +14,7 @@ export interface ExternalFixtureConfig { schemaVersion: 1; providers: Partial<Re
 export const externalRequirements: Record<string, { provider: ExternalProvider; fields: readonly string[] }> = {
   "projects.add-repository": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
   "projects.replace-repository": { provider: "github", fields: ["oldRepositoryId", "oldRepositoryFullName", "newRepositoryId", "newRepositoryFullName", "tokenEnv"] },
-  "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl"] },
+  "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv", "recentMarker", "olderMarker"] },
   "connection-setup.notion-missing": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.notion-wrong-account": { provider: "notion", fields: ["sharedWorkspaceId", "personalWorkspaceId", "personalPageId", "oauthBrowserSession"] },
   "connection-setup.notion-agent-unassigned": { provider: "notion", fields: ["workspaceId", "recentPageId", "mcpUrl"] },

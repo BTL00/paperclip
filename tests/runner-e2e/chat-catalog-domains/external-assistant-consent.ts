@@ -18,6 +18,9 @@ export function gradeViewerConsent(value: unknown) {
     && connections?.length === 1 && connections[0]?.companyId === o.companyId && connections[0]?.scopes.includes("paperclip:read")
     && !connections[0]?.scopes.includes("paperclip:write") && o.state.tokenScopesReadOnly === true,
     "The actual signed-in viewer sees the intended company and requested write scope but cannot accept writes, including via the public consent API.");
+  c.add("explicit-consenting-person-boundary", o.state.phaseBoundary === "operator-chat-to-viewer-browser-consent" && typeof o.state.chatCallerId === "string"
+    && o.state.chatCallerId !== o.state.viewerId && o.state.viewerSessionBefore === o.state.viewerId && o.state.viewerSessionAtConsent === o.state.viewerId && o.state.viewerSessionAfter === o.state.viewerId,
+    "This tests viewer authority in the explicitly separate consent phase; the operator's canonical chat is not represented as viewer chat coverage.");
   c.add("only-explicit-human-grant", o.state.viewerGrantId === connections?.[0]?.id && o.state.humanConsented === true
     && o.activity.some(row => row.action === "mcp.connection_authorized" && row.entityId === o.state.viewerGrantId && row.actorType === "user" && row.actorId === o.state.viewerId),
     "Only the invited viewer's actual browser consent authorizes this grant, with independent actor attribution.");
@@ -34,10 +37,11 @@ export const assistantConsentExternalCases = [definition("assistant-connections.
   if (!browser || !secrets) throw new Error("Viewer consent requires an isolated signed-in person and private redactor");
   const viewer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets, name: "Viewer Casey" }); people.set(ctx, viewer);
   try {
+    const caller = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
     await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, viewer, secrets, "viewer");
     const marker = `Viewer allowed fixture ${randomBytes(12).toString("hex")}`;
     const task = await ctx.input.api.post<{ id: string; title: string; description: string }>(`${root(ctx)}/issues`, { title: "Viewer consent sample task", description: marker, status: "backlog" });
-    return { viewerId: viewer.id, taskId: task.id, taskBefore: task, marker, forbiddenTitle: `Forbidden viewer task ${ctx.input.nonce}` };
+    return { viewerId: viewer.id, chatCallerId: caller.user.id, phaseBoundary: "operator-chat-to-viewer-browser-consent", taskId: task.id, taskBefore: task, marker, forbiddenTitle: `Forbidden viewer task ${ctx.input.nonce}` };
   } catch (error) { people.delete(ctx); await viewer.dispose(); throw error; }
 }, gradeViewerConsent, {
   authentication: "human-session",
@@ -46,9 +50,12 @@ export const assistantConsentExternalCases = [definition("assistant-connections.
     await waitForReply(ctx); const viewer = people.get(ctx); if (!viewer || !ctx.input.privateSecrets) throw new Error("Viewer consent fixture missing");
     const page = await viewer.context.newPage();
     try {
+      async function signedInPerson() { const response = await page.context().request.get(`${ctx.input.api.baseURL}/api/auth/get-session`); if (!response.ok()) throw new Error("Viewer browser session check failed"); return (await response.json() as { user: { id: string } }).user.id; }
+      state.viewerSessionBefore = await signedInPerson();
       const connection = await connect(viewer.context, { ...ctx.input.fixtures.company, issuePrefix: ctx.input.fixtures.company.issuePrefix ?? "EVAL" }, false, page, ctx.input.privateSecrets, false, {
         requestedWrite: true,
         async inspectConsent(consent) {
+          state.viewerSessionAtConsent = await signedInPerson();
           await expect(consent.getByRole("radio", { name: ctx.input.fixtures.company.name, exact: true })).toBeChecked(); state.companyVisible = true;
           await expect(consent.getByText("Your role in this organization is read-only.", { exact: true })).toBeVisible(); state.readOnlyRoleVisible = true;
           const writes = consent.getByRole("checkbox", { name: "Write all of your Paperclip data", exact: true });
@@ -62,6 +69,8 @@ export const assistantConsentExternalCases = [definition("assistant-connections.
         },
       });
       state.humanConsented = true;
+      state.viewerSessionAfter = await signedInPerson();
+      await ctx.input.evidence("chat-catalog-viewer-consent-boundary.json", { phaseBoundary: state.phaseBoundary, chatCallerId: state.chatCallerId, consentingViewerId: state.viewerId, viewerSessionBefore: state.viewerSessionBefore, viewerSessionAtConsent: state.viewerSessionAtConsent, viewerSessionAfter: state.viewerSessionAfter });
       state.tokenScopesReadOnly = connection.tokens.scope.split(/\s+/).includes("paperclip:read") && !connection.tokens.scope.split(/\s+/).includes("paperclip:write");
       const client = await mcp(connection.tokens);
       try {
