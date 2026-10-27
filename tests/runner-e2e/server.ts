@@ -1,3 +1,4 @@
+import { archiveServerEnvironment } from "./chat-archive-fault-control.js";
 import { CHAT_INSTALL_PLAN, refreshInstalledChatPins, publishInstalledChatReceipt } from "./chat-installed-lane.js";
 import { parseFinalizationCrashBinding, readFinalizationCrashBoundary, type FinalizationCrashBinding } from "./finalization-crash-boundary.js";
 import { parseRestartRunnerIdentity, type RestartRunnerIdentity } from "./process-tree-owner.js";
@@ -51,9 +52,11 @@ const restartTimeoutMs = 180_000;
 const gracefulStopTimeoutMs = 30_000;
 const installedRelease = process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI
   ? installedReleaseLaunch(process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI) : null;
+const archiveEnvironment = await archiveServerEnvironment({ selected: executionIds, temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, env: process.env });
 const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
-  ? installedReleaseEnvironment(process.env, repositoryRoot, path.join(temporaryRoot, "provider-bin"))
-  : process.env, {
+  ? installedReleaseEnvironment(archiveEnvironment.source, repositoryRoot, path.join(temporaryRoot, "provider-bin"))
+  : archiveEnvironment.source, {
+  ...archiveEnvironment.overrides,
   NODE_ENV: "test",
   PORT: port,
   // Keep provider caches attempt-private without changing Playwright's browser

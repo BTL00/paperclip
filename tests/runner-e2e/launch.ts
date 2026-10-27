@@ -1,3 +1,4 @@
+import { ARCHIVE_CONTROL_ENV, ARCHIVE_SCENARIO, startArchiveFaultControl } from "./chat-archive-fault-control.js";
 import { abnormalFinalizationResult } from "./abnormal-finalization.js";
 import { CHAT_ORACLE_KEY_ENV } from "./chat-private-oracle.js";
 import { stagePublishedChatInstall, ChatInstalledCleanupError } from "./chat-installed-lane.js";
@@ -511,6 +512,7 @@ async function runAttempt(input: {
   let attemptSecrets: string[] = [];
   let processCleanupFailed = false;
   let startupReceiptPath: string | undefined;
+  let archiveControl: Awaited<ReturnType<typeof startArchiveFaultControl>> | undefined;
   let gateway: Awaited<ReturnType<EvalOperations["start"]>> | undefined;
   const rawCleanupResults: Array<{ cleanup: string; synthetic: boolean; status: string }> = [];
   try {
@@ -563,6 +565,7 @@ async function runAttempt(input: {
     if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
     await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
     const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir: selectedPrivateInputsDirectory, env: process.env, secrets: credentials }) : undefined;
+    if (selectedDescriptor?.scenarioId === ARCHIVE_SCENARIO) archiveControl = await startArchiveFaultControl({ selected: executions.map(row => row.id), temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, privateSecrets: credentials });
     const diagnosticRegistry = stagePrivateDiagnostics(temporaryRoot, executions.map(row => row.id), credentials);
     if (installedCli) await writeFile(path.join(privateDir, "installed-cli-admission.json"), `${JSON.stringify(installedCli, null, 2)}\n`, { mode: 0o600 });
     if (installedPlugin) await writeFile(path.join(privateDir, "installed-daytona-plugin-admission.json"), `${JSON.stringify(installedPlugin, null, 2)}\n`, { mode: 0o600 });
@@ -573,6 +576,7 @@ async function runAttempt(input: {
     const childEnv: NodeJS.ProcessEnv = {
       ...buildRunnerE2EProcessEnvironment(sourceEnvironment, executions),
       [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
+      [ARCHIVE_CONTROL_ENV]: archiveControl?.filename,
       [PRIVATE_DIAGNOSTICS_ENV]: diagnosticRegistry,
       PATH: providerPath,
       PAPERCLIP_RUNNER_E2E_EXECUTION_IDS: JSON.stringify(
@@ -926,6 +930,9 @@ async function runAttempt(input: {
     }
     return [...publishedResults];
   } finally {
+    // runProcess has completed its owned Playwright/server process shutdown.
+    let archiveCleanupError: unknown;
+    try { await archiveControl?.close(); } catch (error) { archiveCleanupError = error; processCleanupFailed = true; }
     let gatewayCleanupError: unknown;
     try { await gateway?.close(); } catch (error) { gatewayCleanupError = error; }
     if (!processCleanupFailed) reapNewDetachedDarwinSharedMemory(sharedMemoryBaseline);
@@ -972,7 +979,7 @@ async function runAttempt(input: {
         `Refusing to remove unexpected temporary path ${temporaryRoot}`,
       );
     }
-    if (gatewayCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError].filter(Boolean), "Eval gateway cleanup failed");
+    if (gatewayCleanupError || archiveCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError, archiveCleanupError].filter(Boolean), "Eval owned gateway/transport cleanup failed");
     if (startupReceiptPath) {
       const receipt = JSON.parse(await readFile(startupReceiptPath, "utf8"));
       receipt.status = cleanupError ? "installed_launch_chain_cleanup_failed" : "installed_launch_chain_passed";
