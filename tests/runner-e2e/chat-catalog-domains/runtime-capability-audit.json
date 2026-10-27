@@ -261,8 +261,8 @@
     },
     {
       "scenarioId": "task-coordination.independent-review",
-      "readinessClass": "local",
-      "needs": "Real delivered Morgan result plus independent eligible Riley; governed completion and self-approval rejection."
+      "readinessClass": "implemented",
+      "needs": "Real Morgan native implementation registers HTML and blocks before any review request; configured eligible Riley review policy remains unchanged. Genuine source setup context, canonical CEO stage transition with source-run audit, actual Riley waiting run and bearer-read deliverable/acceptance check; Morgan self-approval rejects while policy remains pending. Riley actual native approval/activity/latest decision and review document resolve same task with original implementation hash retained; explicit final human query receives its own attributed actual completion report. No live qualification claimed."
     },
     {
       "scenarioId": "task-coordination.pause-tree",
