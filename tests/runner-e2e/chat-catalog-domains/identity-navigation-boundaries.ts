@@ -13,6 +13,9 @@ async function status(ctx: ChatCatalogContext, path: string) {
   try { await ctx.input.api.get(path); return 200; }
   catch (error) { if (error instanceof RunnerApiHttpError) return error.status; throw error; }
 }
+export function assertDistinctMissingLinkFixtures(stale: Entity, similar: Entity, originalProjectId: string, otherProjectId: string) {
+  if (stale.id === similar.id || originalProjectId === otherProjectId || stale.projectId !== originalProjectId || similar.projectId !== otherProjectId) throw new Error("Missing-link fixtures must be distinct saved tasks in their actual separate projects");
+}
 export function gradeNavigationBoundary(value: unknown) {
   const c = checks(); const o = identityObservation(value);
   c.add("complete-personal-navigation", !!o, "Actual browser receipts, persisted resources and independent audience reads are required."); if (!o) return c.result();
@@ -50,7 +53,9 @@ export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
     const source = await openStandingChat(ctx); const p = await project(ctx);
     const stale = await task(ctx, "Launch website draft", p.id, { description: "Website draft for Launch." });
     const elsewhere = await ctx.input.api.post<Entity>(`/api/companies/${ctx.input.fixtures.company.id}/projects`, { name: "Archived launch context" });
-    const similar = await task(ctx, "Launch website draft", elsewhere.id, { description: "Current draft for the Archived launch context project." });
+    const similar = await task(ctx, "Launch website draft revision", elsewhere.id, { description: "Current draft for the Archived launch context project." });
+    const [savedOriginal, savedSimilar] = await Promise.all([stale, similar].map(row => ctx.input.api.get<Entity>(`/api/issues/${row.id}`)));
+    assertDistinctMissingLinkFixtures(savedOriginal!, savedSimilar!, p.id, elsewhere.id);
     const restrictedMarker = `Private unrelated acquisition ${ctx.input.nonce}`;
     const restricted = await task(ctx, "Private acquisition", elsewhere.id, { visibility: "private", description: restrictedMarker });
     const path = `/${ctx.input.fixtures.company.issuePrefix}/issues/${stale.identifier}?tab=activity`;
