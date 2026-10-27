@@ -1366,6 +1366,14 @@ keeps ownership throughout that interval. Recovery leaves its coordinator unchan
 and does not dispatch a second executor. An inactive run still requires the normal
 ownership, workspace integrity, and provider evidence checks.
 
+When restart recovery blocks an unusable native session, it records any required
+workspace preservation in the same transaction as the failed run. The exact
+prepared descriptor and source lease must match, and no current coordinator may
+own the source. Existing cleanup saves the files and verifies termination before
+saved user direction can start another run. This does not retry provider work or
+infer the outcome of previous actions. A failed preservation write rolls back
+terminalization so the recovery owner can try again.
+
 A preparation that resumes after another execution acquired the coordinator
 lease yields through the controller-detachment path. It does not fail the shared
 run, release its environment, or start another provider. Lease expiry alone does
