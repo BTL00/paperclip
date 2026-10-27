@@ -44,6 +44,7 @@ it("independently resolves declared receipt IDs and rejects undeclared, duplicat
 });
 
 it.each([
+  ["developer-labs.gated-lab", "historical-lab-link.md"],
   ["documents-artifacts.resolve-feedback", "selected-source.md"], ["documents-artifacts.restore-document", "selected-source.md"],
   ["documents-artifacts.produce-download", "selected-source.md"], ["documents-artifacts.revise-delivery", "selected-source.md"],
   ["skills.author-skill", "skill-context.md"], ["skills.studio-test", "skill-context.md"], ["skills.review-update", "skill-context.md"],

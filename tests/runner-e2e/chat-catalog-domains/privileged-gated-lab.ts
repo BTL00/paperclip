@@ -1,8 +1,18 @@
 import { expect } from "@playwright/test";
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import { factualContextQueryAttachment, uploadFactualQueryAttachment } from "../chat-query-attachments.js";
 import { checks } from "./internal-support.js";
 import { privilegedDefinition, privilegedObservation, settlePrivilegedChat } from "./privileged-support.js";
 import { startOwnedProductionUi } from "./privileged-production-ui.js";
 
+const productionTargets = new WeakMap<ChatCatalogContext, Awaited<ReturnType<typeof startOwnedProductionUi>>>();
+export function historicalLabLink(origin: string, companyPrefix: string | null | undefined) {
+  const url = new URL(origin);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port || url.pathname !== "/"
+    || url.search || url.hash || url.username || url.password || typeof companyPrefix !== "string" || !/^[A-Z][A-Z0-9]*$/.test(companyPrefix))
+    throw new Error("Historical lab link must bind the owned production listener and exact company prefix");
+  return new URL(`/${companyPrefix}/dev/task-chat-lab`, url).href;
+}
 export function gradeGatedLab(value: unknown) {
   const c = checks(), o = privilegedObservation(value);
   c.add("production-route-observation", !!o, "A real production build must deny the historical developer route."); if (!o) return c.result();
@@ -19,13 +29,31 @@ export function gradeGatedLab(value: unknown) {
   return c.result();
 }
 const gated = privilegedDefinition("developer-labs.gated-lab", "privileged-gated-lab", {
-  async setup() { return {}; },
+  async setup(ctx) {
+    const target = await startOwnedProductionUi(ctx);
+    productionTargets.set(ctx, target);
+    try {
+      const historicalUrl = historicalLabLink(target.origin, ctx.input.fixtures.company.issuePrefix);
+      const factualContextAttachment = await uploadFactualQueryAttachment(ctx, {
+        filename: "historical-lab-link.md", body: `${historicalUrl}\n`,
+      });
+      return { historicalUrl, factualContextAttachment };
+    } catch (error) {
+      productionTargets.delete(ctx);
+      await target.stop();
+      throw error;
+    }
+  },
   async act(ctx, state) {
     await settlePrivilegedChat(ctx);
-    const target = await startOwnedProductionUi(ctx), page = ctx.input.page, source = page.url();
+    const target = productionTargets.get(ctx);
+    if (!target) throw new Error("Missing exact pre-query production target");
+    const page = ctx.input.page, source = page.url();
     try {
-      const historicalPath = `/${ctx.input.fixtures.company.issuePrefix}/dev/task-chat-lab`;
-      const response = await page.goto(target.origin + historicalPath, { waitUntil: "domcontentloaded" });
+      const historicalUrl = historicalLabLink(target.origin, ctx.input.fixtures.company.issuePrefix);
+      if (state.historicalUrl !== historicalUrl) throw new Error("Selected historical link changed after the human query");
+      const historicalPath = new URL(historicalUrl).pathname;
+      const response = await page.goto(historicalUrl, { waitUntil: "domcontentloaded" });
       state.productionHeaderMatched = response?.headers()["x-eval-production-ui-build"] === target.buildSha256;
       await expect(page.getByRole("heading", { name: /not found|page.*exist|couldn.*find/i }).first()).toBeVisible();
       await expect(page.getByRole("heading", { name: "Task Chat Lab", exact: true })).toHaveCount(0);
@@ -35,10 +63,15 @@ const gated = privilegedDefinition("developer-labs.gated-lab", "privileged-gated
       state.unrelatedTaskAbsent = await page.getByTestId("task-chat-composer-input").count() === 0;
       await ctx.input.evidence("chat-catalog-production-lab-gate.json", { ...state, files: target.files, proof: "production build; no second database or provider" });
       await ctx.input.capture("production-lab-gate", "Real production build excludes developer lab", "production-lab-gate.png");
-    } finally { try { await page.goto(source, { waitUntil: "domcontentloaded" }); } finally { await target.stop(); } }
+    } finally { try { await page.goto(source, { waitUntil: "domcontentloaded" }); } finally { productionTargets.delete(ctx); await target.stop(); } }
   }, grade: gradeGatedLab,
   async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); },
 });
 gated.attemptTimeoutMs = 600_000;
-gated.sourceFiles = [...gated.sourceFiles, "chat-catalog-domains/privileged-production-ui.ts", "../../ui/vite.config.ts", "../../ui/src/App.tsx", "../../ui/src/pages/NotFound.tsx"];
+gated.queryAttachments = factualContextQueryAttachment("historical-lab-link.md");
+gated.cleanup = async ctx => {
+  const target = productionTargets.get(ctx);
+  if (target) { productionTargets.delete(ctx); await target.stop(); }
+};
+gated.sourceFiles = [...gated.sourceFiles, "chat-catalog-domains/privileged-production-ui.ts", "../../ui/vite.config.ts", "../../ui/src/App.tsx", "../../ui/src/pages/NotFound.tsx", "chat-query-attachments.ts"];
 export const privilegedGatedLabCases = [gated];

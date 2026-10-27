@@ -13,6 +13,7 @@ export interface ChatQueryHumanComment {
   issueId?: string; companyId?: string; createdByRunId?: string | null;
 }
 const factualFiles: Readonly<Record<string, string>> = {
+  "developer-labs.gated-lab": "historical-lab-link.md",
   "documents-artifacts.resolve-feedback": "selected-source.md",
   "documents-artifacts.restore-document": "selected-source.md",
   "documents-artifacts.produce-download": "selected-source.md",

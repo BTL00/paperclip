@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { gradeInstanceSettings } from "./privileged-configuration.js";
 import { documentExportCommand, gradeExportDocumentCli } from "./privileged-document-cli.js";
 import { inspectRunCommands, gradeInspectRunCli } from "./privileged-run-cli.js";
-import { gradeGatedLab } from "./privileged-gated-lab.js";
+import { historicalLabLink, gradeGatedLab } from "./privileged-gated-lab.js";
 const base = { scenarioId: "owned", origin: "http://127.0.0.1:3100", companyId: "company", leadId: "lead", state: {}, tasks: [], projects: [], goals: [],
   comments: [], activity: [], documents: [], revisions: [], links: [], humanQueries: ["canonical"], runs: [{ id: "run", agentId: "lead", status: "succeeded" }], reply: "" };
 const block = (body: string) => `\`\`\`bash\n${body}\n\`\`\``;
@@ -57,4 +57,11 @@ describe("operator companions use actual saved authority and output", () => {
       expect(gradeGatedLab({ ...o, state: { ...o.state, ...delta } }).passed).toBe(false);
     expect(gradeGatedLab({ ...o, reply: "The lab is available in production; it is not a development-only task-chat-lab." }).passed).toBe(false);
   });
+});
+
+it("binds factual historical lab links only to the owned production listener and selected company", () => {
+  expect(historicalLabLink("http://127.0.0.1:43210", "RUN")).toBe("http://127.0.0.1:43210/RUN/dev/task-chat-lab");
+  for (const origin of ["https://unowned.invalid", "http://127.0.0.1", "http://127.0.0.1:43210/other", "http://127.0.0.1:43210/?redirect=elsewhere"])
+    expect(() => historicalLabLink(origin, "RUN")).toThrow();
+  expect(() => historicalLabLink("http://127.0.0.1:43210", "../foreign")).toThrow();
 });
