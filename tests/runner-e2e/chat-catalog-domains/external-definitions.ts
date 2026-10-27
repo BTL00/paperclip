@@ -7,3 +7,4 @@ export { gatewayExternalCases } from "./external-gateways-profiles.js";
 export { connectionSetupExternalCases } from "./external-connection-setup.js";
 export { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 export { chatChannelExternalCases } from "./external-chat-channels.js";
+export { appCatalogExternalCases } from "./external-app-catalog.js";

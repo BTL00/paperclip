@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 import { chatChannelExternalCases } from "./external-chat-channels.js";
+import { appCatalogExternalCases } from "./external-app-catalog.js";
 import { appPermissionExternalCases } from "./external-app-permissions.js";
 import { teamExternalCases } from "./external-teams.js";
 import { secretExternalCases } from "./external-secrets.js";
@@ -9,7 +10,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -17,7 +18,12 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id.startsWith("app-permissions.")) {
+  if (id === "app-permissions.new-quarantined-action") {
+    const original = { id: "read", toolName: "launch_read", status: "active", schemaHash: "same" };
+    Object.assign(o.state, { catalogBefore: [original], catalogAfter: [original, { id: "export", toolName: "launch_export", status: "quarantined" }],
+      exportEntryId: "export", quarantinedBeforeQuery: true, providerCalls: [], existingReadStillAllowed: true, existingWriteStillAllowed: true });
+    o.reply = "The new export action is quarantined and needs human review.";
+  } else if (id.startsWith("app-permissions.")) {
     o.connections = [{ id: "connection" }]; Object.assign(o.state, { syntheticProvider: true, connectionId: "connection", written: null });
     if (id.endsWith("read-allowed-write-off")) {
       Object.assign(o.state, { providerCalls: [], readAllowed: true, writeDisabled: true }); o.reply = "Notion write permission is disabled; open settings to enable the update action.";
@@ -58,6 +64,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "app-permissions.new-quarantined-action": o => { (o.state.catalogAfter as Array<{status:string}>)[1]!.status = "active"; },
   "app-permissions.read-allowed-write-off": o => { o.state.providerCalls = [{ name: "launch_update", authorized: true }]; },
   "app-permissions.ask-before-action": o => { o.state.beforeApprovalCalls = 1; },
   "teams.find-team": o => { o.state.agentIdsAfter = ["ceo", "premature-installation"]; },
