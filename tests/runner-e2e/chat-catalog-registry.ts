@@ -1,6 +1,7 @@
 import { validNativeStopDeclaration, assertNativeStopCallback } from "./chat-native-stop-boundary.js";
 import { validSlackIngressDeclaration } from "./chat-slack-ingress.js";
 import { validCompanionDeclaration } from "./chat-companion-surface.js";
+import { assertExpectedWorkerCancellation } from "./chat-catalog-run-policy.js";
 import { installedChatScenarioIds } from "./chat-installed-lane.js";
 import { existsSync, readFileSync } from "node:fs";
 import { validChatCatalogHumanCounts } from "./chat-catalog-contract.js";
@@ -9,7 +10,7 @@ import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
 import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
-export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "beforeCanonicalSend" | "dispatchSlackOtherThread" | "verifySlackSupportedTransfer" | "dispatchSlackUnsupportedFile" | "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
+export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "expectedCancelledWorkerRun" | "beforeCanonicalSend" | "dispatchSlackOtherThread" | "verifySlackSupportedTransfer" | "dispatchSlackUnsupportedFile" | "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
   journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant" | "native-slack-thread";
   boundaryTarget?: "authenticated-harness" | "empty-installed-target";
   modulePath: string;
@@ -25,6 +26,9 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (matches.length > 1) throw new Error(`Duplicate chat implementation: ${scenarioId}`);
   const descriptor = matches[0];
   if (!descriptor) return;
+  if (descriptor.runPolicy?.kind === "source-settled-with-active-work" && descriptor.runPolicy.expectedWorkerCancellation !== undefined
+    && (scenarioId !== "tasks.edit-properties" || descriptor.runPolicy.expectedWorkerCancellation !== "owned-task-reassignment"))
+    throw new Error("Worker reassignment cancellation is declared only for edit-properties");
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && !validCompanionDeclaration(descriptor)) throw new Error("Only the declared scoped-client catalog case may select an external assistant");
   if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && !validSlackIngressDeclaration(descriptor)) throw new Error("Only two declared Slack thread cases may use native ingress");
   if (descriptor.canonicalBoundary && !validNativeStopDeclaration(descriptor)) throw new Error("Native Stop boundary is exclusive to the exact human post-stop scenario");
@@ -59,6 +63,7 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
+  assertExpectedWorkerCancellation(implementation);
   for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface", "slackIngress", "canonicalBoundary"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }

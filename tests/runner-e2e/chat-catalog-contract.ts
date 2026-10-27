@@ -17,7 +17,11 @@ export interface ChatCatalogContext {
 export type ChatCatalogTerminalRunStatus = "succeeded" | "cancelled" | "failed" | "timed_out";
 export type ChatCatalogRunPolicy =
   | { kind: "terminal-counts"; terminalStatusCounts: Partial<Record<ChatCatalogTerminalRunStatus, number>> }
-  | { kind: "source-settled-with-active-work"; maximumActiveWorkerRuns: number };
+  | { kind: "source-settled-with-active-work"; maximumActiveWorkerRuns: number;
+      expectedWorkerCancellation?: "owned-task-reassignment" };
+export interface ChatCatalogExpectedWorkerCancellation {
+  runId: string; taskId: string; workerId: string; sourceRunId: string;
+}
 export interface ChatCatalogSetupPolicy {
   funding?: "standard" | "preserve-scenario";
   readiness?: "all-ready" | "preserve-scenario";
@@ -71,6 +75,8 @@ export interface ChatCatalogCase {
   authentication?: "local-trusted" | "human-session";
   setupPolicy?: ChatCatalogSetupPolicy;
   runPolicy?: ChatCatalogRunPolicy;
+  /** Only edit-properties: independent observation proof of the exact reassigned worker. */
+  expectedCancelledWorkerRun?(observation: unknown): ChatCatalogExpectedWorkerCancellation | undefined;
   queryOutcome?: "persisted" | "rejected";
   /** Audited substitution of an incidental catalog fixture token, never other prose. */
   queryBindings?: readonly ChatCatalogQueryBinding[];

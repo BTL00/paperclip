@@ -1,7 +1,7 @@
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
-import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
+import { chatCatalogRunStatusAllowed, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
 import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./chat-catalog-fingerprint.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
@@ -65,7 +65,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
         detail: "Only declared production attachment suffixes are allowed, backed by same-source human receipts and independently retrieved matching bytes." },
       ...(slack ? [slackNativeRunCheck(context, evidence.runs, state)] : []),
       ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
-        leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
+        leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs, observation }).checks,
     ];
     grade = { passed: checks.every(check => check.passed), checks };
     await input.evidence("chat-catalog-observation.json", { scenarioId: scenario.id, inventoryDigest: chatCatalogInventoryDigest,
@@ -146,7 +146,8 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       },
       reject: result => {
         if (result.runs.length > implementation.expectedRunCount) return "Scenario exceeded its declared run bound";
-        if (result.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status) && !chatCatalogAllowedRunStatuses(implementation).includes(run.status))) return "Observed provider run failed";
+        if (result.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status) && !chatCatalogRunStatusAllowed({ implementation,
+          run, companyId: input.fixtures.company.id, leadId: input.fixtures.agent.id, source: result.issue, observation }))) return "Observed provider run failed";
         if (result.runs.length && result.runs.every(run => !["queued", "running"].includes(run.status)) && result.issue?.conversationState === "waiting") settledAt ??= Date.now();
         else settledAt = undefined;
         return settledAt && Date.now() - settledAt >= 15_000
