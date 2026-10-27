@@ -1,5 +1,6 @@
 import { expect, type Page, type Route } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
+import type { IssueDocument, IssueDocumentSummary, DocumentRevision } from "../../../packages/shared/src/types/issue.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
@@ -41,7 +42,8 @@ export function gradeConfirmationWorkflow(value: unknown) {
     c.add("one-actual-answer-artifact", o.tasks.length === 1 && o.tasks[0]?.companyId === o.companyId && hasLink(o, "issues", o.tasks[0])
       && o.documents.length === 1 && (o.documents[0]?.body ?? "").includes("Acorn") && !!o.documents[0]?.latestRevisionId
       && o.activity.some(row => row.action === "issue.document_created" && row.entityId === o.tasks[0]?.id && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(row.agentId ?? ""))
-      && o.runs.some(run => run.id === o.documents[0]?.createdByRunId && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(run.agentId)),
+      && o.revisions.some(revision => revision.id === o.documents[0]?.latestRevisionId && revision.documentId === o.documents[0]?.id
+        && o.runs.some(run => run.id === revision.createdByRunId && run.agentId === revision.createdByAgentId && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(run.agentId))),
       "The one continuation produces one linked ordinary draft task and one real saved introduction document using Acorn; an empty task or a prose promise is insufficient.");
   } else c.add("known-workflow", false, "This workflow has no independent oracle.");
   return c.result();
@@ -54,7 +56,10 @@ async function observeWorkflow(ctx: ChatCatalogContext, state: Record<string, un
   if (ctx.scenario.id === "questions-and-approvals.accept-one-proposal") state.afterRepeatResolvedCommentId = o.interactions.find(row => row.id === entity(state, "original").id)?.result?.commentId;
   if (ctx.scenario.id === "questions-and-approvals.duplicate-answer" && o.tasks.length === 1) {
     const target = o.tasks[0]!; state.task = target;
-    o.documents = await Promise.all((await ctx.input.api.get<Entity[]>(`/api/issues/${target.id}/documents`)).map(row => ctx.input.api.get<Entity>(`/api/issues/${target.id}/documents/${encodeURIComponent(row.key!)}`)));
+    const documents = await Promise.all((await ctx.input.api.get<IssueDocumentSummary[]>(`/api/issues/${target.id}/documents`)).map(row => ctx.input.api.get<IssueDocument>(`/api/issues/${target.id}/documents/${encodeURIComponent(row.key)}`)));
+    o.documents = documents.map(row => ({ id: row.id, issueId: row.issueId, key: row.key, body: row.body, latestRevisionId: row.latestRevisionId ?? undefined }));
+    const revisions = (await Promise.all(documents.map(row => ctx.input.api.get<DocumentRevision[]>(`/api/issues/${target.id}/documents/${encodeURIComponent(row.key)}/revisions`)))).flat();
+    o.revisions = revisions.map(row => ({ id: row.id, documentId: row.documentId, createdByRunId: row.createdByRunId, createdByAgentId: row.createdByAgentId }));
   }
   return o;
 }

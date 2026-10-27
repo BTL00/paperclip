@@ -18,7 +18,8 @@ function valid(id: string): IdentityObservation {
     Object.assign(o.state, { humanId: "alex", worker: { id: "morgan" }, submitStatuses: [409, 200], actualSubmitRequests: 2, noTaskBeforeAnswers: true, bothTabsResolved: true });
     o.activity = [{ id: "answer", action: "issue.thread_interaction_answered", actorType: "user", details: { interactionId: "request" } },
       { id: "document", action: "issue.document_created", entityId: "draft", agentId: "morgan" }];
-    o.documents = [{ id: "introduction", body: "Acorn helps small teams write clear product introductions.", latestRevisionId: "revision", createdByRunId: "write" }];
+    o.documents = [{ id: "introduction", body: "Acorn helps small teams write clear product introductions.", latestRevisionId: "revision" }];
+    o.revisions = [{ id: "revision", documentId: "introduction", createdByRunId: "write", createdByAgentId: "morgan" }];
     o.runs = [{ id: "query", companyId: "acorn", agentId: "ceo", status: "succeeded" },
       { id: "continue", companyId: "acorn", agentId: "ceo", status: "succeeded", contextSnapshot: { interactionId: "request" } },
       { id: "write", companyId: "acorn", agentId: "morgan", status: "succeeded" }];
@@ -41,6 +42,10 @@ describe("conversational proposal and simultaneous human answer oracles", () => 
   });
   it("an empty task or unattributed document is not an artifact result", () => {
     const o = valid("questions-and-approvals.duplicate-answer"); o.documents = []; expect(gradeConfirmationWorkflow(o).passed).toBe(false);
-    const wrong = valid("questions-and-approvals.duplicate-answer"); wrong.documents[0]!.createdByRunId = "unrelated-run"; expect(gradeConfirmationWorkflow(wrong).passed).toBe(false);
+    const wrong = valid("questions-and-approvals.duplicate-answer"); wrong.revisions[0]!.createdByRunId = "unrelated-run"; expect(gradeConfirmationWorkflow(wrong).passed).toBe(false);
+  });
+  it("rejects a real revision attributed to another agent or another document", () => {
+    const o = valid("questions-and-approvals.duplicate-answer"); o.revisions[0]!.createdByAgentId = "unrelated-agent"; expect(gradeConfirmationWorkflow(o).passed).toBe(false);
+    const wrong = valid("questions-and-approvals.duplicate-answer"); wrong.revisions[0]!.documentId = "unrelated-document"; expect(gradeConfirmationWorkflow(wrong).passed).toBe(false);
   });
 });
