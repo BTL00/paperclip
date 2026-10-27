@@ -10,7 +10,7 @@ import { defaultCapabilityRunnerdBinary } from "../../../server/src/vendor/paper
 import { pollUntil } from "../api.js";
 // The public full-run route selects these persisted native fields; the legacy
 // shared HeartbeatRun DTO does not yet declare them. Keep this exact projection.
-export type NativeFaultRun = HeartbeatRun & Pick<typeof heartbeatRuns.$inferSelect, "runtimeMode" | "nativeIssueId" | "runnerInstanceId" | "nativePhase">;
+export type NativeFaultRun = HeartbeatRun & Pick<typeof heartbeatRuns.$inferSelect, "runtimeMode" | "nativeIssueId" | "runnerInstanceId" | "nativePhase" | "nativeSessionId" | "runnerProfileJson">;
 export type NativeFaultBinding = Pick<NativeFaultRun, "id" | "companyId" | "agentId" | "status" | "runtimeMode" | "nativeIssueId" | "runnerInstanceId" | "processPid" | "processGroupId" | "processStartedAt">;
 export interface OwnedNativeIdentity {
   pid: number; uid: number; group: number; startedAt: string; executable: string; commandRunId: string; commandRunnerId: string; runtimeRoot: string;
@@ -42,7 +42,7 @@ async function processIdentity(run: NativeFaultRun): Promise<OwnedNativeIdentity
   } catch { throw new Error("Native infrastructure fault could not independently verify the actual process; private diagnostics withheld"); }
 }
 /** Authoring primitive only: this function is invoked solely inside the coordinator's selected live attempt. */
-export async function faultOwnedNativeProcess(ctx: ChatCatalogContext, binding: { runId: string; issueId: string; agentId: string }) {
+export async function verifyOwnedNativeRunner(ctx: ChatCatalogContext, binding: { runId: string; issueId: string; agentId: string }) {
   if (ctx.input.execution.environment.id !== "local" || typeof process.getuid !== "function") throw new Error("Owned infrastructure fault requires a supported local UID/process identity");
   const isolated = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT; if (!isolated) throw new Error("Owned infrastructure fault requires the explicit isolated attempt root");
   const expected = { companyId: ctx.input.fixtures.company.id, agentId: binding.agentId, issueId: binding.issueId, uid: process.getuid(), executable: await realpath(defaultCapabilityRunnerdBinary()), root: await realpath(isolated) };
@@ -51,6 +51,11 @@ export async function faultOwnedNativeProcess(ctx: ChatCatalogContext, binding: 
   if (!matchesOwnedNativeIdentity({ identity: observed, run: first, expected })) throw new Error("Owned infrastructure fault rejected a foreign or mismatched native process identity");
   const current = await load(), confirmed = await processIdentity(current);
   if (!matchesOwnedNativeIdentity({ identity: confirmed, run: current, expected }) || JSON.stringify(confirmed) !== JSON.stringify(observed)) throw new Error("Owned infrastructure fault rejected process reuse or changed ownership");
+  return { run: current, identity: confirmed };
+}
+export async function faultOwnedNativeProcess(ctx: ChatCatalogContext, binding: { runId: string; issueId: string; agentId: string }) {
+  const { run: current, identity: confirmed } = await verifyOwnedNativeRunner(ctx, binding);
+  const load = () => ctx.input.api.get<NativeFaultRun>(`/api/heartbeat-runs/${binding.runId}`);
   // Deliberately signal only the verified Runner PID. Its provider/tools remain
   // subject to the production cleanup/quarantine rules; never signal a group.
   process.kill(confirmed.pid, "SIGKILL");

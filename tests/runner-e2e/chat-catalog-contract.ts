@@ -48,7 +48,7 @@ export interface ChatSlackIngressReceipt {
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface NativeStopBoundaryReceipt { runId: string; issueId: string; intentId: string; intentRecordedAt: string }
 export interface ChatCatalogCase {
-  /** Only post-stop-message: actual human Stop after bookkeeping, before unchanged canonical send. */
+  /** Only post-stop-message: Stop the genuine same-source setup turn after bookkeeping, then send the unchanged canonical query. */
   canonicalBoundary?: "native-stop-cleanup";
   beforeCanonicalSend?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<NativeStopBoundaryReceipt>;
   scenarioId: string;
