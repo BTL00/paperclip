@@ -1,5 +1,5 @@
 import { gunzipSync, inflateRawSync } from "node:zlib";
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { CompanySecret } from "../../../packages/shared/src/types/secrets.js";
@@ -42,6 +42,17 @@ export function bytesContainSecret(bytes: Buffer, secret: string, depth = 0): bo
   if ([Buffer.from(secret), Buffer.from(secret, "utf16le"), Buffer.from(Buffer.from(secret).toString("base64"))].some(needle => bytes.includes(needle))) return true;
   if (bytes.length >= 4 && bytes.readUInt32LE(0) === 0x04034b50) return zipContents(bytes).some(content => bytesContainSecret(content, secret, depth + 1));
   if (bytes.length >= 2 && bytes.readUInt16LE(0) === 0x8b1f) return bytesContainSecret(gunzipSync(bytes, { maxOutputLength: MAX_BYTES }), secret, depth + 1);
+  // Raw absence cannot clear compressed object streams or image metadata. Only
+  // completely decoded text (or supported containers above) proves a clean scan.
+  if (bytes.subarray(0, 5).toString("ascii") === "%PDF-" || bytes.subarray(0, 4).toString("ascii") === "GIF8"
+    || bytes.subarray(0, 4).toString("ascii") === "RIFF") throw new Error("Unsupported binary payload scan");
+  try {
+    const utf16 = bytes.length >= 2 && (bytes.readUInt16LE(0) === 0xfeff || bytes.readUInt16BE(0) === 0xfeff);
+    const encoding = utf16 ? bytes.readUInt16LE(0) === 0xfeff ? "utf-16le" : "utf-16be" : "utf-8";
+    const text = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+    if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(text)) throw new Error("Non-text payload");
+    if (text.includes(secret) || text.includes(Buffer.from(secret).toString("base64"))) return true;
+  } catch { throw new Error("Unsupported binary payload scan"); }
   return false;
 }
 /** Fetch through the actual signed-in cookie without Playwright tracing raw
@@ -93,6 +104,7 @@ export async function scanReachableSecretOutputs(ctx: ChatCatalogContext, issueI
         if (!ref.relativePath || path.isAbsolute(ref.relativePath)) throw new Error("Private workspace artifact scan has no bounded path");
         const base = await realpath(ctx.input.workspacePath); const file = await realpath(path.resolve(base, ref.relativePath));
         if (!file.startsWith(base + path.sep)) throw new Error("Private artifact path escapes the disposable workspace");
+        const info = await stat(file); if (!info.isFile() || info.size > MAX_BYTES) throw new Error("Bounded private workspace artifact scan unavailable");
         scan(await readFile(file)); artifacts++;
       } else {
         const contentPath = typeof metadata.contentPath === "string" ? metadata.contentPath : product.url;

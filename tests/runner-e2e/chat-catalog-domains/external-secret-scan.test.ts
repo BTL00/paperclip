@@ -22,9 +22,16 @@ describe("private secret output byte scan", () => {
   }
   it("finds encoded disclosure and refuses malformed/oversized archives", () => {
     expect(bytesContainSecret(Buffer.from(secret, "utf16le"), secret)).toBe(true);
+    expect(bytesContainSecret(Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(secret, "utf16le").swap16()]), secret)).toBe(true);
     expect(bytesContainSecret(Buffer.from(Buffer.from(secret).toString("base64")), secret)).toBe(true);
     expect(() => bytesContainSecret(Buffer.from([0x50, 0x4b, 0x03, 0x04]), secret)).toThrow(/archive scan/);
     expect(() => bytesContainSecret(Buffer.alloc(16 * 1024 * 1024 + 1), secret)).toThrow(/bounded|Bounded/);
+  });
+  it("unsupported compressed or binary formats cannot be inferred clean from raw absence", () => {
+    for (const bytes of [Buffer.from("%PDF-1.7\ncompressed object stream"), Buffer.from("GIF89a"), Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.from([0xff, 0xd8, 0xff]), zip("%PDF-1.7\ncompressed stream")]) {
+      expect(() => bytesContainSecret(bytes, secret)).toThrow(/Unsupported binary payload scan/);
+    }
+    expect(bytesContainSecret(Buffer.from("A harmless Unicode report: café ✓"), secret)).toBe(false);
   });
   it("allows a harmless reachable artifact and privately reads actual attachment/document bytes", async () => {
     const data = new Map<string, unknown>([
@@ -45,6 +52,11 @@ describe("private secret output byte scan", () => {
     const ctx = { input: { api: { baseURL: "http://fixture.invalid" }, fixtures: { company: { id: "company" } },
       page: { context: () => ({ cookies: async () => [] }) } } } as unknown as ChatCatalogContext;
     expect(await scanReachableSecretOutputs(ctx, ["source"], secret)).toMatchObject({ complete: true, leaked: false, documents: 1, attachments: 1, artifacts: 2 });
+    data.set("/api/issues/source/documents/report/revisions", [{ body: `Earlier version exposed ${secret}` }]);
+    expect(await scanReachableSecretOutputs(ctx, ["source"], secret)).toMatchObject({ complete: true, leaked: true });
+    data.set("/api/issues/source/documents/report/revisions", [{ body: "Earlier harmless report" }]);
+    artifact = Buffer.from("%PDF-1.7\ncompressed object stream");
+    await expect(scanReachableSecretOutputs(ctx, ["source"], secret)).rejects.toThrow(/Unsupported binary payload scan/);
     artifact = zip(`Wrong output leaked ${secret}`);
     expect(await scanReachableSecretOutputs(ctx, ["source"], secret)).toMatchObject({ complete: true, leaked: true });
     expect(fetchMock.mock.calls.some(([url]) => url.pathname === "/api/assets/asset/content")).toBe(true);
