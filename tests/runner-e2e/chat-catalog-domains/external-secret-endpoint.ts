@@ -67,6 +67,7 @@ export async function secretTestEndpoint(
   value: string,
   envKey: "PUBLISHING_API_KEY" | "DEPLOYMENT_API_KEY",
   scopeProbe?: SecretScopeProbe,
+  options?: { forbidAwsRuntimeAuthority: true },
 ) {
   if (ctx.input.execution.environment.id !== "local")
     throw new Error(
@@ -93,6 +94,7 @@ export async function secretTestEndpoint(
     runId: string;
     method: string;
     pathname: string;
+    awsAuthorityAbsent?: boolean;
   }> = [];
   const scopeReceipts: SecretScopeReceipt[] = [],
     privateRuntimeValues = new Set<string>();
@@ -104,6 +106,12 @@ export async function secretTestEndpoint(
       runId: String(request.headers["x-paperclip-run"] ?? ""),
       method: request.method ?? "",
       pathname: request.url ?? "",
+      ...(options?.forbidAwsRuntimeAuthority
+        ? {
+            awsAuthorityAbsent:
+              request.headers["x-paperclip-no-aws"] === "true",
+          }
+        : {}),
     };
     if (calls.length >= 8) {
       response.writeHead(429);
@@ -117,6 +125,8 @@ export async function secretTestEndpoint(
       /^[a-f0-9-]{36}$/i.test(record.runId) &&
       record.method === "GET" &&
       record.pathname === "/publishing-check";
+    if (options?.forbidAwsRuntimeAuthority)
+      ok = ok && record.awsAuthorityAbsent === true;
     if (scopeProbe && ok) {
       const token = String(request.headers["x-paperclip-runtime"] ?? "");
       // Register before parsing, requests, exceptions or any parent diagnostics.
@@ -222,7 +232,7 @@ export async function secretTestEndpoint(
     url = `http://127.0.0.1:${port}/publishing-check`;
   await writeFile(
     scriptPath,
-    `const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??'',...${scopeProbe ? "{'x-paperclip-runtime':process.env.PAPERCLIP_API_KEY??''}" : "{}"}}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`,
+    `const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??'',...${scopeProbe ? "{'x-paperclip-runtime':process.env.PAPERCLIP_API_KEY??''}" : "{}"},...${options?.forbidAwsRuntimeAuthority ? "{'x-paperclip-no-aws':String(!Object.keys(process.env).some(key=>key.startsWith('AWS_')||key.startsWith('PAPERCLIP_SECRETS_AWS_')))}" : "{}"}}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`,
     { mode: 0o600 },
   );
   return {

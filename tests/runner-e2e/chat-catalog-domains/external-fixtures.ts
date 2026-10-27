@@ -34,7 +34,8 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "chat-channels.repair-endpoint": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "expiredAuthorizationEnv", "registeredWebhookOrigin"] },
   "chat-channels.outbound-email": { provider: "agentmail", fields: ["inboxId", "recipient", "draftArtifactId"] },
   "chat-channels.reply-to-email": { provider: "agentmail", fields: ["inboxId", "threadId", "latestMessageId", "earlierMessageId", "recipient"] },
-  "secrets.vault-reference": { provider: "vault", fields: ["provider", "vaultId", "secretReference", "consumerId"] },
+  "secrets.vault-reference": { provider: "vault", fields: ["provider", "region", "deploymentId", "kmsKeyId", "secretReference", "accessKeyIdEnv", "secretAccessKeyEnv", "sessionTokenEnv", "expectedValueEnv"] },
+  "recovery.unknown-email-outcome": { provider: "agentmail", fields: ["inboxId", "recipient", "recipientAuthorization", "apiTokenEnv"] },
 };
 export interface PrerequisiteReceipt { scenarioId: string; provider?: ExternalProvider; configured: boolean; missing: string[] }
 export function validateExternalConfig(value: unknown): ExternalFixtureConfig {
