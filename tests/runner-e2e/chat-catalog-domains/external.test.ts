@@ -98,8 +98,8 @@ function valid(id: string) {
       gatewayCountBeforeHuman: 0, humanCreated: true, agentCreateStatus: 403, tokenScanComplete: true, tokenLeaked: false });
     o.activity = [{ id: "event", entityId: "gateway", actorType: "user", action: "tool_gateway.created" }];
   } else if (id === "connection-setup.notion-declined") {
-    Object.assign(o.state, { intentId: "intent", cardVisibleBeforeDecline: true, connectedBeforeDecline: 0, providerInvocations: 0 });
-    o.interactions = [{ id: "intent", kind: "connection_intent", status: "answered", resolvedByUserId: "person", payload: { serviceSlug: "notion" },
+    Object.assign(o.state, { intentId: "intent", personId: "person", sourceIssueId: "source", declineRequestMatched: true, cardVisibleBeforeDecline: true, connectedBeforeDecline: 0, providerInvocations: 0 });
+    o.interactions = [{ id: "intent", companyId: "company", issueId: "source", createdByAgentId: "ceo", ...{ sourceRunId: "initial" }, kind: "connection_intent", status: "rejected", resolvedByUserId: "person", payload: { serviceSlug: "notion", serviceName: "Notion", requestingAgentId: "ceo" },
       ...{ addresseeUserId: "person", result: { outcome: "declined" } } }];
     o.reply = "I could not read Notion because you declined access. You can paste an excerpt instead.";
   } else if (id === "chat-channels.provider-disabled") {
