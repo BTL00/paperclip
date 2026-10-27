@@ -6,9 +6,9 @@ function valid() { return { personId: "alex", returnedPersonId: "alex", companyI
   nonmemberCompanyStatus: 403, nonmemberConversationStatus: 404, nonmemberBrowserBlocked: true,
   beforeCommentIds: [], afterCommentIds: [], runIds: [] }; }
 describe("real sign-in boundary acceptance", () => {
-  it("accepts complete real auth+same-resource+audience evidence", () => { expect(gradeSignInBoundary(valid()).passed).toBe(true); });
+  it.each([401, 404])("accepts complete real auth+same-resource+audience evidence with production denial %s", expiredReadStatus => { expect(gradeSignInBoundary({ ...valid(), expiredReadStatus }).passed).toBe(true); });
   it.each([
-    { expiredReadStatus: 200 }, { returnedPersonId: "riley" }, { returnedConversationId: "new-conversation" },
+    { expiredReadStatus: 200 }, { expiredReadStatus: 403 }, { expiredReadStatus: 500 }, { returnedPersonId: "riley" }, { returnedConversationId: "new-conversation" },
     { safeReturnPath: "https://other.test/steal" }, { nonmemberConversationStatus: 200 }, { nonmemberBrowserBlocked: false },
     { runIds: ["accidental-run"] }, { afterCommentIds: ["sent-expired-intent"] }, { restoredComposerVisible: false },
   ])("rejects incomplete or wrong boundary proof %j", change => { expect(gradeSignInBoundary({ ...valid(), ...change }).passed).toBe(false); });

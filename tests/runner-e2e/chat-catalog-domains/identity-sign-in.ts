@@ -20,7 +20,7 @@ interface SignInEvidence {
 export function gradeSignInBoundary(value: unknown) {
   const c = checks(); const o = value as SignInEvidence | undefined;
   c.add("real-invalidated-human-session", !!o && !!o.personId && o.personId !== "local-board" && o.beforeComposerVisible
-    && o.expiredReadStatus === 401 && o.expiredComposerAbsent, "A previously usable real human session is revoked by the server; the expired browser cannot read or compose in its conversation.");
+    && [401, 404].includes(o.expiredReadStatus) && o.expiredComposerAbsent, "A previously usable real human session is revoked by the server; the expired browser cannot read or compose in its conversation.");
   c.add("configured-safe-sign-in-return", !!o && o.configuredSignInVisible && typeof o.safeReturnPath === "string" && o.safeReturnPath === o.intendedReturnPath
     && o.safeReturnPath.startsWith("/") && !o.safeReturnPath.startsWith("//") && o.returnedPersonId === o.personId
     && o.returnedConversationId === o.conversationId && o.restoredComposerVisible,
