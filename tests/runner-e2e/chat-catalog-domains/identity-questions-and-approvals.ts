@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
 import { pollUntil } from "../api.js";
 import { checks, project, entity, hasLink, putDocument } from "./internal-support.js";
-import { identityDefinition, identityObservation, observeIdentity, openStandingChat, waitForReply, type Interaction } from "./identity-support.js";
+import { identityDefinition, identityObservation, observeIdentity, openStandingChat, readAgentResource, waitForReply, type Interaction } from "./identity-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
 const audiencePeople = new WeakMap<ChatCatalogContext, Awaited<ReturnType<typeof createAuthenticatedPerson>>>();
@@ -167,9 +167,25 @@ export const questionIdentityCases = [
         data: { name: state.originalHumanName }, headers: { Origin: ctx.input.api.baseURL } }); }
     },
   }),
-  identityDefinition("questions-and-approvals.necessary-question", async ctx => ({ project: await project(ctx), answer: `Acorn ${ctx.input.nonce}` }), gradeQuestions, {
+  identityDefinition("questions-and-approvals.necessary-question", async ctx => {
+    const p = await project(ctx); const source = await openStandingChat(ctx);
+    const existingBrief = "The requested single-page site presents a collaborative research workspace for independent researchers and small research teams. Visitors should join the early-access waitlist through an accessible signup form. Use a clear, welcoming visual style and a responsive layout for mobile and desktop.";
+    await ctx.input.api.patch(`/api/issues/${source.id}`, { description: existingBrief });
+    return { project: p, sourceId: source.id, existingBrief, answer: `Acorn ${ctx.input.nonce}` };
+  }, gradeQuestions, {
     expectedRunCount: 4, minimumRunCount: 1, attemptTimeoutMs: 540_000,
     observe: observeQuestion,
+    async verifySetup(ctx, state) {
+      const visible = await readAgentResource(ctx, `/api/issues/${state.sourceId}`);
+      const source = visible.data as { id?: string; companyId?: string; description?: string } | undefined;
+      const c = checks();
+      c.add("accessible-existing-site-brief", visible.status === 200 && !!source && source.id === state.sourceId && source.companyId === ctx.input.fixtures.company.id
+        && source.description === state.existingBrief, "The actual speaking agent can read the ordinary source brief with purpose, audience and signup intent before its question.");
+      c.add("product-name-not-supplied", typeof source?.description === "string" && !source.description.includes("Acorn") && !source.description.includes(ctx.input.nonce)
+        && !(await ctx.input.api.get<Array<{ title: string }>>(`/api/companies/${ctx.input.fixtures.company.id}/issues`)).some(row => row.title.includes(String(state.answer))),
+        "Neither the source brief nor a pre-created result task supplies the later human product name.");
+      return c.result();
+    },
     async act(ctx, state) {
       const pending = await pollUntil({ label: "agent-created product-name question", deadlineAt: Date.now() + 150_000,
         load: () => cards(ctx), accept: rows => rows.some(row => row.kind === "ask_user_questions" && row.status === "pending") });

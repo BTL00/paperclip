@@ -98,7 +98,7 @@ export function mentionsRecordedTime(reply: string, recordedAt: string | undefin
 function companyOverview(): ChatCatalogCase {
   const base = define("activity.company-overview", async ctx => {
     const p = await project(ctx); const worker = await fixtureWorker(ctx);
-    const active = await task(ctx, "Website draft", p.id, { status: "in_progress" });
+    const active = await task(ctx, "Website draft", p.id, { status: "in_progress", assigneeUserId: "local-board" });
     const blocker = `approved launch colors ${ctx.input.nonce}`;
     const blockedTask = await task(ctx, "Accessibility review", p.id, { status: "blocked", description: `Waiting for ${blocker}.` });
     const doneTask = await task(ctx, "Launch brief delivered", p.id, { status: "done" });
@@ -107,7 +107,16 @@ function companyOverview(): ChatCatalogCase {
     await ctx.input.api.post(`/api/companies/${hiddenCompany.id}/issues`, { title: hiddenMarker, status: "blocked" });
     return { project: p, task: active, blockedTask, doneTask, worker, blocker, hiddenCompany, hiddenMarker };
   });
-  return { ...base, async observe(ctx, state) {
+  return { ...base, async verifySetup(ctx, state) {
+    const active = await ctx.input.api.get<Entity & { assigneeUserId: string | null }>(`/api/issues/${entity(state, "task").id}`);
+    const worker = await ctx.input.api.get<Entity>(`/api/agents/${entity(state, "worker").id}`);
+    const c = checks();
+    c.add("human-owned-active-work", active.status === "in_progress" && active.assigneeUserId === "local-board" && !active.assigneeAgentId,
+      "The active task has a real local board owner without admitting agent execution.");
+    c.add("idle-worker-no-setup-run", worker.status === "idle" && (await ctx.allRuns()).length === 0,
+      "Morgan remains genuinely idle and fixture preparation admits no native run.");
+    return c.result();
+  }, async observe(ctx, state) {
     const o = await observeInternal(ctx, state);
     return { ...o, agents: await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/agents`) };
   }, async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "hiddenCompany").id}`, { allowNotFound: true }); } };
