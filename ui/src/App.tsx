@@ -803,6 +803,10 @@ export function App() {
           <Route path="instance/settings" element={<LegacySettingsRedirect />} />
           <Route path="instance/settings/*" element={<LegacySettingsRedirect />} />
           <Route path="companies" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals/pending" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals/all" element={<UnprefixedBoardRedirect />} />
+          <Route path="approvals/:approvalId" element={<UnprefixedBoardRedirect />} />
           <Route path="issues" element={<UnprefixedBoardRedirect />} />
           <Route path="tasks" element={<UnprefixedBoardRedirect />} />
           <Route path="issues/:issueId" element={<UnprefixedBoardRedirect />} />
