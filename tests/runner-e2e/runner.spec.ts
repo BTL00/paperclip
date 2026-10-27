@@ -1,3 +1,4 @@
+import { checkSetupHealthCredential } from "./chat-setup-credential.js";
 import { SetupHealthAbort, runChatSetupHealth } from "./chat-setup-health.js";
 import { bindInvitationEnrollmentPrerequisite } from "./chat-catalog-domains/identity-invite-prerequisite.js";
 import { verifyInvitationSourceProof } from "./chat-catalog-domains/identity-invite-source-proof.js";
@@ -988,6 +989,12 @@ for (const execution of executions) {
       if (execution.suite.id === "stock-harness") {
         const receipt = verifyStockHarnessPreflight(process.env[STOCK_PREFLIGHT_ENV]);
         await writeSanitizedJson(snapshotsDir, "stock-harness-preflight.json", receipt, secrets);
+      }
+      if (execution.task.flow === "setup_health") {
+        const credential = await checkSetupHealthCredential({ executionId: execution.id, provider: execution.profile.provider,
+          model: execution.profile.model, credential: credentials.OPENROUTER_API_KEY, env: process.env, secrets });
+        await writeSanitizedJson(snapshotsDir, "chat-setup-credential.json", credential, secrets);
+        if (!credential.recognized) throw new Error(`Setup-health credential prerequisite failed: ${credential.code}`);
       }
       const nativeRolloutEnabled = execution.profile.provider !== "codex";
       const experimental = await api.patch<{

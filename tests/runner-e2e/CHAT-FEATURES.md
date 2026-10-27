@@ -237,3 +237,11 @@ Merged production now also maps `runs-adapters/model-accounts`; that capability
 is outside this frozen catalog and remains uncovered and unqualified by it.
 The setup-health cell is diagnostic only and is excluded from those 244 scenarios
 and from `--all`, as is the explicit-only chat catalog.
+
+The explicit setup-health diagnostic first makes one bounded, read-only OpenRouter
+current-key request on the trusted remote Linux job. Unrecognized credentials stop
+before agent creation or any model call. A recognized key permits the existing
+single ordinary lifecycle hello. The closed receipt records only HTTP status,
+recognition, expiry and key-budget availability; unlimited/unknown key budgets do
+not establish account credit or model access. Response bodies, labels, amounts,
+account identities and key values are never retained. There is no retry.
