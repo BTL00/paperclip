@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyRemoteCell, validateRemoteCell, remoteCellUsage, type RemoteArtifactDocument, type RemoteCampaign } from "./chat-remote-campaign.js";
+import { applyRemoteCell, validateRemoteCell, remoteCellUsage, validateRemoteHostRefusal, type RemoteArtifactDocument, type RemoteCampaign } from "./chat-remote-campaign.js";
 import { DATABASE_LANE_ENV, POSTGRES_ARTIFACT_ENV, POSTGRES_IMAGE_ID_ENV, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, POSTGRES_VERSION } from "./docker-postgres.js";
 import { CHAT_OPENCODE_MODEL } from "./chat-runtime-profile.js";
 import type { CampaignAttempt } from "./chat-campaign.js";
@@ -36,6 +36,14 @@ describe("remote Actions cell import", () => {
     const f = fixture(), changed = f.input(); changed.result.bytes += " "; expect(() => validateRemoteCell(changed)).toThrow("bytes changed");
     const foreign = f.input(); foreign.result.path = "../result.json"; expect(() => validateRemoteCell(foreign)).toThrow("artifact path");
     const rerun = f.input(); rerun.provenance.runAttempt = 2; expect(() => validateRemoteCell(rerun)).toThrow("job rerun");
+  });
+  it("imports actual On-Demand refusal only as an operation with zero case ordinals", () => {
+    const f = fixture(); Object.assign(f.host, { status: "blocked", lifecycle: "on-demand", reason: "on-demand-or-unknown-host-refused-before-evaluation", instanceId: "i-12345678", imageId: "ami-12345678" });
+    delete f.host.postgres; delete f.host.dockerEngineSha256;
+    const operation = validateRemoteHostRefusal(f.input());
+    expect(operation.caseMeasurements).toBe(0); expect(operation.caseOrdinalsConsumed).toBe(0); expect(operation.initialIntentConsumed).toBe(false);
+    f.host.evaluationAdmitted = true; expect(() => validateRemoteHostRefusal(f.input())).toThrow("On-Demand refusal");
+    f.host.evaluationAdmitted = false; f.host.lifecycle = "spot"; expect(() => validateRemoteHostRefusal(f.input())).toThrow("On-Demand refusal");
   });
   it("keeps unknown billing unknown and reported OpenRouter billing separate", () => {
     const f = fixture(); expect(remoteCellUsage(f.result)).toEqual({ costUsd: null, tokens: null, coverage: "unavailable" });

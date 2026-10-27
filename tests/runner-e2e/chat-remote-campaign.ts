@@ -71,6 +71,34 @@ export function validateRemoteCell(input: {
     resultPath: input.result.path, resultSha256: input.result.sha256, hostSha256: input.host.sha256, definitionSha256: input.definition.sha256,
     result, definitionDigest: definition.definitionDigest, graderDigest: definition.graderDigest, databaseLane };
 }
+/** A pre-attempt qualification refusal is an operation, never a case reservation.
+ * Only the source-qualified On-Demand branch proves this exact zero-admission stage. */
+export function validateRemoteHostRefusal(input: {
+  intent: RemoteCellIntent; provenance: RemoteArtifactProvenance; host: RemoteArtifactDocument;
+}) {
+  const { intent, provenance: p } = input, host = document(input.host);
+  requireProof(p.repository === "paperclipai/paperclip" && p.workflow === "runner-full-stack-e2e.yml" && p.workflowRef === "refs/heads/master"
+    && /^\d+$/.test(p.runId) && p.runAttempt === 1 && /^\d+$/.test(p.artifactId) && hex(p.archiveSha256), "unverified qualification artifact");
+  requireProof(/^[a-f0-9]{40}$/.test(intent.sourceRevision) && p.targetSourceRevision === intent.sourceRevision
+    && host.sourceRevision === intent.sourceRevision && host.workflowRunId === p.runId && host.workflowAttempt === p.runAttempt
+    && host.workflowRef === "paperclipai/paperclip/.github/workflows/runner-full-stack-e2e.yml@refs/heads/master", "qualification source/run mismatch");
+  requireProof(host.schema === "paperclip.chat-remote-host/v1" && host.status === "blocked" && host.scope === "before-evaluation"
+    && host.evaluationAdmitted === false && host.automaticRetries === 0 && host.lifecycle === "on-demand"
+    && host.reason === "on-demand-or-unknown-host-refused-before-evaluation" && !host.postgres && !host.dockerEngineSha256
+    && host.region === "us-east-1" && host.architecture === "x86_64" && /^i-[a-f0-9]{8,17}$/.test(host.instanceId)
+    && /^ami-[a-f0-9]{8,17}$/.test(host.imageId), "not the proven pre-evaluation On-Demand refusal");
+  requireProof(Array.isArray(host.executionIds) && host.executionIds.length === intent.selected.length
+    && new Set(host.executionIds).size === host.executionIds.length
+    && intent.selected.every(row => host.executionIds.includes(row.executionId)), "qualification selection mismatch");
+  return { schema: "paperclip.chat-remote-operation/v1", campaignId: intent.campaignId, runId: p.runId,
+    sourceRevision: intent.sourceRevision, artifactId: p.artifactId, artifactSha256: p.archiveSha256,
+    hostReceiptPath: input.host.path, hostReceiptSha256: input.host.sha256,
+    outcome: "infrastructure-blocked-before-evaluation", reason: host.reason,
+    evaluationAdmitted: false, canonicalQueries: 0, nativeRuns: 0, providerCalls: 0,
+    caseMeasurements: 0, caseOrdinalsConsumed: 0, initialIntentConsumed: false,
+    caseExecutionIds: host.executionIds as string[], actualHost: { lifecycle: "on-demand", region: host.region, architecture: host.architecture },
+    reporterConclusionIsIndependent: true } as const;
+}
 export function remoteCellUsage(result: RunnerE2EResult): CampaignAttempt["usage"] {
   const usage = result.billing?.llm;
   return { tokens: usage && Number.isFinite(usage.totalTokens) ? usage.totalTokens : null,
