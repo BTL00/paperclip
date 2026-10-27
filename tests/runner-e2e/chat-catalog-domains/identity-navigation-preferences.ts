@@ -70,7 +70,7 @@ export const navigationIdentityCases = [
     } catch (error) { await observer.dispose(); searchObservers.delete(ctx); throw error; }
   }, gradeNavigation, {
     authentication: "human-session",
-    sourceFiles: ["chat-catalog-domains/identity-navigation-preferences.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
+    sourceFiles: ["chat-catalog-domains/identity-navigation-preferences.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
     async act(ctx, state) {
       await waitForReply(ctx); const source = ctx.input.page.url();
       await ctx.input.page.keyboard.press("ControlOrMeta+k");

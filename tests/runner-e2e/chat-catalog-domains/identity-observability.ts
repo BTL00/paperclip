@@ -1,3 +1,4 @@
+import { privateIdentityBrowser } from "./identity-private-browser.js";
 import { createServer, type Server } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
@@ -56,7 +57,7 @@ export const observabilityIdentityCases: readonly ChatCatalogCase[] = [identityD
   return { beforeSettings: before.settings, collectorUrl: target.url, syntheticCollector: true };
 }, gradeObservability, {
   authentication: "human-session", expectedRunCount: 3, expectedHumanMessageCount: 3, attemptTimeoutMs: 600_000,
-  sourceFiles: ["chat-catalog-domains/identity-observability.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/companies.yaml"],
+  sourceFiles: ["chat-catalog-domains/identity-observability.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/companies.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const target = collectors.get(ctx); if (!target) throw new Error("Owned synthetic collector is missing");
     const root = `/api/companies/${ctx.input.fixtures.company.id}/observability`; const source = ctx.input.page.url();
@@ -64,10 +65,8 @@ export const observabilityIdentityCases: readonly ChatCatalogCase[] = [identityD
     state.agentWriteStatus = await probeAgentPermission(ctx, root, "PUT", { expectedRevision: null, enabled: true, destination: { provider: "otlp", endpointBaseUrl: target.url }, credentials: { mode: "replace", headers: [] }, capture: { userPrompts: false, assistantResponses: false, toolDetails: false, toolContent: false } });
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/company/settings`, { waitUntil: "domcontentloaded" });
     const section = ctx.input.page.locator('section[aria-labelledby="agent-observability-heading"]');
-    await section.getByLabel("Destination", { exact: true }).selectOption("otlp"); await section.getByLabel("OTLP base URL", { exact: true }).fill(target.url);
-    await section.getByRole("button", { name: "Add header", exact: true }).click(); await section.getByRole("textbox", { name: "Header name", exact: true }).fill("Authorization");
-    await section.getByLabel("Value for Authorization", { exact: true }).fill(`Bearer ${target.key}`);
-    await section.getByRole("switch", { name: "Enable export", exact: true }).setChecked(true); await section.getByRole("button", { name: "Save changes", exact: true }).click();
+    await privateIdentityBrowser({ kind: "observability", origin: ctx.input.api.baseURL, startPath: ctx.input.page.url(), cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL), endpoint: target.url, credential: `Bearer ${target.key}` });
+    await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
     await expect(section.getByRole("button", { name: "Test saved settings", exact: true })).toBeEnabled();
     const saved = await ctx.input.api.get<AgentObservabilitySettingsResponse>(root); state.saved = saved; state.publicSettingsContainsKey = JSON.stringify(saved).includes(target.key);
     const response = ctx.input.page.waitForResponse(row => row.request().method() === "POST" && new URL(row.url()).pathname === `${root}/test`);

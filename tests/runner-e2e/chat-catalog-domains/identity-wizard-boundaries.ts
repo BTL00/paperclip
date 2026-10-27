@@ -51,7 +51,7 @@ export function gradeWizardBoundary(value: unknown, scenarioId: string) {
   return c.result();
 }
 const sources = ["chat-catalog-domains/identity-wizard-boundaries.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-onboarding.ts",
-  "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-boundary-contract.ts", "chat-catalog-domains/internal-support.ts", "installed-release.ts", "chat-scenarios/onboarding.yaml"];
+  "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-boundary-contract.ts", "chat-catalog-domains/internal-support.ts", "installed-release.ts", "chat-scenarios/onboarding.yaml"];
 export const wizardIdentityBoundaryCases: readonly IdentityBoundaryCase[] = ["onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard"].map(scenarioId => ({
   scenarioId, journeyKind: "browser-boundary", boundaryTarget: scenarioId === "onboarding.new-instance" ? "empty-installed-target" : "authenticated-harness",
   ...(scenarioId === "onboarding.new-instance" ? {} : { authentication: "human-session" as const }),

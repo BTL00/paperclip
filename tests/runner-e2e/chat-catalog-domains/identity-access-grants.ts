@@ -33,7 +33,7 @@ export function gradeAccessGrant(value: unknown) {
   } else c.add("known-grant-case", false, "No permission oracle exists for this case.");
   return c.result();
 }
-const sources = ["chat-catalog-domains/identity-access-grants.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/access.yaml",
+const sources = ["chat-catalog-domains/identity-access-grants.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/access.yaml",
   "../../maps/agent-access-map/access.md", "../../server/src/routes/access.ts", "../../server/src/routes/agents.ts", "../../packages/shared/src/validators/agent.ts"];
 export const accessGrantIdentityCases: readonly ChatCatalogCase[] = ["access.invite-teammate", "access.manage-membership"].map(scenarioId => identityDefinition(scenarioId, async ctx => {
   const permissionKey = scenarioId.endsWith("invite-teammate") ? "users:invite" : "users:manage_permissions";

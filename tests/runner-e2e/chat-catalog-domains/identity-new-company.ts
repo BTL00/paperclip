@@ -31,7 +31,7 @@ export const newCompanyIdentityCases: readonly ChatCatalogCase[] = [identityDefi
   return { humanId: session.user.id, sourceMembers: await ctx.input.api.get(`/api/companies/${ctx.input.fixtures.company.id}/members`) };
 }, gradeNewCompany, {
   authentication: "human-session", requiredCredentials: ["OPENAI_API_KEY"], attemptTimeoutMs: 600_000,
-  sourceFiles: ["chat-catalog-domains/identity-new-company.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/onboarding.yaml"],
+  sourceFiles: ["chat-catalog-domains/identity-new-company.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/onboarding.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); state.companyCountAfterReply = (await ctx.input.api.get<unknown[]>("/api/companies")).length;
     if (state.companyCountAfterReply !== 1) throw new Error("The source agent changed company identities before the human wizard");

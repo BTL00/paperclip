@@ -1,4 +1,5 @@
-import { expect, type Page, type Response } from "@playwright/test";
+import { expect, test, type Page, type Response } from "@playwright/test";
+import { privateIdentityBrowser } from "./identity-private-browser.js";
 import { pollUntil } from "../api.js";
 import type { AiConnectionBinding, AiConnectionList } from "../../../packages/shared/src/ai-connections.js";
 
@@ -20,11 +21,23 @@ export interface WizardReceipt {
 /** The actual public wizard owns all company/account/first-agent mutations.
  * APIs only read its resulting identities; secrets enter the normal masked
  * human field and are never included in receipts or browser draft snapshots. */
-export async function finishIdentityWizard(input: {
+interface WizardInput {
   page: Page; origin: string; companyName: string; agentName: string; harness: WizardHarness; credential: string;
   deadlineAt: number; resume?: boolean; entry?: "empty" | "new-company";
   onCompany(company: Company): void; evidence(name: string, value: unknown): Promise<void>;
-}): Promise<WizardReceipt> {
+}
+export async function finishIdentityWizard(input: WizardInput): Promise<WizardReceipt> {
+  const receipt = await privateIdentityBrowser({ kind: "wizard", origin: input.origin, startPath: input.page.url() === "about:blank" ? "/" : input.page.url(), cookies: await input.page.context().cookies(input.origin),
+    credential: input.credential, companyName: input.companyName, agentName: input.agentName, harness: input.harness, deadlineAt: input.deadlineAt, resume: input.resume, entry: input.entry },
+    { company(id) { input.onCompany({ id, name: input.companyName, issuePrefix: "" }); } });
+  if (!receipt.wizard) throw new Error("Private wizard returned no bounded result");
+  await input.page.goto(new URL(receipt.wizard.readyConversationPath, input.origin).href, { waitUntil: "domcontentloaded" });
+  await input.evidence("identity-public-wizard-result.json", receipt.wizard); return receipt.wizard;
+}
+/** Called only by the standalone worker, never in the Playwright Test process. */
+export async function runIdentityWizardInPrivateBrowser(input: WizardInput & { registerCompany(company: Company): Promise<void> }): Promise<WizardReceipt> {
+  let attached = false; try { test.info(); attached = true; } catch { /* outside Test */ }
+  if (attached) throw new Error("Credential-bearing wizard must run only in the private child");
   const { page, origin } = input; const remaining = () => Math.max(1, Math.min(180_000, input.deadlineAt - Date.now()));
   const get = async <T>(endpoint: string): Promise<T> => {
     const response = await page.context().request.get(origin + endpoint, { timeout: Math.min(30_000, remaining()) });
@@ -41,6 +54,7 @@ export async function finishIdentityWizard(input: {
   await expect(page.locator("#onboarding-agent-name")).toBeVisible();
   const company = await pollUntil({ label: "wizard-created exact company", deadlineAt: input.deadlineAt,
     load: () => get<Company[]>("/api/companies"), accept: rows => rows.filter(row => !before.some(old => old.id === row.id) && row.name === input.companyName).length === 1 }).then(rows => rows.find(row => !before.some(old => old.id === row.id) && row.name === input.companyName)!);
+  await input.registerCompany(company);
   input.onCompany(company);
   await page.locator("#onboarding-agent-name").fill(input.agentName); await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Connect a model", exact: true })).toBeVisible();

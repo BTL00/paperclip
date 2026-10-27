@@ -37,7 +37,7 @@ export const profileIdentityCases: readonly ChatCatalogCase[] = [identityDefinit
   } catch (error) { await observer.dispose(); observers.delete(ctx); throw error; }
 }, gradeProfile, {
   authentication: "human-session",
-  sourceFiles: ["chat-catalog-domains/identity-profile.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
+  sourceFiles: ["chat-catalog-domains/identity-profile.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); state.beforeHumanName = (await ctx.input.api.get<Session>("/api/auth/get-session")).user.name;
     state.agentWriteStatus = await probeAgentPermission(ctx, "/api/auth/profile", "PATCH", { name: "Alex Chen" });

@@ -44,7 +44,7 @@ export function gradeNavigationBoundary(value: unknown) {
   } else c.add("known-navigation-boundary", false, "No oracle exists for this case.");
   return c.result();
 }
-const sources = ["chat-catalog-domains/identity-navigation-boundaries.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"];
+const sources = ["chat-catalog-domains/identity-navigation-boundaries.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"];
 export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
   identityDefinition("navigation-preferences.broken-link", async ctx => {
     const source = await openStandingChat(ctx); const p = await project(ctx);

@@ -51,7 +51,7 @@ export const sidebarOrderIdentityCases: readonly ChatCatalogCase[] = [identityDe
   } catch (error) { await observers.get(ctx)?.dispose(); observers.delete(ctx); await ctx.input.api.patch("/api/instance/settings/experimental", { enableStreamlinedUi: settings.enableStreamlinedUi }); throw error; }
 }, gradeSidebarOrder, {
   authentication: "human-session",
-  sourceFiles: ["chat-catalog-domains/identity-sidebar-order.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
+  sourceFiles: ["chat-catalog-domains/identity-sidebar-order.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const endpoint = `/api/companies/${ctx.input.fixtures.company.id}/sidebar-preferences/me`;
     state.orderAfterReply = await ctx.input.api.get<Order>(endpoint);

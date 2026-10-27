@@ -155,7 +155,7 @@ export const questionIdentityCases = [
     return { original, originalHumanName: session.user.name, alexId: session.user.id, rileyId: riley.id, realHumanIdentities: true, visibleToAlex: true };
   }, gradeQuestions, {
     authentication: "human-session",
-    sourceFiles: ["chat-catalog-domains/identity-questions-and-approvals.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"],
+    sourceFiles: ["chat-catalog-domains/identity-questions-and-approvals.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"],
     async act(ctx, state) {
       await waitForReply(ctx);
       const response = await ctx.input.page.context().request.post(`${ctx.input.api.baseURL}/api/issues/${ctx.issue()!.id}/interactions/${entity(state, "original").id}/accept`,

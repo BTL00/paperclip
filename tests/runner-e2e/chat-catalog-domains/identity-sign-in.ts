@@ -37,7 +37,7 @@ export function gradeSignInBoundary(value: unknown) {
 export const signInIdentityBoundaryCases: readonly IdentityBoundaryCase[] = [{
   scenarioId: "access.sign-in", journeyKind: "browser-boundary", boundaryTarget: "authenticated-harness", authentication: "human-session",
   oracleVersion: "paperclip.chat-catalog.identity.v1", expectedRunCount: 0, expectedHumanMessageCount: 0, turnTimeoutMs: 120_000, attemptTimeoutMs: 300_000,
-  sourceFiles: ["chat-catalog-domains/identity-sign-in.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-boundary-contract.ts", "chat-catalog-domains/internal-support.ts", "live-fixtures.ts", "chat-scenarios/access.yaml"],
+  sourceFiles: ["chat-catalog-domains/identity-sign-in.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-boundary-contract.ts", "chat-catalog-domains/internal-support.ts", "live-fixtures.ts", "chat-scenarios/access.yaml"],
   grade: gradeSignInBoundary,
   async run(ctx) {
     const browser = ctx.page.context().browser(); if (!browser) throw new Error("Real human boundary needs a browser");
