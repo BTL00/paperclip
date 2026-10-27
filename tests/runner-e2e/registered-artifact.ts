@@ -35,9 +35,7 @@ export async function readRegisteredArtifacts(api: RunnerApi, issueId: string, r
     if (!Number.isSafeInteger(attachment.byteSize) || attachment.byteSize < 0 || attachment.byteSize > 262_144) {
       throw new Error(`Registered artifact ${name} has an invalid or excessive size`);
     }
-    const response = await api.request.get(`/api/attachments/${encodeURIComponent(attachment.id)}/content?download=1`);
-    if (!response.ok()) throw new Error(`Registered artifact ${name} download returned ${response.status()}`);
-    const bytes = await response.body();
+    const bytes = await api.getAttachmentContent(attachment.id);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (bytes.length !== attachment.byteSize || sha256 !== attachment.sha256) {
       throw new Error(`Downloaded registered artifact ${name} disagrees with stored bytes`);
