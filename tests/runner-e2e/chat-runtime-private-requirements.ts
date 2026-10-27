@@ -3,6 +3,8 @@
 export const runtimePrivateRequirements = {
   "execution-environments.prepare-image": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "toolsManifest"], credentials: ["DAYTONA_API_KEY"] },
   "execution-environments.assign-computer": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "qualifiedHarness"], credentials: ["DAYTONA_API_KEY"] },
+  "recovery.workspace-repair": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "qualifiedHarness"], credentials: ["DAYTONA_API_KEY"] },
+  "workspaces.recover-lost-sandbox": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "qualifiedHarness"], credentials: ["DAYTONA_API_KEY"] },
   "agents.ambiguous-cloud-code": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "qualifiedHarness"], credentials: ["ANTHROPIC_API_KEY", "DAYTONA_API_KEY"] },
   "execution-environments.add-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.test-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
