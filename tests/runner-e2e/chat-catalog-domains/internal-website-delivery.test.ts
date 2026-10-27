@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { gradeWebsiteDelivery } from "./internal-website-delivery.js";
+import { gradeWebsiteDelivery, websitePrerequisiteSettled } from "./internal-website-delivery.js";
 const hash = (body: string) => createHash("sha256").update(body).digest("hex");
+it("keeps generated-but-undelivered work honestly blocked until the canonical delivery request", () => {
+  const staged = { task: { id: "task", status: "blocked" }, runs: [{ agentId: "morgan", status: "succeeded" }] };
+  expect(websitePrerequisiteSettled(staged, "morgan", false)).toBe(true);
+  expect(websitePrerequisiteSettled(staged, "morgan", true)).toBe(false);
+  expect(websitePrerequisiteSettled({ ...staged, runs: [{ agentId: "morgan", status: "failed" }] }, "morgan", false)).toBe(false);
+  expect(websitePrerequisiteSettled({ ...staged, runs: [{ agentId: "unrelated", status: "succeeded" }] }, "morgan", false)).toBe(false);
+});
 function valid(revising = false) {
   const task = { id: "task", companyId: "company", title: "Website task", status: "done", assigneeAgentId: "ceo" };
   const prior = "<html><body><h1>Bring your research team notes together in one accessible place</h1><p>Research teams stay organized.</p><a href='https://example.test/signup'>Signup</a><footer>ORCHID</footer></body></html>";

@@ -1,10 +1,19 @@
 import { expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { gradeProjectDefaults, projectReadCalls } from "./internal-project-defaults.js";
+import { gradeProjectDefaults, gradeProjectDefaultsSetup, projectReadCalls } from "./internal-project-defaults.js";
 import { gradeRoutineAudit, routineHistoricalContext } from "./internal-routine-audit.js";
 import { gradeWorkTimeline } from "./internal-work-timeline.js";
 import { gradeArchivePartial } from "./internal-archive-partial.js";
 function base(scenarioId: string) { return { scenarioId, origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: {} as Record<string, unknown>, tasks: [] as any[], projects: [] as any[], goals: [] as any[], comments: [] as any[], activity: [] as any[], documents: [], revisions: [], links: [] as string[], reply: "", humanQueries: [], runs: [] as any[] }; }
+it("preserves the exact active prerequisite while independently proving ready canonical and future agents", () => {
+  const ready = { id: "ceo", lifecycleState: "ready", status: "idle", adapterConfig: { timeoutSec: 120 } };
+  const prepared = { lead: ready, future: { ...ready, id: "riley" }, held: { ...ready, id: "morgan", status: "running", adapterConfig: { timeoutSec: 420 } }, task: { id: "task", assigneeAgentId: "morgan", executionRunId: "held" }, runs: [{ id: "held", agentId: "morgan", status: "running" }], activeRunId: "held", gateCalls: [{ authorized: true }] };
+  expect(gradeProjectDefaultsSetup(prepared).passed).toBe(true);
+  expect(gradeProjectDefaultsSetup({ ...prepared, held: { ...prepared.held, status: "idle" } }).passed).toBe(false);
+  expect(gradeProjectDefaultsSetup({ ...prepared, future: { ...prepared.future, status: "error" } }).passed).toBe(false);
+  expect(gradeProjectDefaultsSetup({ ...prepared, held: { ...prepared.held, adapterConfig: { timeoutSec: 120 } } }).passed).toBe(false);
+  expect(gradeProjectDefaultsSetup({ ...prepared, gateCalls: [] }).passed).toBe(false);
+});
 function defaults() {
   const o = base("projects.project-defaults"); const task = { id: "active", status: "in_progress", projectId: "p", assigneeAgentId: "morgan", executionRunId: "prior" }; const future = { id: "future", status: "done", projectId: "p" }; const p = { id: "p", description: "Keyboard navigation; adequate contrast; labeled controls", goalIds: ["growth"], env: null };
   Object.assign(o.state, { project: { id: "p" }, goal: { id: "growth", title: "Growth" }, task, futureTask: future, futureWorker: { id: "riley" }, activeRunId: "prior", originalEnv: null, defaultsReply: "New work uses the saved defaults. Existing active work remains unchanged." });
@@ -22,6 +31,9 @@ it("accepts consumed supported same-project API reads without requiring a partic
   const events = [{ runId: "new", eventType: "item.started", itemId: "read-p", payload: { kind: "dynamicToolCall", item: { type: "tool_use", id: "read-p", name: "call_api", input: { operationId: "GET /api/projects/{id}", apiPayloadRedacted: true, apiPayloadSha256: digest } } } },
     { runId: "new", eventType: "item.completed", itemId: "read-p", payload: { kind: "dynamicToolCall", item: { type: "tool_result", id: "read-p", tool_use_id: "read-p", result: { apiOperationId: "GET /api/projects/{id}", ok: true, status: 200 } } } }];
   Object.assign(o, { futureProjectReads: projectReadCalls(events, "new", "p") }); expect(gradeProjectDefaults(o).passed).toBe(true);
+  const stored = events.map((event, index) => ({ runId: "new", sourceEventId: `source-${index}`, payload: { prpEvent: { ...event, schema: "paperclip.prp.event.v1", sourceEventId: `source-${index}` } } }));
+  expect(projectReadCalls(stored, "new", "p")).toEqual(projectReadCalls(events, "new", "p"));
+  stored[0]!.payload.prpEvent.sourceEventId = "foreign-event"; expect(projectReadCalls(stored, "new", "p")).toEqual([]);
   expect(projectReadCalls(events, "new", "another-project")).toEqual([]); expect(projectReadCalls(events, "another-run", "p")).toEqual([]);
   events[1]!.itemId = "other-call"; expect(projectReadCalls(events, "new", "p")).toEqual([]);
   expect(projectReadCalls([{ runId: "new", eventType: "item.completed", payload: { kind: "agentMessage", text: JSON.stringify(events) } }], "new", "p")).toEqual([]);

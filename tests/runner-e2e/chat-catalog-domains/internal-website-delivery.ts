@@ -8,11 +8,15 @@ import type { WorkspaceFileContent } from "../../../packages/shared/src/types/wo
 import { pollUntil } from "../api.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
-import { checks, entity, hasLink, observation, observeInternal, project, task, type InternalObservation } from "./internal-support.js";
+import { checks, entity, hasLink, observation, observeInternal, project, task, type Entity, type InternalObservation } from "./internal-support.js";
 interface Downloaded { id: string; sha256: string; body: string }
 interface DeliveryObservation extends InternalObservation { attachments: IssueAttachment[]; products: IssueWorkProduct[]; downloaded: Downloaded[] }
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 const headline = (body: string) => /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(body)?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
+export function websitePrerequisiteSettled(value: { task: Entity; runs: { agentId: string; status: string }[] }, workerId: string, revising: boolean) {
+  return value.runs.length === 1 && value.runs[0]?.agentId === workerId && value.runs[0]?.status === "succeeded"
+    && value.task.status === (revising ? "done" : "blocked");
+}
 function downloadHref(o: InternalObservation, attachment: IssueAttachment) {
   const paths = [attachment.contentPath, attachment.openPath, attachment.downloadPath].filter((path): path is string => !!path);
   return o.links.find(href => { try { const url = new URL(href, o.origin); return url.origin === o.origin && paths.some(path => new URL(path, o.origin).pathname === url.pathname); } catch { return false; } });
@@ -57,10 +61,10 @@ function websiteDelivery(revising: boolean): ChatCatalogCase {
     const bodyFact = "Acorn Notes keeps quiet research teams organized."; const signupHref = "https://example.test/acorn-signup";
     const producedBody = `<!doctype html><html><head><meta charset="utf-8"><title>Acorn Notes</title></head><body><h1>Bring all of your research team notes together in one calm and accessible place</h1><p>${bodyFact}</p><a href="${signupHref}">Join the list</a><footer>${marker}</footer></body></html>\n`;
     const t = await task(ctx, "Website task", p.id, { status: "todo", assigneeAgentId: worker.id,
-      description: `Generate the website file ${filename} in this task's authorized project workspace, with exactly these UTF-8 bytes (JSON string): ${JSON.stringify(producedBody)}. Use ordinary filesystem tools and independently verify the saved file. ${revising ? `Deliver ${filename} through the normal product artifact registration and upload path, with that exact filename as its work-product title.` : "Keep the file in the authorized workspace for the subsequent delivery request; do not register or upload it yet."} Complete this initial build prerequisite after verifying the actual file. Do not create other tasks.` });
+      description: `Generate the website file ${filename} in this task's authorized project workspace, with exactly these UTF-8 bytes (JSON string): ${JSON.stringify(producedBody)}. Use ordinary filesystem tools and independently verify the saved file. ${revising ? `Deliver ${filename} through the normal product artifact registration and upload path, with that exact filename as its work-product title. Complete this initial build prerequisite after verifying the actual file.` : "This is the generate-only prerequisite stage: keep the verified file in the authorized workspace and pause the task as blocked awaiting the person's subsequent explicit delivery request. Do not claim finished delivery, register, or upload it yet."} Do not create other tasks.` });
     const ready = await pollUntil({ label: "Real prior website generation", deadlineAt: Date.now() + 240_000,
       load: async () => ({ task: await ctx.input.api.get<typeof t>(`/api/issues/${t.id}`), runs: await ctx.allRuns() }),
-      accept: value => value.runs.length === 1 && value.runs[0]?.agentId === worker.id && value.runs[0]?.status === "succeeded" && value.task.status === "done",
+      accept: value => websitePrerequisiteSettled(value, worker.id, revising),
       reject: value => value.runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status)) ? "The real prerequisite website build did not finish" : undefined });
     const produced = await ctx.input.api.get<WorkspaceFileContent>(`/api/issues/${t.id}/file-resources/content?workspace=execution&path=${encodeURIComponent(filename)}`);
     const actual = produced.content.encoding === "base64" ? Buffer.from(produced.content.data, "base64").toString("utf8") : produced.content.data;
@@ -71,8 +75,10 @@ function websiteDelivery(revising: boolean): ChatCatalogCase {
       if (original.content !== actual) throw new Error("The prior registered delivery does not match the generated website");
       originalAttachment = (await ctx.input.api.get<IssueAttachment[]>(`/api/issues/${t.id}/attachments`)).find(file => file.id === original.attachmentId)!; originalProductId = original.workProductId;
     } else if ((await ctx.input.api.get<IssueAttachment[]>(`/api/issues/${t.id}/attachments`)).length) throw new Error("The undelivered prerequisite unexpectedly uploaded the requested outcome");
-    // The responsible human hands the finished source to the CEO for the next ordinary delivery/revision request.
-    const handedOff = await ctx.input.api.patch<typeof t>(`/api/issues/${t.id}`, { assigneeAgentId: ctx.input.fixtures.agent.id });
+    // The delivered revision source can be handed over without starting work. The
+    // undelivered prerequisite stays honestly blocked with its original worker;
+    // assigning a nonterminal task here could admit an undeclared extra run.
+    const handedOff = revising ? await ctx.input.api.patch<typeof t>(`/api/issues/${t.id}`, { assigneeAgentId: ctx.input.fixtures.agent.id }) : ready.task;
     const state = { project: p, task: handedOff, worker, priorRunId, filename, producedBody: actual, producedHash: hash(actual), marker, bodyFact, signupHref, originalAttachment, originalProductId };
     await ctx.input.evidence("chat-catalog-actual-prior-website.json", state); return state;
   }, gradeWebsiteDelivery);
