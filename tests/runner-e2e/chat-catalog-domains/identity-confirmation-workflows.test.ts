@@ -37,6 +37,10 @@ describe("conversational proposal and simultaneous human answer oracles", () => 
   it("accepting the proposal twice cannot produce two durable tasks", () => {
     const o = valid("questions-and-approvals.accept-one-proposal"); o.tasks.push({ ...o.tasks[0]!, id: "duplicate" }); expect(gradeConfirmationWorkflow(o).passed).toBe(false);
   });
+  it("a task created before the protected answer cannot be credited despite a correct final artifact", () => {
+    const o = valid("questions-and-approvals.duplicate-answer"); o.state.noTaskBeforeAnswers = false;
+    expect(gradeConfirmationWorkflow(o).passed).toBe(false);
+  });
   it("a duplicated answer continuation is rejected even with identical final output", () => {
     const o = valid("questions-and-approvals.duplicate-answer"); o.runs.push({ ...o.runs[1]!, id: "extra-resume" }); expect(gradeConfirmationWorkflow(o).passed).toBe(false);
   });

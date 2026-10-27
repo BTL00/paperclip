@@ -24,7 +24,15 @@ export function gradePlanReview(value: unknown) {
       && o.state.sourcePlanRevisionAfter === plan?.latestRevisionId && typeof o.state.canonicalCommentId === "string" && current.result?.commentId === o.state.canonicalCommentId
       && o.activity.some(row => row.action === "issue.thread_interaction_accepted" && row.details?.interactionId === original?.id && row.details?.responseCommentId === o.state.canonicalCommentId),
       "The exact canonical conversational approval is attached to the real reviewed revision and decision audit.");
-    c.add("reviewed-scope-handed-off", !!saved && `${saved.title} ${saved.description}`.includes(String(o.state.scopeMarker)), "The actual ordinary task retains the substantive scope of the approved plan.");
+    const scopeInBrief = !!saved && `${saved.title} ${saved.description}`.includes(String(o.state.scopeMarker));
+    const scopeInSavedPlan = !!saved && o.documents.some(doc => doc.issueId === saved.id && doc.key === "plan"
+      && (doc.body ?? "").includes(String(o.state.scopeMarker)) && typeof plan?.latestRevisionId === "string"
+      && (doc.body ?? "").includes(plan.latestRevisionId) && typeof doc.latestRevisionId === "string"
+      && o.revisions.some(revision => revision.id === doc.latestRevisionId && revision.documentId === doc.id
+        && o.runs.some(run => run.id === revision.createdByRunId && run.agentId === revision.createdByAgentId
+          && (run.agentId === o.leadId || run.agentId === worker?.id
+            && (run.contextSnapshot?.issueId === saved.id || (run as unknown as { nativeIssueId?: string }).nativeIssueId === saved.id)))));
+    c.add("reviewed-scope-handed-off", scopeInBrief || scopeInSavedPlan, "The actual ordinary task retains the approved scope in its brief or an attributed saved plan bound to the reviewed source revision.");
     c.add("stale-review-shows-new-version", o.state.staleAttemptStatus === 409 && o.state.staleErrorCode === "interaction_stale_target" && o.state.newerRevisionVisible === true
       && o.state.newerRevisionId !== o.state.staleRevisionId && o.state.staleExpired === true,
       "A separately opened real old revision becomes unapprovable after a public edit; the browser shows the actual newer version instead of approving unseen work.");

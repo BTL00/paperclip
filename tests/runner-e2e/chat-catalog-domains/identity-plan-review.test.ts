@@ -22,6 +22,22 @@ describe("versioned approval and revised publication scope", () => {
     it(`${d.scenarioId}: changed target revision rejected`, () => { const o = valid(d.scenarioId); (o.state.plan as { latestRevisionId: string }).latestRevisionId = "unreviewed"; expect(d.grade(o).passed).toBe(false); });
     it(`${d.scenarioId}: response promise without executed result rejected`, () => { const o = valid(d.scenarioId); o.runs = []; expect(d.grade(o).passed).toBe(false); });
   }
+  it("accepts the approved scope in the actual execution task plan and rejects wrong document, revision or writer bindings", () => {
+    const d = planReviewIdentityCases[0]!; const o = valid(d.scenarioId);
+    o.tasks[0]!.title = "Prepare research checklist"; o.tasks[0]!.description = "See the saved execution plan.";
+    o.documents = [{ id: "execution-plan", issueId: "task", key: "plan", body: "Acorn research launch. Approved source revision reviewed.", latestRevisionId: "handoff" }];
+    o.revisions = [{ id: "handoff", documentId: "execution-plan", createdByRunId: "lead-run", createdByAgentId: "ceo" }];
+    expect(d.grade(o).passed).toBe(true);
+    o.documents[0]!.issueId = "unrelated-task"; expect(d.grade(o).passed).toBe(false); o.documents[0]!.issueId = "task";
+    o.documents[0]!.body = "Acorn research launch. A different source revision."; expect(d.grade(o).passed).toBe(false);
+    o.documents[0]!.body = "Acorn research launch. Approved source revision reviewed.";
+    o.revisions[0]!.createdByRunId = "unrelated-run"; expect(d.grade(o).passed).toBe(false);
+    o.revisions[0]!.createdByRunId = "lead-run"; o.links = []; expect(d.grade(o).passed).toBe(false);
+  });
+  it("rejects a still-pending publication proposal even when a correct local review draft exists", () => {
+    const d = planReviewIdentityCases[1]!; const o = valid(d.scenarioId); o.interactions[0]!.status = "pending";
+    expect(d.grade(o).passed).toBe(false);
+  });
   it("rejects acceptance of a stale revision despite successful current work", () => { const d = planReviewIdentityCases[0]!; const o = valid(d.scenarioId); o.state.staleAttemptStatus = 200; expect(d.grade(o).passed).toBe(false); });
   it("rejects reusing approval on the publication after the draft request", () => { const d = planReviewIdentityCases[1]!; const o = valid(d.scenarioId); o.interactions[0]!.status = "accepted"; expect(d.grade(o).passed).toBe(false); });
   it("rejects a published work product while keeping a real local draft", () => { const d = planReviewIdentityCases[1]!; const o = valid(d.scenarioId); o.state.noPublishedWorkProduct = false; expect(d.grade(o).passed).toBe(false); });

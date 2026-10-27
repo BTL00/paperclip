@@ -102,8 +102,13 @@ export const confirmationWorkflowIdentityCases: readonly ChatCatalogCase[] = [
     authentication: "human-session", sourceFiles: sources, expectedRunCount: 4, minimumRunCount: 2, runPolicy: { kind: "source-settled-with-active-work", maximumActiveWorkerRuns: 1 }, attemptTimeoutMs: 600_000,
     observe: observeWorkflow,
     async act(ctx, state) {
-      await waitForReply(ctx); const other = tabs.get(ctx); if (!other) throw new Error("The second real browser tab is missing");
+      const other = tabs.get(ctx); if (!other) throw new Error("The second real browser tab is missing");
+      await pollUntil({ label: "Canonical name reply has an admitted native run", deadlineAt: Date.now() + 120_000,
+        load: () => ctx.allRuns(), accept: runs => runs.some(run => run.agentId === ctx.input.fixtures.agent.id && ["running", "succeeded"].includes(run.status)) });
+      const pending = await ctx.input.api.get<Interaction[]>(`/api/issues/${ctx.issue()!.id}/interactions`);
+      if (pending.find(row => row.id === entity(state, "original").id)?.status !== "pending") throw new Error("The original human-only question is not pending before the two-tab answer race");
       const before = await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true`); state.noTaskBeforeAnswers = before.filter(row => row.id !== ctx.issue()!.id).length === 0;
+      if (!state.noTaskBeforeAnswers) throw new Error("Work started before the protected human question was actually answered");
       for (const page of [ctx.input.page, other]) {
         const form = page.getByTestId("task-chat-composer-takeover");
         if (!(await form.isVisible())) await page.locator(`#interaction-${entity(state, "original").id}`).click();
