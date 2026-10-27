@@ -187,6 +187,22 @@ describe("trusted report catalog discovery", () => {
     ).toThrow("must be unique");
   });
 
+  it("uses the retained result model/provider for an unknown suite sharing a known profile ID", () => {
+    const known = runnerMatrix.find(row => row.profile.id === "runner-opencode")!;
+    const executionId = `branch-only-chat.${known.profile.id}.${known.environment.id}.conversation`;
+    const retained = { ...result(), executionId, profileId: known.profile.id, environmentId: known.environment.id,
+      provider: "opencode", model: "openrouter/deepseek/deepseek-v4.1-flash-1017", runtimeMode: "native" as const };
+    const oldCatalog = [{ ...known, profile: { ...known.profile, model: "obsolete-profile-default" } }];
+    const discovered = discoverReportCatalog({ catalog: oldCatalog, expected: [executionId], results: [retained] });
+    const profile = discovered.find(row => row.id === executionId)!.profile;
+    expect(profile.model).toBe(retained.model); expect(profile.provider).toBe(retained.provider);
+    expect(profile.label).toBe(known.profile.label);
+    const page = renderRunnerE2EDashboard({ title: "Retained source", generatedAt: retained.finishedAt,
+      expected: [executionId], catalog: oldCatalog, entries: [{ result: retained, valid: false, errors: [] }] });
+    expect(page).toContain(retained.model); expect(page).not.toContain("obsolete-profile-default");
+    expect(retained.source).toEqual(result().source);
+  });
+
   it("regenerates branch-only cards and gallery from persisted JSON using trusted code", async () => {
     const bundle = await mkdtemp(
       path.join(os.tmpdir(), "branch-report-regenerate-"),
