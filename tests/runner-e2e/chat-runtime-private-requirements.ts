@@ -8,7 +8,6 @@ export const runtimePrivateRequirements = {
   "agents.ambiguous-cloud-code": { provider: "daytona", fields: ["imageDigest", "imageRef", "region", "disposableNamespace", "qualifiedHarness"], credentials: ["ANTHROPIC_API_KEY", "DAYTONA_API_KEY"] },
   "execution-environments.add-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.test-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
-  "execution-environments.choose-capable-target": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "assistant-connections.connect-external-assistant": { provider: "chatgpt", fields: ["operatorRef", "chatgptAuthorizationRef", "operatorMode"], credentials: [] },
   "agents.existing-grok-bot": { provider: "grok", fields: ["botId", "endpoint", "challengeMethod", "credentialEnvName", "operatorRef", "botAuthorizationRef", "operatorMode"], credentials: [] },
   "agents.hire-claude-code": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },

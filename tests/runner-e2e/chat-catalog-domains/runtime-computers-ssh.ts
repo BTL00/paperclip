@@ -1,3 +1,4 @@
+import { runtimeCapabilityChoiceCase } from "./runtime-capability-choice.js";
 import { agentHarnessType } from "../../../packages/shared/src/agent-runner.js";
 import { expect } from "@playwright/test";
 import type { Environment } from "../../../packages/shared/src/types/environment.js";
@@ -12,7 +13,7 @@ import { probeAgentPermission, cleanupIdentityProbes, waitForReply } from "./ide
 import { selectedRuntimeInputs, runtimePrivateSpec, sshPinnedHost } from "./runtime-private.js";
 import { privateSshComputer, type SshComputerRequest, type SshComputerReceipt } from "./runtime-computers-private.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime, runtimeWorker, type RuntimeAgent } from "./runtime-support.js";
-const ids = ["execution-environments.add-computer", "execution-environments.test-computer", "execution-environments.choose-capable-target"] as const;
+const ids = ["execution-environments.add-computer", "execution-environments.test-computer"] as const;
 const requests = new WeakMap<ChatCatalogContext, SshComputerRequest>();
 const ownedIds = new WeakMap<ChatCatalogContext, string[]>();
 const sources = ["chat-catalog-domains/runtime-computers-ssh.ts", "chat-catalog-domains/runtime-computers-private.ts", "chat-catalog-domains/runtime-computers-private-worker.ts", "chat-catalog-domains/runtime-private.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-scenarios/execution-environments.yaml", "../../server/src/routes/environments.ts", "../../server/src/routes/agents.ts", "../../packages/shared/src/environment-support.ts", "../../ui/src/pages/CompanyEnvironments.tsx", "../../ui/src/components/agent-config-primitives.tsx", "chat-catalog-domains/external-secret-scan.ts", "run-observations.ts"];
@@ -75,7 +76,7 @@ export function gradeSshComputer(value: unknown) {
   c.add("no-unrequested-execution", o.tasks.length === 0 && o.runs.length === (kind === "choose" ? 1 : 2) && o.runs.every(x => x.status === "succeeded"), "Only declared source chat runs occur; no host provisioning or employee task is admitted.");
   return c.result();
 }
-export const runtimeComputerSshCases = ids.map(id => runtimeDefinition(id, async ctx => {
+const sshCases = ids.map(id => runtimeDefinition(id, async ctx => {
   try {
     const state: Record<string, unknown> = { ...await prepare(ctx), kind: id.endsWith("add-computer") ? "add" : id.endsWith("test-computer") ? "test" : "choose" };
     if (state.kind !== "add") { const created = await create(ctx); state.environmentId = created.environmentId; state.savedIdentityMatched = created.savedIdentityMatched; }
@@ -108,3 +109,5 @@ export const runtimeComputerSshCases = ids.map(id => runtimeDefinition(id, async
     return { ...o, state };
   }, cleanup,
 }));
+
+export const runtimeComputerSshCases = [...sshCases, runtimeCapabilityChoiceCase];

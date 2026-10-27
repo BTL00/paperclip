@@ -2880,36 +2880,16 @@
     "exportName": "runtimeComputerCloudCases"
   },
   {
-    "requiredCredentials": [],
-    "externalInput": {
-      "provider": "ssh",
-      "fields": [
-        "hostname",
-        "port",
-        "login",
-        "hostKeySha256",
-        "knownHosts",
-        "allowedRemoteRoot",
-        "privateKeyEnv",
-        "qualifiedHarness"
-      ]
-    },
     "scenarioId": "execution-environments.choose-capable-target",
     "sourceFiles": [
+      "chat-catalog-domains/runtime-capability-choice.ts",
       "chat-catalog-domains/runtime-computers-ssh.ts",
-      "chat-catalog-domains/runtime-computers-private.ts",
-      "chat-catalog-domains/runtime-computers-private-worker.ts",
-      "chat-catalog-domains/runtime-private.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-scenarios/execution-environments.yaml",
-      "../../server/src/routes/environments.ts",
-      "../../server/src/routes/agents.ts",
       "../../packages/shared/src/environment-support.ts",
-      "../../ui/src/pages/CompanyEnvironments.tsx",
-      "../../ui/src/components/agent-config-primitives.tsx",
-      "chat-catalog-domains/external-secret-scan.ts",
-      "run-observations.ts"
+      "../../server/src/routes/environments.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
