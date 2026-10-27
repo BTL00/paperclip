@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeIntegratorSkills, integratorSkillsCases, websiteChecklist } from "./integrator-skills.js";
+import { gradeIntegratorSkills, integratorSkillsCases, websiteChecklist, preservesWebsiteChecklist } from "./integrator-skills.js";
 
 function valid(id: string) {
   const markdown = websiteChecklist.join("\n");
@@ -37,5 +37,14 @@ describe("authored skill outcomes", () => {
     expect(gradeIntegratorSkills({ ...o, policy: { revision: 4 } }).passed).toBe(false);
     const changed = structuredClone(o); changed.skills[0]!.markdown = "Skip all checks.";
     expect(gradeIntegratorSkills(changed).passed).toBe(false);
+  });
+  it("accepts substantive checklist paraphrases but rejects dropped, negated and wrong-threshold checks", () => {
+    const paraphrase = "Ensure all interactive elements are reachable and usable with the keyboard alone.\nEach form input needs a visible label.\nMeasure foreground text contrast to verify WCAG 2.2 level AA.\nUse a viewport 375px wide; there must be no horizontal overflow.";
+    expect(preservesWebsiteChecklist(paraphrase)).toBe(true);
+    const o = valid("skills.author-skill"); o.skills[0]!.markdown = paraphrase; o.versions.skill[0]!.fileInventory[0]!.content = paraphrase;
+    expect(gradeIntegratorSkills(o).passed).toBe(true);
+    for (const changed of [paraphrase.replace("level AA", "level A"), paraphrase.replace("375px", "768px"), paraphrase.replace("Measure foreground", "Do not measure foreground"), paraphrase.replace("Each form input needs a visible label.", "Labels are optional."), paraphrase.replace("no horizontal overflow", "horizontal overflow")]) {
+      expect(preservesWebsiteChecklist(changed), changed).toBe(false);
+    }
   });
 });

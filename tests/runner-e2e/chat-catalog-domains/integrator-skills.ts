@@ -5,6 +5,15 @@ import { checks, observation, project, task, putDocument, type InternalObservati
 import { integratorDefinition, groundedStatement, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
 
 export const websiteChecklist = ["Navigate every interactive control using only the keyboard.", "Verify every form field has a visible label.", "Check text contrast meets WCAG AA.", "Test the landing page at a 375 pixel viewport without horizontal scrolling."];
+export function preservesWebsiteChecklist(markdown: string): boolean {
+  const instructions = markdown.split(/\n+|(?<=[.!?])\s+/).filter(Boolean);
+  const forbidden = /\b(?:skip|omit|ignore|don't|do not|need not|not required|optional)\b/i;
+  const instruction = (requirements: RegExp[]) => instructions.some(text => requirements.every(pattern => pattern.test(text)) && !forbidden.test(text));
+  return instruction([/\bkeyboard\b/i, /(?:\b(?:all|every)\b.*\b(?:interactive|control|element|action|navigation)|\b(?:interactive|control|element|action|navigation)\b.*\b(?:all|every)\b)/i, /(?:only|alone|without (?:a |the )?mouse|no mouse)/i])
+    && instruction([/\b(?:all|every|each)\b/i, /\b(?:form|input)\b/i, /\b(?:field|control|input)s?\b/i, /\bvisible\b/i, /\blabels?\b/i])
+    && instruction([/\b(?:text|foreground)\b/i, /\bcontrast\b/i, /\bWCAG(?:\s+2\.\d)?\s+(?:level\s+)?AA\b/i, /\b(?:check|verify|ensure|measure|assess|meet|meets|satisfy)\b/i])
+    && instruction([/\b375\s*(?:px|pixels?)?\b/i, /\b(?:viewport|wide|width)\b/i, /(?:without horizontal (?:scrolling|overflow)|no horizontal (?:scrolling|overflow)|(?:must not|does not|doesn't) (?:scroll|overflow) horizontally)/i]);
+}
 interface SkillsObservation extends InternalObservation {
   skills: CompanySkillDetail[]; versions: Record<string, CompanySkillVersion[]>;
   policy: EffectiveSkillPolicy; editDecision: SkillPolicyDecision;
@@ -35,7 +44,7 @@ export function gradeIntegratorSkills(value: unknown) {
     const version = skill && o.versions[skill.id]?.find(row => row.id === skill.currentVersionId);
     const markdown = version?.fileInventory.find(file => file.path === "SKILL.md")?.content;
     c.add("actual-checklist-in-current-revision", !!skill && !!version && version.authorAgentId === o.leadId && typeof markdown === "string"
-      && websiteChecklist.every(item => markdown.includes(item)) && markdown === skill.markdown, "The current saved SKILL.md revision preserves all four actual checklist requirements.");
+      && preservesWebsiteChecklist(markdown) && markdown === skill.markdown, "The current saved SKILL.md revision preserves keyboard-only controls, visible form labels, WCAG AA text contrast and a 375px viewport without horizontal overflow; paraphrase is permitted.");
     c.add("inspectable-skill-link", !!skill && !!resultHref(o, skill.id, "studio"), "Chat links the saved editable skill in Studio.");
     c.add("creation-not-global-assignment", !!skill && skill.usedByAgents.length === 0 && !/\b(?:enabled|assigned|activated)\s+(?:it|the skill|this skill)?\s*(?:for\s+)?(?:all|every)\b/i.test(o.reply), "Creating a reusable skill does not silently enable it for all agents or claim that happened.");
   } else if (o.scenarioId === "skills.explicit-restriction") {
