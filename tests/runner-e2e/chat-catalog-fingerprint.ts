@@ -114,7 +114,7 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     file, sha256: hash(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")),
   })) : null;
   const originIdentity = publicOriginFingerprintIdentity((selectedExecution as { executionId: string }).executionId, descriptor.scenarioId);
-  const originReaders = originIdentity.selected ? ["server/src/config.ts", "server/src/auth/better-auth.ts", "server/src/routes/tool-access.ts", "server/src/services/chat-task-url.ts", "server/src/services/muse-setup.ts", "server/src/services/workspace-runtime.ts"] : [];
+  const originReaders = originIdentity.selected ? ["server/src/config.ts", "server/src/auth/better-auth.ts", "server/src/routes/tool-access.ts", "server/src/services/chat-task-url.ts", "server/src/services/muse-setup.ts", "server/src/services/workspace-runtime.ts", "tests/runner-e2e/chat-catalog-domains/external-public-signin-worker.ts", "tests/runner-e2e/chat-catalog-domains/external-public-signin-contract.ts", "ui/src/pages/Auth.tsx"] : [];
   const result = fingerprintChatDependencyClosure({ root,
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
