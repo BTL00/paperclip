@@ -15,7 +15,7 @@ export function advertisedClaudeTargets(capabilities: EnvironmentCapabilities, s
 export function recommendsIncompatibleTarget(reply: string) {
   // Match a recommendation whose object is the incompatible target, not a
   // warning or a hypothetical that tells the operator to choose another one.
-  const recommendation = /\b(?:choose|select|pick|use|assign|bind|recommend)\b[^.!?;,\n]{0,100}\b(?:incompatible|unsupported)\b/gi;
+  const recommendation = /\b(?:choose|select|pick|use|assign|bind|recommend)\s+(?:(?:the|an?|this|that|our|your|existing|known)\s+){0,3}(?:incompatible|unsupported)\s+(?:(?:execution|runtime|sandbox|cloud|local|SSH)\s+)?(?:target|computer|environment|one)\b/gi;
   return [...reply.matchAll(recommendation)].some(match => !/\b(?:do not|don't|cannot|can't|never|not to|avoid|won't|would not)\s*(?:\w+\s+){0,3}$/i.test(reply.slice(Math.max(0, match.index! - 45), match.index!)))
     || /\b(?:incompatible|unsupported)\s+(?:target|computer|environment)\s+(?:is|would be)\s+(?:the\s+)?(?:recommended|preferred|correct|right|best)\s+(?:choice|target|computer|environment)\b/i.test(reply);
 }

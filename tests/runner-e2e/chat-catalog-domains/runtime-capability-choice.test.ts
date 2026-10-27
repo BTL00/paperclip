@@ -47,3 +47,10 @@ it("rejects a recommendation of the incompatible target despite otherwise truthf
   for (const text of ["Select the unsupported computer.", "Use an incompatible target.", "The unsupported environment is the recommended choice."]) expect(recommendsIncompatibleTarget(text)).toBe(true);
   for (const text of ["Do not choose the incompatible target.", "Never select an unsupported computer.", "If a target is incompatible, choose another computer.", "Selecting an incompatible computer would fail; ask the operator to inspect supported capabilities."]) expect(recommendsIncompatibleTarget(text)).toBe(false);
 });
+
+it("distinguishes using a capability view to reject targets from choosing those targets", () => {
+  const o = valid(); o.reply = "An operator can use the capability view to rule out unsupported targets. Claude Code support does not establish runtime health; test before use.";
+  expect(gradeCapabilityChoice(o).passed).toBe(true);
+  o.reply = "Use the unsupported computer for Claude Code. The operator capability settings show support; runtime health still needs testing.";
+  expect(gradeCapabilityChoice(o).passed).toBe(false);
+});
