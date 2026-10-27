@@ -9,3 +9,4 @@ export { assistantConnectionExternalCases } from "./external-assistant-connectio
 export { chatChannelExternalCases } from "./external-chat-channels.js";
 export { appCatalogExternalCases } from "./external-app-catalog.js";
 export { pluginExternalCases } from "./external-plugins.js";
+export { assistantDeviceExternalCases } from "./external-assistant-device.js";

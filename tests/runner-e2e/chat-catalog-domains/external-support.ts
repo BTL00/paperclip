@@ -47,7 +47,7 @@ export function definition(id: string, setup: ChatCatalogCase["setup"], grade: C
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
       await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     }, ...extra };
-  return { ...result,
+  return { ...result, sourceFiles: [...new Set([...result.sourceFiles, "chat-catalog-domains/identity-support.ts"])],
     async setup(ctx) { try { return await result.setup(ctx); } catch (error) { await cleanupIdentityProbes(ctx); throw error; } },
     async cleanup(ctx, state) { try { await result.cleanup?.(ctx, state); } finally { await cleanupIdentityProbes(ctx); } },
   };

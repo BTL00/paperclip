@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 import { chatChannelExternalCases } from "./external-chat-channels.js";
+import { assistantDeviceExternalCases } from "./external-assistant-device.js";
 import { pluginExternalCases } from "./external-plugins.js";
 import { appCatalogExternalCases } from "./external-app-catalog.js";
 import { appPermissionExternalCases } from "./external-app-permissions.js";
@@ -11,7 +12,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -19,7 +20,12 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id.startsWith("plugins.")) {
+  if (id === "assistant-connections.device-login") {
+    Object.assign(o.state, { verificationPath: "/mcp-device", currentCodeVisible: true, companyConsentVisible: true, readScopeVisible: true, humanApproved: true,
+      clientCompanyId: "company", clientReadOnly: true, pendingError: "authorization_pending", wrongResourceDenied: true, wrongClientDenied: true,
+      correctExchangeSucceeded: true, reusedCodeDenied: true, expirationWaitMs: 600000, elapsedBeforeExpiryProbe: 600501, expiredCodeDenied: true, expiredPageVisible: true });
+    o.reply = "Open the verification page and sign in to approve the CLI device code as yourself.";
+  } else if (id.startsWith("plugins.")) {
     Object.assign(o.state, { pluginId: "plugin", pluginKey: "synthetic.preview", syntheticPlugin: true, pluginReadyBeforeQuery: true, agentMutationStatus: 403, unchangedBeforeHuman: true,
       pluginAfter: { id: "plugin", pluginKey: "synthetic.preview", status: id.endsWith("disable-plugin") ? "disabled" : "ready" } });
     o.reply = "The preview plugin requires the administrator to use its settings screen.";
@@ -72,6 +78,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "assistant-connections.device-login": o => { o.state.elapsedBeforeExpiryProbe = 500; },
   "plugins.configure-plugin": o => { o.state.configuredReadback = false; },
   "plugins.disable-plugin": o => { o.state.previewStatusAfter = 200; },
   "app-permissions.new-quarantined-action": o => { (o.state.catalogAfter as Array<{status:string}>)[1]!.status = "active"; },
