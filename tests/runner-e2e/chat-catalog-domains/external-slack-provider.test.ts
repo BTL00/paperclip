@@ -1,7 +1,7 @@
 import { describe,expect,it } from "vitest";
 import type { ChatConversation,ChatEndpoint,ExternalChannelBindingSummary } from "../../../packages/shared/src/types/chat-channels.js";
 import { assertSlackCall,assertSlackFixture,slackIngressMatches,type SlackIngressReceipt } from "./external-slack-provider.js";
-function binding(){return {disposable:true as const,resourceIds:["TWORKSPACE","CCHANNEL","USENDER","UBOT","AAPP"],credentialEnv:["PAPERCLIP_CHAT_EVAL_SLACK_BOT","PAPERCLIP_CHAT_EVAL_SLACK_SENDER","PAPERCLIP_CHAT_EVAL_SLACK_SIGNING","PAPERCLIP_CHAT_EVAL_SLACK_CONFIG"],prerequisites:{workspaceId:"TWORKSPACE",channelId:"CCHANNEL",senderUserId:"USENDER",botUserId:"UBOT",appId:"AAPP",registeredWebhookOrigin:"https://isolated.example.test",botTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_BOT",senderTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_SENDER",signingSecretEnv:"PAPERCLIP_CHAT_EVAL_SLACK_SIGNING",configurationTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_CONFIG"}};}
+function binding(){return {disposable:true as const,resourceIds:["TWORKSPACE","CCHANNEL","USENDER","UBOT","AAPP"],credentialEnv:["PAPERCLIP_CHAT_EVAL_SLACK_BOT","PAPERCLIP_CHAT_EVAL_SLACK_SENDER","PAPERCLIP_CHAT_EVAL_SLACK_SIGNING","PAPERCLIP_CHAT_EVAL_SLACK_CONFIG"],prerequisites:{workspaceId:"TWORKSPACE",channelId:"CCHANNEL",senderUserId:"USENDER",botUserId:"UBOT",appId:"AAPP",registeredWebhookOrigin:"https://isolated.example.test",webhookRelayPort:"3399",botTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_BOT",senderTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_SENDER",signingSecretEnv:"PAPERCLIP_CHAT_EVAL_SLACK_SIGNING",configurationTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_CONFIG"}};}
 function ingress(){const receipt:SlackIngressReceipt={providerCalls:1,query:"Exact canonical query.",endpointId:"endpoint",conversationId:"conversation",issueId:"issue",humanCommentId:"comment",linkedPaperclipUserId:"human",provider:{workspaceId:"TWORKSPACE",channelId:"CCHANNEL",threadId:"1793050000.123456",canonicalMessageId:"1793050001.123456",senderUserId:"USENDER"}};return {receipt,endpoint:{id:"endpoint",companyId:"company",assignedAgentId:"ceo",provider:"slack",providerAccountId:"TWORKSPACE",botExternalId:"UBOT"} as ChatEndpoint,conversation:{id:"conversation",endpointId:"endpoint",companyId:"company",issueId:"issue",externalConversationId:"slack:CCHANNEL",externalThreadId:"slack:CCHANNEL:1793050000.123456"} as ChatConversation,binding:{endpointId:"endpoint",conversationId:"conversation",provider:"slack",assignedAgentLocked:true} as ExternalChannelBindingSummary,comment:{id:"comment",body:"Exact canonical query.",authorUserId:"human",metadata:{sourceChannel:"slack"}},canonicalQuery:"Exact canonical query.",companyId:"company",agentId:"ceo"};}
 describe("finite real Slack companion prerequisites and source binding",()=>{
  it("requires each explicit disposable provider resource and a distinct actual human sender",()=>{
@@ -25,4 +25,18 @@ describe("finite real Slack companion prerequisites and source binding",()=>{
    (i:ReturnType<typeof ingress>)=>{i.receipt.providerCalls=0;},
   ]){const i=ingress();mutate(i);expect(slackIngressMatches(i)).toBe(false);}
  });
+});
+
+it("cleans only messages proven created by this exact private client; arbitrary delete remains unavailable",async()=>{
+ const {slackProvider}=await import("./external-slack-provider.js");
+ const b=binding(),requests:Array<{method:string;body:Record<string,unknown>}>=[];
+ const ctx={input:{privateSecrets:[],privateInputs:{read:()=>"synthetic-private-token"}}} as unknown as import("../chat-catalog-contract.js").ChatCatalogContext;
+ const client=slackProvider(ctx,b,(async(url,options)=>{
+  const method=String(url).split("/").at(-1)!,body=JSON.parse(String(options?.body));requests.push({method,body});
+  return new Response(JSON.stringify(method==="chat.postMessage"?{ok:true,channel:"CCHANNEL",ts:"1793050002.123456"}:method==="conversations.replies"?{ok:true,messages:[{ts:"1793050003.123456",thread_ts:"1793050002.123456",user:"UBOT"},{ts:"1793050004.123456",thread_ts:"1793050002.123456",user:"UOTHER"}]}:{ok:true}),{status:200});
+ }) as typeof fetch);
+ await expect(client.call("sender","chat.delete",{channel:"CCHANNEL",ts:"1793059999.123456"})).rejects.toThrow(/finite/);
+ await client.call("sender","chat.postMessage",{channel:"CCHANNEL",text:"Actual disposable creation"});
+ await client.cleanupOwned();await client.cleanupOwned();
+ expect(requests).toEqual([{method:"chat.postMessage",body:{channel:"CCHANNEL",text:"Actual disposable creation"}},{method:"conversations.replies",body:{channel:"CCHANNEL",ts:"1793050002.123456",limit:100}},{method:"chat.delete",body:{channel:"CCHANNEL",ts:"1793050003.123456"}},{method:"chat.delete",body:{channel:"CCHANNEL",ts:"1793050002.123456"}}]);
 });
