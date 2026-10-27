@@ -111,8 +111,8 @@
     },
     {
       "scenarioId": "agent-chat.chat-disabled",
-      "readinessClass": "boundary",
-      "needs": "Actual disabled Agent Chat context needs a narrowly allowlisted unavailable-surface browser-boundary case; ordinary Agent Chat cannot send its canonical query. No conference-only unrelated-gate substitute."
+      "readinessClass": "implemented",
+      "needs": "Actual allowlisted authenticated-harness boundary; disable Agent Chat itself; real Morgan route unavailable/no composer, agent settings denial, create-chat 404, usable Morgan profile and zero tasks/chats/native admissions."
     },
     {
       "scenarioId": "runs-adapters.list-model-options",
@@ -126,8 +126,8 @@
     },
     {
       "scenarioId": "runs-adapters.inspect-failed-run",
-      "readinessClass": "local",
-      "needs": "Generate real failed website run and later successful one; retain exact failure diagnostics and missing cost/log branches."
+      "readinessClass": "implemented",
+      "needs": "Public unavailable-model configuration must actually admit one native failed run with model/task/actor/terminal-event evidence; restore exact configuration, one actual human Retry, later successful HTML artifact, retained failure/source links and truthful missing logs/cost."
     },
     {
       "scenarioId": "runs-adapters.reset-session",
@@ -201,8 +201,8 @@
     },
     {
       "scenarioId": "recovery.browser-reconnect",
-      "readinessClass": "partial",
-      "needs": "Real browser offline/server completion plus second actual still-running phase; phase-bound status replies and no duplicate sends/runs. Failed-native-run reconnect remains a concrete coverage gap; no live runtime attempts yet."
+      "readinessClass": "implemented",
+      "needs": "Three executable real offline phases: native completion, independently observed still-running work, and mandatory actually admitted failed native attempt under explicit unavailable-model configuration; each answer bound to its own persisted human/native run. No live qualification claimed."
     },
     {
       "scenarioId": "steering.queue-follow-up",

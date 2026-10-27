@@ -31,6 +31,9 @@ export async function unavailableNativeModelFailure(ctx: ChatCatalogContext, wor
     || original.adapterType !== "paperclip_runner" || original.adapterConfig?.provider !== "codex")
     throw new Error("Native failure prerequisite requires an actually ready native Codex worker");
   const before = await ctx.allRuns(); const model = `paperclip-eval-unavailable-${ctx.input.nonce}`;
+  for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }])
+    await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true,
+      isActive: true, unpricedUsagePolicy: "allow" });
   let failed: NativeFailureRun | undefined;
   try {
     const configured = await ctx.input.api.patch<RuntimeAgent>(endpoint, { adapterConfig: { ...original.adapterConfig, model } });

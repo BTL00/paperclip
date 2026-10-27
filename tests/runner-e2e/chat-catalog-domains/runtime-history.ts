@@ -5,8 +5,9 @@ import { sendChatMessage } from "../chat-flow.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { checks, type Entity } from "./internal-support.js";
 import { openStandingChat } from "./identity-support.js";
-import { runtimeDefinition, runtimeObservation, observeRuntime } from "./runtime-support.js";
+import { runtimeDefinition, runtimeObservation, observeRuntime, runtimeWorker } from "./runtime-support.js";
 import { busyRuntimeWorker, releaseRuntimeWorker } from "./runtime-busy-worker.js";
+import { unavailableNativeModelFailure } from "./runtime-native-failure.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 type Artifact = Awaited<ReturnType<typeof readRegisteredArtifacts>>[number];
 
@@ -73,22 +74,31 @@ export function gradeBrowserReconnect(value: unknown) {
   "The actual existing worker completes on the server while the browser is disconnected.");
   c.add("reconnected-persisted-state", o.state.reconnected === true && o.state.historyRetained === true
     && o.state.offlineCommentsRetained === true && current?.status === "done" && workerRun?.status === "succeeded"
-    && o.documents.some(row => row.createdByRunId === workerRun.id || /brief|website/i.test(row.title ?? "")),
+    && o.documents.some(doc => o.revisions.some(revision => revision.id === doc.latestRevisionId && revision.documentId === doc.id
+      && revision.createdByRunId === workerRun.id && revision.createdByAgentId === (o.state.worker as Entity).id)),
   "Reloaded UI and public reads recover the persisted conversation, real task completion and delivered document.");
   c.add("honest-canonical-status", /done|complete|finished/i.test(reply) && !/still (?:working|running)|restart(?:ed|ing).*disconnect/i.test(reply)
     && (reply.includes(task.identifier ?? task.id) || /website/i.test(reply)),
   "The canonical reply reports actual completion rather than inferring a restart from reconnecting.");
-  const remaining = o.state.remainingPhase as { attributed?: boolean; reply?: string; taskId?: string; runId?: string; offlineObserved?: boolean; runningWhileOffline?: boolean; reconnected?: boolean } | undefined;
+  const remaining = o.state.remainingPhase as { attributed?: boolean; reply?: string; taskId?: string; runId?: string; offlineObserved?: boolean; runningWhileOffline?: boolean; reconnected?: boolean; runStatusAtReply?: string; taskStatusAtReply?: string } | undefined;
   const active = o.runs.find(run => run.id === remaining?.runId); const remainingTask = o.tasks.find(row => row.id === remaining?.taskId);
   c.add("remaining-work-reported-after-second-disconnect", remaining?.attributed === true && remaining.offlineObserved === true
-    && remaining.runningWhileOffline === true && remaining.reconnected === true && active?.status === "running"
-    && remainingTask?.status !== "done" && /running|working|waiting|not (?:yet )?(?:done|finished|complete)|still|in progress/i.test(remaining.reply ?? "")
+    && remaining.runningWhileOffline === true && remaining.reconnected === true && !!active && !!remainingTask
+    && remaining.runStatusAtReply === "running" && typeof remaining.taskStatusAtReply === "string" && remaining.taskStatusAtReply !== "done"
+    && /running|working|waiting|not (?:yet )?(?:done|finished|complete)|still|in progress/i.test(remaining.reply ?? "")
     && !/(?:is|has|have) (?:now )?(?:finished|completed)|restarted.*disconnect/i.test(remaining.reply ?? ""),
   "Another genuine worker phase remains active through a second disconnect; only that phase's attributed answer reports the actual remaining work.");
-  c.add("no-duplicate-send-or-worker", o.runs.length === 5 && o.runs.filter(run => run.agentId === (o.state.worker as Entity).id).length === 2
-    && o.humanQueries.length === 3 && o.tasks.length === 2 && new Set(o.tasks.map(row => row.id)).size === 2
+  const failed = o.state.failedReconnectPhase as { attributed?: boolean; reply?: string; runId?: string; taskId?: string; offlineObserved?: boolean; failedWhileOffline?: boolean; reconnected?: boolean } | undefined;
+  const failedRun = o.runs.find(run => run.id === failed?.runId);
+  c.add("genuine-failed-run-not-promoted-to-success", failed?.attributed === true && failed.offlineObserved === true && failed.failedWhileOffline === true
+    && failed.reconnected === true && failedRun?.runtimeMode === "native" && failedRun.status === "failed" && !!failedRun.errorCode
+    && /fail|error|reject|could not|couldn't|did not finish/i.test(failed.reply ?? "")
+    && !/(?:is|has) (?:now )?(?:finished|completed|succeeded)|restarted.*disconnect/i.test(failed.reply ?? ""),
+  "A third genuine native failure occurs while offline; its own phase-attributed answer retains that failure instead of inferring success from missed events.");
+  c.add("no-duplicate-send-or-worker", o.runs.length === 7 && o.runs.filter(run => run.agentId === (o.state.worker as Entity).id).length === 2
+    && o.humanQueries.length === 4 && o.tasks.length === 3 && new Set(o.tasks.map(row => row.id)).size === 3
     && o.tasks.some(row => row.id === task.id) && !!remaining?.taskId && remaining.taskId !== task.id,
-  "The two genuine worker tasks and three explicit source turns remain the only work; reconnecting neither replays sends nor restarts either worker.");
+  "The three genuine worker tasks and four explicit source turns remain the only work; reconnecting neither replays sends nor restarts a worker.");
   return c.result();
 }
 
@@ -155,10 +165,9 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
   }
 }, gradeBrowserReconnect, {
-  sourceFiles: ["chat-catalog-domains/runtime-history.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/recovery.yaml"],
-  setupHumanMessageCount: 1, expectedHumanMessageCount: 3, expectedRunCount: 5, attemptTimeoutMs: 900_000,
-  coverageGaps: ["Reconnect after a genuinely failed native run remains unexercised; successful and still-running native phases plus failed-evidence negative controls are authored."],
-  runPolicy: { kind: "source-settled-with-active-work", maximumActiveWorkerRuns: 1 },
+  sourceFiles: ["chat-catalog-domains/runtime-history.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-native-failure.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/recovery.yaml"],
+  setupHumanMessageCount: 1, expectedHumanMessageCount: 4, expectedRunCount: 7, attemptTimeoutMs: 1_200_000,
+  runPolicy: { kind: "terminal-counts", terminalStatusCounts: { succeeded: 6, failed: 1 } },
   async act(ctx, state) {
     const canonical = await sourceSettled(ctx, 3);
     state.canonicalRunIds = canonical.runs.filter(run => !(state.setupRunIds as string[]).includes(run.id)).map(run => run.id);
@@ -179,8 +188,37 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     const prior = (await ctx.allRuns()).map(run => run.id);
     const message = `I was disconnected again while Morgan worked on the new Website task ${next.task.identifier ?? next.task.id}. Is that follow-up website finished? Please report its actual current state; do not start another task or interrupt it.`;
     await sendChatMessage(ctx.input.page, message); await sourceSettled(ctx, 5);
+    const remainingRun = (await ctx.allRuns()).find(run => run.id === next.workerRunId);
+    const remainingTask = await ctx.input.api.get<Entity>(`/api/issues/${next.task.id}`);
     state.remainingPhase = { ...await attributedPhase(ctx, prior, message), taskId: next.task.id, runId: next.workerRunId,
-      offlineObserved, runningWhileOffline, reconnected: await ctx.input.page.evaluate(() => navigator.onLine) };
+      offlineObserved, runningWhileOffline, reconnected: await ctx.input.page.evaluate(() => navigator.onLine),
+      runStatusAtReply: remainingRun?.status, taskStatusAtReply: remainingTask.status };
+    await releaseRuntimeWorker(next);
+    await pollUntil({ label: "Remaining phase settles before separate failed-native phase", deadlineAt: Date.now() + 180_000,
+      load: () => ctx.allRuns(), accept: rows => rows.length === 5 && rows.every(run => run.status === "succeeded") });
+    const failureWorker = await runtimeWorker(ctx, "Riley"); let failedTask: Entity | undefined;
+    let failedOffline = false, failure: Awaited<ReturnType<typeof unavailableNativeModelFailure>> | undefined;
+    await ctx.input.page.context().setOffline(true);
+    try {
+      failedOffline = await ctx.input.page.evaluate(() => navigator.onLine === false);
+      failure = await unavailableNativeModelFailure(ctx, failureWorker, async () => {
+        failedTask = await ctx.input.api.post<Entity>(`/api/companies/${ctx.input.fixtures.company.id}/issues`, {
+          title: "Website configuration-failure attempt", status: "todo", assigneeAgentId: failureWorker.id,
+          description: "Draft a single-page website and save a task document. Do not create another task or external side effect." });
+        return { issueId: failedTask.id };
+      });
+    } finally {
+      await ctx.input.page.context().setOffline(false);
+      await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    }
+    if (!failure || !failedTask) throw new Error("The offline fixture produced no genuine native failure");
+    const failureBoundary = (await ctx.allRuns()).map(run => run.id);
+    const failedMessage = `I was disconnected during Riley's Website configuration-failure attempt ${failedTask!.identifier ?? failedTask!.id}. Did that attempt finish? Read its actual retained run state and explain it without starting another attempt.`;
+    await sendChatMessage(ctx.input.page, failedMessage); await sourceSettled(ctx, 7);
+    state.failedReconnectEvidence = failure;
+    state.failedReconnectPhase = { ...await attributedPhase(ctx, failureBoundary, failedMessage), runId: failure.failedRun.id, taskId: failedTask!.id,
+      offlineObserved: failedOffline, failedWhileOffline: failure.failedRun.status === "failed", reconnected: await ctx.input.page.evaluate(() => navigator.onLine) };
   },
   async observe(ctx, state) {
     state.reconnected = await ctx.input.page.evaluate(() => navigator.onLine);
