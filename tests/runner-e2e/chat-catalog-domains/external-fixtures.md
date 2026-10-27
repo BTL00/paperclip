@@ -260,3 +260,29 @@ calibration. A visible real form rejection is retained as a nonpassing product
 observation; the harness does not pre-reject an actual rotating-token format or
 bypass that form. Slack's documented rotating access-token format is described at
 https://docs.slack.dev/authentication/using-token-rotation/.
+
+The named human Notion setup cases (`notion-missing`, `return-from-login`, and
+`save-and-resume`) use the real legacy catalog OAuth UI and official Notion MCP,
+not a supplied bearer connection as a substitute. In addition to the independent
+REST workspace/pages/facts above, they require `workspaceName`,
+`oauthBrowserSessionEnv` (a selected namespaced reference containing bounded
+Playwright storage JSON for the authorized synthetic Notion human), and
+`oauthHumanEmailEnv` (that human's private email reference). Only official secure
+Notion-domain cookies/storage are accepted. A qualified session must expose the
+actual account email, selected workspace, and authorization controls; missing or
+changed controls fail explicitly. No password, OTP mailbox, or generic browser
+execution fallback is inferred. Notion's [official MCP flow](https://developers.notion.com/guides/mcp/get-started-with-mcp)
+grants the selected workspace; a private actual `notion-get-self` call verifies
+that workspace after callback, separately from the model's required launch read.
+
+These cases require the selected owned HTTPS-origin receipt and actual public
+sign-in of the same generated fixture person. They do not launch a tunnel or copy
+loopback cookies. Full-page provider navigation/consent runs in the finite
+standalone private child, with no Test tracing/video/report hooks. The callback
+must actually return to the original issue and resolve the exact pending request
+for its addressee. Save-and-resume uses actual **Continue to Notion** to persist a
+personal draft before provider consent, leaves through supported navigation,
+reloads that same draft, then requires its eventual authorization to reuse the
+same connection ID. No literal Save & exit control or API-created draft is
+invented. All of this remains authored/unmeasured until a reserved execution has
+a real authorized disposable Notion session, workspace/pages, and owned origin.
