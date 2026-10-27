@@ -9,7 +9,7 @@ export const runtimePrivateRequirements = {
   "execution-environments.add-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.test-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.choose-capable-target": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
-  "agents.existing-grok-bot": { provider: "grok", fields: ["botId", "endpoint", "challengeMethod", "credentialEnvName"], credentials: [] },
+  "agents.existing-grok-bot": { provider: "grok", fields: ["botId", "endpoint", "challengeMethod", "credentialEnvName", "operatorRef", "botAuthorizationRef", "operatorMode"], credentials: [] },
   "agents.hire-claude-code": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },
   "agents.hire-needs-account": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },
   "runs-adapters.validate-hire": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },
