@@ -1,3 +1,4 @@
+import { cleanupIdentityProbes } from "./identity-support.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { observeInternal, checks, type Entity, type InternalObservation } from "./internal-support.js";
@@ -26,7 +27,7 @@ export function externalObservation(value: unknown): ExternalObservation | undef
     && [o.phaseReplies, o.connections, o.profiles, o.secrets, o.endpoints, o.interactions, o.activity, o.links, o.runs, o.humanQueries].every(Array.isArray) ? o : undefined;
 }
 export function definition(id: string, setup: ChatCatalogCase["setup"], grade: ChatCatalogCase["grade"], extra: Partial<ChatCatalogCase> = {}): ChatCatalogCase {
-  return { scenarioId: id, setup, grade, observe: observeExternal,
+  const result: ChatCatalogCase = { scenarioId: id, setup, grade, observe: observeExternal,
     oracleVersion: "paperclip.chat-catalog.external.v1", expectedRunCount: 1, turnTimeoutMs: 120_000, attemptTimeoutMs: 300_000,
     sourceFiles: ["chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", `chat-catalog-domains/external-${id.split(".")[0]}.ts`, `chat-scenarios/${id.split(".")[0]}.yaml`],
     async verifyResult(ctx, state, value) {
@@ -46,6 +47,10 @@ export function definition(id: string, setup: ChatCatalogCase["setup"], grade: C
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
       await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     }, ...extra };
+  return { ...result,
+    async setup(ctx) { try { return await result.setup(ctx); } catch (error) { await cleanupIdentityProbes(ctx); throw error; } },
+    async cleanup(ctx, state) { try { await result.cleanup?.(ctx, state); } finally { await cleanupIdentityProbes(ctx); } },
+  };
 }
 export function sameRows(before: unknown, after: unknown): boolean { return JSON.stringify(before) === JSON.stringify(after); }
 export { checks };

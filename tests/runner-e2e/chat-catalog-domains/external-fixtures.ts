@@ -69,3 +69,40 @@ export function requireExternalPrerequisites(scenarioId: string, config = readEx
   if (!provider) throw new Error("This scenario has no external-account prerequisite");
   return config!.providers[provider]!;
 }
+
+/** Runtime case consumers receive only the selected declaration's configuration
+ * and references. Never fall back to ambient host/model/provider environment. */
+export function selectedExternalBinding(
+  context: import("../chat-catalog-contract.js").ChatCatalogContext,
+  scenarioId = context.scenario.id,
+): ProviderBinding {
+  const privateInputs = context.input.privateInputs;
+  if (!privateInputs) throw new Error(`Setup blocker ${scenarioId}: selected-case private inputs are unavailable`);
+  const configValue = privateInputs.configuration("external-provider");
+  if (!configValue) throw new Error(`Setup blocker ${scenarioId}: authorized disposable provider configuration is missing`);
+  const config = validateExternalConfig(configValue);
+  const requirement = externalRequirements[scenarioId];
+  if (!requirement) throw new Error("No external provider requirement is declared for this scenario");
+  const binding = config.providers[requirement.provider];
+  const references: NodeJS.ProcessEnv = {};
+  for (const name of [...binding?.credentialEnv ?? [], ...requirement.fields.filter(field => field.endsWith("Env")).map(field => binding?.prerequisites[field]).filter((name): name is string => !!name)]) {
+    if (!/^PAPERCLIP_CHAT_EVAL_[A-Z0-9_]+$/.test(name)) throw new Error("Selected provider reference is outside the private namespace");
+    references[name] = privateInputs.read(name);
+  }
+  const receipt = externalPrerequisiteReceipt(scenarioId, config, references);
+  if (!receipt.configured) throw new Error(`Setup blocker ${scenarioId}: ${receipt.provider} requires ${receipt.missing.join(", ")}`);
+  return binding!;
+}
+export function selectedExternalCredential(
+  context: import("../chat-catalog-contract.js").ChatCatalogContext,
+  binding: ProviderBinding,
+  name: string,
+): string {
+  const fieldReference = binding.prerequisites[name];
+  const reference = fieldReference && name.endsWith("Env") ? fieldReference : name;
+  if (!binding.credentialEnv.includes(reference) && !Object.entries(binding.prerequisites).some(([field, value]) => field.endsWith("Env") && value === reference)) throw new Error("Credential reference was not declared by this selected provider");
+  const value = context.input.privateInputs?.read(reference);
+  if (!value) throw new Error("Selected private provider credential is unavailable; reference withheld");
+  context.input.privateSecrets?.push(value);
+  return value;
+}

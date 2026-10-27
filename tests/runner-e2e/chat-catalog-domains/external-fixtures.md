@@ -68,3 +68,14 @@ Synthetic notes apps, MCP gateways, local plugins, team packages, local encrypte
 secrets and test endpoints do not require this file. They use real public
 Paperclip APIs and controlled fixture implementations; they cannot count as live
 proof of Notion, Slack, AgentMail or vault operation.
+
+During execution, the launcher copies only the selected case's declared
+`externalInput` provider/fields and referenced values into an owned private0600
+attempt file. Owning callbacks use `selectedExternalBinding(context)` and
+`selectedExternalCredential(context, binding, referenceOrEnvField)`; these call
+`context.input.privateInputs.configuration("external-provider")` and `.read(name)`.
+They never fall back to process environment or adopt another provider's binding.
+The launcher strips original external config/environment references from server,
+model, provider and unrelated-case inheritance. Only declared reference names
+and field names enter the public fingerprint; credentials enter the private
+redaction sink. Local fixture CLI children use an explicit sanitized environment.
