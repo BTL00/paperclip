@@ -95,6 +95,9 @@ For a saved Retry stranded at the first native source policy check, verify that
 an exact prepared warm source enters one audited files-only retention generation.
 Keep its original failure and Retry receipt. Confirm saved and newer local files,
 stopped allocation proof and restored warm policy before normal continuation.
+If local merge metadata is missing, verify a bound snapshot completes preservation
+while the old allocation stays retained. Keep an accepted result as history and
+deliver the saved Retry once with fresh isolation and verified snapshot attachment.
 Reject a changed source, any competing allocation, a live writer/controller,
 lost user authority, prior export work and a second adoption. Hold an ordinary
 provider resume before its database handoff and verify maintenance cannot take

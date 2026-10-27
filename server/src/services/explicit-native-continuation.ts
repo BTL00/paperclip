@@ -265,7 +265,13 @@ export async function admitExplicitNativeContinuation(input: {
         eq(nativeRunResults.schemaStatus, "accepted"),
         sql`${nativeRunResults.resultJson}#>>'{terminal,runTerminalState}' = 'succeeded'`,
       )).limit(1);
-      if (completedResult) return blocked("finalizing_saved_result", "Paperclip is finishing the saved result.");
+      const recovery = readSystemRecovery(action.evidence);
+      const retention = action.evidence.nativeSourceRetention as Record<string, unknown> | undefined;
+      const snapshotSettled = recovery?.state === "complete" && retention?.schema === "paperclip.native-source-retention.v1"
+        && retention.sourceRunId === run.id && retention.actionId === action.id && retention.settlement === "snapshot_retained"
+        && typeof retention.snapshotOperationId === "string" && recovery.preservationOperationIds.includes(retention.snapshotOperationId);
+      if (completedResult && !(freshIntent && snapshotSettled))
+        return blocked("finalizing_saved_result", "Paperclip is finishing the saved result.");
     }
     // A repaired export no longer blocks execution. Its machine receipt still
     // binds the saved user turn; finalized file state alone is insufficient.

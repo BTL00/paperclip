@@ -1,5 +1,5 @@
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
-import { agentWakeupRequests, environmentLeases, heartbeatRuns, issueRecoveryActions, issues, nativeRunFinalizations, type Db } from "@paperclipai/db";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { agentWakeupRequests, environmentLeases, heartbeatRuns, issueRecoveryActions, issues, nativeRunFinalizations, workspaceOperations, type Db } from "@paperclipai/db";
 import { persistActivity } from "../activity-log.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "../delivery-work-notifications.js";
 import { hasRemoteTerminationReceipt } from "../remote-execution-termination.js";
@@ -8,6 +8,7 @@ import { updateSystemRecovery } from "../system-recovery.js";
 import { readTaskRetryIntent, taskRetryMutationAllowed } from "../task-retry.js";
 import { inspectWorkspaceRecoverySource, type WorkspaceRecoverySourceIdentity } from "../workspace-recovery-source.js";
 import { hasVerifiedWorkspaceRepair } from "../workspace-recovery-receipt.js";
+import { readSnapshot } from "../workspace-recovery-snapshot.js";
 import type { NativeWorkspaceFinalizationOwnership } from "./native-workspace-finalization-ownership.js";
 import { readNativeWorkspaceSyncReference } from "./native-workspace-sync.js";
 
@@ -89,11 +90,11 @@ export async function retainNativeRecoverySource(db: Db, input: WorkspaceRecover
   }
 }
 
-export async function releaseRecoveredNativeSourceRetention(db: Db, input: WorkspaceRecoverySourceIdentity) {
+export async function settleRecoveredNativeSourceRetention(db: Db, input: WorkspaceRecoverySourceIdentity, operationIds: string[]) {
   const [run] = await db.select().from(heartbeatRuns).where(and(eq(heartbeatRuns.companyId, input.companyId), eq(heartbeatRuns.id, input.runId)));
-  if (!run || !await hasVerifiedWorkspaceRepair(db, run)) return false;
+  if (!run) return false;
   const reference = readNativeWorkspaceSyncReference(run.runnerProfileJson?.nativeWorkspaceSync);
-  if (!reference || reference.state !== "finalized" || reference.resourceDisposition !== "keep_running") return false;
+  if (!reference || reference.resourceDisposition !== "keep_running") return false;
   const [lease] = await db.select().from(environmentLeases).where(and(eq(environmentLeases.companyId, input.companyId),
     eq(environmentLeases.id, reference.leaseId), eq(environmentLeases.heartbeatRunId, run.id)));
   const marker = lease?.metadata?.nativeSourceRetention as Record<string, unknown> | undefined;
@@ -108,6 +109,32 @@ export async function releaseRecoveredNativeSourceRetention(db: Db, input: Works
     ne(environmentLeases.id, lease.id), eq(environmentLeases.provider, lease.provider!), eq(environmentLeases.providerLeaseId, lease.providerLeaseId!),
   )).limit(1);
   if (other) return false;
+  if (reference.state === "prepared") {
+    if (!operationIds.length) return false;
+    const [operation] = await db.select().from(workspaceOperations).where(and(inArray(workspaceOperations.id, operationIds),
+      eq(workspaceOperations.companyId, input.companyId), eq(workspaceOperations.issueId, input.issueId),
+      eq(workspaceOperations.heartbeatRunId, run.id), eq(workspaceOperations.phase, "workspace_recovery_snapshot"),
+      eq(workspaceOperations.status, "succeeded"), sql`${workspaceOperations.metadata}->>'recoveryActionId' = ${input.actionId}`,
+      sql`${workspaceOperations.metadata}->>'leaseId' = ${lease.id}`,
+      sql`${workspaceOperations.metadata}->>'providerLeaseId' = ${reference.providerLeaseId}`)).limit(1);
+    if (!operation) return false;
+    readSnapshot(operation.metadata, input.companyId, run.id);
+    const [retained] = await db.update(environmentLeases).set({ updatedAt: new Date(),
+      metadata: { ...lease.metadata, nativeSourceRetention: { ...marker, settlement: "snapshot_retained", snapshotOperationId: operation.id } },
+    }).where(and(eq(environmentLeases.companyId, input.companyId), eq(environmentLeases.id, lease.id),
+      eq(environmentLeases.heartbeatRunId, run.id), eq(environmentLeases.leasePolicy, "retain_on_failure"),
+      eq(environmentLeases.status, "released"), sql`${environmentLeases.metadata} = ${JSON.stringify(lease.metadata)}::jsonb`,
+    )).returning({ id: environmentLeases.id });
+    if (!retained) return false;
+    const [settled] = await db.update(issueRecoveryActions).set({ evidence: sql`jsonb_set(${issueRecoveryActions.evidence},
+      '{nativeSourceRetention}', (${issueRecoveryActions.evidence}->'nativeSourceRetention') ||
+      ${JSON.stringify({ settlement: "snapshot_retained", snapshotOperationId: operation.id })}::jsonb)` }).where(and(
+      eq(issueRecoveryActions.companyId, input.companyId), eq(issueRecoveryActions.sourceIssueId, input.issueId),
+      eq(issueRecoveryActions.id, input.actionId), sql`${issueRecoveryActions.evidence}->>'runId' = ${run.id}`,
+    )).returning({ id: issueRecoveryActions.id });
+    return Boolean(settled);
+  }
+  if (!await hasVerifiedWorkspaceRepair(db, run)) return false;
   const restored = await db.update(environmentLeases).set({ leasePolicy: "reuse_by_environment", updatedAt: new Date() }).where(and(
     eq(environmentLeases.companyId, input.companyId), eq(environmentLeases.id, lease.id),
     eq(environmentLeases.heartbeatRunId, run.id), eq(environmentLeases.leasePolicy, "retain_on_failure"),

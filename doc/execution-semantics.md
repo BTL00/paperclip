@@ -1424,6 +1424,11 @@ held. Warm policy returns only after verified file persistence and exact stopped
 allocation evidence. Policy restoration and the recovered receipt commit together;
 failed settlement keeps the existing recovery obligation. Task continuation still
 passes ordinary admission.
+If local merge metadata is missing, a verified snapshot can settle preservation
+while the unfinished allocation stays retained. Its exact snapshot operation
+remains bound to the source and maintenance generation. Only verified native
+copyback can reopen an accepted result's original workspace finalizer. A saved
+Retry can instead use fresh isolation and attach the verified snapshot.
 
 Every continuation carries the triggering request, ordered user direction, interaction outcomes, completed work, and explicit history coverage. A delivered message remains part of the task's request after its connection or approval resolves. The original title is background; a completed Notion read does not satisfy a later Gmail request. Author and source-trust boundaries survive rendering into both native and legacy prompts. Missing required history must be fetched before dispatch rather than described as complete.
 

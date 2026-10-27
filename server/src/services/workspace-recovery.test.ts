@@ -30,7 +30,8 @@ import type { AdapterSandboxExecutionTarget } from "@paperclipai/adapter-utils/e
 import type { EnvironmentLease } from "@paperclipai/shared";
 import { startEmbeddedPostgresTestDatabase } from "../__tests__/helpers/embedded-postgres.js";
 import { resolveExternalTestDatabaseUrl } from "../__tests__/helpers/external-test-database.js";
-import { prepareNativeWorkspaceSync } from "./native-runtime/native-workspace-sync.js";
+import { nativeWorkspaceSyncStateRoot, prepareNativeWorkspaceSync } from "./native-runtime/native-workspace-sync.js";
+import { nativeWorkspaceExportPendingForResource } from "./native-runtime/native-workspace-finalization-state.js";
 import { nativeWorkspaceFinalizationLockKey } from "./native-runtime/native-workspace-finalization-ownership.js";
 import { remoteTerminationReceipt } from "./remote-execution-termination.js";
 import { prepareStoppedSandboxForRecovery } from "./sandbox-stop-and-retain.js";
@@ -233,6 +234,46 @@ describe("automatic retained workspace recovery", () => {
     expect(await resumePreservedResultFinalization(db, f.companyId, f.runId)).toBe(true);
     expect((await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.id, f.retry.requestId!)))[0])
       .toMatchObject({ status: "coalesced", runId: f.runId });
+  }, 30_000);
+
+  it.each([false, true])("settles snapshot-only warm source preservation without making its unfinished allocation reusable: acceptedResult=%s", async acceptedResult => {
+    const f = await failedWarmSource(acceptedResult);
+    targets.get(f.lease.id)!.runner!.syncIn = async () => ({ filesTransferred: 0, bytesTransferred: 0, operations: [] });
+    targets.get(f.lease.id)!.runner!.syncOut = async operations => {
+      for (const operation of operations) for (const file of operation.files)
+        await cp(file.sourcePath, file.targetPath, { recursive: true, dereference: false });
+      return { filesTransferred: 2, bytesTransferred: 0, operations: [] };
+    };
+    await rm(path.join(nativeWorkspaceSyncStateRoot(), f.runId), { recursive: true });
+    await Promise.all(await reconcileRetainedWorkspaces(db, f.environmentRuntime, vi.fn()) ?? []);
+    expect(await db.select().from(workspaceOperations).where(and(eq(workspaceOperations.heartbeatRunId, f.runId),
+      eq(workspaceOperations.phase, "workspace_recovery_snapshot"), eq(workspaceOperations.status, "succeeded")))).toHaveLength(1);
+    expect(readSystemRecovery((await action(f.actionId)).evidence)?.state).toBe("complete");
+    expect(await hasVerifiedWorkspaceRepair(db, await run(f.runId))).toBe(false);
+    const [lease] = await db.select().from(environmentLeases).where(eq(environmentLeases.id, f.lease.id));
+    expect(lease).toMatchObject({ status: "released", leasePolicy: "retain_on_failure", cleanupStatus: "success" });
+    expect(lease.metadata?.nativeSourceRetention).toMatchObject({ settlement: "snapshot_retained" });
+    expect(await nativeWorkspaceExportPendingForResource(db, lease, randomUUID())).toBe(true);
+    expect((await db.select().from(nativeRunFinalizations).where(eq(nativeRunFinalizations.runId, f.runId)))[0].phase).toBe("terminal_failure");
+    await recoverRetainedWorkspace(f.input);
+    expect(f.runtime.resumeRunLease).toHaveBeenCalledOnce();
+    const source = await run(f.runId);
+    await db.insert(heartbeatRuns).values({ companyId: f.companyId, agentId: source.agentId, status: "running" });
+    const service = heartbeatService(db, { environmentRuntime: f.environmentRuntime });
+    await Promise.all([service.resumeTaskRetry(f.companyId, f.retry.requestId!), service.resumeTaskRetry(f.companyId, f.retry.requestId!)]);
+    const successors = await db.select().from(heartbeatRuns).where(and(eq(heartbeatRuns.companyId, f.companyId), eq(heartbeatRuns.status, "queued")));
+    expect(successors).toHaveLength(1);
+    const [successor] = successors;
+    expect(await readFreshWorkspaceReadiness(db, successor)).toMatchObject({ mode: "fresh_isolated_workspace",
+      retryIntentId: f.retry.requestId, sourceRunId: f.runId, retainedSourceIds: [f.lease.id] });
+    const fresh = path.join(root, randomUUID()); await mkdir(fresh);
+    const attached = await attachPreservedWorkspaceSnapshots({ db, companyId: f.companyId, issueId: f.issueId,
+      sourceRunIds: [successor.id], cwd: fresh });
+    expect(attached).toHaveLength(1);
+    expect(await readFile(path.join(attached[0].path, "files", "saved.txt"), "utf8")).toBe("finished work\n");
+    expect(await readFile(path.join(f.host, "newer.txt"), "utf8")).toBe("newer local work\n");
+    if (acceptedResult) expect((await db.select().from(nativeRunResults).where(eq(nativeRunResults.runId, f.runId)))[0])
+      .toMatchObject({ schemaStatus: "accepted", resultJson: { terminal: { runTerminalState: "succeeded" } } });
   }, 30_000);
 
   it.each(["no_request", "unauthorized", "already_adopted", "prior_export", "other_failure", "wrong_cwd", "writer", "newer_terminal", "controller", "older_lease", "foreign_lease"])(

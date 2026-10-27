@@ -24,7 +24,7 @@ import { createSystemRecovery, failSystemRecovery, readSystemRecovery, reserveSy
 import { inspectWorkspaceRecoverySource, workspaceRecoverySourceEligible, workspaceSourceBindingFailure } from "./workspace-recovery-source.js";
 import { preserveWorkspaceSnapshot } from "./workspace-recovery-snapshot.js";
 import { adoptHistoricalWorkspaceRecoveries } from "./workspace-recovery-backfill.js";
-import { canAdoptNativeSourceRetention, retainNativeRecoverySource, releaseRecoveredNativeSourceRetention } from "./native-runtime/native-source-retention.js";
+import { canAdoptNativeSourceRetention, retainNativeRecoverySource, settleRecoveredNativeSourceRetention } from "./native-runtime/native-source-retention.js";
 
 const exportCauses = ["native_workspace_sync_out_unrecoverable", "native_workspace_sync_out_retry_exhausted"];
 const terminal = ["failed", "interrupted", "timed_out", "cancelled", "succeeded"];
@@ -256,7 +256,7 @@ export async function recoverRetainedWorkspace(input: Source & { db: Db; environ
           metadata: { owningService: "workspace_recovery", preservationOperationIds: next.preservationOperationIds } });
         if (!await updateSystemRecovery(tx as unknown as Db, input, current!, next))
           throw new Error("workspace_recovery_generation_changed");
-        if (inspected.action.evidence.nativeSourceRetention && !await releaseRecoveredNativeSourceRetention(tx as unknown as Db, input))
+        if (inspected.action.evidence.nativeSourceRetention && !await settleRecoveredNativeSourceRetention(tx as unknown as Db, input, next.preservationOperationIds))
           throw new SystemRecoveryFailure("effect_unresolved", "recheck_evidence");
         return persistActivity(tx as unknown as Db, { companyId: input.companyId, actorType: "system", actorId: "workspace-recovery",
           action: "issue.workspace_recovered", entityType: "issue", entityId: input.issueId, runId: input.runId,
