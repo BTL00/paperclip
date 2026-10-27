@@ -2,6 +2,7 @@ import { checks, sameTask } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, unchangedAgent, agentLink, verifyRuntimeResult, type RuntimeObservation, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
 import { pollUntil } from "../api.js";
 import { expect } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { updateAgentPermissionsSchema } from "../../../packages/shared/src/validators/agent.js";
 
 export function hiringDeniedPermissions(permissions: RuntimeAgent["permissions"]) {
@@ -48,11 +49,15 @@ export function gradeRuntimeAgents(value: unknown) {
       c.add("requested-rule-or-visible-conflict", ruleSaved || /conflict|changed while|newer revision|concurrent|stale/i.test(o.reply)
         && !/(?:I(?:'ve| have)? (?:added|saved)|successfully (?:added|saved))[^.!]*?(?:rule|instruction|test)/i.test(o.reply),
         "The rule is durably merged or the unresolved revision conflict is visibly reported without false success.");
-      c.add("actual-concurrent-boundary", o.state.concurrentRunStatus === "running" && !!concurrent
-        && o.instructionHistory?.revisions.some(row => row.id === concurrent.revision.id) === true,
-        "An actual human revision occurred during the canonical query's active native run and remains in history.");
-      c.add("rule-attributed-if-saved", !ruleSaved || !!current && current.revision.actorAgentId === o.leadId
-        && o.runs.some(run => run.id === current.revision.sourceRunId), "A saved testing rule belongs to this actual agent run.");
+      const write = worker && current ? instructionFileAudit(o, worker.id, current.content, "agent") : undefined;
+      const human = worker && concurrent ? instructionFileAudit(o, worker.id, concurrent.content, "user") : undefined;
+      c.add("actual-concurrent-boundary", o.state.concurrentRunStatus === "running" && !!human && o.runs.some(run => {
+        const end = (run as typeof run & { finishedAt?: string }).finishedAt;
+        return run.agentId === o.leadId && run.companyId === o.companyId && (!o.state.concurrentRunId || run.id === o.state.concurrentRunId)
+          && Number.isFinite(Date.parse(run.startedAt ?? "")) && Number.isFinite(Date.parse(end ?? ""))
+          && Date.parse(human.createdAt!) >= Date.parse(run.startedAt!) && Date.parse(human.createdAt!) <= Date.parse(end!);
+      }), "The retained human file-mutation audit occurred within the independently observed active native run.");
+      c.add("rule-attributed-if-saved", !ruleSaved || !!write, "The exact saved file bytes have a same-agent, same-native-run file mutation audit.");
       c.add("future-use-and-agent-or-revision-link", !!worker && instructionResultLink(o, worker) && /future|next|subsequent|new (?:run|work)|conflict|revision/i.test(o.reply),
         "The reply links Morgan or the exact saved revision and describes future instruction use or the unresolved revision.");
       break;
@@ -90,6 +95,7 @@ export const runtimeAgentsCases = [
         load: () => ctx.allRuns(), accept: runs => runs.length === 1 && runs[0]?.status === "running",
         reject: runs => runs.some(run => ["succeeded", "failed", "cancelled", "timed_out"].includes(run.status)) ? "Instruction run settled before concurrent fixture boundary" : undefined });
       state.concurrentRunStatus = active[0]!.status;
+      state.concurrentRunId = active[0]!.id;
       const root = `/api/agents/${(state.worker as RuntimeAgent).id}/instructions-bundle/file`;
       const current = await ctx.input.api.get<InstructionFile>(`${root}?path=AGENTS.md`);
       if (current.revision.id !== (state.originalInstruction as InstructionFile).revision.id)
@@ -149,8 +155,32 @@ export const runtimeAgentsCases = [
     const unwantedInstruction = await ctx.input.api.putSensitive<InstructionFile>(root, { path: "AGENTS.md",
       content: `${previousInstruction.content}\nUnwanted rule: never run frontend tests.`, baseRevisionId: previousInstruction.revision.id });
     return { worker, instructionAgentId: worker.id, previousInstruction, unwantedInstruction, sideContent };
-  }, gradeRuntimeAgents),
+  }, gradeRuntimeAgents, {
+    coverageGaps: ["supported-two-visible-instruction-history-versions"],
+    async verifySetup(ctx, state) {
+      const { readAgentResource } = await import("./identity-support.js");
+      const history = await readAgentResource(ctx, `/api/agents/${(state.worker as RuntimeAgent).id}/instructions-bundle/history?path=AGENTS.md`);
+      const rows = (history.data as { revisions?: InstructionFile["revision"][] } | undefined)?.revisions;
+      const previous = state.previousInstruction as InstructionFile; const unwanted = state.unwantedInstruction as InstructionFile;
+      const c = checks();
+      c.add("two-actual-visible-prior-versions", history.status === 200 && Array.isArray(rows) && previous.revision.id !== unwanted.revision.id
+        && [previous.revision.id, unwanted.revision.id].every(id => rows.some(row => row.id === id)),
+        "The actual speaking agent must see both genuine historical versions before the unchanged restore request; content ETags and newly written files do not manufacture history.");
+      await ctx.input.evidence("runtime-instruction-history-precondition.json", { agentId: (state.worker as RuntimeAgent).id, status: history.status,
+        visibleRevisionIds: rows?.map(row => row.id) ?? [], expectedRevisionIds: [previous.revision.id, unwanted.revision.id],
+        productContract: "Current file writes use content tokens; legacy history is read-only (design change14420).", prerequisiteSatisfied: c.result().passed });
+      return c.result();
+    },
+  }),
 ];
+function instructionFileAudit(o: RuntimeObservation, workerId: string, content: string, actor: "agent" | "user") {
+  const hash = createHash("sha256").update(content).digest("hex");
+  return o.activity.find(row => row.action === "agent.files_updated" && row.companyId === o.companyId && row.entityId === workerId
+    && row.actorType === actor && row.details?.path === "AGENTS.md" && row.details.contentHash === hash
+    && (actor === "user" ? !row.agentId && row.details.source === "board" : row.agentId === o.leadId && row.actorId === o.leadId
+      && row.details.source === "tool" && o.runs.some(run => run.id === (row as typeof row & { runId?: string }).runId
+        && run.companyId === o.companyId && run.agentId === o.leadId)));
+}
 function instructionResultLink(o: RuntimeObservation, worker: RuntimeAgent): boolean {
   return !!agentLink(o, worker) || !!o.instruction && o.links.some(href => {
     try { const url = new URL(href, o.origin); return url.origin === new URL(o.origin).origin

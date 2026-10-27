@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { gradeRuntimeAgents, hiringDeniedPermissions, runtimeAgentsCases } from "./runtime-agents.js";
 import { updateAgentPermissionsSchema } from "../../../packages/shared/src/validators/agent.js";
+import { createHash } from "node:crypto";
 import type { RuntimeObservation } from "./runtime-support.js";
 
 function valid(id: string): RuntimeObservation {
@@ -28,6 +29,14 @@ function valid(id: string): RuntimeObservation {
     o.instruction = { path: "AGENTS.md", content: "Original frontend guidance\nKeep keyboard support\nRun the relevant tests before handing work back.",
       revision: { ...revision, id: "merged", source: "api", actorAgentId: "ceo", sourceRunId: "run" } };
     o.instructionHistory = { revisions: [revision, { ...revision, id: "concurrent" }, o.instruction.revision] };
+    Object.assign(o.runs[0]!, { startedAt: "2026-10-27T08:00:00Z", finishedAt: "2026-10-27T08:02:00Z" });
+    o.state.concurrentRunId = "run";
+    o.activity = [
+      { id: "human-write", companyId: "company", action: "agent.files_updated", entityId: "morgan", actorType: "user", actorId: "local-board", createdAt: "2026-10-27T08:00:30Z",
+        details: { path: "AGENTS.md", source: "board", contentHash: createHash("sha256").update("Original frontend guidance\nKeep keyboard support").digest("hex") } },
+      Object.assign({ id: "agent-write", companyId: "company", action: "agent.files_updated", entityId: "morgan", actorType: "agent", actorId: "ceo", agentId: "ceo",
+        details: { path: "AGENTS.md", source: "tool", contentHash: createHash("sha256").update(o.instruction.content).digest("hex") } }, { runId: "run" }),
+    ];
     o.reply = "Added the rule to Morgan's instructions for future work.";
   } else {
     const revision = { id: "previous", agentId: "morgan", companyId: "company", source: "seed" };
@@ -98,6 +107,22 @@ describe("runtime agent oracles", () => {
 it("rejects an instruction edit that overwrote concurrent human guidance", () => {
   const o = valid("agents.edit-instructions"); o.instruction!.content = "Original frontend guidance\nRun the relevant tests before handing work back.";
   expect(gradeRuntimeAgents(o).passed).toBe(false);
+});
+it("uses actual file-mutation audits rather than the current reader's virtual revision actor/history", () => {
+  const o = valid("agents.edit-instructions");
+  o.instructionHistory = { revisions: [] };
+  Object.assign(o.instruction!.revision, { actorAgentId: null, sourceRunId: null, actorUserId: "local-board" });
+  expect(gradeRuntimeAgents(o).passed).toBe(true);
+  for (const change of [
+    { companyId: "foreign" }, { entityId: "other-agent" }, { actorId: "other-agent" }, { runId: "other-run" },
+    { details: { path: "other.md", source: "tool", contentHash: o.activity[1]!.details!.contentHash } },
+    { details: { path: "AGENTS.md", source: "tool", contentHash: "wrong-hash" } },
+  ]) {
+    const wrong = structuredClone(o); Object.assign(wrong.activity[1]!, change);
+    expect(gradeRuntimeAgents(wrong).passed).toBe(false);
+  }
+  const late = structuredClone(o); late.activity[0]!.createdAt = "2026-10-27T08:03:00Z";
+  expect(gradeRuntimeAgents(late).passed).toBe(false);
 });
 it("accepts an explicit unresolved revision conflict preserving the concurrent edit", () => {
   const o = valid("agents.edit-instructions"); o.instruction!.content = "Original frontend guidance\nKeep keyboard support";
