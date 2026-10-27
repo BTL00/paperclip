@@ -54,6 +54,17 @@ export async function connectRepositoryFixture(ctx: ChatCatalogContext) {
     throw error;
   }
 }
+/** Keep broad authorized metadata discovery private. Public case observations
+ * retain only the selected resources and this actual connection's attribution. */
+export function projectRequestedRepositories(
+  repositories: readonly Repository[],
+  requested: readonly { id: string; fullName: string }[],
+  connectionId: string,
+): Repository[] {
+  return repositories.filter(row => requested.some(target => target.id === row.id && target.fullName === row.fullName)
+    && row.url === `https://github.com/${row.fullName}` && row.connectionIds?.includes(connectionId))
+    .map(row => ({ id: row.id, fullName: row.fullName, url: row.url, connectionIds: [connectionId] }));
+}
 async function agentReplacementStatus(ctx: ChatCatalogContext, projectId: string, repositoryId: string) {
   const agentId = ctx.input.fixtures.agent.id;
   const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${agentId}/keys`, { name: "repository-replacement-boundary-control" });
@@ -147,7 +158,7 @@ function repositoryCase(scenarioId: string): ChatCatalogCase {
         ctx.input.api.get<RepositoryObservation["connection"]>(`/api/tool-connections/${state.connectionId}`),
       ]);
       return { ...o, repositoryProject: p ? await ctx.input.api.get<RepositoryProject>(`/api/projects/${p.id}`) : undefined,
-        repositories: options.repositories, connection };
+        repositories: projectRequestedRepositories(options.repositories, state.requested as Array<{ id: string; fullName: string }>, String(state.connectionId)), connection };
     },
     ...(scenarioId === "projects.replace-repository" ? { async act(ctx: ChatCatalogContext, state: Record<string, unknown>) {
       const first = await pollUntil({ label: "Repository owner handoff", deadlineAt: Date.now() + 150_000,
