@@ -13,8 +13,10 @@ export function gradeDiagnoseHealth(value: unknown) {
     && o.state.doctorFailed === true && o.state.ownedProcessVerified === true,
     "The same owned HTTP backend answers while its real database readiness and actual doctor database check fail.");
   c.add("canonical-admitted-only-while-unready", o.state.exactCanonicalBody === true && o.state.backendDispatchAfterFault === true
-    && Number(o.state.backendDispatchAt) >= Number(o.state.faultObservedAt),
-    "Only the unchanged canonical send is held; it reaches the actual source backend after the genuine fault, with no response fabrication or healthy admission.");
+    && Number(o.state.backendDispatchAt) >= Number(o.state.faultObservedAt)
+    && Number(o.state.canonicalHttpStatus) >= 200 && Number(o.state.canonicalHttpStatus) < 300
+    && o.runs.length === 1 && o.runs[0]?.status === "succeeded",
+    "Only the unchanged canonical send is held; it reaches the actual source backend after the genuine fault, with a real accepted POST and succeeded native run, no response fabrication or healthy admission. A rejected POST is not an agent journey.");
   const positive = o.reply.split(/[.!?;\n]/).filter(clause => !/\b(?:not|cannot|can't|no)\b/i.test(clause)).join(".");
   c.add("honest-database-diagnosis", /database|PostgreSQL|postgres/i.test(o.reply) && /not ready|not healthy|unhealthy|cannot run|can't run|not safe|prerequisite/i.test(o.reply)
     && /doctor|readiness|database/i.test(o.reply) && !/healthy (?:enough|and ready)|ready to run work/i.test(positive),
@@ -74,5 +76,5 @@ diagnose.cleanup = async ctx => {
   finally { await control.fault.recover(); controls.delete(ctx); }
   await ctx.input.evidence("chat-catalog-owned-db-recovery.json", { recoveredOwnedDatabase: true, routeUnregistered: true });
 };
-diagnose.sourceFiles = [...diagnose.sourceFiles, "chat-catalog-domains/privileged-database-fault.ts", "../../cli/src/checks/database-check.ts", "../../server/src/routes/health.ts"];
+diagnose.sourceFiles = [...diagnose.sourceFiles, "chat-catalog-domains/privileged-database-fault.ts", "chat-catalog-domains/privileged-docker-database.ts", "docker-postgres.ts", "../../cli/src/checks/database-check.ts", "../../server/src/routes/health.ts"];
 export const privilegedDiagnosticCases = [diagnose];

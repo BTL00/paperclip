@@ -15,10 +15,11 @@ it("requires real database-unready evidence and honest diagnosis instead of live
     tasks: [], projects: [], goals: [], comments: [], activity: [], documents: [], revisions: [], links: [], humanQueries: ["canonical"], runs: [{ id: "run", status: "succeeded" }],
     reply: "The database prerequisite is failing; this instance is not ready to run work. Use the operator doctor database check.",
     state: { healthStatus: 503, healthError: "database_unreachable", doctorFailed: true, ownedProcessVerified: true, exactCanonicalBody: true,
-      backendDispatchAfterFault: true, backendDispatchAt: 2000, faultObservedAt: 1000 } };
+      canonicalHttpStatus: 201, backendDispatchAfterFault: true, backendDispatchAt: 2000, faultObservedAt: 1000 } };
   expect(gradeDiagnoseHealth(o).passed).toBe(true);
-  for (const delta of [{ healthStatus: 200 }, { doctorFailed: false }, { exactCanonicalBody: false }, { backendDispatchAt: 500 }])
+  for (const delta of [{ healthStatus: 200 }, { doctorFailed: false }, { exactCanonicalBody: false }, { backendDispatchAt: 500 }, { canonicalHttpStatus: 503 }])
     expect(gradeDiagnoseHealth({ ...o, state: { ...o.state, ...delta } }).passed).toBe(false);
   expect(gradeDiagnoseHealth({ ...o, reply: "The HTTP port works, so it is healthy enough and ready to run work." }).passed).toBe(false);
   expect(gradeDiagnoseHealth({ ...o, reply: "" }).passed).toBe(false);
+  expect(gradeDiagnoseHealth({ ...o, runs: [] }).passed).toBe(false);
 });

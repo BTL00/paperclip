@@ -7,7 +7,8 @@ import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { checks, project, putDocument, task, sameTask, type Entity } from "./internal-support.js";
 import { privilegedDefinition, privilegedObservation, settlePrivilegedChat, companionPhase } from "./privileged-support.js";
-const privateSources = new WeakMap<ChatCatalogContext, { url: string; keyId: string; token: string; root: string }>();
+import { ownedRestoreTarget, prepareOwnedDockerDatabase } from "./privileged-docker-database.js";
+const privateSources = new WeakMap<ChatCatalogContext, { url: string; keyId: string; token: string; root: string; database: string; verify: () => Promise<void> }>();
 const pool = (url: string) => createDb(url, { maxConnections: 1, prepare: false, connectTimeoutSeconds: 5, applicationName: "owned-catalog-backup-proof" }).$client;
 export function gradeBackupRestore(value: unknown) {
   const c = checks(), o = privilegedObservation(value);
@@ -42,12 +43,24 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
     const owned = await realpath(root), configFile = await realpath(configPath);
     if (!configFile.startsWith(owned + path.sep)) throw new Error("Backup refuses an operator config outside the owned attempt");
     const config = JSON.parse(await readFile(configFile, "utf8"));
-    if (config.database?.mode !== "embedded-postgres" || !Number.isSafeInteger(config.database.embeddedPostgresPort)) throw new Error("Backup proof accepts only the launcher's owned embedded PostgreSQL cluster");
-    const url = `postgres://paperclip:paperclip@127.0.0.1:${config.database.embeddedPostgresPort}/paperclip`;
-    const data = await getPostgresDataDirectory(url);
-    if (!data || !(await realpath(data)).startsWith(owned + path.sep)) throw new Error("Backup source PostgreSQL data directory is not owned by this attempt");
+    let url: string, database: string, verify: () => Promise<void>;
+    if (config.database?.mode === "postgres") {
+      const docker = await prepareOwnedDockerDatabase(owned, configFile);
+      url = docker.connection; database = docker.database; verify = docker.verify;
+      ctx.input.privateSecrets.push(url);
+    } else {
+      if (config.database?.mode !== "embedded-postgres" || !Number.isSafeInteger(config.database.embeddedPostgresPort))
+        throw new Error("Backup requires the launcher's owned embedded or qualified Docker PostgreSQL cluster");
+      url = `postgres://paperclip:paperclip@127.0.0.1:${config.database.embeddedPostgresPort}/paperclip`;
+      database = "paperclip";
+      verify = async () => {
+        const data = await getPostgresDataDirectory(url);
+        if (!data || !(await realpath(data)).startsWith(owned + path.sep)) throw new Error("Backup source PostgreSQL data directory is not owned by this attempt");
+      };
+      await verify();
+    }
     const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${ctx.input.fixtures.agent.id}/keys`, { name: `catalog-backup-probe-${ctx.input.nonce}` });
-    ctx.input.privateSecrets.push(key.token); privateSources.set(ctx, { url, keyId: key.id, token: key.token, root: owned });
+    ctx.input.privateSecrets.push(key.token); privateSources.set(ctx, { url, keyId: key.id, token: key.token, root: owned, database, verify });
     const response = await fetch(new URL("/api/instance/database-backups", ctx.input.api.baseURL), { method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${key.token}`, "Content-Type": "application/json" }, body: "{}" });
     const agentBackupStatus = response.status; await response.body?.cancel();
@@ -71,6 +84,8 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
       return { tasks: [...tasks], docs: [...docs], revisions: [...revisions] };
     };
     try {
+      await source.verify();
+      if (!ownedRestoreTarget(targetName, source.database, ctx.input.nonce)) throw new Error("Restore target is not the generated separate database");
       const before = await readMarker(sql);
       const receipt = await ctx.input.api.post<{ backupFile: string; sizeBytes: number }>("/api/instance/database-backups", {});
       const archive = await realpath(receipt.backupFile);
@@ -81,13 +96,15 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
       // The name is generated here, checked absent, and never read from model output.
       const existing = await sql.unsafe("select datname from pg_database where datname = $1", [targetName]);
       if (existing.length) throw new Error("Owned restore target unexpectedly exists");
-      await sql.unsafe(`create database "${targetName}"`); targetCreated = true; state.separateDatabase = targetName !== "paperclip";
+      await source.verify();
+      await sql.unsafe(`create database "${targetName}"`); targetCreated = true; state.separateDatabase = targetName !== source.database;
       const target = pool(targetUrl.href);
       try {
         const tables = await target.unsafe("select table_name from information_schema.tables where table_schema = 'public'");
         state.targetWasEmpty = tables.length === 0;
         if (!state.targetWasEmpty) throw new Error("Refusing restore into a nonempty target");
         await target.end({ timeout: 5 });
+        await source.verify();
         await runDatabaseRestore({ connectionString: targetUrl.href, backupFile: archive, connectTimeoutSeconds: 5 }); state.restoreCompleted = true;
       } finally { await target.end({ timeout: 5 }); }
       const restored = pool(targetUrl.href);
@@ -99,7 +116,7 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
       state.sourceFixtureUnchanged = JSON.stringify(await readMarker(sql)) === JSON.stringify(before);
     } catch { throw new Error("Owned backup/restore verification failed; connection, archive contents and private diagnostics withheld"); }
     finally {
-      try { if (targetCreated) { await sql.unsafe(`drop database "${targetName}"`); state.targetDropped = true; } }
+      try { if (targetCreated) { await source.verify(); await sql.unsafe(`drop database "${targetName}"`); state.targetDropped = true; } }
       finally { await sql.end({ timeout: 5 }); }
     }
     const receipt = { archiveSha256: state.archiveSha256, archiveBytes: state.archiveBytes,
@@ -117,5 +134,5 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
 backup.attemptTimeoutMs = 600_000;
 backup.expectedRunCount = 2; backup.expectedHumanMessageCount = 2;
 backup.cleanup = async ctx => { const source = privateSources.get(ctx); if (source) { await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${source.keyId}`); privateSources.delete(ctx); } };
-backup.sourceFiles = [...backup.sourceFiles, "../../packages/db/src/backup-lib.ts", "../../server/src/routes/instance-database-backups.ts"];
+backup.sourceFiles = [...backup.sourceFiles, "chat-catalog-domains/privileged-docker-database.ts", "docker-postgres.ts", "../../packages/db/src/backup-lib.ts", "../../server/src/routes/instance-database-backups.ts"];
 export const privilegedBackupCases = [backup];

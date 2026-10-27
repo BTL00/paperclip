@@ -7,6 +7,7 @@ import { getPostgresDataDirectory, closeRegisteredClients } from "../../../packa
 import { databaseCheck } from "../../../cli/src/checks/database-check.js";
 import type { PaperclipConfig } from "../../../packages/shared/src/config-schema.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import { prepareOwnedDockerDatabase } from "./privileged-docker-database.js";
 const execute = promisify(execFile);
 export function ownedPostmasterStillMatches(input: { pid: number; startedAt: string; directory: string; port: number; uid: number;
   binary: string; marker: string[]; processRow: string }) {
@@ -23,6 +24,20 @@ export async function prepareOwnedDatabaseFault(ctx: ChatCatalogContext) {
   const root = await realpath(temp), configFile = await realpath(configPath);
   if (!configFile.startsWith(root + path.sep)) throw new Error("Database fault config is outside its owned attempt");
   const config = JSON.parse(await readFile(configFile, "utf8")) as PaperclipConfig;
+  if (config.database.mode === "postgres") {
+    const docker = await prepareOwnedDockerDatabase(root, configFile);
+    if (!ctx.input.privateSecrets) throw new Error("Owned Docker fault requires a private redaction sink");
+    ctx.input.privateSecrets.push(docker.connection);
+    return {
+      proof: docker.proof, stop: docker.stop, recover: docker.recover,
+      async doctor() {
+        const result = await databaseCheck(config);
+        await closeRegisteredClients(docker.connection);
+        return { name: result.name, status: result.status,
+          connectionFailure: result.status === "fail" && /connect|PostgreSQL/i.test(result.message), repairHint: result.repairHint ?? null };
+      },
+    };
+  }
   if (config.database.mode !== "embedded-postgres" || !config.database.embeddedPostgresDataDir) throw new Error("Database fault is limited to the owned embedded PostgreSQL fixture");
   const directory = await realpath(config.database.embeddedPostgresDataDir);
   if (!directory.startsWith(root + path.sep) || (await stat(directory)).uid !== process.getuid?.()) throw new Error("Database directory owner differs from the current attempt owner");
