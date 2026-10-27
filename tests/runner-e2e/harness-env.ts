@@ -1,4 +1,5 @@
 import { scrubChatPrivateEnvironment } from "./chat-private-inputs.js";
+import { PRIVATE_DIAGNOSTICS_ENV } from "./private-diagnostics.js";
 import { installedDaytonaPluginKeys } from "./installed-daytona-plugin.js";
 import { QUALIFIED_ACPX_PROFILES } from "../../packages/paperclip-runner/src/drivers/acpx/qualified-profiles.js";
 import { assertInstalledCliSelection, installedCliKeys, usesInstalledCli } from "./installed-cli.js";
@@ -198,6 +199,7 @@ export function buildPaperclipServerEnvironment(
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
   const result = scrubChatPrivateEnvironment({ ...source }, [], true);
+  delete result[PRIVATE_DIAGNOSTICS_ENV];
   for (const key of Object.keys(result)) {
     if (PROVIDER_SECRET_KEY.test(key)) delete result[key];
   }

@@ -1,4 +1,5 @@
 import { readChatPrivateInputs } from "./chat-private-inputs.js";
+import { trackedPrivateSecrets } from "./private-diagnostics.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { runChatBoundaryFlow } from "./chat-boundary-flow.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
@@ -627,7 +628,7 @@ for (const execution of executions) {
       verifyNativeInstructionPreflight(process.env[NATIVE_INSTRUCTION_PREFLIGHT_ENV]);
     }
     const credentials = credentialValues();
-    const secrets = normalizedSecrets([...Object.values(credentials), ...EVAL_OBSERVABILITY_SECRET_NAMES.map(name => process.env[name]), process.env.PAPERCLIP_E2E_GATEWAY_TOKEN]);
+    const secrets = trackedPrivateSecrets(normalizedSecrets([...Object.values(credentials), ...EVAL_OBSERVABILITY_SECRET_NAMES.map(name => process.env[name]), process.env.PAPERCLIP_E2E_GATEWAY_TOKEN]), execution.id);
     const privateInputs = execution.suite.id === "chat-features" ? readChatPrivateInputs(execution.id, secrets) : undefined;
     const traceConfig = evalBraintrustConfig(process.env);
     const trace = traceConfig ? new EvalAttemptTrace(traceConfig, {

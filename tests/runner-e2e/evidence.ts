@@ -6,8 +6,10 @@ import {
   rm,
   writeFile,
   copyFile,
+  mkdtemp,
 } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import {
   assertSecretFree,
   findSecretLeak,
@@ -87,7 +89,7 @@ function isAllowed(relative: string) {
   return ALLOWED_DIRECTORIES.has(segments[0]);
 }
 
-async function inspectZip(source: string, secrets: readonly string[]) {
+export async function inspectZip(source: string, secrets: readonly string[]) {
   // Failure traces can exceed Node's child-process output buffer. Stream the
   // expanded archive through the exact-value scanner with enough overlap to
   // detect a credential split across stdout chunks, without retaining the
@@ -103,9 +105,13 @@ async function inspectZip(source: string, secrets: readonly string[]) {
     let carry = Buffer.alloc(0);
     let leak: string | null = null;
     let spawnError: Error | null = null;
+    let expanded = 0;
+    const timer = setTimeout(() => { leak = "zip inspection exceeded its time bound"; unzip.kill(); }, 30_000);
 
     unzip.stdout.on("data", (chunk: Buffer) => {
       if (leak) return;
+      expanded += chunk.length;
+      if (expanded > 256 * 1024 * 1024) { leak = "zip inspection exceeded its expanded-byte bound"; unzip.kill(); return; }
       const data = Buffer.concat([carry, chunk]);
       leak = findSecretLeak(data, secrets, { includeShapes: false });
       carry = data.subarray(Math.max(0, data.length - overlap));
@@ -118,6 +124,7 @@ async function inspectZip(source: string, secrets: readonly string[]) {
       spawnError = error;
     });
     unzip.on("close", (code) => {
+      clearTimeout(timer);
       if (leak) return resolve(leak);
       if (spawnError) {
         return resolve(`zip could not be inspected: ${spawnError.message}`);
@@ -129,6 +136,23 @@ async function inspectZip(source: string, secrets: readonly string[]) {
       );
     });
   });
+}
+
+/** Playwright HTML contains a compressed report, which a plaintext HTML scan
+ * cannot inspect. It receives the same independent ZIP check as blob reports. */
+export async function inspectEmbeddedReport(raw: string, secrets: readonly string[]) {
+  const payloads = [...raw.matchAll(/data:application\/zip;base64,([A-Za-z0-9+/=]+)/g)];
+  if (!payloads.length) return /playwrightReportBase64/.test(raw) ? "embedded report encoding could not be inspected" : null;
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "runner-report-scan-"));
+  try {
+    for (const [index, payload] of payloads.entries()) {
+      if (payload[1]!.length > 128 * 1024 * 1024) return "embedded report exceeded its byte bound";
+      const filename = path.join(temporary, `${index}.zip`);
+      await writeFile(filename, Buffer.from(payload[1]!, "base64"), { mode: 0o600 });
+      const issue = await inspectZip(filename, secrets); if (issue) return issue;
+    }
+    return null;
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
 export async function packageEvidence(input: {
@@ -155,6 +179,10 @@ export async function packageEvidence(input: {
       continue;
     } else if (TEXT_EXTENSIONS.has(extension)) {
       const raw = await readFile(source, "utf8");
+      if (extension === ".html") {
+        const issue = await inspectEmbeddedReport(raw, input.secrets);
+        if (issue) { leaks.push({ file: relative, reason: issue }); continue; }
+      }
       const parsed = extension === ".json" ? JSON.parse(raw) : null;
       const leak =
         extension === ".json"

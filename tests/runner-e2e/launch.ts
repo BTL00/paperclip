@@ -1,5 +1,7 @@
 import { stagePublishedChatInstall, ChatInstalledCleanupError } from "./chat-installed-lane.js";
 import { stageChatPrivateInputs, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
+import { createPrivateDiagnosticStream, diagnosticSecrets, PRIVATE_DIAGNOSTICS_ENV, readPrivateDiagnosticSecrets, stagePrivateDiagnostics } from "./private-diagnostics.js";
+import { sanitizePrivateReporterArtifacts } from "./private-reporter-artifacts.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { recoverWorkerTiming } from "./worker-timing.js";
 import { openEvalOperations, type EvalOperations } from "./operations.js";
@@ -284,6 +286,7 @@ async function runProcess(
   logPath: string,
   completionPaths: readonly string[],
   interactive: boolean,
+  secrets: () => readonly string[],
 ) {
   const log = createWriteStream(logPath, { flags: "a", mode: 0o600 });
   const child = spawn(invocation.command, invocation.args, {
@@ -296,19 +299,17 @@ async function runProcess(
   activeProcessGroups.add(child.pid);
   const processOwner = createProcessTreeOwner(child);
   let outputTail = "";
-  const recordOutput = (chunk: Buffer, destination: NodeJS.WriteStream) => {
-    destination.write(chunk);
-    log.write(chunk);
-    outputTail += chunk.toString("utf8");
+  const recordOutput = (safe: string, destination: NodeJS.WriteStream) => {
+    destination.write(safe);
+    log.write(safe);
+    outputTail += safe;
     if (outputTail.length > 1024 * 1024)
       outputTail = outputTail.slice(-1024 * 1024);
   };
-  child.stdout?.on("data", (chunk: Buffer) =>
-    recordOutput(chunk, process.stdout),
-  );
-  child.stderr?.on("data", (chunk: Buffer) =>
-    recordOutput(chunk, process.stderr),
-  );
+  const stdout = createPrivateDiagnosticStream(secrets, safe => recordOutput(safe, process.stdout));
+  const stderr = createPrivateDiagnosticStream(secrets, safe => recordOutput(safe, process.stderr));
+  child.stdout?.on("data", (chunk: Buffer) => stdout.write(chunk));
+  child.stderr?.on("data", (chunk: Buffer) => stderr.write(chunk));
   let childSettled = false;
   let postResultStallError: string | null = null;
   let boundedCleanup: Promise<string | null> | undefined;
@@ -336,12 +337,7 @@ async function runProcess(
       const diagnostic = await processTreeDiagnostic(child.pid!);
       if (childSettled) return;
       postResultStallError = `Playwright remained alive for ${completedResultExitGraceMs}ms after every result was written`;
-      recordOutput(
-        Buffer.from(
-          `\n${postResultStallError}; forcing bounded cleanup. ${diagnostic.summary}\n`,
-        ),
-        process.stderr,
-      );
+      stderr.write(Buffer.from(`\n${postResultStallError}; forcing bounded cleanup. ${diagnostic.summary}\n`));
       stopChildTree(diagnostic);
     },
   });
@@ -351,10 +347,7 @@ async function runProcess(
           if (childSettled || postResultStallError) return;
           postResultStallError =
             "Completed-result exit guard failed during bounded inspection";
-          recordOutput(
-            Buffer.from(`\n${postResultStallError}; forcing cleanup.\n`),
-            process.stderr,
-          );
+          stderr.write(Buffer.from(`\n${postResultStallError}; forcing cleanup.\n`));
           stopChildTree();
         });
       }, 500)
@@ -401,6 +394,7 @@ async function runProcess(
     activeProcessCleanup.delete(child.pid);
     activeProcessTerminators.delete(child.pid);
   }
+  stdout.end(); stderr.end();
   await new Promise<void>((resolve) => log.end(resolve));
   return {
     exitCode,
@@ -409,6 +403,8 @@ async function runProcess(
     processCleanupError,
     spawnError,
     outputTail,
+    privateDiagnosticFailure: stdout.failed() || stderr.failed(),
+    privateDiagnosticLeak: stdout.redactedSecret() || stderr.redactedSecret(),
   };
 }
 
@@ -562,8 +558,9 @@ async function runAttempt(input: {
     attemptSecrets = credentials;
     const needsPrivateInputs = selectedDescriptor && ((selectedDescriptor.requiredCredentials?.length ?? 0) > 0 || selectedDescriptor.externalInput);
     if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
-    if (needsPrivateInputs) await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
+    await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
     const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir: selectedPrivateInputsDirectory, env: process.env, secrets: credentials }) : undefined;
+    const diagnosticRegistry = stagePrivateDiagnostics(temporaryRoot, executions.map(row => row.id), credentials);
     if (installedCli) await writeFile(path.join(privateDir, "installed-cli-admission.json"), `${JSON.stringify(installedCli, null, 2)}\n`, { mode: 0o600 });
     if (installedPlugin) await writeFile(path.join(privateDir, "installed-daytona-plugin-admission.json"), `${JSON.stringify(installedPlugin, null, 2)}\n`, { mode: 0o600 });
     const runnerBinary = installedCli ? undefined : resolvePaperclipRunnerBinaryForHarness(
@@ -573,6 +570,7 @@ async function runAttempt(input: {
     const childEnv: NodeJS.ProcessEnv = {
       ...buildRunnerE2EProcessEnvironment(sourceEnvironment, executions),
       [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
+      [PRIVATE_DIAGNOSTICS_ENV]: diagnosticRegistry,
       PATH: providerPath,
       PAPERCLIP_RUNNER_E2E_EXECUTION_IDS: JSON.stringify(
         executions.map((candidate) => candidate.id),
@@ -646,7 +644,9 @@ async function runAttempt(input: {
         path.join(privateDir, "cases", candidate.task.id, "result.json"),
       ),
       options.ui || options.debug,
+      () => readPrivateDiagnosticSecrets(diagnosticRegistry, temporaryRoot),
     );
+    credentials.splice(0, credentials.length, ...diagnosticSecrets(readPrivateDiagnosticSecrets(diagnosticRegistry, temporaryRoot)));
     processCleanupFailed = processResult.processCleanupError !== null;
     if (options.installedStartupOnly) {
       const proofDir = path.join(resultsRoot, campaignId, "installed-startup-only");
@@ -703,7 +703,9 @@ async function runAttempt(input: {
         }
         // Keep cleanup authority before evidence copying/publication can fail.
         rawCleanupResults.push({ cleanup: result.cleanup, synthetic: result === fallback, status: result.status });
-        return enforceResultProcessIntegrity(result, processResult);
+        const checked = enforceResultProcessIntegrity(result, processResult);
+        return processResult.privateDiagnosticFailure ? { ...checked, status: "failed" as const, failureClass: checked.status === "passed" ? "secret_leak" as const : checked.failureClass,
+          error: `${checked.error ? `${checked.error}; ` : ""}Private diagnostic redaction was unavailable; raw output was withheld.` } : checked;
       }),
     );
     let isolationError: unknown;
@@ -760,6 +762,8 @@ async function runAttempt(input: {
         persistedStateError = error;
       }
     }
+    const reporterPrivacy = await sanitizePrivateReporterArtifacts(privateDir, credentials);
+    if (processResult.privateDiagnosticLeak) reporterPrivacy.push({ file: "playwright process stdout/stderr", disposition: "redacted", reason: "credential detected before diagnostic emission" });
     for (const [index, candidate] of executions.entries()) {
       let result = {
         ...results[index],
@@ -831,6 +835,13 @@ async function runAttempt(input: {
       );
       await mkdir(casePrivateDir, { recursive: true });
       await copySharedEvidence(privateDir, casePrivateDir);
+      if (reporterPrivacy.length) {
+        const original = { status: result.status, failureClass: result.failureClass, error: result.error };
+        const snapshots = path.join(casePrivateDir, "snapshots"); await mkdir(snapshots, { recursive: true });
+        await writeFile(path.join(snapshots, "diagnostic-privacy.json"), `${JSON.stringify(sanitizeJson({ schemaVersion: 1, originalResult: original, issues: reporterPrivacy }, credentials), null, 2)}\n`, { mode: 0o600 });
+        result = { ...result, status: "failed", failureClass: result.status === "passed" ? "secret_leak" : result.failureClass,
+          error: `${result.error ? `${result.error}; ` : ""}Reporter privacy violation: ${reporterPrivacy.map(issue => `${issue.disposition} ${issue.file}`).join(", ")}` };
+      }
       if (persistedStateError && persistenceCheckedExecutions.includes(candidate)) {
         const snapshots = path.join(casePrivateDir, "snapshots");
         await mkdir(snapshots, { recursive: true });
