@@ -17,10 +17,14 @@ function savedDesignInstruction(o: InternalObservation, body: string, design: En
   const valid = targets.map((href, index) => hasLink({ ...o, links: [href] }, "issues", design) ? `{{DESIGNREF${index}}}` : null).filter((x): x is string => !!x);
   if (!valid.length) return false;
   const directive = /\b(?:follow|use|adhere\s+to|implement\s+(?:according\s+to|in\s+line\s+with)|build\s+(?:according\s+to|in\s+line\s+with))\b/i;
-  const negative = /\b(?:do not|don't|must not|should not|never|not to|avoid|ignore|disregard|stop)\b/i;
+  const governsNegativeReference = (prefix: string) => {
+    const text = prefix.replace(/\b(?:do not|don't) forget to\b/gi, "remember to");
+    return /\b(?:do not|don't|must not|should not|never|not to|not)\b[^{}.;!\n]{0,60}\b(?:follow|use|adhere|implement|build)\b[^{}.;!\n]{0,80}$/i.test(text)
+      || /\b(?:avoid|ignore|disregard|stop)\b[^{}.;!\n]{0,80}$/i.test(text);
+  };
   const clauses = prose.split(/[.;!\n]+/).filter(clause => valid.some(token => clause.includes(token)));
-  if (clauses.some(clause => negative.test(clause))) return false;
-  if (/\b(?:do not|don't|never|must not|should not)\s+(?:follow|use|adhere\s+to)\s+(?:it|this|that|the\s+(?:approved\s+)?design)\b/i.test(prose)) return false;
+  if (clauses.some(clause => valid.some(token => { const at = clause.indexOf(token); return at >= 0 && governsNegativeReference(clause.slice(0, at)); }))) return false;
+  if (/\b(?:(?:do not|don't|never|must not|should not)\s+(?:follow|use|adhere\s+to)|ignore|disregard)\s+(?:it|this|that|the\s+(?:approved\s+)?design)\b/i.test(prose)) return false;
   return clauses.some(clause => directive.test(clause) && valid.some(token => {
     const instruction = directive.exec(clause); return !!instruction && clause.indexOf(token) > instruction.index;
   }));
