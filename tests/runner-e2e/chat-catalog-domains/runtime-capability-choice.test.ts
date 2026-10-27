@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { getEnvironmentCapabilities } from "../../../packages/shared/src/environment-support.js";
-import { advertisedClaudeTargets, capabilityChoiceReply, gradeCapabilityChoice, runtimeCapabilityChoiceCase } from "./runtime-capability-choice.js";
+import { advertisedClaudeTargets, capabilityChoiceReply, recommendsIncompatibleTarget, gradeCapabilityChoice, runtimeCapabilityChoiceCase } from "./runtime-capability-choice.js";
 import { runtimeComputerSshCases } from "./runtime-computers-ssh.js";
 import { runtimePrivateRequirements } from "../chat-runtime-private-requirements.js";
 function valid() {
@@ -39,4 +39,11 @@ it("removes only the choice case private contract and preserves both genuine SSH
     expect(runtimeComputerSshCases.find(row => row.scenarioId === id)?.externalInput?.provider).toBe("ssh");
     expect(runtimePrivateRequirements).toHaveProperty(id);
   }
+});
+
+it("rejects a recommendation of the incompatible target despite otherwise truthful capability advice", () => {
+  const o = valid(); o.reply = "Choose the incompatible target for Morgan with Claude Code. The operator settings explain capability support; runtime health still needs testing.";
+  expect(gradeCapabilityChoice(o).passed).toBe(false);
+  for (const text of ["Select the unsupported computer.", "Use an incompatible target.", "The unsupported environment is the recommended choice."]) expect(recommendsIncompatibleTarget(text)).toBe(true);
+  for (const text of ["Do not choose the incompatible target.", "Never select an unsupported computer.", "If a target is incompatible, choose another computer.", "Selecting an incompatible computer would fail; ask the operator to inspect supported capabilities."]) expect(recommendsIncompatibleTarget(text)).toBe(false);
 });
