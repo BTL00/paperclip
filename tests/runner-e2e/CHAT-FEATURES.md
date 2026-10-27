@@ -229,3 +229,11 @@ The supervisor binds the actual CLI PID, version and CLI/server bytes before set
 and after an allowed update restart. The operator receipt stays private0600;
 fingerprints bind public artifact hashes and the full owned dependency tree.
 Source-local refusal remains the default for every other ordinary chat case.
+
+## Frozen capability coverage
+
+The campaign retains its original 244 scenarios and 191 declared capabilities.
+Merged production now also maps `runs-adapters/model-accounts`; that capability
+is outside this frozen catalog and remains uncovered and unqualified by it.
+The setup-health cell is diagnostic only and is excluded from those 244 scenarios
+and from `--all`, as is the explicit-only chat catalog.

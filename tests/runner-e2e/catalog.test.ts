@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { parseDocument } from "yaml";
 import { contextIntegrityTasks } from "./context-integrity-cases.js";
 import { normalizePrpResultSignals } from "../../packages/paperclip-runner/src/protocol/result-normalization.js";
 import {
@@ -219,10 +220,20 @@ describe("runner E2E catalog", () => {
     expect(localIntegrityTasks).toHaveLength(2);
     expect(openRouterBreadthTasks).toHaveLength(3);
     expect(runnerSuites.map((suite) => suite.expectedMatrixSize)).toEqual([
-      2, 1, 3, 2, 2, 4, 4, 4, 4, 4, 4, 8, 10, 6, 63, 12, 6, 4, 2, 4, 2, 30, 3, 16, 16, 2, 6, 8, 46, 2, 23, 15, 52, 6, 6, 20, 26, 52, 2, 28, 18, 2, 6, 6, 13, 10, 2, 48, 16, 10, 2, 1, 1, 4, 116, 2, 2,
+      2, 1, 3, 2, 2, 4, 4, 4, 4, 4, 4, 8, 10, 6, 63, 12, 6, 4, 2, 4, 2, 30, 3, 16, 16, 2, 6, 8, 46, 2, 23, 15, 52, 6, 6, 20, 26, 52, 1, 244, 28, 18, 2, 6, 6, 13, 10, 2, 48, 16, 10, 2, 1, 1, 4, 116, 2, 2,
     ]);
-    expect(validateRunnerCatalog()).toHaveLength(769);
-    expect(new Set(runnerMatrix.map((entry) => entry.id)).size).toBe(769);
+    expect(validateRunnerCatalog()).toHaveLength(1012);
+    const frozenDirectory = new URL("./chat-scenarios/", import.meta.url);
+    const frozenIds = readdirSync(frozenDirectory).filter(name => name.endsWith(".yaml") && name !== "defaults.yaml")
+      .flatMap(name => parseDocument(readFileSync(new URL(name, frozenDirectory), "utf8")).toJS().scenarios.map((scenario: { id: string }) => scenario.id));
+    expect(frozenIds).toHaveLength(244);
+    const chat = selectRunnerExecutions(parseRunnerSelectors(["--suite", "chat-features"]));
+    // These two historical execution aliases retain their exact frozen YAML identity.
+    const legacyScenarioIds: Record<string, string> = { "create-backlog": "tasks.create-backlog", "delegate-announcement": "tasks.delegate-announcement" };
+    expect(chat.map(cell => legacyScenarioIds[cell.task.id] ?? cell.task.id).sort()).toEqual(frozenIds.sort());
+    for (const cell of chat) expect(selectRunnerExecutions(parseRunnerSelectors(["--id", cell.id]))).toEqual([cell]);
+    expect(selectRunnerExecutions(parseRunnerSelectors(["--all"])).some(cell => ["chat-features", "chat-setup-health"].includes(cell.suite.id))).toBe(false);
+    expect(new Set(runnerMatrix.map((entry) => entry.id)).size).toBe(1012);
     expect(
       runnerMatrix.filter((entry) => entry.suite.id === "core-compatibility"),
     ).toHaveLength(48);
