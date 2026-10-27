@@ -36,6 +36,7 @@ export interface ChatCatalogCase {
   scenarioId: string;
   /** Real browser locale context for the canonical person's schedule. */
   browserTimezone?: "America/Chicago";
+  respondingAgent?: { kind: "case-primary-owner"; name: "Morgan"; role: "engineer"; canAssignTasks: true };
   requiredCredentials?: readonly CredentialName[];
   externalInput?: ChatExternalInputRequirement;
   installedSource?: "published-global-npm";

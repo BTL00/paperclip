@@ -1,3 +1,4 @@
+import { prepareChatCatalogRespondent } from "./chat-catalog-respondent.js";
 import type { ChatPrivateInputs } from "./chat-private-inputs.js";
 import { chatCatalogAllowedRunStatuses } from "./chat-catalog-run-policy.js";
 import { runHiringTemplateFlow } from "./hiring-template-flow.js";
@@ -374,6 +375,7 @@ export interface ChatFlowInput {
   check?: (id: string, passed: boolean, detail: string) => void;
 }
 export async function runChatFlow(input: ChatFlowInput) {
+  if (input.execution.suite.id === CHAT_FEATURE_SUITE) await prepareChatCatalogRespondent(input, findChatCatalogCase(input.execution.task.id));
   const { page, api, fixtures: f, execution, nonce } = input;
   const chatPath = `/api/companies/${f.company.id}/chats/${f.agent.id}`;
   const route = `/${f.company.issuePrefix}/chats/${f.agent.id}`;
