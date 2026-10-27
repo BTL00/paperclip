@@ -455,7 +455,7 @@ export function accessService(db: Db) {
 
   async function listAgentMembers(companyId: string) {
     const members = await db.select({ member: companyMemberships }).from(companyMemberships)
-      .innerJoin(agents, and(eq(agents.id, companyMemberships.principalId), eq(agents.companyId, companyId)))
+      .innerJoin(agents, and(eq(sql`${agents.id}::text`, companyMemberships.principalId), eq(agents.companyId, companyId)))
       .where(and(eq(companyMemberships.companyId, companyId), eq(companyMemberships.principalType, "agent")))
       .orderBy(sql`${companyMemberships.createdAt} desc`);
     if (!members.length) return [];

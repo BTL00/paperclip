@@ -14,7 +14,7 @@ describe("agent membership discovery query scope", () => {
     const db = { select: vi.fn().mockReturnValueOnce({ from: () => memberships }).mockReturnValueOnce({ from: () => grants }) };
     const result = await accessService(db as unknown as Db).listAgentMembers(companyId);
     const dialect = new PgDialect();
-    expect(dialect.sqlToQuery(join).sql).toContain('"agents"."id" = "company_memberships"."principal_id"');
+    expect(dialect.sqlToQuery(join).sql).toContain('"agents"."id"::text = "company_memberships"."principal_id"');
     expect(dialect.sqlToQuery(join).params).toEqual([companyId]);
     expect(dialect.sqlToQuery(memberWhere).params).toEqual([companyId, "agent"]);
     expect(dialect.sqlToQuery(grantWhere).params).toEqual([companyId, "agent", agentId]);
