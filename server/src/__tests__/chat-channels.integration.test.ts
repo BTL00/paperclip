@@ -2879,8 +2879,9 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         body: "This turn ended without publishing a final response." })).rejects.toMatchObject({ status: 403 });
       expect(f.responseWrites).toHaveLength(writes);
     });
-    it.each(["completed", "failed", "missing_decision", "comment_requested", "missing_semantic", "legacy", "uncommitted_native", "pending_publication"] as const)(
+    it.each(["completed", "failed", "missing_decision", "comment_requested", "missing_semantic", "legacy", "uncommitted_native", "pending_publication", "missing_decision_then_missing", "uncommitted_then_failed", "malformed_null", "malformed_scalar", "malformed_schema", "malformed_action"] as const)(
       "keeps GitHub response maintenance truthful for a new request: %s", async scenario => {
+      const pendingPresentation = scenario.startsWith("missing_decision") || scenario.startsWith("uncommitted") || scenario.startsWith("malformed");
       const f = await publicationRetryFixture();
       await f.service.execute(f.session, "submit_review", f.assessment, "review-before-new-request");
       await db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.run.id));
@@ -2891,15 +2892,15 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         trigger: "subscribed_message", message: makeMessage({ id: "41802", text: "Please handle this new request", userId: "42", userName: "octocat" }) });
       const [next] = await db.insert(heartbeatRuns).values({ companyId: f.companyId, agentId: f.assignedAgentId,
         status: scenario === "failed" ? "failed" : "succeeded", runtimeMode: scenario === "legacy" ? "legacy" : "native",
-        nativePhase: scenario === "uncommitted_native" ? "observed" : "committed", contextSnapshot: await chatWakeContext({
+        nativePhase: scenario.startsWith("uncommitted") ? "observed" : "committed", contextSnapshot: await chatWakeContext({
           endpointId: f.endpoint.id, issueId: f.conversation.issueId, provider: "github", providerMessageId: "41802",
         }), resultJson: { finalizationPhase: "committed", finalizationReasonCode: "external_chat_response_waiting",
           ...(scenario === "missing_semantic" ? {} : { nativeResult: { schema: "paperclip.run_result.v1",
             reportedWorkDisposition: scenario === "completed" ? "completed" : "yielded",
             continuation: { kind: "response_wake", idempotencyKey: "new-request-wait" } } }),
-          ...(scenario === "missing_decision" ? {} : { presentationDecision: {
-            schema: "paperclip.run_presentation_decision.v1", chosenSource: "none",
-            commentAction: scenario === "comment_requested" ? "create" : "none", reasonCodes: ["yielded_control_plane_wait"] } }) } }).returning();
+          ...(scenario.startsWith("missing_decision") ? {} : { presentationDecision: scenario === "malformed_null" ? null : scenario === "malformed_scalar" ? "pending" : {
+            schema: scenario === "malformed_schema" ? "unknown" : "paperclip.run_presentation_decision.v1", chosenSource: "none",
+            commentAction: scenario === "malformed_action" ? "unknown" : scenario === "comment_requested" ? "create" : "none", reasonCodes: ["yielded_control_plane_wait"] } }) } }).returning();
       if (scenario === "pending_publication") await db.insert(chatActions).values({ companyId: f.companyId,
         endpointId: f.endpoint.id, conversationId: f.conversation.id, kind: "github_review_publication",
         providerActionId: `github_publication:${randomUUID()}`, status: "processing",
@@ -2914,6 +2915,31 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
         expect(response.result?.final).not.toBe(true);
         expect(response).toMatchObject({ status: "failed", result: { retryable: true, code: "acknowledgement_unconfirmed" } });
+      } else if (pendingPresentation) {
+        expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+        expect(response.result?.final).not.toBe(true);
+        const pendingWrites = f.responseWrites.length;
+        await responses.processPending();
+        await expect(responses.failRun({ ...f.session, runId: next.id, endpointId: f.endpoint.id,
+          body: "This turn ended without publishing a final response." })).rejects.toMatchObject({ status: 409 });
+        expect(f.responseWrites).toHaveLength(pendingWrites);
+        const failed = scenario === "uncommitted_then_failed";
+        const missing = scenario === "missing_decision_then_missing";
+        await db.update(heartbeatRuns).set({ status: failed ? "failed" : "succeeded",
+          nativePhase: failed ? "failed" : "committed", resultJson: {
+            ...next.resultJson, finalizationPhase: failed ? "failed" : "committed",
+            nativeResult: { schema: "paperclip.run_result.v1", reportedWorkDisposition: missing ? "completed" : "yielded",
+              continuation: missing ? null : { kind: "response_wake", idempotencyKey: "settled-request-wait" } },
+            presentationDecision: { schema: "paperclip.run_presentation_decision.v1", chosenSource: "none",
+              commentAction: "none", reasonCodes: [missing ? "no_final_response" : "yielded_control_plane_wait"] },
+          } }).where(eq(heartbeatRuns.id, next.id));
+        await responses.processPending();
+        if (failed || missing) expect(f.responseComments.get(originalId)!.body).toContain(failed
+          ? "This turn stopped before completing" : "This turn ended without publishing a final response");
+        else expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+        expect((await readChatActionsById(response.id))[0]).toMatchObject({
+          status: failed || missing ? "processed" : "cancelled", result: { final: true },
+        });
       } else {
         expect(f.responseComments.get(originalId)!.body).toContain(scenario === "failed"
           ? "This turn stopped before completing" : "This turn ended without publishing a final response");
@@ -3986,7 +4012,10 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       const f = await toolReplyFixture();
       const [response] = await db.select().from(chatActions).where(and(eq(chatActions.endpointId, f.endpoint.id), eq(chatActions.kind, "github_response_comment")));
       await db.update(chatActions).set({ status: "received", result: null }).where(eq(chatActions.id, response.id));
-      await db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.run.id));
+      await db.update(heartbeatRuns).set({ status: "succeeded", nativePhase: "committed", resultJson: { presentationDecision: {
+        schema: "paperclip.run_presentation_decision.v1", commentAction: "none", chosenSource: "none",
+        reasonCodes: ["no_final_response"],
+      } } }).where(eq(heartbeatRuns.id, f.run.id));
       await githubResponseCommentService(db, f.providerFetch).processPending();
       expect(f.responseComments.size).toBe(1);
       expect([...f.responseComments.values()][0].body).toContain("without publishing a final response");
@@ -4253,7 +4282,10 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     });
     it("does not invent a GitHub completion response when the agent sends no tool reply", async () => {
       const f = await toolReplyFixture();
-      await db.update(heartbeatRuns).set({ status: "succeeded", resultJson: { presentationDecision: { authorizationReason: "internal_agent_write" } } }).where(eq(heartbeatRuns.id, f.run.id));
+      await db.update(heartbeatRuns).set({ status: "succeeded", nativePhase: "committed", resultJson: { presentationDecision: {
+        schema: "paperclip.run_presentation_decision.v1", commentAction: "none", chosenSource: "none",
+        reasonCodes: ["no_final_response"], authorizationReason: "internal_agent_write",
+      } } }).where(eq(heartbeatRuns.id, f.run.id));
       await expect(resolveChatRunPresentationAuthorizationReason(db, f.session)).resolves.toBe("internal_agent_write");
       await enqueueChatRunMilestones(db); await f.service.processPendingPublications();
       expect(f.runtime.endpoints.get(f.endpoint.id)?.posts).toEqual([]);

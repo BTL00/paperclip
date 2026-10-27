@@ -141,6 +141,10 @@ For a long-lived task, repeat more than 100 continuations and check that tool
 access remains available. Fail a later GitHub run after a final answer and
 check that the earlier answer remains intact.
 After publishing a PR assessment, deliver an ordinary no-new-work author reply.
+Hold native presentation after execution succeeds. Verify maintenance makes no
+provider write while undecided, including repeated passes and the explicit
+fallback path. Commit either a passive wait, genuine missing response, or failure
+and verify that the same request settles once with the corresponding behavior.
 Verify the actual shared summary stays unchanged during queued/running
 acknowledgements and after the committed passive wait, including maintenance,
 restart and cleanup. Confirm the per-request acknowledgement is terminal and a

@@ -1258,6 +1258,13 @@ apply. Stream closure without a turn terminal is not proof of success. Event
 replay uses the existing source receipts and never repeats provider work merely
 to recover recorded output.
 
+Native execution success can precede its durable presentation decision. GitHub
+response maintenance without a confirmed current-run reply holds that request
+until the native phase is committed and a valid presentation decision exists.
+A confirmed current-run receipt can retire its placeholder. The same maintenance owner
+then rechecks the settled outcome; elapsed time cannot turn undecided output
+into a generic failure notice. Failed execution retains normal error fallback.
+
 GitHub main-PR response maintenance honors a committed native passive response wait
 whose server presentation decision intentionally selects no comment. It settles
 the current source's acknowledgement without a provider write or a fabricated

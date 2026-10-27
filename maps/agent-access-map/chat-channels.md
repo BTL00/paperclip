@@ -139,6 +139,10 @@ follow normal access checks. Provider-fixture coverage is not live GitHub proof.
 Native terminal reconciliation resolves the accepted run identity through the
 existing chat provenance resolver; an older run's reply cannot complete a newer
 request merely because both requests share the same PR comment.
+A terminal native success does not authorize missing-response publication while
+its native phase or durable presentation decision remains pending. Maintenance
+rechecks the same request after authoritative settlement; failures keep their
+separate fallback path.
 Maintenance projects the bounded server-committed native passive-wait decision
 only after current request ownership. It settles a no-comment acknowledgement
 without authorizing a new send or counting an old shared receipt as a current-run

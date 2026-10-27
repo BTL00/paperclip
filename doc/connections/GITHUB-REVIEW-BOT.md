@@ -169,6 +169,11 @@ permissions. Ordinary discussion does not change a review score. Repeat review
 mentions and pushes continue the existing task; inline replies return to the
 task owning that thread.
 
+A successful native execution can still be resolving its visible response.
+Without a confirmed reply for that run, maintenance waits for its committed
+presentation decision before choosing a completion fallback. It then uses the same saved request to settle the wait,
+publish a genuine missing-response notice, or report a failed turn.
+
 A queued or running follow-up acknowledgement preserves an existing App-owned
 final PR summary. A new validated assessment can replace it through the review
 publication path. When an authorized native turn commits a passive response

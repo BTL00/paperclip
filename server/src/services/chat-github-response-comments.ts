@@ -35,6 +35,16 @@ const responseRunColumns = {
   issueId: heartbeatRuns.issueId,
   status: heartbeatRuns.status,
   updatedAt: heartbeatRuns.updatedAt,
+  // Terminal execution can precede native presentation commit. Until its
+  // durable decision exists, missing output is undecided rather than failure.
+  nativePresentationPending: sql<boolean>`coalesce(
+    ${heartbeatRuns.status} = 'succeeded'
+    and ${heartbeatRuns.runtimeMode} = 'native'
+    and (${heartbeatRuns.nativePhase} is distinct from 'committed'
+      or ${heartbeatRuns.resultJson}->'presentationDecision'->>'schema' is distinct from 'paperclip.run_presentation_decision.v1'
+      or coalesce(${heartbeatRuns.resultJson}->'presentationDecision'->>'commentAction', '') not in ('none', 'create', 'reuse')),
+    false
+  )`,
   // Project only the server-committed no-publication decision, never the
   // potentially large native result or model-authored summary.
   passiveResponseWait: sql<boolean>`coalesce(
@@ -248,6 +258,9 @@ export function githubResponseCommentService(db: Db, fetchImpl = fetch) {
             companyId: source.endpoint.companyId, endpointId: source.endpoint.id,
             issueId: source.conversation.issueId!, runId: run.id }) : "none";
           if (reply === "unsettled") throw conflict("GitHub reply is still being resolved");
+          // A confirmed reply for this exact run can retire its placeholder.
+          // Otherwise terminal execution is not yet a missing-response decision.
+          if (ownsLatestRequest && run.nativePresentationPending && reply === "none") return;
           if (isMainPullResponse(source) && ownsLatestRequest && run.passiveResponseWait && reply === "none") {
             // A committed passive turn intentionally has no new response.
             // Settle this request's acknowledgement without editing the shared
@@ -403,6 +416,7 @@ export function githubResponseCommentService(db: Db, fetchImpl = fetch) {
         )).orderBy(desc(heartbeatRuns.createdAt), desc(heartbeatRuns.id)).limit(1);
         if (latest?.id !== run.id) throw forbidden("A newer GitHub run owns the response");
         if ((await responseForRequest())?.result?.final === true) throw forbidden("GitHub request already has a final response");
+        if (current.nativePresentationPending) throw conflict("GitHub native response presentation is still being resolved");
         if (isMainPullResponse(source) && current.passiveResponseWait) throw forbidden("GitHub run intentionally yielded without a new response");
         if (await githubRunReplyState(db, input) !== "none") throw conflict("GitHub reply is still being resolved");
       };
