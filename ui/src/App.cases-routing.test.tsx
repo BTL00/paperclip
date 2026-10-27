@@ -65,7 +65,7 @@ vi.mock("./pages/Cases", () => ({ Cases: () => <div>CASES_LIST_PAGE</div> }));
 vi.mock("./pages/CaseDetail", () => ({ CaseDetail: () => <div>CASE_DETAIL_PAGE</div> }));
 vi.mock("./pages/Approvals", async () => {
   const { useLocation } = await import("react-router-dom");
-  return { Approvals: () => <div>APPROVALS_LIST_PAGE {useLocation().pathname}</div> };
+  return { Approvals: () => { const location = useLocation(); return <div>APPROVALS_LIST_PAGE {location.pathname}{location.search}{location.hash}</div>; } };
 });
 vi.mock("./pages/ApprovalDetail", async () => {
   const { useLocation, useParams } = await import("react-router-dom");
@@ -140,9 +140,15 @@ describe("App unprefixed board routing", () => {
     vi.clearAllMocks();
   });
 
-  it.each(["/approvals", "/approvals/pending", "/approvals/all"])("redirects the unprefixed approval list %s to the selected company", async path => {
+  it.each([
+    ["/approvals", "/PAP/approvals/pending"],
+    ["/approvals/pending", "/PAP/approvals/pending"],
+    ["/approvals/all", "/PAP/approvals/all"],
+    ["/approvals?source=chat#history", "/PAP/approvals/pending?source=chat#history"],
+    ["/PAP/approvals?source=chat#history", "/PAP/approvals/pending?source=chat#history"],
+  ])("opens approval list %s at its exact selected-company destination", async (path, expected) => {
     const root = await renderAppAt(container, path);
-    try { await waitForRoute(container, "APPROVALS_LIST_PAGE /PAP/approvals/"); }
+    try { await vi.waitFor(() => expect(container.textContent).toBe(`APPROVALS_LIST_PAGE ${expected}`)); }
     finally { flushSync(() => root.unmount()); }
   });
 
