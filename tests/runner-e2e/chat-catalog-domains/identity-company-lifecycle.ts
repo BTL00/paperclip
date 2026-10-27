@@ -48,6 +48,8 @@ export const companyLifecycleIdentityCases: readonly ChatCatalogCase[] = [
       projectId: p.id, assigneeUserId: session.user.id, status: "backlog" });
     const members = await Promise.all([ctx.input.fixtures.company.id, other.id].map(id => ctx.input.api.get<{ members: Array<{ principalId: string }> }>(`/api/companies/${id}/members`)));
     const denied = await readAgentResource(ctx, `/api/companies/${other.id}/issues`);
+    // Public API fixture creation must be reflected in the browser company inventory.
+    await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
     return { otherCompany: other, foreignProject: p, foreignTask: work, foreignMarker, foreignPrefix: other.issuePrefix,
       humanOwnsBoth: members.every(result => result.members.some(member => member.principalId === session.user.id)), agentForeignReadStatus: denied.status };
   }, gradeCompanyLifecycle, {

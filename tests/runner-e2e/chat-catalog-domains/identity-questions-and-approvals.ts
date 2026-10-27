@@ -185,8 +185,8 @@ export const questionIdentityCases = [
     expectedRunCount: 2, observe: observeQuestion,
     async act(ctx, state) {
       await waitForReply(ctx);
-      const row = ctx.input.page.getByTestId("task-chat-unanswered-question").filter({ hasText: "Launch page details" }).first();
-      if (!(await ctx.input.page.getByTestId("task-chat-composer-takeover").isVisible())) await row.click();
+      const row = ctx.input.page.locator(`[id=${JSON.stringify(`interaction-${entity(state, "original").id}`)}]`);
+      await row.click();
       const form = ctx.input.page.getByTestId("task-chat-composer-takeover");
       await form.getByRole("button", { name: "Next", exact: true }).click();
       state.validationObserved = await form.getByText(/required|choose|select an option/i).first().isVisible();
@@ -212,8 +212,8 @@ export const questionIdentityCases = [
     async act(ctx, state) {
       await waitForReply(ctx); const page = ctx.input.page;
       const form = page.getByTestId("task-chat-composer-takeover");
-      const historical = page.getByTestId("task-chat-unanswered-question").filter({ hasText: "Launch page details" }).first();
-      if (!(await form.isVisible())) await historical.click();
+      const historical = page.locator(`[id=${JSON.stringify(`interaction-${entity(state, "original").id}`)}]`);
+      await historical.click();
       await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first().fill(String(state.answer));
       await form.getByRole("button", { name: /^Dismiss / }).click();
       await page.reload({ waitUntil: "domcontentloaded" });

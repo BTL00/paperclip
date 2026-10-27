@@ -107,9 +107,11 @@ export const runtimeAgentsCases = [
     const source = ctx.input.page.url();
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/agents/all`, { waitUntil: "domcontentloaded" });
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
+    await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/agents`, { waitUntil: "domcontentloaded" });
     const toggle = ctx.input.page.getByRole("button", { name: "Org chart view", exact: true });
-    if (await toggle.isVisible()) await toggle.click();
-    else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/org`, { waitUntil: "domcontentloaded" });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
     const morgan = ctx.input.page.locator("[data-org-card]").filter({ hasText: "Morgan" });
     const riley = ctx.input.page.locator("[data-org-card]").filter({ hasText: "Riley" });
     await expect(morgan).toBeVisible(); await expect(riley).toBeVisible();

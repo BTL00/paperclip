@@ -48,7 +48,8 @@ export const navigationIdentityCases = [
       await expect(ctx.input.page.getByRole("heading", { name: "Launch", exact: true }).first()).toBeVisible();
       await ctx.input.page.getByRole("button", { name: /^Filter/ }).first().click();
       for (const status of ["Backlog", "Todo", "In Progress", "In Review", "Blocked"]) {
-        await ctx.input.page.getByRole("checkbox", { name: status, exact: true }).setChecked(true);
+        const row = ctx.input.page.locator("label").filter({ has: ctx.input.page.getByText(status, { exact: true }) });
+        await row.getByRole("checkbox").setChecked(true);
       }
       await ctx.input.page.keyboard.press("Escape");
       await expect(ctx.input.page.getByText(entity(state, "task").title!, { exact: true }).first()).toBeVisible();
