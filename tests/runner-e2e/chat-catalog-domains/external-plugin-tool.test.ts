@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradePluginTool, previewToolManifest } from "./external-plugin-tool.js";
+import { failedPreviewReply, gradePluginTool, previewToolManifest } from "./external-plugin-tool.js";
 
 function valid() {
   return {
@@ -23,6 +23,12 @@ describe("real admitted website preview contribution", () => {
     expect(manifest.jobs).toBeUndefined();
   });
   it("accepts the actual successful view and separately observed missing-artifact phase", () => expect(gradePluginTool(valid()).passed).toBe(true));
+  it("distinguishes a prior preview from a contradictory fresh success claim", () => {
+    const o=valid();o.phaseReplies[1]!.body="The earlier preview succeeded, but the artifact is now unavailable, so I cannot render a fresh preview.";
+    expect(gradePluginTool(o).passed).toBe(true);
+    for(const text of ["Preview succeeded. The artifact is unavailable.","I rendered a fresh preview, but the artifact is unavailable.","Here is the working preview. One artifact is missing."])expect(failedPreviewReply(text)).toBe(false);
+    expect(failedPreviewReply("The website is not ready; the artifact is missing.")).toBe(true);
+  });
   it("rejects installed-only, wrong scope/phase/artifact and cached success evidence", () => {
     for (const mutate of [
       (o: ReturnType<typeof valid>) => { o.state.toolVisibleToAgent = false; },
@@ -34,6 +40,7 @@ describe("real admitted website preview contribution", () => {
       (o: ReturnType<typeof valid>) => { o.state.receipts[1]!.failed = false; },
       (o: ReturnType<typeof valid>) => { o.phaseReplies[1]!.body = "The website is now ready despite a missing optional icon."; },
       (o: ReturnType<typeof valid>) => { o.phaseReplies[1]!.body = "Here is the website preview."; },
+      (o: ReturnType<typeof valid>) => { o.phaseReplies[1]!.body = "Preview succeeded. The artifact is unavailable."; },
       (o: ReturnType<typeof valid>) => { o.runs[1]!.status = "failed"; },
     ]) { const o = valid(); mutate(o); expect(gradePluginTool(o).passed).toBe(false); }
     expect(gradePluginTool(undefined).passed).toBe(false);
