@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 import { chatChannelExternalCases } from "./external-chat-channels.js";
 import { gatewayClientExternalCases } from "./external-gateway-client.js";
+import { pluginInstallExternalCases } from "./external-plugin-install.js";
 import { assistantDeviceExternalCases } from "./external-assistant-device.js";
 import { pluginExternalCases } from "./external-plugins.js";
 import { appCatalogExternalCases } from "./external-app-catalog.js";
@@ -13,7 +14,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -21,7 +22,11 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id === "gateways-profiles.connect-client") {
+  if (id === "plugins.install-plugin") {
+    Object.assign(o.state, { pluginId: "plugin", pluginKey: "synthetic.preview", syntheticPackage: true, pluginAfter: { id: "plugin", pluginKey: "synthetic.preview", status: "ready", manifestJson: { displayName: "Website Preview Eval" } }, operatorChannel: "board-api-local-path", agentInstallStatus: 403, absentBeforeHuman: true, humanInstallStatus: 200, previewReadback: true, humanSawActivation: true });
+    o.reply = "An instance administrator can install Website Preview Eval through plugin management.";
+    o.activity = [{ id: "activity", entityId: "plugin", actorType: "user", action: "plugin.installed" }];
+  } else if (id === "gateways-profiles.connect-client") {
     Object.assign(o.state, { profileId: "profile", readEntryId: "read", writeEntryId: "write", connectionId: "connection", sourceIssueId: "source", probeRunId: "initial",
       effective: { agentId: "ceo", profiles: [{ id: "profile" }], allowedTools: [{ id: "read" }] }, sessionCreated: true, discoveredRead: true, discoveredWrite: false,
       decisions: [{ runId: "initial", decisions: [{ invocation: { runId: "initial", agentId: "ceo", issueId: "source", connectionId: "connection", catalogEntryId: "read", status: "succeeded" } }] }],
@@ -85,6 +90,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "plugins.install-plugin": o => { o.state.pluginAfter = { id: "plugin", pluginKey: "synthetic.preview", status: "error" }; },
   "gateways-profiles.connect-client": o => { o.state.providerWriteCalls = 1; },
   "assistant-connections.device-login": o => { o.state.elapsedBeforeExpiryProbe = 500; },
   "plugins.configure-plugin": o => { o.state.configuredReadback = false; },
