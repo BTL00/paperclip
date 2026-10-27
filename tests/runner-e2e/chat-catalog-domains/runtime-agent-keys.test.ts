@@ -12,6 +12,7 @@ function valid() {
     runs: [], humanQueries: [] };
 }
 it("accepts secure one-time human creation and actual credential revocation", () => expect(gradeAgentKey(valid()).passed).toBe(true));
+it("accepts natural secure human-key guidance", () => { const o = valid(); o.reply = "Open Morgan's profile API key controls and create the local integration credential in your board session. Keep the one-time value private."; expect(gradeAgentKey(o).passed).toBe(true); });
 it("rejects missing human credential evidence", () => expect(gradeAgentKey(undefined).passed).toBe(false));
 it("rejects a key that authenticates a different agent", () => {
   const o = valid(); o.state.createdKeyAgentId = "other"; expect(gradeAgentKey(o).passed).toBe(false);

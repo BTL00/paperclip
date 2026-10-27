@@ -12,6 +12,7 @@ function valid() {
       { id: "query", agentId: "ceo", status: "succeeded" }, { id: "completion", agentId: "ceo", status: "succeeded" }] };
 }
 it("accepts actual prior native delegation, accurate busy status and automatic result delivery", () => expect(gradeTrackDelegatedWork(valid()).passed).toBe(true));
+it("accepts natural attributed pending and completion reports", () => { const o = valid(); o.state.queryReply = "The Website task remains with Morgan, who is waiting on the brief and has not finished this turn."; o.state.delivery.response.body = "Morgan completed the Website task; its saved result is available."; expect(gradeTrackDelegatedWork(o).passed).toBe(true); });
 it("rejects missing handoff evidence", () => expect(gradeTrackDelegatedWork(undefined).passed).toBe(false));
 it("rejects a task manually seeded instead of created by that conversation", () => { const o = valid(); o.state.createdFromSource = false; expect(gradeTrackDelegatedWork(o).passed).toBe(false); });
 it("rejects completion language from the wrong query phase", () => { const o = valid(); o.state.queryReply = "The website has finished."; expect(gradeTrackDelegatedWork(o).passed).toBe(false); });

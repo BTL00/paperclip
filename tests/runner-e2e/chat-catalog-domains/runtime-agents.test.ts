@@ -39,6 +39,15 @@ function valid(id: string): RuntimeObservation {
   return o;
 }
 describe("runtime agent oracles", () => {
+  it("accepts substantive paraphrases for each authored agent outcome", () => {
+    const replies: Record<string, string> = {
+      "agents.change-manager": "Morgan now reports to Riley; the reporting relationship is saved.",
+      "agents.hire-denied": "Hiring is denied by my effective permissions. A board administrator can create Morgan through the human hiring flow.",
+      "agents.edit-instructions": "Morgan's saved instructions now require relevant tests before a handoff; the guidance applies to future work.",
+      "agents.restore-instructions": "Morgan's instruction file is back at the previous saved version; the unwanted change is removed.",
+    };
+    for (const [id, reply] of Object.entries(replies)) { const o = valid(id); o.reply = reply; expect(gradeRuntimeAgents(o).passed, id).toBe(true); }
+  });
   for (const definition of runtimeAgentsCases) {
     it(`${definition.scenarioId} accepts independent valid evidence`, () => expect(definition.grade(valid(definition.scenarioId)).passed).toBe(true));
     it(`${definition.scenarioId} rejects missing evidence`, () => expect(definition.grade(undefined).passed).toBe(false));

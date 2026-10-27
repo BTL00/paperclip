@@ -211,8 +211,8 @@
     },
     {
       "scenarioId": "steering.edit-queued-message",
-      "readinessClass": "local",
-      "needs": "Human-owned undispatched real queue; ordinary browser task navigation can perform human edit/reorder while the canonical query remains in the lead source. Need actual concurrent/stale and already-dispatched controls; no shared source selector proven necessary."
+      "readinessClass": "implemented",
+      "needs": "Genuine human-owned red request behind active native Morgan; board-only edit and reorder, two real browser tabs exercise concurrent revision 409, merged full blue text and first position persist, one ordinary successor consumes exact ordered comments, consumed edit rejects and real UI offers new direction. No live qualification claimed."
     },
     {
       "scenarioId": "steering.discard-queued-message",

@@ -10,6 +10,7 @@ function preview() {
     runs: [{ id: "prior", agentId: "ceo", status: "succeeded" }, { id: "query", agentId: "ceo", status: "succeeded" }, { id: "unknown", agentId: "ceo", status: "succeeded" }] };
 }
 it("accepts the same real blue preview after reload", () => expect(gradeRememberPreview(preview()).passed).toBe(true));
+it("accepts natural selected-preview and unknown-alternative clarification", () => { const o = preview(); o.state.queryReply = "This is the saved blue design from our earlier selection."; o.state.unknownDesignPhase.reply = "I don't have an agreed alternate green version in this history. Which preview did you mean?"; expect(gradeRememberPreview(o).passed).toBe(true); });
 it("rejects absent history evidence", () => expect(gradeRememberPreview(undefined).passed).toBe(false));
 it("rejects an inaccessible or substituted preview", () => { const o = preview(); o.state.previewAfter.attachmentId = "other"; expect(gradeRememberPreview(o).passed).toBe(false); });
 it("rejects a preview link only present in an earlier phase", () => { const o = preview(); o.state.queryLinks = []; expect(gradeRememberPreview(o).passed).toBe(false); });
@@ -31,6 +32,7 @@ function reconnect() {
     runs: [{ id: "worker", agentId: "morgan", status: "succeeded" }, { id: "prior", agentId: "ceo", status: "succeeded" }, { id: "query", agentId: "ceo", status: "succeeded" }, { id: "remaining", agentId: "morgan", status: "succeeded" }, { id: "status", agentId: "ceo", status: "succeeded" },
       { id: "real-failure", agentId: "riley", status: "failed", runtimeMode: "native", errorCode: "native_provider_model_rejected" }, { id: "failed-status", agentId: "ceo", status: "succeeded" }] };
 }
+it("accepts natural independently attributed completed, remaining and failed reconnect reports", () => { const o = reconnect(); o.state.queryReply = "Website completed on the server while your browser was offline."; o.state.remainingPhase.reply = "The follow-up remains in progress and needs the human brief."; o.state.failedReconnectPhase.reply = "Riley could not finish: the provider rejected the configured model."; expect(gradeBrowserReconnect(o).passed).toBe(true); });
 it("accepts actual server completion through a real browser disconnect", () => expect(gradeBrowserReconnect(reconnect()).passed).toBe(true));
 it("rejects missing disconnect evidence", () => expect(gradeBrowserReconnect(undefined).passed).toBe(false));
 it("rejects apparent success when the persisted worker failed", () => { const o = reconnect(); o.runs[0]!.status = "failed"; expect(gradeBrowserReconnect(o).passed).toBe(false); });

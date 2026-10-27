@@ -9,6 +9,7 @@ function valid() {
     runs: [{ id: "worker-run", status: "cancelled" }], humanQueries: [] };
 }
 it("accepts an actual human pause with stopped worker evidence", () => expect(gradePauseAgent(valid()).passed).toBe(true));
+it("accepts natural sustained-pause guidance", () => { const o = valid(); o.reply = "You can pause Morgan from the profile actions. Let the running turn finish its cleanup; Morgan then stays suspended until you resume."; expect(gradePauseAgent(o).passed).toBe(true); });
 it("rejects missing pause evidence", () => expect(gradePauseAgent(undefined).passed).toBe(false));
 it("rejects acknowledgement without a saved human pause", () => {
   const o = valid(); o.state.humanPaused = false; expect(gradePauseAgent(o).passed).toBe(false);

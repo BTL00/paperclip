@@ -12,6 +12,7 @@ function valid() {
     reply: "Open Morgan's profile and choose Set as my primary; confirm replacing your personal primary." };
 }
 it("accepts a confirmed personal preference with isolated scope", () => expect(gradePrimary(valid()).passed).toBe(true));
+it("accepts natural personal-primary guidance", () => { const o = valid(); o.reply = "In Morgan's profile, select Set as my primary and confirm the replacement. This changes your personal primary preference."; expect(gradePrimary(o).passed).toBe(true); });
 it("rejects missing primary evidence", () => expect(gradePrimary(undefined).passed).toBe(false));
 it("rejects an agent preference write before the human control", () => {
   const o = valid(); o.state.beforeHumanPrimary = "morgan"; expect(gradePrimary(o).passed).toBe(false);

@@ -13,6 +13,7 @@ function valid() {
     runs: [{ id: "worker", agentId: "morgan", status: "cancelled" }, { id: "guidance", agentId: "ceo", status: "succeeded" }] };
 }
 it("accepts human retirement with confirmed stop and retained historical work", () => expect(gradeRetirement(valid()).passed).toBe(true));
+it("accepts natural retirement guidance", () => { const o = valid(); o.state.queryReply = "You can retire Morgan with Terminate in the profile actions. The active assignment stops after cleanup; earlier task history remains attributable to Morgan."; expect(gradeRetirement(o).passed).toBe(true); });
 it("rejects absent retirement evidence", () => expect(gradeRetirement(undefined).passed).toBe(false));
 it("rejects merely renaming the employee", () => { const o = valid(); o.state.retiredWorker.name = "Retired Morgan"; expect(gradeRetirement(o).passed).toBe(false); });
 it("rejects deleting historical work", () => { const o = valid(); o.tasks = o.tasks.filter(row => row.id !== "history"); expect(gradeRetirement(o).passed).toBe(false); });

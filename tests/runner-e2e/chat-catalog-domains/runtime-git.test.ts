@@ -13,6 +13,7 @@ function valid() {
     runs: [{ id: "setup", agentId: "morgan", status: "succeeded" }, { id: "query", agentId: "ceo", status: "succeeded" }] };
 }
 it("accepts an actual uncommitted diff summary with unchanged prior work", () => expect(gradeInspectGit(valid()).passed).toBe(true));
+it("accepts natural substantive working-tree reporting", () => { const o = valid(); o.reply = "header.html has an uncommitted replacement: Launch later becomes Launch sooner. The working tree also retains the human edit in existing-notes.txt."; expect(gradeInspectGit(o).passed).toBe(true); });
 it("rejects absent repository evidence", () => expect(gradeInspectGit(undefined).passed).toBe(false));
 it("rejects inspecting another checkout", () => { const o = valid(); o.state.nativeInspectionCwd = "/other/website"; expect(gradeInspectGit(o).passed).toBe(false); });
 it("rejects dropping the unrelated existing change", () => { const o = valid(); o.state.notesAfter = ""; expect(gradeInspectGit(o).passed).toBe(false); });

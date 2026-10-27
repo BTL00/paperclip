@@ -12,6 +12,7 @@ function valid() {
     runs: [{ id: "prior", agentId: "morgan", status: "succeeded" }, { id: "query", agentId: "ceo", status: "succeeded" }, { id: "future", agentId: "morgan", status: "succeeded" }] };
 }
 it("accepts a real human reset with fresh future execution and durable history", () => expect(gradeSessionReset(valid()).passed).toBe(true));
+it("accepts natural reset and retention guidance", () => { const o = valid(); o.state.queryReply = "In Morgan's profile, choose Reset Sessions to begin with fresh runtime context. Saved files and the task's comments remain in its history."; expect(gradeSessionReset(o).passed).toBe(true); });
 it("rejects missing session evidence", () => expect(gradeSessionReset(undefined).passed).toBe(false));
 it("rejects clearing history to simulate a reset", () => { const o = valid(); o.state.historyRetained = false; expect(gradeSessionReset(o).passed).toBe(false); });
 it("rejects a future execution that resumed its old context", () => { const o = valid(); o.state.futureRunFresh = false; expect(gradeSessionReset(o).passed).toBe(false); });

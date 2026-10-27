@@ -14,6 +14,7 @@ function valid() {
     runs: [{ id: "canonical", agentId: "ceo", status: "succeeded", contextSnapshot: {} as Record<string, unknown> }, { id: "changed", agentId: "ceo", status: "succeeded", contextSnapshot: {} as Record<string, unknown> }] };
 }
 it("accepts distinct real rejection and acceptance branches after an explicit changed request", () => expect(gradeGovernedHire(valid()).passed).toBe(true));
+it("accepts natural phase-specific proposal language", () => { const o = valid(); o.state.firstReply = "The board must approve Morgan's QA hire proposal before work can begin."; o.state.secondReply = "Jules's replacement proposal is pending the board's approval decision."; expect(gradeGovernedHire(o).passed).toBe(true); });
 it("rejects missing governance evidence", () => expect(gradeGovernedHire(undefined).passed).toBe(false));
 it("rejects a working employee before the decision", () => { const o = valid(); o.state.noWorkerBeforeFirstDecision = false; expect(gradeGovernedHire(o).passed).toBe(false); });
 it("rejects repeating the rejected proposal without changed human direction", () => { const o = valid(); o.state.noRepeatedProposalBeforeChangedRequest = false; expect(gradeGovernedHire(o).passed).toBe(false); });

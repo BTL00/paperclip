@@ -8,6 +8,7 @@ function valid() { return { scenarioId: "steering.queue-follow-up", origin: "htt
   agents: [], tasks: [{ id: "website", assigneeAgentId: "morgan", status: "done" }], links: [], activity: [], reply: "", humanQueries: [],
   runs: [{ id: "prior", agentId: "morgan", status: "succeeded" }, { id: "controller", agentId: "ceo", status: "succeeded" }, { id: "successor", agentId: "morgan", status: "succeeded" }] }; }
 it("accepts actual ordered queue admission and one later consuming native turn", () => expect(gradeQueuedFollowup(valid()).passed).toBe(true));
+it("accepts natural pending-delivery guidance", () => { const o = valid(); o.state.queryReply = "Morgan is occupied with the current turn. Your contact requirement will wait behind it for the next eligible continuation."; expect(gradeQueuedFollowup(o).passed).toBe(true); });
 it("rejects absent queue evidence", () => expect(gradeQueuedFollowup(undefined).passed).toBe(false));
 it("rejects forwarding to a similarly named task", () => { const o = valid(); o.state.queuedAtReply.issueId = "other"; expect(gradeQueuedFollowup(o).passed).toBe(false); });
 it("rejects claiming implementation while the requirement is only queued", () => { const o = valid(); o.state.queryReply = "The contact section is complete."; expect(gradeQueuedFollowup(o).passed).toBe(false); });

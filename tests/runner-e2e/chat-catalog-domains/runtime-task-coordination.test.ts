@@ -9,6 +9,7 @@ function valid() {
     activity: [], runs: [], humanQueries: [] };
 }
 it("accepts an independently saved acyclic rejection", () => expect(gradeDependencyCycle(valid()).passed).toBe(true));
+it("accepts natural actionable cycle explanation", () => { const o = valid(); o.reply = "Design already waits for Website. Adding the reverse edge would make a dependency cycle; tell me which task should go first."; expect(gradeDependencyCycle(o).passed).toBe(true); });
 it("rejects missing dependency detail", () => expect(gradeDependencyCycle(undefined).passed).toBe(false));
 it("rejects a plausible explanation with the cycle actually saved", () => {
   const o = valid(); o.dependencyTasks[0]!.blockedBy = [{ id: "design" }]; expect(gradeDependencyCycle(o).passed).toBe(false);

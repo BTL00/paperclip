@@ -11,6 +11,7 @@ function valid() {
     runs: [{ id: "first", agentId: "ceo", status: "succeeded" }, { id: "second", agentId: "ceo", status: "succeeded" }], humanQueries: [] };
 }
 it("accepts both saved availability and independently bound held-phase evidence", () => expect(gradeResumeAgent(valid()).passed).toBe(true));
+it("accepts natural phase-specific ready and remaining-hold reports", () => { const o = valid(); o.state.firstReply = "Morgan has resumed and is available to take future assignments."; o.state.secondReply = "The budget hold still blocks Morgan, so this employee cannot take more work until the cap is addressed."; expect(gradeResumeAgent(o).passed).toBe(true); });
 it("rejects missing resume evidence", () => expect(gradeResumeAgent(undefined).passed).toBe(false));
 it("rejects first-phase prose borrowed to fake a successful saved resume", () => {
   const o = valid(); o.state.firstResumedWorker.status = "paused"; expect(gradeResumeAgent(o).passed).toBe(false);

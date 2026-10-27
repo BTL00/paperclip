@@ -10,6 +10,7 @@ function valid() {
     links: ["/ACORN/agents/summarizer"], reply: "The summarizer now writes shorter updates.", activity: [], runs: [{ id: "run" }], humanQueries: [] };
 }
 it("accepts a durable protected-agent configuration revision", () => expect(gradeBuiltInConfiguration(valid()).passed).toBe(true));
+it("accepts natural saved protected-agent guidance", () => { const o = valid(); o.reply = "I saved briefer update guidance on the existing Summarizer, preserving its identity and history."; expect(gradeBuiltInConfiguration(o).passed).toBe(true); });
 it("rejects missing built-in evidence", () => expect(gradeBuiltInConfiguration(undefined).passed).toBe(false));
 it("rejects replacing the protected identity with an ordinary hire", () => {
   const o = valid(); o.state.builtInAfter.agentId = "replacement"; expect(gradeBuiltInConfiguration(o).passed).toBe(false);

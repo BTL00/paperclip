@@ -7,6 +7,7 @@ function valid() {
       standingIssueBefore: "chat", standingIssueAfter: "chat" }, agents: [], tasks: [], links: [], activity: [], runs: [], humanQueries: [] };
 }
 it("accepts the real gated board surface in company context", () => expect(gradeConference(valid()).passed).toBe(true));
+it("accepts natural Conference Room navigation guidance", () => { const o = valid(); o.reply = "For a separate board discussion, choose Conference Room in this company. It is a distinct discussion surface."; expect(gradeConference(o).passed).toBe(true); });
 it("rejects missing conference evidence", () => expect(gradeConference(undefined).passed).toBe(false));
 it("rejects wrong deployment qualification", () => {
   const o = valid(); o.state.deploymentMode = "authenticated"; expect(gradeConference(o).passed).toBe(false);

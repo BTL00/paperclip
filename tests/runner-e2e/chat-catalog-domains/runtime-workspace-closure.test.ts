@@ -13,6 +13,7 @@ function valid() {
     runs: ["morgan", "riley", "ceo", "ceo"].map((agentId, index) => ({ id: String(index), agentId, status: "succeeded" })) };
 }
 it("accepts real closed state with retained artifact retrieval and untouched other work", () => expect(gradeWorkspaceClosure(valid()).passed).toBe(true));
+it("accepts natural closed-workspace retrieval guidance", () => { const o = valid(); o.reply = "I archived this workspace. The earlier artifact remains available to download, so you can still retrieve the saved file."; expect(gradeWorkspaceClosure(o).passed).toBe(true); });
 it("rejects missing closure evidence", () => expect(gradeWorkspaceClosure(undefined).passed).toBe(false));
 it("rejects a friendly acknowledgement while the workspace remains active", () => { const o = valid(); o.state.closedWorkspace.status = "active"; expect(gradeWorkspaceClosure(o).passed).toBe(false); });
 it("rejects retaining only an attachment row without verified saved bytes", () => { const o = valid(); o.state.retainedArtifact.contentVerified = false; expect(gradeWorkspaceClosure(o).passed).toBe(false); });

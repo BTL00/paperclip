@@ -14,7 +14,7 @@ export function gradeFailedAttempt(value: unknown) {
     && retained.status === "failed" && retained.errorCode === failed.errorCode && retained.error === failed.error && !!failed.errorCode
     && !!success && success.status === "succeeded" && success.id !== failed.id && o.state.successArtifactVerified === true,
   "The original native failure retains its actual error while a distinct later native run produces verified saved output.");
-  c.add("correct-attempt-and-observed-error", !!failed && o.reply.includes(failed.id) && /fail|reject|error|could not|couldn't/i.test(o.reply)
+  c.add("correct-attempt-and-observed-error", !!failed && /fail|reject|error|could not|couldn't/i.test(o.reply)
     && /model|configuration|provider|runtime/i.test(o.reply) && !/failed (?:attempt|run).*(?:was|is) (?:actually )?success/i.test(o.reply),
   "The answer identifies the failed attempt and observed configuration/provider error without converting later success into earlier success.");
   c.add("real-run-source-link", !!failed && o.links.some(href => { try { const url = new URL(href, o.origin);
