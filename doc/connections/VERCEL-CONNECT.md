@@ -14,11 +14,12 @@ This is an opt-in exception to the normal instance-vault custody rule, not a new
 connection model. Profiles, policies, ask-first approvals, changed-tool
 quarantine, resource filters, installs, and audit continue to use Apps v2.
 
-> **Preview UI paused:** Paperclip currently withholds Vercel Connect from Apps
-> Browse and redirects `/apps/vercel-connect` back to Apps. The persisted model,
-> runtime resolver, and existing-connection management remain in place so saved
-> references are not orphaned. New operator setup is intentionally unavailable
-> until the integration is ready for another product review.
+The standalone Vercel Connect entry is withheld from Apps Browse. Reviewed
+provider deep links remain supported: `/apps/vercel-connect?source=notion`
+uses the ordinary company-scoped Apps setup route with Vercel as the credential
+source. The route admits supported catalog providers, and the setup flow checks
+the gallery's instance availability before accepting a new connector reference.
+A bare `/apps/vercel-connect` URL without a supported source redirects to Apps.
 
 ## Deployment configuration
 
@@ -26,7 +27,7 @@ Paperclip pins `@vercel/connect` to `0.6.1`.
 
 | Setting | Meaning |
 | --- | --- |
-| `PAPERCLIP_VERCEL_CONNECT_ENABLED=true` | Enables the backend capability for controlled testing and existing connections. It does not currently expose a customer-facing setup entry. |
+| `PAPERCLIP_VERCEL_CONNECT_ENABLED=true` | Enables new setup through reviewed provider deep links when credentials are configured. It does not expose a standalone Browse entry. |
 | `VERCEL_OIDC_TOKEN` | Workload identity injected by Vercel and preferred when present. |
 | `PAPERCLIP_VERCEL_CONNECT_ACCESS_TOKEN` | BYO instance bootstrap authority for deployments without Vercel workload OIDC. |
 | `PAPERCLIP_INSTANCE_ID` | Included in derived pseudonymous user subjects when configured. |
@@ -59,18 +60,19 @@ the platform injects and refreshes workload identity automatically. Provider
 tokens returned by Connect are also short-lived and are refreshed through the
 normal SDK cache path rather than persisted by Paperclip.
 
-## Operator setup (currently withheld from the product UI)
+## Operator setup through a reviewed provider deep link
 
-The following flow is retained as implementation and test documentation. It is
-not available from Apps while the preview UI is paused.
+Only reviewed methods advertising this credential source support this flow.
+Search discovery must explain unavailable instance prerequisites rather than
+present an unavailable source as ready.
 
 1. Open [Vercel Connect](https://vercel.com/connect), create the provider
    connector, and attach it to the project/environments allowed to run
    Paperclip. Vercel remains the inventory and management UI.
-2. In a future reviewed build, Paperclip will expose one isolated Vercel Connect
-   setup entry. Native PostHog, Linear, Notion, and other provider setup screens
-   will not show Vercel as a credential option. The retained pilot definitions
-   cover PostHog, Linear, and Notion.
+2. Open the company-scoped Vercel setup link for the reviewed provider and
+   method. This preserves the selected credential source rather than opening
+   the ordinary provider OAuth card. Only catalog methods with a reviewed
+   Vercel credential-source declaration are eligible.
 3. Choose the reviewed app, open the Vercel handoff if needed, and paste only
    the connector UID (for example `notion/paperclip`) or connector ID (`scl_…`).
 4. Paperclip calls `getConnectorMetadata` and rejects missing, unattached, or

@@ -207,11 +207,14 @@ describeEmbeddedPostgres("connectionIntentService", () => {
     try {
       const before = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.issueId, issueId));
       const service = connectionIntentService(db);
-      for (const query of ["Notion", "Compare Linear and Notion"]) {
+      for (const query of ["Notion", "Compare Linear and Notion", "Connect Notion with Vercel Connect"]) {
         const result = await service.search(claims, query);
         expect(result.instruction).toMatch(/For setup advice or comparison, explain/);
         expect(result.instruction).toMatch(/If the user explicitly requests setup or selects a method/);
         expect(result.instruction).not.toContain("user already asked to connect");
+        expect(result.instruction).toContain("share that source's setupPath only when available");
+        expect(result.instruction).toContain("otherwise explain its reason");
+        expect(result.instruction).toContain("Do not silently replace the selected source");
         expect(result.results.find(item => item.service === "notion")?.methods).toContainEqual(expect.objectContaining({
           key: "mcp-oauth", whenToUse: "Use the provider-hosted connection for the quickest setup.",
           setupPath: "/CONN/apps/connect?source=notion&method=mcp-oauth",

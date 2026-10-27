@@ -36,7 +36,7 @@ export interface ConnectionSearchResultItem {
     }>;
     /** AgentMail channel setup and tool methods support connection_request cards. */
     purpose?: "tool" | "channel" | "ai";
-    /** Company-scoped setup destination for methods with a separate setup flow. */
+    /** Company-scoped supported setup destination; tool methods also support the inline connection_request card. */
     setupPath?: string;
   }>;
   state: ConnectionAvailabilityState;

@@ -40,6 +40,14 @@ describe("app connect policy", () => {
     expect(canEnterAppsConnect(new URLSearchParams("byo=1&source=zapier"))).toBe(false);
   });
 
+  it("admits a reviewed Vercel provider deep link while rejecting the bare source picker", () => {
+    const href = vercelConnectSourceHref("notion");
+    expect(href).toBe("/apps/vercel-connect?source=notion");
+    expect(canEnterAppsConnect(new URL(href, "https://paperclip.test").searchParams)).toBe(true);
+    expect(canEnterAppsConnect(new URLSearchParams())).toBe(false);
+    expect(canEnterAppsConnect(new URLSearchParams("source=unknown"))).toBe(false);
+  });
+
   it("keeps only exact custom MCP reconnects on the legacy BYO query contract", () => {
     expect(canEnterAppsConnect(new URLSearchParams(
       "byo=1&reconnect=connection-1&applicationId=application-1&link=https%3A%2F%2Fmcp.example.com",

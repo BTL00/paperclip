@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getConnectableAppDefinition } from "@paperclipai/shared";
 import {
+  credentialSourceSelectionInstruction,
   connectionMethodDiscoveryMetadata,
   connectionSetupAdviceInstruction,
 } from "./connection-method-discovery.js";
@@ -56,6 +57,17 @@ describe("reviewed connection setup discovery", () => {
     expect(connectionSetupAdviceInstruction).toContain(
       "Search alone does not authorize",
     );
+  });
+  it("preserves an explicitly selected credential source rather than silently starting ordinary OAuth", () => {
+    expect(credentialSourceSelectionInstruction).toContain("share that source's setupPath only when available");
+    expect(credentialSourceSelectionInstruction).toContain("otherwise explain its reason");
+    expect(credentialSourceSelectionInstruction).toContain("Do not silently replace");
+    expect(connectionSetupAdviceInstruction).toContain(credentialSourceSelectionInstruction);
+  });
+  it("does not advertise a reviewed source for an unrelated service", () => {
+    expect(connectionMethodDiscoveryMetadata(notion, "unrelated", "ACORN", {
+      available: true, reason: null,
+    })).not.toHaveProperty("credentialSources");
   });
   it("uses the board catalog's actual disabled, missing-credential and available states without exporting credentials", () => {
     for (const [env, available, reason] of [
