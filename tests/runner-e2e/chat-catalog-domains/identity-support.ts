@@ -6,8 +6,9 @@ export interface IdentityObservation extends InternalObservation {
   companies: Entity[]; company: Entity; agents: Entity[]; interactions: Interaction[];
 }
 export interface Interaction extends Entity {
-  kind: string; status: string; payload: { prompt?: string; toolAction?: { connectionId?: string; actionRequestId?: string }; questionSet?: { submitLabel?: string; questions: Array<{ id: string; prompt: string; answerMode: string; required?: boolean }> } };
-  result?: { answers?: Array<{ questionId: string; otherText?: string; optionIds?: string[] }> };
+  idempotencyKey?: string | null;
+  kind: string; status: string; payload: { prompt?: string; runtimeRequestId?: string; toolAction?: { connectionId?: string; actionRequestId?: string }; questionSet?: { submitLabel?: string; questions: Array<{ id: string; prompt: string; answerMode: string; required?: boolean; customAnswer?: { enabled: boolean; label?: string } }> } };
+  result?: { toolAction?: { status: string; errorCode?: string | null; errorMessage?: string | null }; answers?: Array<{ questionId: string; otherText?: string; optionIds?: string[] }> };
   resolvedByUserId?: string; resolvedByAgentId?: string; sourceRunId?: string;
 }
 export async function openStandingChat(ctx: ChatCatalogContext) {

@@ -12,7 +12,7 @@ async function cards(ctx: ChatCatalogContext) {
 }
 async function questionFixture(ctx: ChatCatalogContext, multipart: boolean) {
   const source = await openStandingChat(ctx);
-  const payload = createIssueThreadInteractionSchema.parse({ kind: "ask_user_questions", title: "Launch page details", continuationPolicy: "none",
+  const payload = createIssueThreadInteractionSchema.parse({ kind: "ask_user_questions", title: "Launch page details", continuationPolicy: "wake_assignee",
     payload: { version: 1, supersedeOnUserComment: false, questionSet: { schema: "paperclip.question_set.v1", title: "Launch page details", submitLabel: "Submit answers",
       questions: multipart ? [
         { id: "audience", prompt: "Who is the audience?", answerMode: "single_select", required: true, options: [{ id: "researchers", label: "Researchers" }, { id: "teams", label: "Teams" }] },
@@ -27,8 +27,29 @@ async function questionFixture(ctx: ChatCatalogContext, multipart: boolean) {
 async function answerText(ctx: ChatCatalogContext, answer: string) {
   const form = ctx.input.page.getByTestId("task-chat-composer-takeover");
   await expect(form).toBeVisible();
-  await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first().fill(answer);
+  const text = form.getByTestId("question-text-answer-composer");
+  if (await text.isVisible()) await text.locator('[contenteditable="true"],textarea').first().fill(answer);
+  else {
+    const pending = (await cards(ctx)).find(row => row.kind === "ask_user_questions" && row.status === "pending");
+    const label = pending?.payload.questionSet?.questions[0]?.customAnswer?.label ?? "Other";
+    await form.getByRole("radio", { name: label, exact: true }).click();
+    await form.getByTestId("question-other-answer-composer").locator('[contenteditable="true"],textarea').first().fill(answer);
+  }
   await form.getByRole("button", { name: /^(Submit|Send) answers$/ }).click();
+}
+async function beforeAnswer(ctx: ChatCatalogContext, state: Record<string, unknown>) {
+  state.beforeAnswerCommentIds = (await ctx.input.api.get<Array<{ id: string }>>(`/api/issues/${ctx.issue()!.id}/comments`)).map(row => row.id);
+  state.beforeAnswerTasks = (await ctx.input.api.get<Array<{ id: string; title: string; description?: string; updatedAt: string }>>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true`)).filter(row => row.id !== ctx.issue()!.id)
+    .map(row => ({ id: row.id, title: row.title, description: row.description, updatedAt: row.updatedAt }));
+}
+async function observeQuestion(ctx: ChatCatalogContext, state: Record<string, unknown>) {
+  const observed = await observeIdentity(ctx, state);
+  const seen = new Set(state.beforeAnswerCommentIds as string[] | undefined);
+  state.afterAnswerReply = (await ctx.input.api.get<Array<{ id: string; body: string; authorAgentId?: string }>>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`))
+    .filter(row => row.authorAgentId === ctx.input.fixtures.agent.id && !seen.has(row.id)).map(row => row.body).join("\n");
+  const brief = observed.tasks.find(row => `${row.title}\n${row.description}`.includes(String(state.answer)));
+  state.taskBrief = brief ? await ctx.input.api.get(`/api/issues/${brief.id}`) : undefined;
+  return observed;
 }
 export function gradeQuestions(value: unknown) {
   const c = checks(); const o = identityObservation(value);
@@ -69,21 +90,41 @@ export function gradeQuestions(value: unknown) {
       && answers.some(row => row.questionId === "headline" && row.otherText === o.state.answer), "The submitted choice/choice/custom-text set preserves earlier pages.");
     c.add("no-default-consent", o.state.unsubmittedPending === true && o.state.validationObserved === true && o.state.retainedAudience === true,
       "Missing required input cannot submit, unfinished pages stay pending, and back navigation retains the first selection.");
+    c.add("submitted-set-only-continuation", o.runs.filter(run => run.contextSnapshot?.interactionId === original?.id).length === 1
+      && /researchers/i.test(String(o.state.afterAnswerReply)) && /clear/i.test(String(o.state.afterAnswerReply)) && String(o.state.afterAnswerReply).includes(String(o.state.answer)),
+      "The submitted set causes one request-bound continuation whose actual later response accurately summarizes all three answers.");
   } else {
     c.add("exact-free-text-answer", answers.length === 1 && answers[0]?.otherText === o.state.answer && !answers[0]?.optionIds?.length,
       "The exact human product name is attached once to the existing question.");
     if (o.scenarioId === "questions-and-approvals.defer-and-reopen") {
       c.add("dismissal-is-not-answer", o.state.afterDismissPending === true && o.state.afterDismissRuns === 1 && o.state.reopenedSame === true,
         "Dismiss/reload retains the unanswered request and does not trigger a continuation.");
+      c.add("draft-and-governance-preserved", o.state.reopenedDraft === o.state.answer && o.state.gateBeforeAnswerPending === true
+        && o.interactions.some(row => row.id === (o.state.protectedGate as Interaction | undefined)?.id && row.status === "pending" && !row.result),
+        "The saved local draft reopens on the same question; dismissing it never resolves the separate protected approval.");
+      c.add("later-answer-resumes-once", o.runs.filter(run => run.contextSnapshot?.interactionId === original?.id).length === 1
+        && String(o.state.afterAnswerReply).includes(String(o.state.answer)), "Only the later submitted answer causes one continuation and is used in its actual response.");
     } else {
       c.add("agent-created-essential-question", original?.createdByAgentId === o.leadId && !!original.sourceRunId
-        && o.runs.some(run => run.id === original.sourceRunId) && original.payload.questionSet?.questions.length === 1
-        && /\b(?:product|name)\b/i.test(original.payload.questionSet.questions[0]!.prompt), "The agent itself asks one necessary product-name question tied to its run.");
+        && o.runs.some(run => run.id === original.sourceRunId && run.agentId === o.leadId && run.companyId === o.companyId && run.status === "succeeded") && original.payload.questionSet?.questions.length === 1
+        && (original.payload.questionSet.questions[0]!.answerMode === "text" || original.payload.questionSet.questions[0]!.customAnswer?.enabled === true)
+        && original.payload.questionSet.questions[0]!.required === true
+        && /\b(?:product|name)\b/i.test(original.payload.questionSet.questions[0]!.prompt)
+        && !/model|runtime|adapter|framework|deployment|database|hosting/i.test(original.payload.questionSet.questions[0]!.prompt), "The agent itself asks exactly one necessary free-text product-name question tied to its actual completed run, excluding incidental implementation settings.");
       c.add("answer-in-saved-brief", o.tasks.some(row => `${row.title}\n${row.description}`.includes(String(o.state.answer)) && row.companyId === o.companyId && hasLink(o, "issues", row)),
         "A saved, linked task brief uses the actual answer rather than merely acknowledging it in chat.");
       c.add("one-bound-continuation", o.runs.filter(run => run.contextSnapshot?.interactionId === original?.id).length === 1
-        || o.runs.filter(run => run.id === original?.sourceRunId).length === 1 && o.state.providerQuestion === true,
+        || !!original?.payload.runtimeRequestId && original.idempotencyKey === `paperclip-runner-question:${original.sourceRunId}:${original.payload.runtimeRequestId}`
+          && o.runs.filter(run => run.id === original.sourceRunId && run.status === "succeeded").length === 1,
         "Exactly one semantic continuation or the same verified native provider request resumes.");
+      const brief = o.state.taskBrief as { id?: string; companyId?: string; createdAt?: string; updatedAt?: string; description?: string; title?: string } | undefined;
+      const beforeBriefs = o.state.beforeAnswerTasks as Array<{ id: string; title: string; description?: string }> | undefined;
+      const beforeBrief = Array.isArray(beforeBriefs) ? beforeBriefs.find(row => row.id === brief?.id) : undefined;
+      const savedAt = beforeBrief ? brief?.updatedAt : brief?.createdAt;
+      c.add("actual-answer-brief-provenance", !!brief?.id && brief.companyId === o.companyId && Array.isArray(beforeBriefs) && typeof current?.resolvedAt === "string" && typeof savedAt === "string"
+        && Date.parse(savedAt) >= Date.parse(current.resolvedAt) && (!beforeBrief || !`${beforeBrief.title}\n${beforeBrief.description}`.includes(String(o.state.answer)))
+        && `${brief.title}\n${brief.description}`.includes(String(o.state.answer)) && o.activity.some(row => row.entityId === brief.id && row.action === (beforeBrief ? "issue.updated" : "issue.created") && row.agentId === o.leadId),
+        "Before/after public brief snapshots and mutation attribution prove the actual agent saved the real answer only after the human resolved this question, including an eligible pre-existing draft.");
     }
   }
   return c.result();
@@ -123,7 +164,7 @@ export const questionIdentityCases = [
   }),
   identityDefinition("questions-and-approvals.necessary-question", async ctx => ({ project: await project(ctx), answer: `Acorn ${ctx.input.nonce}` }), gradeQuestions, {
     expectedRunCount: 4, minimumRunCount: 1, attemptTimeoutMs: 540_000,
-    coverageGaps: ["provider-native-question-correlation", "incidental-settings-exclusion", "task-brief-version-provenance"],
+    observe: observeQuestion,
     async act(ctx, state) {
       const pending = await pollUntil({ label: "agent-created product-name question", deadlineAt: Date.now() + 150_000,
         load: () => cards(ctx), accept: rows => rows.some(row => row.kind === "ask_user_questions" && row.status === "pending") });
@@ -131,11 +172,12 @@ export const questionIdentityCases = [
       state.original = original;
       await expect(ctx.input.page.getByTestId("task-chat-composer-takeover")).toContainText(/product|name/i);
       await ctx.input.evidence("identity-question-before-answer.json", { original, runs: await ctx.allRuns() });
+      await beforeAnswer(ctx, state);
       await answerText(ctx, String(state.answer));
     },
   }),
   identityDefinition("questions-and-approvals.multi-part-question", ctx => questionFixture(ctx, true), gradeQuestions, {
-    coverageGaps: ["submitted-set-resumes-work", "accurate-agent-summary"],
+    expectedRunCount: 2, observe: observeQuestion,
     async act(ctx, state) {
       await waitForReply(ctx);
       const row = ctx.input.page.getByTestId("task-chat-unanswered-question").filter({ hasText: "Launch page details" }).first();
@@ -151,23 +193,34 @@ export const questionIdentityCases = [
       await form.getByRole("radio", { name: "Clear", exact: true }).click();
       await form.getByRole("button", { name: "Next", exact: true }).click();
       state.unsubmittedPending = (await cards(ctx)).find(card => card.id === entity(state, "original").id)?.status === "pending";
+      await beforeAnswer(ctx, state);
       await answerText(ctx, String(state.answer));
     },
   }),
-  identityDefinition("questions-and-approvals.defer-and-reopen", ctx => questionFixture(ctx, false), gradeQuestions, {
-    coverageGaps: ["draft-state-retention", "protected-gate-not-waived", "later-answer-continuation"],
+  identityDefinition("questions-and-approvals.defer-and-reopen", async ctx => {
+    const state = await questionFixture(ctx, false);
+    const protectedGate = await ctx.input.api.post<Interaction>(`/api/issues/${state.sourceId}/interactions`, createIssueThreadInteractionSchema.parse({ kind: "request_confirmation", title: "Protected publication approval",
+      resolverPolicy: "human_only", continuationPolicy: "none", payload: { version: 1, prompt: "Approve publishing our launch page?", supersedeOnUserComment: false } }));
+    return { ...state, protectedGate };
+  }, gradeQuestions, {
+    expectedRunCount: 2, observe: observeQuestion,
     async act(ctx, state) {
       await waitForReply(ctx); const page = ctx.input.page;
       const form = page.getByTestId("task-chat-composer-takeover");
       const historical = page.getByTestId("task-chat-unanswered-question").filter({ hasText: "Launch page details" }).first();
       if (!(await form.isVisible())) await historical.click();
-      await form.getByRole("button", { name: "Cancel", exact: true }).click();
+      await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first().fill(String(state.answer));
+      await form.getByRole("button", { name: /^Dismiss / }).click();
       await page.reload({ waitUntil: "domcontentloaded" });
       const current = (await cards(ctx)).find(card => card.id === entity(state, "original").id);
       state.afterDismissPending = current?.status === "pending" && !current.result;
       state.afterDismissRuns = (await ctx.allRuns()).length;
       await historical.click(); await expect(form).toBeVisible();
       state.reopenedSame = await form.getByText("What is the product name?", { exact: true }).isVisible();
+      state.reopenedDraft = await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first()
+        .evaluate(element => element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? "");
+      state.gateBeforeAnswerPending = (await cards(ctx)).some(card => card.id === entity(state, "protectedGate").id && card.status === "pending" && !card.result);
+      await beforeAnswer(ctx, state);
       await answerText(ctx, String(state.answer));
     },
   }),

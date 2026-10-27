@@ -61,10 +61,14 @@ function valid(id: string) {
       { id: "poster", kind: "request_confirmation", status: "pending", payload: { prompt: "Launch poster?" } }]; o.reply = "Which proposal: Welcome note or Launch poster?";
   } else if (id.startsWith("questions-and-approvals.")) {
     const multipart = id.endsWith("multi-part-question"); const original = question(multipart); o.state.original = original; o.state.answer = "Acorn 42";
-    o.interactions = [{ ...original, status: "answered", resolvedByUserId: "person", result: { answers: multipart ? [
+    o.interactions = [{ ...original, status: "answered", resolvedAt: "2026-10-26T12:00:00.000Z", resolvedByUserId: "person", result: { answers: multipart ? [
       { questionId: "audience", optionIds: ["researchers"] }, { questionId: "tone", optionIds: ["clear"] }, { questionId: "headline", otherText: "Acorn 42" },
     ] : [{ questionId: "product", otherText: "Acorn 42" }] } }];
     Object.assign(o.state, { unsubmittedPending: true, validationObserved: true, retainedAudience: true, afterDismissPending: true, afterDismissRuns: 1, reopenedSame: true });
+    Object.assign(o.state, { afterAnswerReply: "Researchers should receive a clear page with the headline Acorn 42.", reopenedDraft: "Acorn 42", gateBeforeAnswerPending: true,
+      beforeAnswerTasks: [], taskBrief: { ...o.tasks[0], createdAt: "2026-10-26T12:00:01.000Z" }, protectedGate: { id: "protected" } });
+    o.interactions.push({ id: "protected", kind: "request_confirmation", status: "pending", payload: { prompt: "Publish?" } });
+    o.activity.push({ id: "task-created", action: "issue.created", entityId: "task", agentId: "ceo" });
     o.runs.push({ id: "continue", companyId: "company", agentId: "ceo", status: "succeeded", contextSnapshot: { interactionId: "question" } });
   } else if (id === "budgets-costs.set-budget") {
     Object.assign(o.state, { worker: { id: "morgan" }, other: { id: "other" }, beforeHumanAmount: 500, humanSaved: true, agentWriteStatus: 403,
@@ -106,6 +110,14 @@ describe("identity catalog independent oracle calibration", () => {
   it("quick search rejects a private result disclosed to an independent viewer", () => {
     const observation = valid("navigation-preferences.quick-search"); observation.state.observerPrivatePaletteHidden = false;
     expect(gradeNavigation(observation).passed).toBe(false);
+  });
+  it("requires native provider question identity and answer-bearing creation provenance", () => {
+    const o = valid("questions-and-approvals.necessary-question"); const original = o.state.original as Interaction;
+    o.runs = [o.runs[0]!]; original.payload.runtimeRequestId = "request-7"; original.idempotencyKey = "paperclip-runner-question:run:request-7";
+    expect(gradeQuestions(o).passed).toBe(true);
+    original.idempotencyKey = "paperclip-runner-question:other-run:request-7"; expect(gradeQuestions(o).passed).toBe(false);
+    original.idempotencyKey = "paperclip-runner-question:run:request-7"; (o.state.taskBrief as { createdAt: string }).createdAt = "2026-10-25T12:00:00.000Z";
+    expect(gradeQuestions(o).passed).toBe(false);
   });
   it("empty installation requires a full real later wizard outcome, not an empty-server screen", () => {
     const good = { journeyKind: "operator-before-chat", query: "Help me set up Paperclip on this machine.", querySent: false,
