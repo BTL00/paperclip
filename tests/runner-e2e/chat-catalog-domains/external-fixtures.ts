@@ -18,6 +18,7 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "projects.replace-repository": { provider: "github", fields: ["oldRepositoryId", "oldRepositoryFullName", "newRepositoryId", "newRepositoryFullName", "tokenEnv"] },
   "app-permissions.revoke-account": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },
   "app-permissions.grant-one-agent": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },
+  "gateways-profiles.define-profile": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },
   "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv", "recentMarker", "olderMarker", "recentFactJson", "olderFactJson"] },
   "connection-setup.notion-missing": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.notion-wrong-account": { provider: "notion", fields: ["sharedWorkspaceId", "personalWorkspaceId", "personalPageId", "oauthBrowserSession"] },
