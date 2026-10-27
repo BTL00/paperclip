@@ -241,8 +241,8 @@
     },
     {
       "scenarioId": "steering.approval-delivery",
-      "readinessClass": "local",
-      "needs": "Real waiting question plus ordinary comment queue during turn settlement; human answer delivery distinct from editable queue, once only."
+      "readinessClass": "implemented",
+      "needs": "Actual Morgan native run creates one ordinary durable naming question then waits in real tool process while two real human comments remain queued. Canonical run may answer only with actual authorized interaction audit, or real human uses supported response card. Typed Acorn decision retains exact question/actor/result while actual human UI edits, keyboard-reorders and discards ordinary comments. Remaining response projection is immutable and ordinary mutation rejects; one normal native successor has exact question ID/answer input and actual Acorn latest output with earlier revision retained. Both valid response actors authored and calibrated; no live qualification claimed."
     },
     {
       "scenarioId": "task-coordination.delegate-with-context",
