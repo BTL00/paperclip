@@ -246,8 +246,8 @@
     },
     {
       "scenarioId": "task-coordination.delegate-with-context",
-      "readinessClass": "local",
-      "needs": "CEO-owned source launch task and actual attached brief; single Morgan child/linked work, real report incorporated without false parent attribution."
+      "readinessClass": "implemented",
+      "needs": "Real human-authored Launch task brief comment+uploaded attachment bytes, actual CEO ownership and genuine pre-query source acknowledgement. Canonical creates one Morgan child or actually linked work task, durable original/copied brief and independent Morgan bearer download hash. Real gated native implementation produces registered HTML and latest non-plan delivery revision; correlated automatic source completion incorporates actual result with no parent execution or duplicate task. No live qualification claimed."
     },
     {
       "scenarioId": "task-coordination.block-on-design",
