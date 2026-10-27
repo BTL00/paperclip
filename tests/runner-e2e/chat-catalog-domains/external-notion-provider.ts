@@ -8,14 +8,16 @@ interface Block { id: string; type: string; has_children: boolean; [key: string]
 const normalized = (id: string) => id.replaceAll("-", "").toLowerCase();
 /** Only the selected disposable resource allowlist is accepted. This does not
  * enumerate an account, search workspaces, or infer permission from a token. */
-export function assertNotionFixture(binding: ProviderBinding) {
-  const p = binding.prerequisites;
-  for (const field of ["workspaceId", "recentPageId", "olderPageId"]) {
-    const id = p[field]; if (!id || !/^[a-f0-9-]{32,36}$/i.test(id) || !binding.resourceIds.some(resource => normalized(resource) === normalized(id))) throw new Error(`Setup blocker: Notion ${field} must be an explicitly allowlisted disposable UUID`);
-  }
+export function assertNotionConnection(binding: ProviderBinding) {
+  const p = binding.prerequisites, id = p.workspaceId;
+  if (!id || !/^[a-f0-9-]{32,36}$/i.test(id) || !binding.resourceIds.some(resource => normalized(resource) === normalized(id))) throw new Error("Setup blocker: Notion workspaceId must be an explicitly allowlisted disposable UUID");
   const url = new URL(p.mcpUrl!);
   if (url.protocol !== "https:" || url.hostname !== "mcp.notion.com" || url.pathname !== "/mcp" || url.username || url.password || url.search || url.hash) throw new Error("Setup blocker: named Notion proof requires the actual official Notion MCP resource");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p.apiVersion ?? "")) throw new Error("Setup blocker: Notion API version reference is missing");
+}
+export function assertNotionFixture(binding: ProviderBinding) {
+  assertNotionConnection(binding); const p = binding.prerequisites;
+  for (const field of ["recentPageId", "olderPageId"]) { const id = p[field]; if (!id || !/^[a-f0-9-]{32,36}$/i.test(id) || !binding.resourceIds.some(resource => normalized(resource) === normalized(id))) throw new Error(`Setup blocker: Notion ${field} must be an explicitly allowlisted disposable UUID`); }
   if (!p.recentMarker || !p.olderMarker || p.recentMarker === p.olderMarker) throw new Error("Setup blocker: distinct synthetic recent/background Notion marker references are required");
   parseNotionFact(p.recentFactJson); parseNotionFact(p.olderFactJson);
 }
@@ -46,14 +48,19 @@ async function blocksText(token: string, version: string, pageId: string, maxChi
   }
   return children(pageId, 0);
 }
+export async function verifyNotionWorkspace(ctx: ChatCatalogContext, binding: ProviderBinding) {
+  assertNotionConnection(binding); const p = binding.prerequisites, token = selectedExternalCredential(ctx, binding, "apiTokenEnv");
+  const self = await notionJson<{ object: string; type: string; bot?: { workspace_id?: string } }>(token, p.apiVersion!, "/v1/users/me");
+  if (self.object !== "user" || self.type !== "bot" || !self.bot?.workspace_id || normalized(self.bot.workspace_id) !== normalized(p.workspaceId!)) throw new Error("Setup blocker: actual Notion token workspace differs from its authorized disposable workspace reference");
+  return { provider: "notion" as const, workspaceMatched: true };
+}
 export async function readNotionFixturePages(ctx: ChatCatalogContext, binding = selectedExternalBinding(ctx)) {
   assertNotionFixture(binding); const p = binding.prerequisites;
   const token = selectedExternalCredential(ctx, binding, "apiTokenEnv");
   // Provider identity is checked privately; names, email and the raw account
   // receipt never enter state/evidence. Provider contract:
   // https://developers.notion.com/reference/user#bots
-  const self = await notionJson<{ object: string; type: string; bot?: { workspace_id?: string } }>(token, p.apiVersion!, "/v1/users/me");
-  if (self.object !== "user" || self.type !== "bot" || !self.bot?.workspace_id || normalized(self.bot.workspace_id) !== normalized(p.workspaceId!)) throw new Error("Setup blocker: actual Notion token workspace differs from its authorized disposable workspace reference");
+  await verifyNotionWorkspace(ctx, binding);
   const result: NotionPageOracle[] = [];
   for (const [idField, markerField] of [["recentPageId", "recentMarker"], ["olderPageId", "olderMarker"]] as const) {
     const id = p[idField]!, marker = p[markerField]!;
@@ -70,7 +77,7 @@ export async function readNotionFixturePages(ctx: ChatCatalogContext, binding = 
   return result;
 }
 export async function connectNamedNotion(ctx: ChatCatalogContext, binding: ProviderBinding, agentIds: string[]) {
-  assertNotionFixture(binding);
+  assertNotionConnection(binding);
   const token = selectedExternalCredential(ctx, binding, "mcpTokenEnv");
   const result = await ctx.input.api.postSensitive<{ connectionId: string; actions: { readOnly: Array<{ catalogEntryId: string }>; canMakeChanges: Array<{ catalogEntryId: string }> } }>(`${root(ctx)}/tools/apps/connect`, {
     link: binding.prerequisites.mcpUrl, name: "Launch Notion", authMode: "bearer", credentialValues: { "credentials.authorization": token }, grantKind: "organization",

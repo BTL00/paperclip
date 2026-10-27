@@ -16,6 +16,7 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "workspaces.prepare-repository": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
   "workspaces.private-repository-no-access": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
   "projects.replace-repository": { provider: "github", fields: ["oldRepositoryId", "oldRepositoryFullName", "newRepositoryId", "newRepositoryFullName", "tokenEnv"] },
+  "app-permissions.grant-one-agent": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },
   "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv", "recentMarker", "olderMarker", "recentFactJson", "olderFactJson"] },
   "connection-setup.notion-missing": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.notion-wrong-account": { provider: "notion", fields: ["sharedWorkspaceId", "personalWorkspaceId", "personalPageId", "oauthBrowserSession"] },

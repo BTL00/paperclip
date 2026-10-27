@@ -124,3 +124,20 @@ The launcher strips original external config/environment references from server,
 model, provider and unrelated-case inheritance. Only declared reference names
 and field names enter the public fingerprint; credentials enter the private
 redaction sink. Local fixture CLI children use an explicit sanitized environment.
+
+The finite `gateway-token-rotation` private-browser operation uses the actual
+Tokens UI to issue one replacement and revoke the named old client only after
+protocol discovery with the replacement succeeds. Old and unrelated-client
+bearers enter through the private request. The one-time replacement crosses a
+separate `0600` handoff inside the same disposable directory, reaches only the
+owning callback/redactor, and is removed with the directory in `finally`.
+The public receipt contains only fixed booleans, a token UUID and HTTP status;
+it never contains a bearer. The parent separately verifies saved revocation,
+other-client preservation, actual protocol access and reachable-output byte scans.
+
+`app-permissions.grant-one-agent` requires only the selected official Notion
+transport, disposable workspace and API/MCP credential references. It does not
+require launch-summary pages or dates. The independent account probe verifies
+the declared workspace through the official API, and the product connects to the
+official MCP endpoint. Human audience changes use the real agent-selection UI;
+public effective access verifies Morgan-only reach and unchanged action rules.
