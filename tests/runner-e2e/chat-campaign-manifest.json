@@ -7801,7 +7801,7 @@
           "automaticRetries": 0,
           "correction": null,
           "classification": "transient_infrastructure",
-          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\"]')\nTimeout: 30000ms\n\u001b[32m- Expected substring  - 3\u001b[39m\n\u001b[31m+ Received string     + 2\u001b[39m\n\n\u001b[32m- \u001b[7mYour \u001b[27mRUN-1 conversation is intact and responding.\u001b[39m\n\u001b[31m+ \u001b[7mCEOI\u2019m checking what restart controls this test instance exposes and preserving the current conversation state before taking any action.Read filesI\u2019m using the Paperclip board workflow because this request concerns instance lifecycle and conversation recovery in the control plane.Read filesThe request is clear, and I won\u2019t create a separate execution task for it. I\u2019m locating the instance restart and conversation-recovery operations now, then I\u2019ll verify the conversation is available again.Searched files, read files, and moreThe conversation itself is intact and this reply proves the task resumed with its latest comment. The remaining restart action is blocked: the instance lifecycle and conversation-control APIs both rejected this agent with \u201cBoard access required,\u201d so I can\u2019t safely restart the host from inside its own active run.Used toolsYour In Review\u001b[27mRUN-1 conversation is intact and responding.\u001b[39m\n\u001b[32m-\u001b[39m\n\u001b[32m- I couldn\u2019t restart the test instance because Paperclip rejected the lifecycle controls with \u001b[7m**\u001b[27m403: Board access required\u001b[7m**\u001b[27m. The test harness or an instance administrator must restart it, then reopen RUN-1 to restore this durable conversation.\u001b[39m\n\u001b[31m+ I couldn\u2019t restart the test instance because Paperclip rejected the lifecycle controls with 403: Board access required. The test harness or an instance administrator must restart it, then reopen \u001b[7mIn Review\u001b[27mRUN-1 to restore this durable conversation.\u001b[7m7:37 AM\u001b[27m\u001b[39m\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('[id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\"]')\u001b[22m\n\u001b[2m    64 \u00d7 locator resolved to <div class=\"mt-6\" data-thread-item-kind=\"agent\" data-conversation-typography=\"\" id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\" data-thread-anchor=\"86710c85-c925-4c28-af01-a29274dd7990\">\u2026</div>\u001b[22m\n\u001b[2m       - unexpected value \"CEOI\u2019m checking what restart controls this test instance exposes and preserving the current conversation state before taking any action.Read filesI\u2019m using the Paperclip board workflow because this request concerns instance lifecycle and conversation recovery in the control plane.Read filesThe request is clear, and I won\u2019t create a separate execution task for it. I\u2019m locating the instance restart and conversation-recovery operations now, then I\u2019ll verify the conversation is available again.Searched files, read files, and moreThe conversation itself is intact and this reply proves the task resumed with its latest comment. The remaining restart action is blocked: the instance lifecycle and conversation-control APIs both rejected this agent with \u201cBoard access required,\u201d so I can\u2019t safely restart the host from inside its own active run.Used toolsYour In ReviewRUN-1 conversation is intact and responding.\u001b[22m\n\u001b[2mI couldn\u2019t restart the test instance because Paperclip rejected the lifecycle controls with 403: Board access required. The test harness or an instance administrator must restart it, then reopen In ReviewRUN-1 to restore this durable conversation.7:37 AM\"\u001b[22m\n",
+          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\"]')\nTimeout: 30000ms\n\u001b[32m- Expected substring  - 3\u001b[39m\n\u001b[31m+ Received string     + 2\u001b[39m\n\n\u001b[32m- \u001b[7mYour \u001b[27mRUN-1 conversation is intact and responding.\u001b[39m\n\u001b[31m+ \u001b[7mCEOI’m checking what restart controls this test instance exposes and preserving the current conversation state before taking any action.Read filesI’m using the Paperclip board workflow because this request concerns instance lifecycle and conversation recovery in the control plane.Read filesThe request is clear, and I won’t create a separate execution task for it. I’m locating the instance restart and conversation-recovery operations now, then I’ll verify the conversation is available again.Searched files, read files, and moreThe conversation itself is intact and this reply proves the task resumed with its latest comment. The remaining restart action is blocked: the instance lifecycle and conversation-control APIs both rejected this agent with “Board access required,” so I can’t safely restart the host from inside its own active run.Used toolsYour In Review\u001b[27mRUN-1 conversation is intact and responding.\u001b[39m\n\u001b[32m-\u001b[39m\n\u001b[32m- I couldn’t restart the test instance because Paperclip rejected the lifecycle controls with \u001b[7m**\u001b[27m403: Board access required\u001b[7m**\u001b[27m. The test harness or an instance administrator must restart it, then reopen RUN-1 to restore this durable conversation.\u001b[39m\n\u001b[31m+ I couldn’t restart the test instance because Paperclip rejected the lifecycle controls with 403: Board access required. The test harness or an instance administrator must restart it, then reopen \u001b[7mIn Review\u001b[27mRUN-1 to restore this durable conversation.\u001b[7m7:37 AM\u001b[27m\u001b[39m\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('[id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\"]')\u001b[22m\n\u001b[2m    64 × locator resolved to <div class=\"mt-6\" data-thread-item-kind=\"agent\" data-conversation-typography=\"\" id=\"comment-86710c85-c925-4c28-af01-a29274dd7990\" data-thread-anchor=\"86710c85-c925-4c28-af01-a29274dd7990\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"CEOI’m checking what restart controls this test instance exposes and preserving the current conversation state before taking any action.Read filesI’m using the Paperclip board workflow because this request concerns instance lifecycle and conversation recovery in the control plane.Read filesThe request is clear, and I won’t create a separate execution task for it. I’m locating the instance restart and conversation-recovery operations now, then I’ll verify the conversation is available again.Searched files, read files, and moreThe conversation itself is intact and this reply proves the task resumed with its latest comment. The remaining restart action is blocked: the instance lifecycle and conversation-control APIs both rejected this agent with “Board access required,” so I can’t safely restart the host from inside its own active run.Used toolsYour In ReviewRUN-1 conversation is intact and responding.\u001b[22m\n\u001b[2mI couldn’t restart the test instance because Paperclip rejected the lifecycle controls with 403: Board access required. The test harness or an instance administrator must restart it, then reopen In ReviewRUN-1 to restore this durable conversation.7:37 AM\"\u001b[22m\n",
           "evidencePaths": [
             "tests/runner-e2e/results/chat-catalog-campaign/remaining104-initial-selection-68e8534e31.json",
             "tests/runner-e2e/results/remaining104-initials-68e8534e3127-b629a45797c34d94e2c2/chat-features/runner-codex-subscription/local/instance-operations.restart-service/attempt-1/result.json",
@@ -9546,7 +9546,7 @@
           "automaticRetries": 0,
           "correction": null,
           "classification": "candidate_failure",
-          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\nExpected pattern: \u001b[32m/Declined|Superseded/i\u001b[39m\nReceived string:  \u001b[31m\"Publish research launch introductionPublish the proposed introduction page?\"\u001b[39m\nTimeout: 30000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\u001b[22m\n\u001b[2m    64 \u00d7 locator resolved to <button type=\"button\" data-testid=\"task-chat-pending-request\" id=\"interaction-a3b1e4e9-9189-42cc-8b09-529442efca67\" aria-label=\"Open request: Publish research launch introduction\" class=\"group flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring\">\u2026</button>\u001b[22m\n\u001b[2m       - unexpected value \"Publish research launch introductionPublish the proposed introduction page?\"\u001b[22m\n",
+          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\nExpected pattern: \u001b[32m/Declined|Superseded/i\u001b[39m\nReceived string:  \u001b[31m\"Publish research launch introductionPublish the proposed introduction page?\"\u001b[39m\nTimeout: 30000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\u001b[22m\n\u001b[2m    64 × locator resolved to <button type=\"button\" data-testid=\"task-chat-pending-request\" id=\"interaction-a3b1e4e9-9189-42cc-8b09-529442efca67\" aria-label=\"Open request: Publish research launch introduction\" class=\"group flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring\">…</button>\u001b[22m\n\u001b[2m       - unexpected value \"Publish research launch introductionPublish the proposed introduction page?\"\u001b[22m\n",
           "evidencePaths": [
             "tests/runner-e2e/results/chat-catalog-campaign/admitted-initials-6beacfe0a9.json",
             "tests/runner-e2e/results/catalog-initial-2026-10-27T08-52-51-704Z-questions-and-approvals-reject-and-revise/chat-features/runner-codex-subscription/local/questions-and-approvals.reject-and-revise/attempt-1/result.json",
@@ -10876,7 +10876,7 @@
           "automaticRetries": 0,
           "correction": null,
           "classification": "candidate_failure",
-          "observedFailure": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Open actions for Morgan', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" id=\"radix-_r_h_\" data-size=\"icon-xs\" data-state=\"closed\" data-variant=\"ghost\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-slot=\"dropdown-menu-trigger\" aria-label=\"Open actions for Morgan\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-(length:--rad\u2026>\u2026</button> aka locator('#radix-_r_h_')\n    2) <button type=\"button\" data-size=\"icon-xs\" data-state=\"closed\" data-variant=\"ghost\" aria-expanded=\"false\" aria-haspopup=\"dialog\" data-slot=\"popover-trigger\" aria-label=\"Open actions for Morgan\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-(--tp-color-background-color-border-color-box-shadow-opacity) disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-v\u2026>\u2026</button> aka locator('#main-content').getByRole('button', { name: 'Open actions for Morgan' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Open actions for Morgan', exact: true })\u001b[22m\n",
+          "observedFailure": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Open actions for Morgan', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" id=\"radix-_r_h_\" data-size=\"icon-xs\" data-state=\"closed\" data-variant=\"ghost\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-slot=\"dropdown-menu-trigger\" aria-label=\"Open actions for Morgan\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-(length:--rad…>…</button> aka locator('#radix-_r_h_')\n    2) <button type=\"button\" data-size=\"icon-xs\" data-state=\"closed\" data-variant=\"ghost\" aria-expanded=\"false\" aria-haspopup=\"dialog\" data-slot=\"popover-trigger\" aria-label=\"Open actions for Morgan\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-(--tp-color-background-color-border-color-box-shadow-opacity) disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-v…>…</button> aka locator('#main-content').getByRole('button', { name: 'Open actions for Morgan' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Open actions for Morgan', exact: true })\u001b[22m\n",
           "evidencePaths": [
             "tests/runner-e2e/results/chat-catalog-campaign/remaining98-initial-selection-68e8534e31.json",
             "tests/runner-e2e/results/remaining98-initials-68e8534e3127-479d409527f844470878/chat-features/runner-codex-subscription/local/runs-adapters.reset-session/attempt-1/result.json",
@@ -12289,7 +12289,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.discard-queued-message",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.discard-queued-message",
+          "startedAt": "2026-10-27T13:32:22.330Z",
+          "finishedAt": "2026-10-27T13:33:46.707Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "fdc41d468b555fbfadb4994c5be6e93e316a5e7d380c230c1b0afdb940bcea4c",
+          "definitionDigest": "9752cd697257c956145046072c7e6e4a71045de66266a1c177e0862ff259f03c",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "9752cd697257c956145046072c7e6e4a71045de66266a1c177e0862ff259f03c",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for Real Morgan process waiting for its human brief: Busy fixture ended before its required active boundary",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-1c74f03ddd4431ef2d73/chat-features/runner-codex-subscription/local/steering.discard-queued-message/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.discard-queued-message.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 78512,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "9752cd697257c956145046072c7e6e4a71045de66266a1c177e0862ff259f03c",
       "qualifyingGraderDigest": "9752cd697257c956145046072c7e6e4a71045de66266a1c177e0862ff259f03c",
       "productPolicy": {
@@ -12314,7 +12365,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.edit-queued-message",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.edit-queued-message",
+          "startedAt": "2026-10-27T13:32:22.363Z",
+          "finishedAt": "2026-10-27T13:33:48.452Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "9cd85cf55ddb6d42141271f5554efe16a4d19d93c909fd6800bfd1aea6220827",
+          "definitionDigest": "0c7aec71afd37948288ed2d9af838b61cbc002e265ce0f53b08188231921e347",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "0c7aec71afd37948288ed2d9af838b61cbc002e265ce0f53b08188231921e347",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for Real Morgan process waiting for its human brief: Busy fixture ended before its required active boundary",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-af710dd1056c16258b1a/chat-features/runner-codex-subscription/local/steering.edit-queued-message/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.edit-queued-message.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 78552,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "0c7aec71afd37948288ed2d9af838b61cbc002e265ce0f53b08188231921e347",
       "qualifyingGraderDigest": "0c7aec71afd37948288ed2d9af838b61cbc002e265ce0f53b08188231921e347",
       "productPolicy": {
@@ -12340,7 +12442,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.interrupt-with-direction",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.interrupt-with-direction",
+          "startedAt": "2026-10-27T13:33:48.526Z",
+          "finishedAt": "2026-10-27T13:35:03.107Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "a548e1b900b1213229a646cf0e1978b0032d726cae46f9cd0833604cd98f1e10",
+          "definitionDigest": "bb71ab3aeb51422f23bcb573e49f0848f7a57dfc890131c0c0c5eb5dfb8aac54",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "bb71ab3aeb51422f23bcb573e49f0848f7a57dfc890131c0c0c5eb5dfb8aac54",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for Real Morgan process waiting for its human brief: Busy fixture ended before its required active boundary",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-b2bb8bb1aa05dee7db43/chat-features/runner-codex-subscription/local/steering.interrupt-with-direction/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.interrupt-with-direction.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 78322,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "bb71ab3aeb51422f23bcb573e49f0848f7a57dfc890131c0c0c5eb5dfb8aac54",
       "qualifyingGraderDigest": "bb71ab3aeb51422f23bcb573e49f0848f7a57dfc890131c0c0c5eb5dfb8aac54",
       "productPolicy": {
@@ -12366,9 +12519,61 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.preserve-draft",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": "fb5fa1335563c7b092e3e538af563d9d671b8433ea744a7d1706e9c06bd11ed5",
-      "qualifyingGraderDigest": "fb5fa1335563c7b092e3e538af563d9d671b8433ea744a7d1706e9c06bd11ed5",
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "passed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.preserve-draft",
+          "startedAt": "2026-10-27T13:33:48.609Z",
+          "finishedAt": "2026-10-27T13:36:15.754Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "ae97b250c9856a6e6d44efd9076b18d1a78e51f14e55ea1e83476701cd76d49e",
+          "definitionDigest": "fb5fa1335563c7b092e3e538af563d9d671b8433ea744a7d1706e9c06bd11ed5",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "fb5fa1335563c7b092e3e538af563d9d671b8433ea744a7d1706e9c06bd11ed5",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "provisional_initial_pass_pending_final_closure",
+          "observedFailure": null,
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-4dfa8dd0f110da448ef1/chat-features/runner-codex-subscription/local/steering.preserve-draft/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.preserve-draft.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-pass-identity-review-steering.preserve-draft.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 395649,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
+      "qualifyingDefinitionDigest": null,
+      "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
@@ -12391,7 +12596,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.queue-follow-up",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.queue-follow-up",
+          "startedAt": "2026-10-27T13:36:21.638Z",
+          "finishedAt": "2026-10-27T13:37:38.087Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "699f160c54efac565726e92fbd78748c2963c395dc53675eb2ffa95974630544",
+          "definitionDigest": "aa96b6912a10b43edde04d3e94eb16e3827ced9d4c00eec084a6081bf8bfc07c",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "aa96b6912a10b43edde04d3e94eb16e3827ced9d4c00eec084a6081bf8bfc07c",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for Real Morgan process waiting for its human brief: Busy fixture ended before its required active boundary",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-9d8e4d641f9b0b459f07/chat-features/runner-codex-subscription/local/steering.queue-follow-up/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.queue-follow-up.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 78305,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "aa96b6912a10b43edde04d3e94eb16e3827ced9d4c00eec084a6081bf8bfc07c",
       "qualifyingGraderDigest": "aa96b6912a10b43edde04d3e94eb16e3827ced9d4c00eec084a6081bf8bfc07c",
       "productPolicy": {
@@ -12416,7 +12672,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.steer-active",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.steer-active",
+          "startedAt": "2026-10-27T13:36:21.757Z",
+          "finishedAt": "2026-10-27T13:37:38.671Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "594095ffbbb055d4a0e0367668fddc7d44337088d5b4d5ab2744c4baffb7ff2d",
+          "definitionDigest": "feef817a237c8135dcaa3f46498ab15ea69a7bb05f3c227e9fe8512fd194f598",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "feef817a237c8135dcaa3f46498ab15ea69a7bb05f3c227e9fe8512fd194f598",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for Real Morgan process waiting for its human brief: Busy fixture ended before its required active boundary",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-363a04e9c61c51d63af1/chat-features/runner-codex-subscription/local/steering.steer-active/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.steer-active.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 78435,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "feef817a237c8135dcaa3f46498ab15ea69a7bb05f3c227e9fe8512fd194f598",
       "qualifyingGraderDigest": "feef817a237c8135dcaa3f46498ab15ea69a7bb05f3c227e9fe8512fd194f598",
       "productPolicy": {
@@ -12442,7 +12749,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.steering.stop-versus-pause",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.steering.stop-versus-pause",
+          "startedAt": "2026-10-27T13:37:38.748Z",
+          "finishedAt": "2026-10-27T13:39:40.085Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "d5b32fc2c50d6c8e9d6cdaecb08fb0125502d46a8130e573f16307e04b4120b7",
+          "definitionDigest": "d9f23f2969a986d992b5963f42274c7342b9eb6dc58a45d2e216eb2bf4dfa16e",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "d9f23f2969a986d992b5963f42274c7342b9eb6dc58a45d2e216eb2bf4dfa16e",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Timed out waiting for Real independent budget hold on the manually paused child owner; the observed state did not satisfy the condition. See the saved state evidence.",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-aa7d07a10d4887a200a8/chat-features/runner-codex-subscription/local/steering.stop-versus-pause/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-steering.stop-versus-pause.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 0,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "d9f23f2969a986d992b5963f42274c7342b9eb6dc58a45d2e216eb2bf4dfa16e",
       "qualifyingGraderDigest": "d9f23f2969a986d992b5963f42274c7342b9eb6dc58a45d2e216eb2bf4dfa16e",
       "productPolicy": {
@@ -12467,7 +12825,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.task-coordination.block-on-design",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.task-coordination.block-on-design",
+          "startedAt": "2026-10-27T13:37:38.811Z",
+          "finishedAt": "2026-10-27T13:40:38.181Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "45d6fd04720f9b0d31857b212c0095f86e4ef9ca0838c3b7c0a839fcdda22c7b",
+          "definitionDigest": "2d0164da5c9b643d4df292451afd504ff2a7b0fed63e98567a867cfe0db0fa7f",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "2d0164da5c9b643d4df292451afd504ff2a7b0fed63e98567a867cfe0db0fa7f",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('link', { name: /Design/ }).first()\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('link', { name: /Design/ }).first()\u001b[22m\n",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-aae2430215cebe995214/chat-features/runner-codex-subscription/local/task-coordination.block-on-design/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-task-coordination.block-on-design.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 248101,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "2d0164da5c9b643d4df292451afd504ff2a7b0fed63e98567a867cfe0db0fa7f",
       "qualifyingGraderDigest": "2d0164da5c9b643d4df292451afd504ff2a7b0fed63e98567a867cfe0db0fa7f",
       "productPolicy": {
@@ -12493,7 +12902,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.task-coordination.delegate-with-context",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.task-coordination.delegate-with-context",
+          "startedAt": "2026-10-27T13:40:38.330Z",
+          "finishedAt": "2026-10-27T13:41:57.586Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "f360ef76f9eef51bc0d0a2947bdfcc79b946ce222472171c9ac420196a2860ff",
+          "definitionDigest": "82933e139940e4884dc9befa3358d963268281593ce6dc1623cf92bed7c25814",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "82933e139940e4884dc9befa3358d963268281593ce6dc1623cf92bed7c25814",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Real human Launch brief upload did not succeed",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-b19b40562bb063db379b/chat-features/runner-codex-subscription/local/task-coordination.delegate-with-context/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-task-coordination.delegate-with-context.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 0,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "82933e139940e4884dc9befa3358d963268281593ce6dc1623cf92bed7c25814",
       "qualifyingGraderDigest": "82933e139940e4884dc9befa3358d963268281593ce6dc1623cf92bed7c25814",
       "productPolicy": {
@@ -12519,7 +12979,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.task-coordination.independent-review",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.task-coordination.independent-review",
+          "startedAt": "2026-10-27T13:40:38.373Z",
+          "finishedAt": "2026-10-27T13:43:57.247Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "595b5a5368c428fa9a52634b938885c492a4c91ef1188ba9300daf0b72e1d03d",
+          "definitionDigest": "bfe5c33173e74e0f7611ff7bdfdccf68e921a340b03223a67f6352d4ffc96879",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "bfe5c33173e74e0f7611ff7bdfdccf68e921a340b03223a67f6352d4ffc96879",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Expected one registered artifact website.html from the tested run; observed 0",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-7da76748be916d94355d/chat-features/runner-codex-subscription/local/task-coordination.independent-review/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-task-coordination.independent-review.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 272634,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "bfe5c33173e74e0f7611ff7bdfdccf68e921a340b03223a67f6352d4ffc96879",
       "qualifyingGraderDigest": "bfe5c33173e74e0f7611ff7bdfdccf68e921a340b03223a67f6352d4ffc96879",
       "productPolicy": {
@@ -12545,7 +13056,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.task-coordination.pause-tree",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.task-coordination.pause-tree",
+          "startedAt": "2026-10-27T13:43:57.601Z",
+          "finishedAt": "2026-10-27T13:47:08.564Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "cd59628b79a891a7b75d6972ddfaf89e03229ee159fc5ba2cacbc41ef73ccfc9",
+          "definitionDigest": "04275e490f48a0716c36fbe7c8a9ee0308b53ed007409b283bd2adcb59db48f4",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "04275e490f48a0716c36fbe7c8a9ee0308b53ed007409b283bd2adcb59db48f4",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Timed out waiting for Real independent budget hold on the manually paused child owner; the observed state did not satisfy the condition. See the saved state evidence.",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-c48493724a48468b8156/chat-features/runner-codex-subscription/local/task-coordination.pause-tree/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-task-coordination.pause-tree.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 0,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "04275e490f48a0716c36fbe7c8a9ee0308b53ed007409b283bd2adcb59db48f4",
       "qualifyingGraderDigest": "04275e490f48a0716c36fbe7c8a9ee0308b53ed007409b283bd2adcb59db48f4",
       "productPolicy": {
@@ -12647,7 +13209,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.tasks.ambiguous-task",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.tasks.ambiguous-task",
+          "startedAt": "2026-10-27T13:43:57.704Z",
+          "finishedAt": "2026-10-27T13:51:34.206Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "e546571cffc3096528c326acf36aa56b692c4f91d05b737ed4cf486ff5889c58",
+          "definitionDigest": "a42d8eb8aa7eb0dca0aa5e9a9f66b74d4f8a9ec1796abde6ff3acc39304b0270",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "a42d8eb8aa7eb0dca0aa5e9a9f66b74d4f8a9ec1796abde6ff3acc39304b0270",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "transient_infrastructure",
+          "observedFailure": "Stopped waiting for tasks.ambiguous-task: Observed provider run failed",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/qualified-inputs-continuation-initial-selection-68e-v2.json",
+            "tests/runner-e2e/results/qualified-inputs-initials-68e8534e3127-c8d08595298c31578462/chat-features/runner-codex-subscription/local/tasks.ambiguous-task/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-tasks.ambiguous-task.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 1041945,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "a42d8eb8aa7eb0dca0aa5e9a9f66b74d4f8a9ec1796abde6ff3acc39304b0270",
       "qualifyingGraderDigest": "a42d8eb8aa7eb0dca0aa5e9a9f66b74d4f8a9ec1796abde6ff3acc39304b0270",
       "productPolicy": {

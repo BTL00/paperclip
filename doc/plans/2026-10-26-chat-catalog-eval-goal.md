@@ -2,6 +2,16 @@
 
 Date: 2026-10-26
 
+## Authoritative user steering — 2026-10-27
+
+All new local eval admissions are stopped. Already-active local children may finish their existing work and cleanup; no further local initial, final-B, infrastructure-health or provider qualification launches are authorized. Preserve the complete local measurement/ordinal histories and original evidence as a historical lane.
+
+All future eval execution must run in GitHub Actions on the existing AWS spot runners, using the new Paperclip runner **OpenCode** provider through **OpenRouter**, model **`deepseek/deepseek-v4.1-flash-1017`**. The remote campaign requires a separately named execution/product/database/model identity and separately reported rate across all244 scenarios. Do not carry local passes into the remote rate, and do not execute obsolete local source merely to preserve the previous queue.
+
+Carry the audited coherent harness corrections into the remote source. Preserve prior ordinal histories. The manager approved one new remote initial measurement for every scenario and at most one coherent correction measurement per scenario. The representative remote smoke counts as its scenario’s remote initial. Preserve all prior local ordinals separately; this is not an unlimited repair or unchanged rerun policy. Production/core fixes remain isolated and unmerged unless separately authorized.
+
+Immediate deliverables are an inspectable safe results page, an exact closed local checkpoint, and evidence-based accounting of elapsed wall time, stages reached, harness/product/model/prerequisite outcomes, actual usage and operational duplicate/reconciliation history. The original goal below remains historical context where superseded by this section.
+
 > Execution state: This file preserves the requested goal; it is not completion evidence. Before execution, reconcile the actual state of PR #17794 rather than assuming it merged.
 
 Turn the complete Paperclip chat-scenario catalog into executable Product E2E evals, run every scenario, give each failing scenario one fix-and-rerun cycle, and ship according to the rules below.
