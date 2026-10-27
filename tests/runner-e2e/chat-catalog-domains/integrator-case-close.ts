@@ -18,7 +18,13 @@ async function observeClose(ctx: ChatCatalogContext, state: Record<string, unkno
       pendingReview: await ctx.input.api.get<Issue>(`/api/issues/${(state.pendingReview as Entity).id}`), blockerEvidence: await ctx.input.api.get<IssueBlockerDiagnosticsResponse>(`/api/issues/${(state.negativeCase as CaseRecord).workIssueId}/diagnostics/blockers`) } : {}) };
 }
 function closeObservation(value: unknown): CloseObservation | undefined { const o = value as CloseObservation; return observation(value) && !!o.caseRecord && Array.isArray(o.handoffs) && !!o.finalDocument && Array.isArray(o.finalRevisions) ? o : undefined; }
-function closedClaim(reply: string) { return /\b(?:case (?:is |has been |was )?closed|closed (?:the |this )?case|case (?:is )?complete(?:d)?)\b/i.test(reply) && !/\b(?:not (?:yet )?closed|cannot close|can't close|pending|awaiting)\b/i.test(reply); }
+function closedClaim(reply: string, selected?: string, other?: string) {
+  return reply.split(/\n+|;|(?<=[.!?])\s+|\bbut\b/i).some(clause => {
+    if (other && clause.includes(other) && (!selected || !clause.includes(selected))) return false;
+    return /\bcase(?:\s+[A-Z][A-Z0-9]*-\d+)?\s+(?:(?:is|was|has been|has)\s+)?(?:now\s+)?(?:closed|complete(?:d)?)\b|\b(?:have\s+)?closed\s+(?:the|this|that)\s+case\b/i.test(clause)
+      && !/\b(?:not|isn't|wasn't|hasn't|never)\s+(?:yet\s+)?(?:closed|complete(?:d)?)\b/i.test(clause);
+  });
+}
 export function gradeIntegratorCaseClose(value: unknown) {
   const c = checks(); const o = closeObservation(value); c.add("actual-primary-completion-and-terminal-ledger", !!o, "Requires original ordinary primary, genuine accepted review, terminal handoff and preserved documents."); if (!o) return c.result();
   const original = o.state.case as CaseRecord; const originalTask = o.state.task as Issue; const owner = o.state.worker as Entity;
@@ -43,7 +49,7 @@ export function gradeIntegratorCaseClose(value: unknown) {
   c.add("unresolved-required-review-does-not-close", !!o.negativeCase && !!o.negativeTask && !!o.pendingReview && o.negativeCase.workIssueId === o.negativeTask.id
     && o.negativeCase.status !== "done" && !o.negativeCase.completedAt && o.negativeTask.status !== "done" && o.pendingReview.status === "backlog"
     && !!o.blockerEvidence?.blockers.some(blocker => blocker.id === o.pendingReview!.id && blocker.isUnresolved)
-    && /review/i.test(later) && /pending|unresolved|not (?:yet )?(?:accepted|complete|closed)|cannot close|can't close|must|waiting/i.test(later) && !closedClaim(later),
+    && /review/i.test(later) && /pending|unresolved|not (?:yet )?(?:accepted|complete|closed)|cannot close|can't close|must|waiting/i.test(later) && !closedClaim(later, o.negativeCase?.identifier, original.identifier),
     "The separate explicitly selected case retains its real unresolved review dependency and remains open, with truthful phase-specific denial rather than a fictional terminal result.");
   return c.result();
 }

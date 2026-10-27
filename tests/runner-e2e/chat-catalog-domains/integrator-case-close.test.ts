@@ -30,6 +30,9 @@ describe("explicit case terminal completion with normal review gates", () => {
     const lost = valid(); lost.finalRevisions = []; expect(gradeIntegratorCaseClose(lost).passed).toBe(false);
     const gate = valid(); gate.negativeCase.status = "done"; expect(gradeIntegratorCaseClose(gate).passed).toBe(false);
     const fake = valid(); fake.reply = `${fake.state.acceptedResult.reply}\nThe review is complete and the case is closed.`; expect(gradeIntegratorCaseClose(fake).passed).toBe(false);
+    const contradictory = valid(); contradictory.reply = `${contradictory.state.acceptedResult.reply}\nThe case is closed; its review is still pending.`; expect(gradeIntegratorCaseClose(contradictory).passed).toBe(false);
+    const concealed = valid(); concealed.state.initialDirection.reply = "The case is closed; its review is awaiting final approval."; expect(gradeIntegratorCaseClose(concealed).passed).toBe(false);
+    const negated = valid(); negated.reply = `${negated.state.acceptedResult.reply}\nThe case is not closed: its review is pending.`; expect(gradeIntegratorCaseClose(negated).passed).toBe(true);
     const noGate = valid(); noGate.blockerEvidence.blockers = []; expect(gradeIntegratorCaseClose(noGate).passed).toBe(false);
   });
 });
