@@ -35,3 +35,10 @@ describe("real authenticated routine webhook with private human setup", () => {
     expect(webhookCredentialCandidates(`Hash ${"af".repeat(32)} and commit ${"ab".repeat(20)}`)).toEqual([]);
   });
 });
+
+import { selectedWebhookRoutineReference } from "./integrator-routine-webhook.js";
+it("supplies only actual selected routine identity, without trigger recipe or invented service preferences", () => {
+  const context = selectedWebhookRoutineReference({ id: "selected-routine", title: "Test-service receipt", projectId: "actual-project", assigneeAgentId: "actual-owner" });
+  expect(context).toContain("Routine ID: selected-routine"); expect(context).toContain("Owner agent ID: actual-owner"); expect(context).toContain("Project ID: actual-project");
+  expect(context).not.toMatch(/token|credential|https?:|POST|payload|signing|create|completed|expected|must/i);
+});

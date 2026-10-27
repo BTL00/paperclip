@@ -37,3 +37,13 @@ describe("real manual invocation and delivery distinction", () => {
     expect(gradeIntegratorRoutineInvocation({ ...o, reply: `${o.state.firstInvocation.reply}\nThe Launch summary completed. Payment is approved.` }).passed).toBe(false);
   });
 });
+
+import { launchSummaryRoutineInput } from "./integrator-routine-invocation.js";
+import { createRoutineSchema } from "../../../packages/shared/src/validators/routine.js";
+it("validates the real project-name prerequisite as required public text, not unsupported string", () => {
+  const input = launchSummaryRoutineInput("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222");
+  expect(input.variables).toEqual([{ name: "projectName", type: "text", required: true, options: [] }]);
+  expect(input.assigneeAgentId).toBe("22222222-2222-4222-8222-222222222222");
+  expect(createRoutineSchema.safeParse({ ...input, variables: [{ name: "projectName", type: "string", required: true }] }).success).toBe(false);
+  expect(() => launchSummaryRoutineInput("not-a-project-id", input.assigneeAgentId!)).toThrow();
+});

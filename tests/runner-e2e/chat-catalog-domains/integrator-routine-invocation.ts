@@ -1,3 +1,4 @@
+import { createRoutineSchema } from "../../../packages/shared/src/validators/routine.js";
 import type { RoutineDetail, RoutineRunSummary } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
@@ -48,13 +49,15 @@ export function gradeIntegratorRoutineInvocation(value: unknown) {
   "The explicit later user request receives the real summary result and its actual execution task, not another acceptance or an invented payment approval.");
   return c.result();
 }
+/** Validate prerequisite input against the same supported public creation schema. */
+export function launchSummaryRoutineInput(projectId: string, assigneeAgentId: string) {
+  return createRoutineSchema.parse({ title: "Launch summary", projectId, assigneeAgentId,
+    description: "Summarize the actual {{projectName}} project in one saved task comment, including its actual payment approval state. Link the project and mark this summary task done. Do not change project records or create follow-up tasks.",
+    variables: [{ name: "projectName", type: "text", required: true }] });
+}
 export const integratorRoutineInvocationCases = [integratorDefinition("routines", "routines.run-now", async ctx => {
   const p = await project(ctx, "Launch", { description: "Synthetic Launch project. Payment approval is pending; no approval has been received." });
-  const routine = await ctx.input.api.post<RoutineDetail>(`/api/companies/${ctx.input.fixtures.company.id}/routines`, {
-    title: "Launch summary", projectId: p.id, assigneeAgentId: ctx.input.fixtures.agent.id,
-    description: "Summarize the actual {{projectName}} project in one saved task comment, including its actual payment approval state. Link the project and mark this summary task done. Do not change project records or create follow-up tasks.",
-    variables: [{ name: "projectName", type: "string", required: true }],
-  });
+  const routine = await ctx.input.api.post<RoutineDetail>(`/api/companies/${ctx.input.fixtures.company.id}/routines`, launchSummaryRoutineInput(p.id, ctx.input.fixtures.agent.id));
   return { project: p, routine };
 }, observeInvocation, gradeIntegratorRoutineInvocation, async (ctx, _state, value) => {
   const o = invocationObservation(value); const task = o?.tasks.find(row => row.id === o.invocations[0]?.linkedIssueId);

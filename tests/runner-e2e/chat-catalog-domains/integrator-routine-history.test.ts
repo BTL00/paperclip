@@ -36,3 +36,22 @@ describe("routine invocation and native failure distinction", () => {
     expect(gradeIntegratorRoutineHistory({ ...o, links: ["/ACORN/issues/ACORN-2"] }).passed).toBe(false);
   });
 });
+
+import type { BudgetOverview } from "../../../packages/shared/src/types/budget.js";
+import { routineHistoryAccountingReady } from "./integrator-routine-history.js";
+const accountingIdentity = { companyId: "company", agentId: "worker", issueId: "failed-task", runId: "failed-run" };
+function settledAccounting() {
+  return { runs: [{ id: "failed-run", companyId: "company", agentId: "worker", status: "failed", runtimeMode: "native", contextSnapshot: { issueId: "failed-task" } }],
+    overview: { companyId: "company", policies: ["company", "agent"].map(scopeType => ({ companyId: "company", scopeType, scopeId: scopeType === "company" ? "company" : "worker", isActive: true, amount: 500, remainingAmount: 499, hardStopEnabled: true, unpricedUsagePolicy: "allow", pendingRunCount: 0, paused: false, status: "ok" })) } as BudgetOverview };
+}
+it("requires genuine same-scope failed native history AND public terminal accounting release", () => {
+  const value = settledAccounting(); expect(routineHistoryAccountingReady(accountingIdentity, value.runs, value.overview)).toBe(true);
+  for (const scope of [0, 1]) { const pending = settledAccounting(); pending.overview.policies[scope]!.pendingRunCount = 1; expect(routineHistoryAccountingReady(accountingIdentity, pending.runs, pending.overview)).toBe(false); }
+});
+it("does not force ready for foreign runs, fake failure, absent policy or blocked scope", () => {
+  for (const key of ["id", "companyId", "agentId"] as const) { const v = settledAccounting(); v.runs[0]![key] = "foreign"; expect(routineHistoryAccountingReady(accountingIdentity, v.runs, v.overview)).toBe(false); }
+  const wrongTask = settledAccounting(); wrongTask.runs[0]!.contextSnapshot.issueId = "other-task"; expect(routineHistoryAccountingReady(accountingIdentity, wrongTask.runs, wrongTask.overview)).toBe(false);
+  const cancelled = settledAccounting(); cancelled.runs[0]!.status = "cancelled"; expect(routineHistoryAccountingReady(accountingIdentity, cancelled.runs, cancelled.overview)).toBe(false);
+  const absent = settledAccounting(); absent.overview.policies.pop(); expect(routineHistoryAccountingReady(accountingIdentity, absent.runs, absent.overview)).toBe(false);
+  const blocked = settledAccounting(); blocked.overview.policies[0]!.paused = true; expect(routineHistoryAccountingReady(accountingIdentity, blocked.runs, blocked.overview)).toBe(false);
+});

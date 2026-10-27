@@ -1,3 +1,5 @@
+import type { BudgetOverview } from "../../../packages/shared/src/types/budget.js";
+import type { ChatRun } from "../chat-flow.js";
 import type { RoutineDetail, RoutineRunSummary } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
@@ -41,6 +43,15 @@ export function gradeIntegratorRoutineHistory(value: unknown) {
       && !/\b(?:no|not|cannot|can't|unconfirmed|unverified|unknown|missing)\b/i.test(sentence)), "The response preserves which actual native execution failed and which invocation completed without inferring unsupported scheduled success. A truthful concise account of the actual manual runs needs no unprompted schedule-denial sentence.");
   return c.result();
 }
+/** Terminal native failure alone does not release budget accounting admission. */
+export function routineHistoryAccountingReady(expected: { companyId: string; agentId: string; issueId: string; runId: string }, runs: ChatRun[], overview: BudgetOverview) {
+  const run = runs[0];
+  if (runs.length !== 1 || !run || run.id !== expected.runId || run.companyId !== expected.companyId || run.agentId !== expected.agentId
+    || run.contextSnapshot?.issueId !== expected.issueId || run.status !== "failed" || run.runtimeMode !== "native" || overview.companyId !== expected.companyId) return false;
+  const policies = overview.policies.filter(p => p.isActive && (p.scopeType === "company" && p.scopeId === expected.companyId || p.scopeType === "agent" && p.scopeId === expected.agentId));
+  return ["company", "agent"].every(scope => policies.some(p => p.scopeType === scope)) && policies.every(p => p.companyId === expected.companyId
+    && p.hardStopEnabled && p.amount > 0 && p.unpricedUsagePolicy === "allow" && p.pendingRunCount === 0 && !p.paused && p.status !== "hard_stop" && p.remainingAmount > 0);
+}
 export const integratorRoutineHistoryCases = [integratorDefinition("routines", "routines.read-history", async ctx => {
   const p = await project(ctx, "Launch", { description: "Synthetic Launch project: payment approval remains pending; no other active work." }); const worker = await fixtureWorker(ctx);
   for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }]) await ctx.input.api.post(`${root(ctx)}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
@@ -51,6 +62,11 @@ export const integratorRoutineHistoryCases = [integratorDefinition("routines", "
     if (!failedInvocation.linkedIssueId) throw new Error("Routine failure prerequisite did not admit an actual execution task");
     return { issueId: failedInvocation.linkedIssueId };
   });
+  const accountingIdentity = { companyId: ctx.input.fixtures.company.id, agentId: worker.id, issueId: failure.failedIssueId, runId: failure.failedRun.id };
+  const accounting = await pollUntil({ label: "genuine failed routine prerequisite final accounting before separate success invocation", deadlineAt: Date.now() + 60_000, intervalMs: 1000,
+    load: async () => ({ runs: await ctx.allRuns(), overview: await ctx.input.api.get<BudgetOverview>(`${root(ctx)}/budgets/overview`) }),
+    accept: value => routineHistoryAccountingReady(accountingIdentity, value.runs, value.overview) });
+  await ctx.input.evidence("chat-routine-history-prerequisite-accounting.json", { expected: accountingIdentity, ...accounting });
   const completedInvocation = await ctx.input.api.post<RoutineRunSummary>(`/api/routines/${routine.id}/run`, { source: "manual", idempotencyKey: `success-history-${ctx.input.nonce}` });
   if (!completedInvocation.linkedIssueId) throw new Error("Successful routine prerequisite did not create a real execution task");
   const success = await pollUntil({ label: "actual successful routine history", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
