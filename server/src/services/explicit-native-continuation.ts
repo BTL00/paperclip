@@ -1,6 +1,7 @@
 import { assertDurableChatWakeupRequest, assertDurableChatWakeupReceipt, type DurableChatWakeupRequest } from "./durable-chat-wakeup.js";
 import { notifyExecutionRunWork } from "./execution-control-notifications.js";
 import { canSelectFreshWorkspace, type ContinuationReadiness } from "./fresh-workspace-continuation.js";
+import { verifiedWorkspaceSnapshotReceipt } from "./workspace-recovery-snapshot.js";
 import { readTaskRetryIntent } from "./task-retry.js";
 import { readSystemRecovery } from "./system-recovery-state.js";
 import { hasRequiredWorkspaceRecovery } from "./workspace-restore-recovery-state.js";
@@ -266,10 +267,9 @@ export async function admitExplicitNativeContinuation(input: {
         sql`${nativeRunResults.resultJson}#>>'{terminal,runTerminalState}' = 'succeeded'`,
       )).limit(1);
       const recovery = readSystemRecovery(action.evidence);
-      const retention = action.evidence.nativeSourceRetention as Record<string, unknown> | undefined;
-      const snapshotSettled = recovery?.state === "complete" && retention?.schema === "paperclip.native-source-retention.v1"
-        && retention.sourceRunId === run.id && retention.actionId === action.id && retention.settlement === "snapshot_retained"
-        && typeof retention.snapshotOperationId === "string" && recovery.preservationOperationIds.includes(retention.snapshotOperationId);
+      const snapshotSettled = completedResult && freshIntent && recovery?.state === "complete"
+        && await verifiedWorkspaceSnapshotReceipt(db, { companyId, issueId, runId: run.id,
+          actionId: action.id, operationIds: recovery.preservationOperationIds });
       if (completedResult && !(freshIntent && snapshotSettled))
         return blocked("finalizing_saved_result", "Paperclip is finishing the saved result.");
     }
