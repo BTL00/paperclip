@@ -1,23 +1,57 @@
+import { validDevicePrivateInput, type DevicePrivateInput } from "./external-device-private-contract.js";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
 import { validGrokRoutinePrivateInput, matchesConfiguredGrokRoutine, type GrokRoutinePrivateInput } from "./external-grok-private-contract.js";
 import { validSlackIdentityInput, validSlackWizardIdentityInput, matchingSlackIdentityPreview, type SlackIdentityPrivateInput } from "./external-slack-identity-contract.js";
 import { validSlackSetupPrivate, type SlackSetupPrivateInput } from "./external-slack-setup-private-contract.js";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure" | "slack-identity-confirm" | "slack-endpoint-configure" | "slack-wizard-confirm" | "slack-wizard-resume" | "slack-endpoint-reconnect"; slackSetup?:SlackSetupPrivateInput; slackIdentity?:SlackIdentityPrivateInput; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure" | "slack-identity-confirm" | "slack-endpoint-configure" | "slack-wizard-confirm" | "slack-wizard-resume" | "slack-endpoint-reconnect" | "device-approve" | "device-expired"; device?: DevicePrivateInput; slackSetup?:SlackSetupPrivateInput; slackIdentity?:SlackIdentityPrivateInput; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure", "slack-identity-confirm", "slack-endpoint-configure", "slack-wizard-confirm", "slack-wizard-resume", "slack-endpoint-reconnect"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure", "slack-identity-confirm", "slack-endpoint-configure", "slack-wizard-confirm", "slack-wizard-resume", "slack-endpoint-reconnect", "device-approve", "device-expired"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
   try {
     const context = await browser.newContext({ baseURL: base.origin });
     await context.addCookies(input.cookies); const page = await context.newPage(); page.setDefaultTimeout(30_000);
+    if (input.mode === "device-approve" || input.mode === "device-expired") {
+      if (!validDevicePrivateInput(input.mode, input.baseURL, input.setupURL, input.companyId, input.device, input.credential) || !input.device) throw new Error("Invalid finite device verification request");
+      const session = await context.request.get("/api/auth/get-session");
+      if (!session.ok() || (await session.json()).user?.id !== input.device.userId) throw new Error("Device UI requires the same signed-in fixture person");
+      const description = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.origin === base.origin && url.pathname === "/api/mcp/device" && url.searchParams.get("user_code") === input.credential && response.request().method() === "GET";
+      });
+      await page.goto(input.setupURL, { waitUntil: "domcontentloaded" });
+      const described = await description;
+      if (input.mode === "device-expired") {
+        const body = await described.json();
+        if (described.status() !== 404 || body.error !== "invalid_request") throw new Error("Expired device UI did not receive the actual issuer rejection");
+        await page.getByText(/expired|invalid/i).first().waitFor();
+        if (await page.getByRole("button", { name: "Connect organization", exact: true }).isVisible()) throw new Error("Expired device still offers approval");
+        return { processIsolation: true, testRunnerAttached: false, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false, deviceSessionVerified: true, expiredPageVisible: true };
+      }
+      if (!described.ok()) throw new Error("Device consent description unavailable");
+      const request = await described.json();
+      if (request.clientName !== "Paperclip disposable CLI" || request.requestedCompanyId !== input.companyId || request.requiresSignIn !== false || request.requestedWrite !== false || request.requestedConfigure !== false || request.agentConnection === true
+        || !request.companies?.some((company: { id: string; name: string }) => company.id === input.companyId && company.name === input.device!.companyName)) throw new Error("Device consent does not match the exact owned read-only request");
+      await page.getByRole("heading", { name: "Connect Paperclip disposable CLI to Paperclip", exact: true }).waitFor();
+      await page.getByText(input.credential.toUpperCase(), { exact: true }).waitFor();
+      await page.getByText(input.device.companyName, { exact: true }).waitFor();
+      await page.getByText("Read all of your Paperclip data", { exact: true }).waitFor();
+      if (await page.getByText("Write all of your Paperclip data", { exact: true }).isVisible()) throw new Error("Device read-only request unexpectedly offers write authority");
+      const approval = page.waitForResponse(response => new URL(response.url()).origin === base.origin && new URL(response.url()).pathname === "/api/mcp/device/consent" && response.request().method() === "POST");
+      await page.getByRole("button", { name: "Connect organization", exact: true }).click();
+      const approved = await approval, submitted = approved.request().postDataJSON();
+      if (!approved.ok() || (await approved.json()).status !== "approved" || submitted.userCode !== input.credential || submitted.companyId !== input.companyId || submitted.decision !== "approve" || submitted.allowWrites !== false || submitted.allowConfiguration !== false) throw new Error("Actual device UI did not approve exactly the selected read-only company/code");
+      await page.getByRole("heading", { name: "Access approved", exact: true }).waitFor();
+      return { processIsolation: true, testRunnerAttached: false, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false, deviceSessionVerified: true, currentCodeVisible: true, companyConsentVisible: true, readScopeVisible: true, humanApproved: true };
+    }
     if (input.mode === "canary") {
       await page.setContent('<input type="password" aria-label="App key" autocomplete="off">');
       const field = page.getByLabel("App key"); await field.fill(input.credential);

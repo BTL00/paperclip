@@ -59,6 +59,8 @@ function valid(id: string) {
     o.reply = "The launch profile returned Unpredictable launch result.";
   } else if (id === "assistant-connections.device-login") {
     Object.assign(o.state, { verificationPath: "/mcp-device", currentCodeVisible: true, companyConsentVisible: true, readScopeVisible: true, humanApproved: true,
+      approvalUi: { processIsolation: true, testRunnerAttached: false, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false, deviceSessionVerified: true, currentCodeVisible: true, companyConsentVisible: true, readScopeVisible: true, humanApproved: true },
+      expiredUi: { processIsolation: true, testRunnerAttached: false, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false, deviceSessionVerified: true, expiredPageVisible: true },
       clientCompanyId: "company", clientReadOnly: true, pendingError: "authorization_pending", wrongResourceDenied: true, wrongClientDenied: true,
       correctExchangeSucceeded: true, reusedCodeDenied: true, expirationWaitMs: 600000, elapsedBeforeExpiryProbe: 600501, expiredCodeDenied: true, expiredPageVisible: true });
     o.reply = "Open the verification page and sign in to approve the CLI device code as yourself.";

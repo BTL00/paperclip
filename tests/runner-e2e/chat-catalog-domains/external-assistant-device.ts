@@ -1,13 +1,15 @@
-import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { definition, externalObservation, observeExternal, checks, verifyRenderedReply } from "./external-support.js";
 import { waitForReply } from "./identity-support.js";
 import { oauthPost, mcp, origin, resource, type Tokens } from "../public-mcp-client.js";
 
+import { privateBrowserEntry } from "./external-private-browser.js";
+import { matchesDevicePrivateReceipt } from "./external-device-private-contract.js";
+
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 interface DeviceCode { device_code: string; user_code: string; verification_uri: string; verification_uri_complete: string; expires_in: number; interval: number }
-interface DeviceFixture { clientId: string; otherClientId: string; primary: DeviceCode; expiring: DeviceCode; expiresAt: number; polledAt: number; tokens?: Tokens }
+interface DeviceFixture { personId: string; clientId: string; otherClientId: string; primary: DeviceCode; expiring: DeviceCode; expiresAt: number; polledAt: number; tokens?: Tokens }
 const fixtures = new WeakMap<ChatCatalogContext, DeviceFixture>();
 async function requestDevice(clientId: string, companyId: string): Promise<DeviceCode> {
   const response = await oauthPost("device_authorization", { client_id: clientId, resource, company_id: companyId, scope: "paperclip:read offline_access" });
@@ -28,6 +30,8 @@ export function gradeDeviceLogin(value: unknown) {
   c.add("correct-human-verification", o.state.verificationPath === "/mcp-device" && o.state.currentCodeVisible === true && o.state.companyConsentVisible === true && o.state.readScopeVisible === true
     && o.state.humanApproved === true && o.state.clientCompanyId === o.companyId && o.state.clientReadOnly === true,
     "The person follows the issuer's actual page/current code and authorizes exactly the intended company and read scope.");
+  c.add("private-device-ui", matchesDevicePrivateReceipt("device-approve", o.state.approvalUi) && matchesDevicePrivateReceipt("device-expired", o.state.expiredUi),
+    "Both actual device UI phases use the isolated finite browser with closed receipts, outside Test reporting.");
   c.add("pending-without-human-approval", o.state.pendingError === "authorization_pending", "The waiting CLI cannot obtain credentials before human approval.");
   c.add("resource-and-client-mismatch-denied", o.state.wrongResourceDenied === true && o.state.wrongClientDenied === true && o.state.correctExchangeSucceeded === true,
     "Mismatched resource/client requests fail without consuming the valid selected grant.");
@@ -44,25 +48,33 @@ export const assistantDeviceExternalCases = [definition("assistant-connections.d
   const setup = await ctx.input.api.get<{ enabled: boolean; serverUrl: string }>("/api/mcp/setup");
   if (!setup.enabled || setup.serverUrl !== resource) throw new Error("Setup blocker: this disposable instance has no compatible public MCP issuer/resource");
   const clientId = await registerClient(), otherClientId = await registerClient();
-  const primary = await requestDevice(clientId, ctx.input.fixtures.company.id), expiring = await requestDevice(clientId, ctx.input.fixtures.company.id);
+  const primary = await requestDevice(clientId, ctx.input.fixtures.company.id);
+  ctx.input.privateSecrets.push(primary.device_code, primary.user_code, primary.verification_uri_complete);
+  const expiring = await requestDevice(clientId, ctx.input.fixtures.company.id);
+  ctx.input.privateSecrets.push(expiring.device_code, expiring.user_code, expiring.verification_uri_complete);
   if (primary.expires_in !== 600 || expiring.expires_in !== 600 || primary.verification_uri !== `${origin}/mcp-device`) throw new Error("Declared bounded device-code lifetime or verification origin differs from the real issuer");
-  ctx.input.privateSecrets.push(primary.device_code, primary.user_code, expiring.device_code, expiring.user_code);
+  const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
+  if (!session.user?.id) throw new Error("Device UI requires the authenticated fixture person");
   const expiresAt = Date.now() + expiring.expires_in * 1000;
-  const fixture = { clientId, otherClientId, primary, expiring, expiresAt, polledAt: Date.now() }; fixtures.set(ctx, fixture);
+  const fixture = { personId: session.user.id, clientId, otherClientId, primary, expiring, expiresAt, polledAt: Date.now() }; fixtures.set(ctx, fixture);
   const pending = await exchange(fixture, primary); const pendingBody = await pending.json() as { error?: string };
   return { verificationPath: new URL(primary.verification_uri).pathname, pendingError: pendingBody.error, expirationWaitMs: 600_000 };
 }, gradeDeviceLogin, {
   authentication: "human-session", attemptTimeoutMs: 780_000,
-  sourceFiles: ["chat-catalog-domains/external-assistant-device.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "public-mcp-client.ts", "chat-scenarios/assistant-connections.yaml"],
+  sourceFiles: ["chat-catalog-domains/external-assistant-device.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "chat-catalog-domains/external-device-private-contract.ts", "../../ui/src/pages/McpConnect.tsx", "../../server/src/routes/public-mcp.ts", "../../server/src/services/public-mcp/oauth.ts", "../../packages/shared/src/public-mcp.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "public-mcp-client.ts", "chat-scenarios/assistant-connections.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const fixture = fixtures.get(ctx); if (!fixture) throw new Error("Device fixture missing");
-    const source = ctx.input.page.url(); await ctx.input.page.goto(fixture.primary.verification_uri_complete);
-    await expect(ctx.input.page.getByRole("heading", { name: /^Connect .+ to Paperclip$/ })).toBeVisible();
-    await expect(ctx.input.page.getByText(fixture.primary.user_code.toUpperCase(), { exact: true })).toBeVisible(); state.currentCodeVisible = true;
-    await expect(ctx.input.page.getByText(ctx.input.fixtures.company.name, { exact: true })).toBeVisible(); state.companyConsentVisible = true;
-    await expect(ctx.input.page.getByText("Read all of your Paperclip data", { exact: true })).toBeVisible(); state.readScopeVisible = true;
-    await ctx.input.page.getByRole("button", { name: "Connect organization", exact: true }).click();
-    await expect(ctx.input.page.getByText(/connected|approved/i).first()).toBeVisible(); state.humanApproved = true;
+    const approvalUi = await privateBrowserEntry({
+      mode: "device-approve", baseURL: origin, setupURL: fixture.primary.verification_uri_complete,
+      providerURL: origin, credential: fixture.primary.user_code, companyId: ctx.input.fixtures.company.id,
+      device: { userId: fixture.personId, companyName: ctx.input.fixtures.company.name },
+      cookies: await ctx.input.page.context().cookies(origin),
+    });
+    state.approvalUi = approvalUi;
+    state.currentCodeVisible = approvalUi.currentCodeVisible;
+    state.companyConsentVisible = approvalUi.companyConsentVisible;
+    state.readScopeVisible = approvalUi.readScopeVisible;
+    state.humanApproved = approvalUi.humanApproved;
     const wrongResource = await exchange(fixture, fixture.primary, { resource: origin + "/mcp/not-the-resource" }); state.wrongResourceDenied = wrongResource.status === 400; await wrongResource.body?.cancel();
     const wrongClient = await exchange(fixture, fixture.primary, { client_id: fixture.otherClientId }); state.wrongClientDenied = wrongClient.status === 400; await wrongClient.body?.cancel();
     if (Date.now() < fixture.polledAt + fixture.primary.interval * 1000) await pollUntil({ label: "advertised device polling interval", deadlineAt: Date.now() + 15_000, intervalMs: 200, load: async () => Date.now(), accept: now => now >= fixture.polledAt + fixture.primary.interval * 1000 });
@@ -81,9 +93,14 @@ export const assistantDeviceExternalCases = [definition("assistant-connections.d
     state.elapsedBeforeExpiryProbe = Date.now() - (fixture.expiresAt - 600_000);
     const expired = await exchange(fixture, fixture.expiring); const body = await expired.json() as { error?: string };
     state.expiredCodeDenied = expired.status === 400 && body.error === "expired_token";
-    await ctx.input.page.goto(fixture.expiring.verification_uri_complete);
-    await expect(ctx.input.page.getByText(/expired|invalid/i).first()).toBeVisible(); state.expiredPageVisible = true;
-    await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+    const expiredUi = await privateBrowserEntry({
+      mode: "device-expired", baseURL: origin, setupURL: fixture.expiring.verification_uri_complete,
+      providerURL: origin, credential: fixture.expiring.user_code, companyId: ctx.input.fixtures.company.id,
+      device: { userId: fixture.personId, companyName: ctx.input.fixtures.company.name },
+      cookies: await ctx.input.page.context().cookies(origin),
+    });
+    state.expiredUi = expiredUi;
+    state.expiredPageVisible = expiredUi.expiredPageVisible;
   },
   async observe(ctx, state) { return observeExternal(ctx, state); },
   async verifyResult(ctx, _state, value) { await verifyRenderedReply(ctx, value); },
