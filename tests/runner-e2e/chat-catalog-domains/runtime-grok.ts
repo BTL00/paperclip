@@ -1,4 +1,6 @@
 import { expect } from "@playwright/test";
+import type { McpConnection } from "../../../packages/shared/src/public-mcp.js";
+import { privateGrokOperator } from "./runtime-grok-operator.js";
 import type { Agent } from "../../../packages/shared/src/types/agent.js";
 import type { GrokConnection, GrokInvitation } from "../../../packages/shared/src/grok-bot.js";
 import { pollUntil } from "../api.js";
@@ -22,13 +24,17 @@ export function truthfulGrokCapabilities(reply: string) {
     && /(?:stop|termination|terminate|execution).*(?:not|cannot|can't|guarantee|inspect|external)|(?:cannot|can't).*(?:stop|terminate|termination)/is.test(reply)
     && !/(?:has|offers|provides) (?:the )?(?:full|same|identical) (?:parity|capabilities).*local|(?:and |it |Paperclip |Stop )(?:guarantees|ensures) remote termination|can guarantee remote termination|(?:usage|cost).*(?:is zero|\$0)/i.test(reply);
 }
+export function supportedGrokHumanHandoff(reply: string) {
+  return /Grok|Bot/i.test(reply) && /Agents|New Agent|invite|runtime|profile|connection|setup|set up/i.test(reply) && /open|visit|go to|click|choose|select|use|you can|you.ll|you will|your browser|complete.*authori[sz]/i.test(reply)
+    && !/I(?:['’]ve| have)\s+(?:authorized|connected)|(?:Bot|connection) is (?:already |now )?ready/i.test(reply);
+}
 export function gradeExistingGrok(value: unknown) {
   const c = checks(), o = runtimeObservation(value); c.add("actual-existing-bot-human-authorization", !!o, "Actual public HTTPS, human OAuth/one-use pairing and authenticated external Bot challenge receipts are required."); if (!o) return c.result();
   const s = o.state, worker = s.worker as Agent | undefined;
   c.add("canonical-guides-supported-authorization-before-ready", s.enabledPublicInstance === true && s.noExistingBotAuthorization === true && s.authorizationUiVisible === true && s.pairingSecretStayedPrivate === true
     && /Grok|Bot/i.test(String(s.initialReply)) && /authori[sz]|connect|setup|set up|MCP|human|browser/i.test(String(s.initialReply)) && !/(?:Bot|it|agent|connection)\s+(?:is\s+)?(?:already\s+|fully\s+|now\s+)?(?:connected|ready)\b(?!\s+(?:once|when|after|pending|only|subject)\b)|(?:already|fully|now)\s+(?:connected|ready)|I(?:['’]ve| have)\s+(?:authorized|connected)/i.test(String(s.initialReply)),
     "The canonical answer starts or points to the real signed-in human flow and does not label the previously unauthorized Bot ready.");
-  c.add("real-pairing-and-authenticated-two-way-challenge", s.actualHumanPairingObserved === true && s.sameChosenCompanyAndBot === true && s.realRoundTrip === true && s.routineConfiguredSecurely === true && !!worker
+  c.add("real-pairing-and-authenticated-two-way-challenge", s.humanHandoffCompleted === true && s.publicPersonGrantBound === true && s.operatorAvailable === true && s.actualHumanPairingObserved === true && s.sameChosenCompanyAndBot === true && s.realRoundTrip === true && s.routineConfiguredSecurely === true && !!worker
     && o.agents.length === (s.beforeAgentIds as string[]).length + 1 && (s.beforeAgentIds as string[]).every(id => o.agents.some(row => row.id === id)) && worker.companyId === o.companyId && worker.adapterType === "paperclip_runner" && worker.adapterConfig.provider === "grok_bot" && worker.lifecycleState === "ready",
     "The exact chosen company/Bot is bound through genuine external Bot authorization; only its actual authenticated verify acknowledgement makes setup complete.");
   c.add("honest-phase-bound-ready-result-and-capability-limits", s.confirmationBound === true && /ready|connected|verified|round.?trip/i.test(String(s.resultReply)) && truthfulGrokCapabilities(String(s.resultReply))
@@ -51,33 +57,33 @@ export const runtimeGrokCases = [runtimeDefinition("agents.existing-grok-bot", a
   if (!response.ok || (await response.json() as { resource?: string }).resource !== metadata.resource) throw new Error("Actual public HTTPS Bot authorization metadata is not reachable or does not identify this instance");
   const invitation = await ctx.input.api.get<GrokInvitation | null>(`/api/companies/${ctx.input.fixtures.company.id}/grok-invitations`);
   if (invitation) throw new Error("Existing-Bot context must start without any previously authorized Grok invitation/binding");
-  return { beforeAgentIds: (await ctx.input.api.get<Agent[]>(`/api/companies/${ctx.input.fixtures.company.id}/agents`)).map(row => row.id), enabledPublicInstance: true, noExistingBotAuthorization: true, publicResourceMatches: true, providerProbes: [{ phase: "setup", operation: "public-mcp-resource-metadata", status: "reachable", usage: "unavailable", cost: "unavailable" }] };
+  const available = await privateGrokOperator(ctx, "availability");
+  return { operatorAvailable: available.humanSelectedAuthorizedBot && available.publicPersonMatched, publicPersonId: available.personId, beforeGrantIds: (await ctx.input.api.get<McpConnection[]>("/api/mcp/connections")).map(row => row.id), beforeAgentIds: (await ctx.input.api.get<Agent[]>(`/api/companies/${ctx.input.fixtures.company.id}/agents`)).map(row => row.id), enabledPublicInstance: true, noExistingBotAuthorization: true, publicResourceMatches: true, providerProbes: [{ phase: "setup", operation: "public-mcp-resource-metadata", status: "reachable", usage: "unavailable", cost: "unavailable" }] };
 }, gradeExistingGrok, {
-  ...runtimePrivateSpec("agents.existing-grok-bot"), authentication: "human-session", coverageGaps: ["Disposable harness public/auth origin is pinned to loopback HTTP; actual owned HTTPS origin/tunnel binding is not yet supported. This is separate from the genuine existing Bot human OAuth/pairing prerequisite."], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000,
-  sourceFiles: ["chat-catalog-domains/runtime-grok.ts", "chat-catalog-domains/runtime-private.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "chat-catalog-domains/external-grok-private-contract.ts", "../../server/src/routes/grok-bot.ts", "../../server/src/services/grok-bot/routine.ts", "../../server/src/services/dot-runner-broker.ts", "../../ui/src/components/GrokBotConnection.tsx", "../../ui/src/components/new-agent/GrokBotSetupContent.tsx", "chat-scenarios/agents.yaml"],
+  ...runtimePrivateSpec("agents.existing-grok-bot"), authentication: "human-session", coverageGaps: [], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000,
+  sourceFiles: ["chat-catalog-domains/runtime-grok.ts", "chat-catalog-domains/runtime-grok-operator.ts", "chat-catalog-domains/runtime-grok-operator-worker.ts", "chat-catalog-domains/runtime-grok-operator-contract.ts", "chat-runtime-private-requirements.ts", "public-mcp-flow.ts", "chat-public-origin.ts", "chat-catalog-domains/external-public-signin.ts", "chat-catalog-domains/external-public-signin-worker.ts", "chat-catalog-domains/external-public-signin-contract.ts", "../../ui/src/pages/Auth.tsx", "../../ui/src/pages/McpConnect.tsx", "../../ui/src/components/AgentSetupPrompt.tsx", "../../ui/src/lib/grok-bot-setup-prompt.ts", "../../ui/src/components/new-agent/GrokBotSetup.tsx", "../../ui/src/components/NewAgentDialog.tsx", "../../ui/src/components/new-agent/AgentBasicsDialog.tsx", "chat-catalog-domains/runtime-private.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "chat-catalog-domains/external-grok-private-contract.ts", "../../server/src/routes/grok-bot.ts", "../../server/src/services/grok-bot/routine.ts", "../../server/src/services/dot-runner-broker.ts", "../../server/src/modules/external-agents/dot.ts", "../../server/src/services/public-mcp/oauth.ts", "../../ui/src/components/AgentsToolbar.tsx", "../../ui/src/pages/Agents.tsx", "../../ui/src/components/new-agent/ExternalAgentInviteDialog.tsx", "../../ui/src/components/new-agent/ExternalAgentInviteContent.tsx", "../../ui/src/components/GrokBotConnection.tsx", "../../ui/src/components/new-agent/GrokBotSetupContent.tsx", "chat-scenarios/agents.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const initial = await observeRuntime(ctx, state), source = ctx.input.page.url(), selected = selectedRuntimeInputs(ctx, "agents.existing-grok-bot"); state.initialReply = initial.reply;
-    let invitation = await ctx.input.api.get<GrokInvitation | null>(`/api/companies/${initial.companyId}/grok-invitations`);
-    if (!invitation) invitation = await ctx.input.api.post<GrokInvitation>(`/api/companies/${initial.companyId}/grok-invitations`, { name: "Existing Grok Bot", botName: selected.values.botId, role: "engineer", reportsTo: initial.leadId });
-    if (invitation.agent.botName !== selected.values.botId || invitation.binding?.connected) throw new Error("The supported human setup switched the chosen existing Bot or was already authorized");
-    const agentId = invitation.agent.id, route = endpoint(initial.companyId, agentId); state.grokAgentId = agentId;
+    if (!supportedGrokHumanHandoff(initial.reply)) throw new Error("Canonical reply did not direct a supported actual human Grok setup handoff; no UI/API rescue is permitted");
+    const invitation = await ctx.input.api.get<GrokInvitation | null>(`/api/companies/${initial.companyId}/grok-invitations`);
+    if (invitation && (invitation.agent.botName !== selected.values.botId || invitation.binding?.connected)) throw new Error("Canonical setup selected another Bot or claimed an already authorized target");
+    if (!invitation && initial.agents.some(agent => !(state.beforeAgentIds as string[]).includes(agent.id))) throw new Error("Canonical chat created an untracked agent instead of the supported Grok handoff");
+    const handoff = await privateGrokOperator(ctx, "setup", invitation?.agent.id), agentId = handoff.agentId!, route = endpoint(initial.companyId, agentId); state.grokAgentId = agentId; state.bindingId = handoff.bindingId;
+    state.authorizationUiVisible = handoff.productInvitationUi === true; state.pairingSecretStayedPrivate = handoff.pairingCodeConfinedToPublicForm === true && handoff.privateStorageClean === true && handoff.clipboardClean === true;
+    state.humanHandoffCompleted = handoff.accessInstructionsDelivered === true && handoff.routineInstructionsDelivered === true && handoff.publicPairingConsentSubmitted === true && handoff.publicCompanyAgentMatched === true && handoff.clientCallbackApproved === true;
+    await ctx.input.evidence("grok-human-handoff.json", { ...handoff, claim: "Human delivery/selection and actual public form submission only; no Bot readiness or provider success is inferred." });
+    (state.providerProbes as unknown[]).push({ phase: "actual-operator-handoff", operation: "real-existing-Bot-access-and-routine-instruction-delivery", instructionMessagesDelivered: 2, status: "human-acknowledged-only", usage: "unavailable", cost: "unavailable" });
+    const connected = await pollUntil({ label: "Actual same-Bot human OAuth binding", deadlineAt: Date.now() + 60000, load: () => ctx.input.api.get<GrokConnection>(route), accept: row => !!row.binding && row.binding.id === state.bindingId && row.binding.connected,
+      reject: row => row.binding && row.binding.id !== state.bindingId ? "Actual external authorization changed the original UI pairing identity" : undefined });
+    state.actualHumanPairingObserved = connected.binding?.connected === true;
+    const grants = await ctx.input.api.get<McpConnection[]>("/api/mcp/connections"), person = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session"), actual = grants.filter(g => !(state.beforeGrantIds as string[]).includes(g.id) && g.companyId === initial.companyId && g.agent?.id === agentId && g.agent.provider === "grok_bot" && g.scopes.includes("paperclip:agent") && !g.revokedAt);
+    state.publicPersonGrantBound = person.user.id === state.publicPersonId && person.user.id === handoff.personId && actual.length === 1; state.actualGrantId = actual[0]?.id;
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/agents/${agentId}/runtime`, { waitUntil: "domcontentloaded" });
     const section = ctx.input.page.getByRole("region", { name: "Grok Bot connection", exact: true }); await expect(section).toBeVisible();
-    await section.getByRole("button", { name: "Reconnect agent access", exact: true }).click();
-    await expect(section.getByRole("button", { name: "Copy connection instructions", exact: true })).toBeVisible();
-    await expect(section.getByLabel("One-use pairing code", { exact: true })).toHaveAttribute("type", "password"); state.authorizationUiVisible = true; state.pairingSecretStayedPrivate = true;
-    const pending = await ctx.input.api.get<GrokConnection>(route); state.bindingId = pending.binding?.id;
-    if (!state.bindingId || pending.binding?.connected || pending.agentLifecycleState === "ready") throw new Error("Pairing instructions alone incorrectly imply authorized or ready Grok access");
-    // This waits for the ACTUAL existing Bot to install MCP and its responsible
-    // person to complete the real browser OAuth + one-use pairing. The harness
-    // never registers a replacement OAuth client or impersonates the Bot.
-    const connected = await pollUntil({ label: "Genuine existing Bot human OAuth and one-use pairing prerequisite", deadlineAt: Date.now() + 120000, load: () => ctx.input.api.get<GrokConnection>(route), accept: row => !!row.binding && row.binding.id === state.bindingId && row.binding.connected,
-      reject: row => row.binding && row.binding.id !== state.bindingId ? "Existing Bot authorization changed the original pairing identity" : undefined });
-    state.actualHumanPairingObserved = connected.binding?.connected === true;
     const receipt = await privateBrowserEntry({ mode: "grok-routine-configure", companyId: initial.companyId, grok: { agentId, bindingId: String(state.bindingId), expectedRevision: connected.binding?.routine?.revision ?? 0, botName: selected.values.botId, webhookUrl: selected.values.endpoint }, baseURL: ctx.input.api.baseURL, setupURL: ctx.input.page.url(), providerURL: ctx.input.api.baseURL, credential: selected.reference(selected.values.credentialEnvName), cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) });
     state.routineConfiguredSecurely = receipt.bindingId === state.bindingId && receipt.routineConfigured === true && receipt.routineUiVisible === true && receipt.humanSubmittedSecurely === true && receipt.storageClean === true;
     const configured = await ctx.input.api.get<GrokConnection>(route);
-    if (configured.binding?.id !== state.bindingId || !configured.binding.connected || configured.binding.routine?.botName !== selected.values.botId || configured.binding.routine.verified || !configured.binding.routine.configured) throw new Error("The actual saved same-Bot routine configuration did not remain unverified before the real challenge");
+    if (!configured.binding || configured.binding.id !== state.bindingId || !configured.binding.connected || configured.binding.routine?.botName !== selected.values.botId || configured.binding.routine.verified || !configured.binding.routine.configured) throw new Error("The actual saved same-Bot routine configuration did not remain unverified before the real challenge");
     const priorExchangeId = configured.binding.routine.lastExchange?.id;
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" }); await section.getByRole("button", { name: "Verify connection", exact: true }).click();
     const verified = await pollUntil({ label: "Actual authenticated external Bot two-way verification", deadlineAt: Date.now() + 120000, load: () => ctx.input.api.get<GrokConnection>(route), accept: row => genuineGrokRoundTrip(row, String(state.bindingId), selected.values.botId), reject: row => row.binding?.routine?.lastExchange?.status === "rejected" || row.recoveryNeeded || row.binding?.routine?.recoveryNeeded ? "Real Bot challenge rejected or became uncertain; setup is not complete" : undefined });
@@ -91,5 +97,14 @@ export const runtimeGrokCases = [runtimeDefinition("agents.existing-grok-bot", a
     state.confirmationBound = human.length === 1 && Array.isArray(wake) && wake.length === 1 && wake[0] === human[0]!.id; state.resultReply = comments.filter(row => row.authorAgentId === initial.leadId && row.createdByRunId === run.id).map(row => row.body).join("\n");
     state.worker = await ctx.input.api.get<Agent>(`/api/agents/${agentId}`);
   },
-  async cleanup(ctx, state) { if (state.grokAgentId) await ctx.input.api.delete(endpoint(ctx.input.fixtures.company.id, String(state.grokAgentId))); },
+  async cleanup(ctx, state) {
+    const companyId = ctx.input.fixtures.company.id, before = state.beforeAgentIds as string[] | undefined;
+    if (!before) return;
+    const targets = (await ctx.input.api.get<Agent[]>(`/api/companies/${companyId}/agents`)).filter(agent => !before.includes(agent.id) && agent.companyId === companyId && agent.adapterType === "paperclip_runner" && agent.adapterConfig.provider === "grok_bot");
+    for (const agent of targets) await ctx.input.api.delete(endpoint(companyId, agent.id));
+    const beforeGrants = state.beforeGrantIds as string[] | undefined, grants = await ctx.input.api.get<McpConnection[]>("/api/mcp/connections");
+    for (const grant of grants) if (!beforeGrants?.includes(grant.id) && grant.companyId === companyId && targets.some(agent => agent.id === grant.agent?.id) && !grant.revokedAt) await ctx.input.api.delete(`/api/mcp/connections/${grant.id}`);
+    const retained = await ctx.input.api.get<McpConnection[]>("/api/mcp/connections"); if (retained.some(grant => grant.companyId === companyId && targets.some(agent => agent.id === grant.agent?.id) && !grant.revokedAt)) throw new Error("Actual owned Grok authority revocation is not confirmed");
+    await ctx.input.evidence("grok-owned-authority-cleanup.json", { agentIds: targets.map(agent => agent.id), activeOwnedGrants: 0, externalBotRetained: true, claim: "Only this attempt's Paperclip authority is revoked. The user-owned Bot, account-wide plugin and designated reusable routine are retained; remote global termination is not claimed." });
+  },
 })];
