@@ -50,3 +50,16 @@ it("requires actual preview company, endpoint, Slack provider and independently 
   ])
     expect(matchingSlackIdentityPreview(wrong, companyId, input)).toBe(false);
 });
+
+import { validSlackWizardIdentityInput } from "./external-slack-identity-contract.js";
+it("restricts normal wizard continuation to the same real identity and exact saved Slack setup", () => {
+  const setup = `http://127.0.0.1:3100/ACORN/apps/chat/connect?provider=slack&purpose=chat&resume=${input.endpointId}`;
+  expect(validSlackWizardIdentityInput(companyId, input, setup)).toBe(true);
+  for (const wrong of [
+    setup + "&stage=test",
+    setup.replace(input.endpointId, companyId),
+    setup.replace("slack", "discord"),
+    setup + "#test",
+  ])
+    expect(validSlackWizardIdentityInput(companyId, input, wrong)).toBe(false);
+});

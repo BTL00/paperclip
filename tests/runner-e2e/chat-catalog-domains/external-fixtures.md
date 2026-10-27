@@ -214,3 +214,25 @@ persisted human comments comprise the two original-query turns and the product's
 two human-attributed proposal-resolution notices. Approval proves the exact
 saved reference and consumer, with no Morgan task run or task-delivery event;
 it never proves that a later task already consumed or validated the value.
+
+The `connect-slack` and `channel-prerequisites` journeys additionally select
+`slackBrowserSessionEnv`, a private reference containing Playwright storage-state
+JSON for the designated disposable **human** Slack account. It is separate from
+the sender API token. Cookies/storage may belong only to official HTTPS Slack
+hosts. The finite isolated browser verifies the selected workspace/channel URL
+and copies the current person's actual member ID from their own profile before
+submitting exactly the saved app's slash command with `connect`. Missing or
+changed controls, a different member, an existing draft, expired sign-in or an
+unavailable designated session fail that prerequisite; no API-created slash event
+substitutes for it. The provider-signed callback and current processed
+`lastConnectAt` are independently required before the real ownership button,
+Continue to message test and Done controls. The final case also requires a new
+actual two-way native conversation; credential saving or endpoint activation
+alone does not pass. These callbacks are authored and calibrated offline, not
+live-qualified Slack/browser evidence.
+
+The private session JSON, each cookie/storage value, bot token and signing secret
+remain in the selected private envelope, redactor, process memory and private
+0600 child handoff. They never enter model input, public case state, argv,
+subprocess environment, trace, video, screenshots or closed receipts. The child
+handoff is removed unconditionally. Supply no unrelated browser sessions.

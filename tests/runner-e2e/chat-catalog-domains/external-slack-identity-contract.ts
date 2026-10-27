@@ -55,3 +55,29 @@ export function matchingSlackIdentityPreview(
     row.canConfirm !== false
   );
 }
+
+export function validSlackWizardIdentityInput(
+  companyId: unknown,
+  input: SlackIdentityPrivateInput | undefined,
+  setupURL: string,
+) {
+  try {
+    const url = new URL(setupURL);
+    return (
+      !!input &&
+      validSlackIdentityInput(
+        companyId,
+        input,
+        `${url.origin}/apps/chat/${input.endpointId}/access`,
+      ) &&
+      url.pathname.endsWith("/apps/chat/connect") &&
+      url.searchParams.size === 3 &&
+      url.searchParams.get("provider") === "slack" &&
+      url.searchParams.get("purpose") === "chat" &&
+      url.searchParams.get("resume") === input.endpointId &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}

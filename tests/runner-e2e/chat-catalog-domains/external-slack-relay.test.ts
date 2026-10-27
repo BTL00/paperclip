@@ -13,3 +13,13 @@ describe("genuine Slack-signature preserving disposable relay",()=>{
   ]){const i=signed();mutate(i);expect(verifiedSlackRelayRequest(i)).toBe(false);}
  });
 });
+
+import {slackHumanConnectPayload} from "./external-slack-relay.js";
+it("binds a genuine signed form's connect meaning to the exact selected human/workspace/channel/command",()=>{
+ const expected={workspaceId:"T123",senderUserId:"U123",channelId:"C123",command:"/owned-agent"};
+ const payload={team_id:"T123",user_id:"U123",channel_id:"C123",command:"/owned-agent",text:"connect"};
+ const body=(value:typeof payload)=>Buffer.from(new URLSearchParams(value).toString());
+ expect(slackHumanConnectPayload(body(payload),expected)).toBe(true);
+ for(const wrong of [{...payload,user_id:"UOTHER"},{...payload,team_id:"TOTHER"},{...payload,channel_id:"COTHER"},{...payload,command:"/unrelated"},{...payload,text:"delete"}])expect(slackHumanConnectPayload(body(wrong),expected)).toBe(false);
+ expect(slackHumanConnectPayload(Buffer.from(new URLSearchParams(payload).toString()+"&user_id=UOTHER"),expected)).toBe(false);
+});

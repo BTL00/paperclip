@@ -2,15 +2,16 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
 import { validGrokRoutinePrivateInput, matchesConfiguredGrokRoutine, type GrokRoutinePrivateInput } from "./external-grok-private-contract.js";
-import { validSlackIdentityInput, matchingSlackIdentityPreview, type SlackIdentityPrivateInput } from "./external-slack-identity-contract.js";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure" | "slack-identity-confirm"; slackIdentity?:SlackIdentityPrivateInput; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+import { validSlackIdentityInput, validSlackWizardIdentityInput, matchingSlackIdentityPreview, type SlackIdentityPrivateInput } from "./external-slack-identity-contract.js";
+import { validSlackSetupPrivate, type SlackSetupPrivateInput } from "./external-slack-setup-private-contract.js";
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure" | "slack-identity-confirm" | "slack-endpoint-configure" | "slack-wizard-confirm"; slackSetup?:SlackSetupPrivateInput; slackIdentity?:SlackIdentityPrivateInput; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure", "slack-identity-confirm"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure", "slack-identity-confirm", "slack-endpoint-configure", "slack-wizard-confirm"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
@@ -22,6 +23,48 @@ async function main() {
       const field = page.getByLabel("App key"); await field.fill(input.credential);
       if (await field.inputValue() !== input.credential) throw new Error("Canary entry failed");
       return { processIsolation: true, testRunnerAttached: false, credentialEntered: true, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false };
+    }
+    if(input.mode === "slack-wizard-confirm"){
+      const identity=input.slackIdentity;
+      if(!validSlackWizardIdentityInput(input.companyId,identity,input.setupURL)||!identity)throw new Error("Invalid finite normal Slack wizard identity operation");
+      const session=await context.request.get("/api/auth/get-session");if(!session.ok()||(await session.json()).user?.id!==identity.userId)throw new Error("Slack wizard requires the exact same signed-in person");
+      const endpointPath=`/api/chat-endpoints/${identity.endpointId}`;
+      const before=await context.request.get(endpointPath);if(!before.ok())throw new Error("Slack wizard endpoint missing");const endpoint=await before.json();if(endpoint.companyId!==input.companyId||endpoint.provider!=="slack"||endpoint.status!=="verifying"||endpoint.setup?.step!=="test")throw new Error("Normal Slack wizard is not waiting at actual verified identity/test boundary");
+      const principals=await context.request.get(`${endpointPath}/principals`);if(!principals.ok())throw new Error("Slack command discovery unavailable");
+      const rows=await principals.json() as Array<{principalId:string;externalDetail:string;lastConnectAt?:string;status:string;paperclipUserId?:string}>;const candidate=rows.filter(row=>row.principalId===identity.principalId&&row.externalDetail===identity.externalDetail&&row.lastConnectAt&&Date.parse(row.lastConnectAt)>=Date.parse(endpoint.setup.testStartedAt));if(candidate.length!==1||candidate[0]!.status==="linked")throw new Error("Genuine current Slack connect receipt is required before wizard ownership confirmation");
+      await page.goto(input.setupURL,{waitUntil:"domcontentloaded"});
+      const intentResponse=page.waitForResponse(response=>new URL(response.url()).pathname===`${endpointPath}/principals/${identity.principalId}/link-intent`&&response.request().method()==="POST"&&response.status()===201);
+      const confirmed=page.waitForResponse(response=>new URL(response.url()).pathname==="/api/chat-identity-links/confirm"&&response.request().method()==="POST"&&response.ok());
+      await page.getByRole("button",{name:`Link ${identity.externalLabel} to my Paperclip account`,exact:true}).click();
+      const intent=await(await intentResponse).json(),token=new URL(intent.confirmationUrl,base.origin).searchParams.get("token"),confirmation=await confirmed;
+      if(!token||confirmation.request().postDataJSON()?.token!==token||(await confirmation.json()).endpointId!==identity.endpointId)throw new Error("Actual Slack ownership button did not confirm its own generated scoped link");
+      await page.getByText("Linked to you",{exact:true}).waitFor();
+      const linkedResponse=await context.request.get(`${endpointPath}/principals`);if(!linkedResponse.ok()||!(await linkedResponse.json()).some((row:{principalId:string;status:string;paperclipUserId?:string})=>row.principalId===identity.principalId&&row.status==="linked"&&row.paperclipUserId===identity.userId))throw new Error("Wizard ownership did not persist as the exact same person");
+      await page.getByRole("button",{name:"Continue to message test",exact:true}).click();
+      const activation=page.waitForResponse(response=>new URL(response.url()).pathname===`${endpointPath}/finish`&&response.request().method()==="POST"&&response.ok());
+      await page.getByRole("button",{name:"Done",exact:true}).click();const activated=await(await activation).json();
+      const afterResponse=await context.request.get(endpointPath);if(!afterResponse.ok())throw new Error("Activated Slack endpoint unavailable");const after=await afterResponse.json();
+      if(activated.id!==identity.endpointId||activated.status!=="active"||after.status!=="active"||after.companyId!==input.companyId||after.setup?.step!=="complete")throw new Error("Actual wizard Done did not independently save activation");
+      return {processIsolation:true,testRunnerAttached:false,tracingEnabled:false,videoEnabled:false,apiStepRecorder:false,endpointId:identity.endpointId,principalId:identity.principalId,paperclipUserId:identity.userId,identityConfirmed:true,identityUiVisible:true,humanSubmittedSecurely:true,activationUiVisible:true,endpointActive:true};
+    }
+    if(input.mode === "slack-endpoint-configure"){
+      const slack=input.slackSetup;
+      if(!validSlackSetupPrivate(input.companyId,slack,input.setupURL)||!slack||!input.companyId||!input.credential.startsWith("xoxb-"))throw new Error("Invalid finite existing Slack credential form");
+      const endpointPath=`/api/chat-endpoints/${slack.endpointId}`,beforeResponse=await context.request.get(endpointPath);
+      if(!beforeResponse.ok())throw new Error("Owned Slack draft unavailable");
+      const before=await beforeResponse.json();
+      if(before.companyId!==input.companyId||before.provider!=="slack"||before.assignedAgentId!==slack.agentId||before.setup?.slackSetupMethod!=="existing"||before.providerAccountId)throw new Error("Slack credential form must target the exact fresh existing-app draft");
+      await page.goto(input.setupURL,{waitUntil:"domcontentloaded"});
+      const bot=page.getByLabel("Bot User OAuth Token",{exact:true}),secret=page.getByLabel("Signing Secret",{exact:true});
+      await bot.waitFor();if(await bot.getAttribute("type")!=="password"||await secret.getAttribute("type")!=="password")throw new Error("Slack credential fields are not protected");
+      await bot.fill(input.credential);await secret.fill(slack.signingSecret);
+      const saved=page.waitForResponse(response=>new URL(response.url()).pathname===`${endpointPath}/setup`&&response.request().method()==="POST"&&response.ok());
+      await page.getByRole("button",{name:"Connect Slack app",exact:true}).click();const response=await saved,submitted=response.request().postDataJSON();
+      if(submitted.action!=="configure"||submitted.credentials?.botToken!==input.credential||submitted.credentials?.signingSecret!==slack.signingSecret)throw new Error("Slack UI submitted another private setup operation");
+      const result=await response.json(),afterResponse=await context.request.get(endpointPath);if(!afterResponse.ok())throw new Error("Saved Slack endpoint unavailable");const after=await afterResponse.json();
+      if(result.id!==slack.endpointId||after.id!==slack.endpointId||after.companyId!==input.companyId||after.assignedAgentId!==slack.agentId||after.providerAccountId!==slack.workspaceId||!after.setup?.webhookSecretConfigured)throw new Error("Slack UI credential save did not persist the intended real workspace/agent");
+      await bot.waitFor({state:"hidden"});const storageClean=await page.evaluate(values=>!values.some(value=>JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage),document.body.innerText,location.href]).includes(value)),[input.credential,slack.signingSecret]);
+      return {processIsolation:true,testRunnerAttached:false,tracingEnabled:false,videoEnabled:false,apiStepRecorder:false,endpointId:slack.endpointId,slackCredentialUiVisible:true,humanSubmittedSecurely:true,storageClean};
     }
     if (input.mode === "slack-identity-confirm") {
       const identity = input.slackIdentity;
