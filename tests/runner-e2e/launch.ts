@@ -1,3 +1,4 @@
+import { copyHealthHelloDetail } from "./chat-readiness-detail.js";
 import { prepareChatRemoteHost } from "./chat-remote-host.js";
 import { POSTGRES_ARTIFACT_ENV, POSTGRES_IMAGE_ID_ENV } from "./docker-postgres.js";
 import { prepareOwnedPublicOrigin, PublicOriginCleanupError, PUBLIC_ORIGIN_CONTROL_ENV, PUBLIC_ORIGIN_RECEIPT_ENV } from "./chat-public-origin.js";
@@ -911,6 +912,7 @@ async function runAttempt(input: {
           expectPassScreenshot: false,
         });
       }
+      await copyHealthHelloDetail(temporaryRoot, candidate.id, uploadDir, credentials);
       console.log(
         `${result.status === "passed" ? "PASS" : "FAIL"} ${candidate.id} attempt ${attempt} -> ${uploadDir}`,
       );

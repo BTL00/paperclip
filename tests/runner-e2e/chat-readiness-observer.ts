@@ -1,3 +1,4 @@
+import { retainHealthHelloDetail } from "./chat-readiness-detail.js";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
@@ -51,7 +52,8 @@ export async function installChatReadinessObserver(input: {
   let sequence = 0, writes = Promise.resolve();
   const retain = async (companyId: string, result: any, thrown: boolean) => {
     if (++sequence > 100) return;
-    const receipt = { schema: "paperclip.chat-readiness-probe/v1", companyId, sequence,
+    const detailRetention = thrown ? undefined : await retainHealthHelloDetail(root, input.executionIds, sequence, result);
+    const receipt = { ...(detailRetention ? { detailRetention } : {}), schema: "paperclip.chat-readiness-probe/v1", companyId, sequence,
       status: ["pass", "warn", "fail"].includes(result?.status) ? result.status : "unknown", thrown,
       checks: Array.isArray(result?.checks) ? result.checks.slice(0, 64).map((check: any) => closedCheck({ ...check,
         category: readinessErrorCategory(`${check?.message ?? ""}\n${check?.detail ?? ""}`) })) : [],
@@ -79,7 +81,7 @@ export async function installChatReadinessObserver(input: {
 /** Re-project even the private file. No arbitrary file keys/strings enter evidence. */
 export interface ClosedReadinessReceipt {
   schema: "paperclip.chat-readiness-probe/v1"; companyId: string; sequence: number; status: string; thrown: boolean;
-  checks: Array<{ code: string; level: string; category: Category }>; errorCategory: Category;
+  checks: Array<{ code: string; level: string; category: Category }>; errorCategory: Category; detailRetention?: "retained" | "withheld";
 }
 export async function readChatReadinessReceipts(temporaryRoot: string, companyId: string): Promise<ClosedReadinessReceipt[]> {
   if (!temporaryRoot || !uuid(companyId)) return [];
@@ -90,7 +92,7 @@ export async function readChatReadinessReceipts(temporaryRoot: string, companyId
   return bytes.trim().split("\n").filter(Boolean).slice(0, 100).flatMap(line => {
     let row; try { row = JSON.parse(line); } catch { return []; }
     if (!row || row.schema !== "paperclip.chat-readiness-probe/v1" || row.companyId !== companyId || !Number.isInteger(row.sequence) || row.sequence < 1 || row.sequence > 100) return [];
-    return [{ schema: row.schema, companyId, sequence: row.sequence,
+    return [{ ...(row.detailRetention === "retained" || row.detailRetention === "withheld" ? { detailRetention: row.detailRetention } : {}), schema: row.schema, companyId, sequence: row.sequence,
       status: ["pass", "warn", "fail"].includes(row.status) ? row.status : "unknown", thrown: row.thrown === true,
       checks: Array.isArray(row.checks) ? row.checks.slice(0, 64).map(closedCheck) : [],
       errorCategory: categories.includes(row.errorCategory) ? row.errorCategory as Category : "unknown" }];
