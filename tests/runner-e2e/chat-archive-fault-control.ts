@@ -1,3 +1,4 @@
+import { reviewedChatExecutionIds } from "./chat-runtime-profile.js";
 import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { lstat, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -6,7 +7,7 @@ import { listenOnFetchAllowedPort } from "../e2e/fetch-allowed-port.js";
 import { startArchiveFaultProxy, validArchiveBinding, type ArchiveBinding, type ArchiveFaultTransport, type ArchiveTransportReceipt } from "./chat-catalog-domains/internal-archive-transport.js";
 export const ARCHIVE_CONTROL_ENV = "PAPERCLIP_RUNNER_E2E_ARCHIVE_CONTROL";
 export const ARCHIVE_SCENARIO = "inbox-search.archive-partial-failure";
-const executionId = `chat-features.runner-codex-subscription.local.${ARCHIVE_SCENARIO}`;
+const executionIds = reviewedChatExecutionIds(ARCHIVE_SCENARIO);
 interface Binding { version: 1; executionId: string; temporaryRoot: string; backendOrigin: string; origin: string; controlOrigin: string; token: string }
 const origin = (value: unknown): value is string => { try { const u = new URL(String(value)); return u.protocol === "http:" && u.hostname === "127.0.0.1" && !!u.port && u.origin === value; } catch { return false; } };
 async function privateDirectory(root: string) {
@@ -17,14 +18,14 @@ async function privateDirectory(root: string) {
   } catch { throw new Error("Private archive root is unavailable or unsafe"); }
 }
 async function privateBinding(filename: string, root: string, selected: readonly string[]) {
-  if (selected.length !== 1 || selected[0] !== executionId || filename !== path.join(root, "selected-private-inputs", "archive-fault.json")) throw new Error("Archive transport requires its exact selected owned case");
+  if (selected.length !== 1 || !executionIds.includes(selected[0]!) || filename !== path.join(root, "selected-private-inputs", "archive-fault.json")) throw new Error("Archive transport requires its exact selected owned case");
   try {
     await privateDirectory(root);
     const directory = path.dirname(filename), dir = await lstat(directory), file = await lstat(filename);
     if (await realpath(root) !== root || await realpath(directory) !== directory || !dir.isDirectory() || dir.mode & 0o077 || file.isSymbolicLink() || !file.isFile() || (file.mode & 0o777) !== 0o600 || file.size > 4096
       || typeof process.getuid === "function" && (dir.uid !== process.getuid() || file.uid !== process.getuid())) throw new Error();
     const value = JSON.parse(await readFile(filename, "utf8")) as Binding;
-    if (Object.keys(value).sort().join() !== "backendOrigin,controlOrigin,executionId,origin,temporaryRoot,token,version" || value.version !== 1 || value.executionId !== executionId || value.temporaryRoot !== root
+    if (Object.keys(value).sort().join() !== "backendOrigin,controlOrigin,executionId,origin,temporaryRoot,token,version" || value.version !== 1 || value.executionId !== selected[0] || value.temporaryRoot !== root
       || !origin(value.backendOrigin) || !origin(value.origin) || !origin(value.controlOrigin) || new Set([value.backendOrigin, value.origin, value.controlOrigin]).size !== 3 || !/^[a-f0-9]{64}$/.test(value.token)) throw new Error();
     return value;
   } catch { throw new Error("Private archive transport binding is unavailable or unsafe"); }
@@ -40,7 +41,7 @@ function validReceipt(value: unknown): value is ArchiveTransportReceipt {
     && (row.status === undefined || Number.isInteger(row.status) && Number(row.status) >= 100 && Number(row.status) <= 599);
 }
 export async function startArchiveFaultControl(input: { selected: readonly string[]; temporaryRoot: string; backendOrigin: string; privateSecrets: string[] }) {
-  if (input.selected.length !== 1 || input.selected[0] !== executionId || !origin(input.backendOrigin)) throw new Error("Archive fault is allowlisted only for its owned local execution");
+  if (input.selected.length !== 1 || !executionIds.includes(input.selected[0]!) || !origin(input.backendOrigin)) throw new Error("Archive fault is allowlisted only for its owned local execution");
   await privateDirectory(input.temporaryRoot);
   if (/(?:^|[\s,])(?:http|net|tls|undici|\*)(?:$|[\s,])/i.test(process.env.NODE_DEBUG ?? "")) throw new Error("Archive private control refuses raw transport debug output");
   const proxy = await startArchiveFaultProxy(input.backendOrigin), token = randomBytes(32).toString("hex");
@@ -59,7 +60,7 @@ export async function startArchiveFaultControl(input: { selected: readonly strin
     const port = await listenOnFetchAllowedPort(control), controlOrigin = `http://127.0.0.1:${port}`;
     filename = path.join(input.temporaryRoot, "selected-private-inputs", "archive-fault.json");
     input.privateSecrets.push(token, controlOrigin, filename);
-    const binding: Binding = { version: 1, executionId, temporaryRoot: input.temporaryRoot, backendOrigin: input.backendOrigin, origin: proxy.origin, controlOrigin, token };
+    const binding: Binding = { version: 1, executionId: input.selected[0]!, temporaryRoot: input.temporaryRoot, backendOrigin: input.backendOrigin, origin: proxy.origin, controlOrigin, token };
     await writeFile(filename, `${JSON.stringify(binding)}\n`, { mode: 0o600, flag: "wx" }); created = true;
     await privateBinding(filename, input.temporaryRoot, input.selected);
     let closed = false;
@@ -70,14 +71,14 @@ export async function startArchiveFaultControl(input: { selected: readonly strin
  * normal API-origin override; never a control filename, URL or bearer. */
 export async function archiveServerEnvironment(input: { selected: readonly string[]; temporaryRoot: string; backendOrigin: string; env: NodeJS.ProcessEnv }) {
   const source = { ...input.env }, filename = source[ARCHIVE_CONTROL_ENV]; delete source[ARCHIVE_CONTROL_ENV];
-  if (!filename) { if (input.selected.includes(executionId)) throw new Error("Selected archive case is missing pre-server fault transport"); return { source, overrides: {} }; }
+  if (!filename) { if (input.selected.some(id => executionIds.includes(id))) throw new Error("Selected archive case is missing pre-server fault transport"); return { source, overrides: {} }; }
   const binding = await privateBinding(filename, input.temporaryRoot, input.selected);
   if (binding.backendOrigin !== input.backendOrigin) throw new Error("Archive backend origin differs from owned server");
   return { source, overrides: { PAPERCLIP_API_URL: binding.origin } };
 }
 export async function archiveFaultClient(input: { selected: string; backendOrigin: string; privateSecrets?: string[]; env?: NodeJS.ProcessEnv }): Promise<ArchiveFaultTransport | undefined> {
   const env = input.env ?? process.env, filename = env[ARCHIVE_CONTROL_ENV];
-  if (!filename) { if (input.selected === executionId) throw new Error("Selected archive case is missing private transport handoff"); return; }
+  if (!filename) { if (executionIds.includes(input.selected)) throw new Error("Selected archive case is missing private transport handoff"); return; }
   const binding = await privateBinding(filename, env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "", [input.selected]);
   if (binding.backendOrigin !== input.backendOrigin) throw new Error("Archive client belongs to another backend");
   input.privateSecrets?.push(binding.token, binding.controlOrigin, filename);

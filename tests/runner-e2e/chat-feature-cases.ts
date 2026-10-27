@@ -61,7 +61,7 @@ export function chatFeatureProfile(profile: RunnerProfileFixture): RunnerProfile
     return { ...payload, name: "CEO", title: "CEO", role: "ceo",
       capabilities: "Coordinates company work and delegates tasks to the team.",
       budgetMonthlyCents: CHAT_FEATURE_BUDGET_CENTS,
-      adapterConfig: { ...adapterConfig, timeoutSec: 120, modelReasoningEffort: "low" },
+      adapterConfig: { ...adapterConfig, timeoutSec: 120, ...(profile.provider === "codex" ? { modelReasoningEffort: "low" } : {}) },
       runtimeConfig: { ...(payload.runtimeConfig as Record<string, unknown>),
         heartbeat: { enabled: false, maxConcurrentRuns: 1, maxDailyRuns: 3, maxDailyCostCents: CHAT_FEATURE_BUDGET_CENTS } },
     };

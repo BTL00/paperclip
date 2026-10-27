@@ -1,3 +1,4 @@
+import { CHAT_OPENCODE_MODEL } from "./chat-runtime-profile.js";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -117,4 +118,12 @@ it("rejects a missing extensionless component instead of binding an unrelated TS
   f.write("selected.ts", 'export { value } from "./MissingComponent";');
   f.write("OtherComponent.tsx", 'export const value = "unrelated";');
   expect(f.fingerprint).toThrow("Unresolved fingerprint dependency: ./MissingComponent");
+});
+
+it("admits installed OpenCode only for its exact reviewed model, case and source-local lane", () => {
+  const lane = { suiteId: "chat-features", flow: "agent_chat", environment: "local", scenarioId: "instance-operations.update-instance", installedSource: "published-global-npm",
+    profile: { id: "runner-opencode", provider: "opencode", model: CHAT_OPENCODE_MODEL, adapterType: "paperclip_runner", credential: "OPENROUTER_API_KEY" } };
+  expect(assertChatCatalogFingerprintLane(lane, {}, []).installedLane).toBe(true);
+  expect(() => assertChatCatalogFingerprintLane({ ...lane, profile: { ...lane.profile, provider: "codex" } }, {}, [])).toThrow();
+  expect(() => assertChatCatalogFingerprintLane({ ...lane, scenarioId: "tasks.create-backlog" }, { PAPERCLIP_RUNNER_E2E_INSTALLED_CLI: "/candidate" }, [])).toThrow();
 });

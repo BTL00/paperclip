@@ -1,3 +1,4 @@
+import { reviewedChatProfile } from "./chat-runtime-profile.js";
 import { publicOriginFingerprintIdentity } from "./chat-public-origin.js";
 import { databaseFingerprintIdentity } from "./docker-postgres.js";
 import { verifyRetainedChatOracleIdentity } from "./chat-private-inputs.js";
@@ -80,14 +81,14 @@ export function fingerprintChatDependencyClosure(input: {
 }
 
 export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.ProcessEnv = process.env, args: readonly string[] = process.argv) {
-  const execution = selected as { suiteId?: string; flow?: string; environment?: string; executionId?: string; scenarioId?: string; installedSource?: string; databaseLane?: unknown; profile?: { id?: string } };
+  const execution = selected as { suiteId?: string; flow?: string; environment?: string; executionId?: string; scenarioId?: string; installedSource?: string; databaseLane?: unknown; profile?: { id?: string; provider?: string; model?: string; adapterType?: string; credential?: string } };
   const database = databaseFingerprintIdentity(env);
   if (execution.databaseLane !== undefined && JSON.stringify(execution.databaseLane) !== JSON.stringify(database)) throw new Error("Selected database lane differs from fingerprint environment");
   const installed = execution.installedSource === "published-global-npm" && (installedChatScenarioIds as readonly string[]).includes(String(execution.scenarioId));
   const installedKeys = ["PAPERCLIP_RUNNER_E2E_INSTALLED_CLI", "PAPERCLIP_RUNNER_E2E_INSTALLED_CLI_SHA256",
     "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_ROOT", "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_SHA256", "PAPERCLIP_RUNNER_E2E_INSTALLED_STARTUP_ONLY"];
   const forbiddenArguments = ["--target-config", "--github-review-config", "--connection-config", "--installed-startup-only", "product-journeys"];
-  if (installed && execution.profile?.id !== "runner-codex-subscription" || execution.suiteId !== "chat-features" || execution.flow !== "agent_chat" || execution.environment !== "local"
+  if (installed && !reviewedChatProfile(execution.profile) || execution.suiteId !== "chat-features" || execution.flow !== "agent_chat" || execution.environment !== "local"
     || !installed && installedKeys.some(key => env[key] && env[key] !== "0") || args.some(argument => forbiddenArguments.includes(argument)))
     throw new Error("Reviewed dynamic resolutions require source-local Agent Chat without external dispatch overrides");
   return { suiteId: execution.suiteId, flow: execution.flow, environment: execution.environment,

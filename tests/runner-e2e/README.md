@@ -3002,3 +3002,22 @@ PAPERCLIP_RUNNER_E2E_SOURCE_SHA=<snapshot-sha> node --import ./cli/node_modules/
 Its receipt is retained under `results/chat-catalog-campaign/`; it is never a
 scenario measurement or feature acceptance. Missing/changed ownership or an
 unknown inspection result is not proof that a resource is absent.
+
+### Chat catalog remote OpenCode campaign
+
+The explicit `chat-features` matrix now selects `runner-opencode` with native
+`paperclip_runner`, provider `opencode`, and exact model
+`openrouter/deepseek/deepseek-v4.1-flash-1017`. Its credential is an encrypted
+`OPENROUTER_API_KEY` reference. OpenCode remains pinned to the runner-owned
+1.18.34 executable; this candidate does not change the previously qualified
+OpenCode model for other suites. `local` means the selected execution host,
+including an isolated AWS worker, rather than a requirement to use a developer laptop.
+
+This is a new 244-cell behavioral campaign. Historical Codex results and passes
+remain separate and do not qualify the new provider/model. Named-provider feature
+requests retain their original meaning. Unavailable-model history requires an
+actually admitted failed OpenCode run with the exact configured provider/model;
+a preflight rejection does not establish that prerequisite. Provider/account
+qualification, paid-job approval, and owned AWS Spot capacity must be established
+before remote admission. Discovery and credential-free controls establish none
+of those live outcomes.

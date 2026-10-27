@@ -9,12 +9,12 @@ interface NativeFailureRun extends ChatRun {
   runnerProfileJson?: { nativeExecutionInput?: { provider?: { kind?: string; model?: string | null } } };
 }
 interface NativeEvent { seq?: number; eventType?: string; payload?: { prpEvent?: { eventType?: string } } }
-export function admittedModelFailure(input: { run?: NativeFailureRun; events: NativeEvent[]; companyId: string; agentId: string; issueId: string; model: string }) {
+export function admittedModelFailure(input: { run?: NativeFailureRun; events: NativeEvent[]; companyId: string; agentId: string; issueId: string; model: string; provider?: "codex" | "opencode" }) {
   const r = input.run, provider = r?.runnerProfileJson?.nativeExecutionInput?.provider;
   return !!r && r.runtimeMode === "native" && r.status === "failed" && !!r.startedAt && !!r.errorCode && !!r.error
     && r.companyId === input.companyId && r.agentId === input.agentId
     && [r.nativeIssueId, r.contextSnapshot?.issueId, r.contextSnapshot?.taskId].includes(input.issueId)
-    && provider?.kind === "codex" && provider.model === input.model
+    && provider?.kind === (input.provider ?? "codex") && provider.model === input.model
     && input.events.some(event => [event.eventType, event.payload?.prpEvent?.eventType].some(type => type === "run.terminal" || type === "turn.failed"));
 }
 /** A real public configuration/invocation fixture, never a synthetic failure.
@@ -28,9 +28,10 @@ export async function unavailableNativeModelFailure(ctx: ChatCatalogContext, wor
   const endpoint = `/api/agents/${worker.id}`;
   const original = await ctx.input.api.get<RuntimeAgent>(endpoint);
   if (original.lifecycleState !== "ready" || !["active", "idle"].includes(original.status ?? "")
-    || original.adapterType !== "paperclip_runner" || original.adapterConfig?.provider !== "codex")
-    throw new Error("Native failure prerequisite requires an actually ready native Codex worker");
-  const before = await ctx.allRuns(); const model = `paperclip-eval-unavailable-${ctx.input.nonce}`;
+    || original.adapterType !== "paperclip_runner" || !["codex", "opencode"].includes(String(original.adapterConfig?.provider)))
+    throw new Error("Native failure prerequisite requires an actually ready selected native Codex or OpenCode worker");
+  const provider = original.adapterConfig!.provider as "codex" | "opencode";
+  const before = await ctx.allRuns(); const model = unavailableNativeModel(provider, ctx.input.nonce);
   for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }])
     await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true,
       isActive: true, unpricedUsagePolicy: "allow" });
@@ -48,7 +49,7 @@ export async function unavailableNativeModelFailure(ctx: ChatCatalogContext, wor
         : rows.some(run => ["succeeded", "cancelled", "timed_out"].includes(run.status)) ? "Invocation did not produce genuine native failed history" : undefined });
     failed = await ctx.input.api.get<NativeFailureRun>(`/api/heartbeat-runs/${settled[0]!.id}`);
     const events = await collectRunEvents<NativeEvent>((afterSeq, limit) => ctx.input.api.get(`/api/heartbeat-runs/${failed!.id}/events?afterSeq=${afterSeq}&limit=${limit}`));
-    if (!admittedModelFailure({ run: failed, events, companyId: ctx.input.fixtures.company.id, agentId: worker.id, issueId: receipt.issueId, model }))
+    if (!admittedModelFailure({ run: failed, events, companyId: ctx.input.fixtures.company.id, agentId: worker.id, issueId: receipt.issueId, model, provider }))
       throw new Error("Actual invocation lacks admitted model-bound native failure evidence; no failure coverage claimed");
     return { failedRun: failed, failedRunEvents: events, failedIssueId: receipt.issueId, failedModel: model,
       failureKind: "native-failure-under-explicit-unavailable-model-configuration", originalConfiguration: original };
@@ -59,4 +60,10 @@ export async function unavailableNativeModelFailure(ctx: ChatCatalogContext, wor
     const restored = await ctx.input.api.get<RuntimeAgent>(endpoint);
     if (!isDeepStrictEqual(restored.adapterConfig, original.adapterConfig)) throw new Error("Original admitted model configuration was not restored");
   }
+}
+
+/** OpenCode requires a provider-qualified ID; actual admission and persisted failure remain mandatory. */
+export function unavailableNativeModel(provider: "codex" | "opencode", nonce: string) {
+  const id = `paperclip-eval-unavailable-${nonce}`;
+  return provider === "opencode" ? `openrouter/paperclip-eval/${id}` : id;
 }

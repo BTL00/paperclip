@@ -27,9 +27,7 @@ export function gradeModelOptions(value: unknown) {
 }
 export const runtimeRunsAdaptersCases = [runtimeDefinition("runs-adapters.list-model-options", async ctx => {
   const worker = await runtimeWorker(ctx);
-  if (worker.adapterConfig?.provider !== "codex" && worker.adapterType !== "codex_local")
-    throw new Error("Current runtime model-discovery fixture requires a genuinely qualified Codex account");
-  const endpoint = `/api/companies/${ctx.input.fixtures.company.id}/adapters/codex_local/models`;
+  const endpoint = modelDiscoveryEndpoint(ctx.input.fixtures.company.id, worker);
   const discovered = await readAgentResource(ctx, endpoint);
   const restricted = await readAgentResource(ctx, `/api/agents/${worker.id}/runtime-state`);
   if (discovered.status !== 200 || !Array.isArray(discovered.data)) throw new Error("Scenario requires admitted real coding model discovery");
@@ -51,3 +49,9 @@ export const runtimeRunsAdaptersCases = [runtimeDefinition("runs-adapters.list-m
     await expect(ctx.input.page.getByTestId("task-chat-agent-bubble").filter({ hasText: match.id }).last()).toBeVisible();
   },
 })];
+
+export function modelDiscoveryEndpoint(companyId: string, worker: RuntimeAgent) {
+  if (worker.adapterType !== "paperclip_runner" || !["codex", "opencode"].includes(String(worker.adapterConfig?.provider)) || !worker.defaultEnvironmentId)
+    throw new Error("Model discovery requires the actually selected native provider and environment");
+  return `/api/companies/${encodeURIComponent(companyId)}/adapters/paperclip_runner/models?provider=${worker.adapterConfig!.provider}&environmentId=${encodeURIComponent(worker.defaultEnvironmentId)}`;
+}

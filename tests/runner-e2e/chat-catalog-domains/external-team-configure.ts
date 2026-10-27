@@ -49,26 +49,27 @@ export function gradeTeamConfigure(value: unknown) {
   return c.result();
 }
 export const teamConfigureExternalCases = [definition("teams.configure-team", async ctx => {
-  if (ctx.input.execution.profile.credential !== "CODEX_AUTH_JSON") throw new Error("Setup blocker: this disposable team fixture requires the selected Codex subscription account, not an inferred personal login");
+  if (!["CODEX_AUTH_JSON", "OPENROUTER_API_KEY"].includes(ctx.input.execution.profile.credential)) throw new Error("Setup blocker: this disposable team fixture requires the selected campaign account, not an inferred personal login");
   const team = (await ctx.input.api.get<CatalogTeam[]>("/api/teams/catalog")).find(row => row.slug === "product-engineering" && row.compatibility === "compatible");
   if (!team) throw new Error("Setup blocker: compatible real Product Engineering package is unavailable");
   const built = ctx.input.execution.profile.buildAgent({ environmentId: ctx.input.fixtures.environment.id, environmentFixtureId: ctx.input.execution.environment.id, workspacePath: ctx.input.workspacePath, secretRefs: ctx.input.fixtures.secretRefs, executionId: ctx.input.nonce });
   if (typeof built.adapterType !== "string") throw new Error("Setup blocker: selected profile does not declare a supported runtime adapter");
-  const configured = codexSubscriptionAgentConfig(built, process.env, ctx.input.fixtures.company.id);
-  const override: CompanyPortabilityAdapterOverride = { adapterType: built.adapterType, adapterConfig: configured.adapterConfig };
+  const subscription = ctx.input.execution.profile.credential === "CODEX_AUTH_JSON";
+  const configured = subscription ? codexSubscriptionAgentConfig(built, process.env, ctx.input.fixtures.company.id) : built;
+  const override: CompanyPortabilityAdapterOverride = { adapterType: built.adapterType, adapterConfig: configured.adapterConfig as Record<string, unknown> };
   const emptyHome = await mkdtemp(path.join(tmpdir(), "paperclip-missing-team-login-")); fixtures.set(ctx, { emptyHome, override });
   try {
     const install = await ctx.input.api.postSensitive<CatalogTeamInstallResult>(`${root(ctx)}/teams/catalog/${encodeURIComponent(team.id)}/install`, { targetManagerAgentId: ctx.input.fixtures.agent.id, adapterOverrides: Object.fromEntries(team.agentSlugs.map(slug => [slug, override])) });
     const missingId = install.portabilityImport.agents.find(row => row.slug === "qa")?.id, workingId = install.portabilityImport.agents.find(row => row.slug === "senior-coder")?.id;
     if (!missingId || !workingId) throw new Error("Setup blocker: installer did not produce the exact QA and senior-coder members");
-    await ctx.input.api.patchSensitive(`/api/agents/${missingId}`, { adapterConfig: { ...override.adapterConfig, env: { ...(override.adapterConfig?.env as Record<string, unknown> ?? {}), CODEX_HOME: emptyHome, OPENAI_API_KEY: "", CODEX_API_KEY: "" } } });
+    await ctx.input.api.patchSensitive(`/api/agents/${missingId}`, { adapterConfig: { ...override.adapterConfig, env: { ...(override.adapterConfig?.env as Record<string, unknown> ?? {}), ...missingTeamAccountEnvironment(subscription, emptyHome) } } });
     const members = catalogTeamMembers(await observeTeamResources(ctx), team.id);
     const initialProbes = await Promise.all(members.map(member => probe(ctx, member)));
     if (!initialProbes.some(row => row.agentId === missingId && row.status === "fail" && row.checks.some(check => check.level === "error" && /auth|credential|login/i.test(check.code))) || !initialProbes.some(row => row.agentId === workingId && row.status === "pass")) throw new Error("Setup blocker: actual per-member runtime probes do not establish the required missing-versus-ready account split");
     const working = await ctx.input.api.get<Agent>(`/api/agents/${workingId}`);
     const workingRevisionIdsBefore = (await ctx.input.api.get<Array<{ id: string }>>(`/api/agents/${workingId}/config-revisions`)).map(row => row.id).sort();
     await ctx.input.api.post(`${root(ctx)}/chats/${ctx.input.fixtures.agent.id}`); await ctx.refreshIssue();
-    await ctx.input.api.patch(`/api/issues/${ctx.issue()!.id}`, { description: `The website team is the installed ${team.name} package. Its QA member (${missingId}) has not selected the eligible company Codex subscription account. The senior coder (${workingId}) is already configured. The existing company subscription is authorized for the QA member too; its value must not enter chat.` });
+    await ctx.input.api.patch(`/api/issues/${ctx.issue()!.id}`, { description: `The website team is the installed ${team.name} package. Its QA member (${missingId}) has not selected the eligible company ${subscription ? "Codex subscription" : "OpenRouter"} account. The senior coder (${workingId}) is already configured. The existing company account is authorized for the QA member too; its value must not enter chat.` });
     return { teamId: team.id, installedFromCatalog: true, memberIdsBefore: members.map(row => row.id).sort(), expectedMembers: members.length, missingId, missingName: members.find(row => row.id === missingId)!.name,
       workingId, workingHashBefore: configHash(working), workingRevisionIdsBefore, initialProbes };
   } catch (error) { fixtures.delete(ctx); await rm(emptyHome, { recursive: true, force: true }); throw error; }
@@ -105,3 +106,7 @@ export const teamConfigureExternalCases = [definition("teams.configure-team", as
   async verifyResult(ctx, state, value) { await verifyRenderedReply(ctx, value, String(state.initialRunId)); },
   async cleanup(ctx) { const fixture = fixtures.get(ctx); fixtures.delete(ctx); if (fixture) await rm(fixture.emptyHome, { recursive: true, force: true }); },
 })];
+
+export function missingTeamAccountEnvironment(subscription: boolean, emptyHome: string) {
+  return subscription ? { CODEX_HOME: emptyHome, OPENAI_API_KEY: "", CODEX_API_KEY: "" } : { OPENROUTER_API_KEY: "" };
+}

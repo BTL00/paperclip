@@ -76,12 +76,13 @@ describe("chat feature saved-state oracle", () => {
 });
 
 describe("chat feature selection", () => {
-  it("preserves the two original queries as explicit local subscription cells", () => {
+  it("preserves the two original queries as explicit host-local OpenCode cells", () => {
     const cells = runnerMatrix.filter(cell => cell.suite.id === "chat-features" && ["create-backlog", "delegate-announcement"].includes(cell.task.id));
     expect(cells).toHaveLength(2);
     for (const cell of cells) {
       expect(cell.environment.id).toBe("local");
-      expect(cell.requiredCredentials).toEqual(["CODEX_AUTH_JSON"]);
+      expect(cell.requiredCredentials).toEqual(["OPENROUTER_API_KEY"]);
+      expect(cell.profile).toMatchObject({ id: "runner-opencode", provider: "opencode", model: "openrouter/deepseek/deepseek-v4.1-flash-1017" });
       expect(cell.task.automaticRetryPolicy).toBe("single_attempt");
       expect(cell.task.buildPrompt("nonce")).toBe(chatFeatureScenarios.find(row => row.id === `tasks.${cell.task.id}`)!.query);
       expect(selectRunnerExecutions(parseRunnerSelectors(["--id", cell.id])).map(row => row.id)).toEqual([cell.id]);

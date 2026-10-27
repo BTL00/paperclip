@@ -1,3 +1,4 @@
+import { modelDiscoveryEndpoint } from "./runtime-runs-adapters.js";
 import { it, expect } from "vitest";
 import { gradeModelOptions } from "./runtime-runs-adapters.js";
 function valid() {
@@ -18,4 +19,10 @@ it("rejects silently changing Morgan's selected model", () => {
 });
 it("rejects leaked private account credentials", () => {
   const o = valid(); o.state.secretLeaked = true; expect(gradeModelOptions(o).passed).toBe(false);
+});
+
+it("discovers the actual selected native provider/environment rather than a Codex alias", () => {
+  const worker = { adapterType: "paperclip_runner", adapterConfig: { provider: "opencode" }, defaultEnvironmentId: "owned-environment" };
+  expect(modelDiscoveryEndpoint("company", worker as never)).toBe("/api/companies/company/adapters/paperclip_runner/models?provider=opencode&environmentId=owned-environment");
+  expect(() => modelDiscoveryEndpoint("company", { ...worker, adapterConfig: { provider: "unknown" } } as never)).toThrow();
 });

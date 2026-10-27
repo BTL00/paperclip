@@ -1,10 +1,12 @@
+import { reviewedChatExecutionIds } from "./chat-runtime-profile.js";
 import { constants } from "node:fs";
 import { lstat, realpath, open, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 
 export const vaultScenarioId = "secrets.vault-reference";
-export const vaultExecutionId = `chat-features.runner-codex-subscription.local.${vaultScenarioId}`;
+export const vaultExecutionId = reviewedChatExecutionIds(vaultScenarioId)[0]!;
+export const vaultExecutionIds = reviewedChatExecutionIds(vaultScenarioId);
 export const vaultPrivateFields = [
   "provider",
   "region",
@@ -102,7 +104,7 @@ export async function readSelectedVaultServerEnvironment(input: {
   backendOrigin: string;
   env: NodeJS.ProcessEnv;
 }): Promise<NodeJS.ProcessEnv> {
-  if (!input.executionIds.includes(vaultExecutionId)) return {};
+  if (!input.executionIds.some(id => vaultExecutionIds.includes(id))) return {};
   if (input.executionIds.length !== 1)
     throw new Error(
       "Vault runtime inputs require the exact single selected source execution",
@@ -169,7 +171,7 @@ export async function readSelectedVaultServerEnvironment(input: {
   } finally {
     await handle.close();
   }
-  if (envelope.version !== 1 || envelope.executionId !== vaultExecutionId)
+  if (envelope.version !== 1 || envelope.executionId !== input.executionIds[0])
     throw new Error("Vault runtime input belongs to another execution");
   // Ordinary reserved setup handles missing selected provider inputs. It never
   // receives an ambient fallback merely because the private binding is absent.

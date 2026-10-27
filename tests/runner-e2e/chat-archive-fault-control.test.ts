@@ -11,7 +11,8 @@ import { ARCHIVE_CONTROL_ENV, ARCHIVE_SCENARIO, archiveFaultClient, archiveServe
 import { buildPaperclipServerEnvironment } from "./harness-env.js";
 import { reserveRunnerE2EServerPort } from "./ports.js";
 const id = `chat-features.runner-codex-subscription.local.${ARCHIVE_SCENARIO}`;
-it("starts before backend and gives only the test child a private authenticated control handoff", async () => {
+it.each(["runner-codex-subscription", "runner-opencode"])("binds %s archive control to its own selected execution and private handoff", async profile => {
+  const id = `chat-features.${profile}.local.${ARCHIVE_SCENARIO}`;
   const temporaryRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), "paperclip-runner-e2e-"))); await mkdir(path.join(temporaryRoot, "selected-private-inputs"), { mode: 0o700 });
   const port = await reserveRunnerE2EServerPort(), backendOrigin = `http://127.0.0.1:${port}`, secrets: string[] = [];
   const control = await startArchiveFaultControl({ selected: [id], temporaryRoot, backendOrigin, privateSecrets: secrets });

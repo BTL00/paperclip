@@ -1,3 +1,4 @@
+import { reviewedChatProfile } from "./chat-runtime-profile.js";
 import { createProcessTreeOwner, stopOwnedProcessTree } from "./process-tree-owner.js";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -71,7 +72,7 @@ export function installedChatTreeIdentity(prefix: string) {
 }
 export function admitsInstalledChat(execution: Pick<MatrixExecution, "suite" | "task" | "profile" | "environment">) {
   return execution.suite.id === "chat-features" && execution.suite.manualOnly && execution.task.flow === "agent_chat"
-    && execution.profile.id === "runner-codex-subscription" && execution.environment.id === "local"
+    && reviewedChatProfile(execution.profile) && execution.environment.id === "local"
     && (installedChatScenarioIds as readonly string[]).includes(execution.task.id);
 }
 /** Runs only inside an explicitly selected governed attempt; never during discovery. */

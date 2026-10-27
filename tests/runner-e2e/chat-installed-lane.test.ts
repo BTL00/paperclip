@@ -1,3 +1,4 @@
+import { CHAT_OPENCODE_MODEL } from "./chat-runtime-profile.js";
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -15,6 +16,9 @@ it("admits only exact published pins and the two selected source-local Codex ope
     expect(() => validateChatInstallConfiguration({ schemaVersion: 1, disposable: true, source })).toThrow();
   const execution = { suite: { id: "chat-features", manualOnly: true }, task: { id: "instance-operations.update-instance", flow: "agent_chat" }, profile: { id: "runner-codex-subscription" }, environment: { id: "local" } } as MatrixExecution;
   expect(admitsInstalledChat(execution)).toBe(true);
+  const remote = { ...execution, profile: { ...execution.profile, id: "runner-opencode", provider: "opencode", model: CHAT_OPENCODE_MODEL, adapterType: "paperclip_runner", credential: "OPENROUTER_API_KEY" as const } };
+  expect(admitsInstalledChat(remote)).toBe(true);
+  expect(admitsInstalledChat({ ...remote, profile: { ...remote.profile, model: "other" } })).toBe(false);
   expect(admitsInstalledChat({ ...execution, task: { ...execution.task, id: "tasks.create-backlog" } })).toBe(false);
   expect(admitsInstalledChat({ ...execution, environment: { ...execution.environment, id: "daytona" } })).toBe(false);
 });

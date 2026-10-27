@@ -13,6 +13,7 @@ import {
   validVaultBinding,
   vaultPrivateFields,
   vaultExecutionId,
+  vaultExecutionIds,
 } from "./chat-vault-private-server.js";
 import type { MatrixExecution } from "./types.js";
 
@@ -215,4 +216,12 @@ it("scrubs ambient AWS and vault SDK config while preserving explicit unrelated 
     },
   ]);
   expect(other.AWS_ACCESS_KEY_ID).toBe("ambient");
+});
+
+it("binds the OpenCode vault envelope to the exact selected new execution, never the prior campaign", async () => {
+  const f = await fixture();
+  f.input.executionIds = [vaultExecutionIds[1]!]; f.envelope.executionId = vaultExecutionIds[1]!; await f.save();
+  expect(await readSelectedVaultServerEnvironment(f.input)).toHaveProperty("AWS_ACCESS_KEY_ID", f.envelope.references.PAPERCLIP_CHAT_EVAL_AWS_ACCESS);
+  f.envelope.executionId = vaultExecutionId; await f.save();
+  await expect(readSelectedVaultServerEnvironment(f.input)).rejects.toThrow();
 });
