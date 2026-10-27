@@ -22,6 +22,8 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (matches.length > 1) throw new Error(`Duplicate chat implementation: ${scenarioId}`);
   const descriptor = matches[0];
   if (!descriptor) return;
+  if (descriptor.browserTimezone && (scenarioId !== "routines.create-daily-brief" || descriptor.browserTimezone !== "America/Chicago"))
+    throw new Error("Browser timezone is declared only for the canonical Chicago weekday routine");
   if (descriptor.installedSource && (descriptor.installedSource !== "published-global-npm" || !(installedChatScenarioIds as readonly string[]).includes(scenarioId)))
     throw new Error("Installed ordinary Chat is allowlisted only for the two published-source operator scenarios");
   if (!known.has(scenarioId) || !descriptor.oracleVersion || !descriptor.sourceFiles.length
@@ -48,7 +50,7 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")

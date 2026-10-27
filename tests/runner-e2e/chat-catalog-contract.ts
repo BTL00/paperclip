@@ -34,6 +34,8 @@ export interface ChatCatalogQueryAttachment {
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
+  /** Real browser locale context for the canonical person's schedule. */
+  browserTimezone?: "America/Chicago";
   requiredCredentials?: readonly CredentialName[];
   externalInput?: ChatExternalInputRequirement;
   installedSource?: "published-global-npm";

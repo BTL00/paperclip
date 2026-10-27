@@ -584,6 +584,9 @@ async function expectPlanStageVisible(
 }
 
 for (const execution of executions) {
+  test.describe(execution.id, () => {
+  const browserTimezone = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id)?.browserTimezone : undefined;
+  if (browserTimezone) test.use({ timezoneId: browserTimezone });
   const privateDir = path.join(privateRoot, "cases", execution.task.id);
   const resultPath = path.join(privateDir, "result.json");
   const snapshotsDir = path.join(privateDir, "snapshots");
@@ -3390,5 +3393,6 @@ for (const execution of executions) {
     }
 
     if (primaryError) throw primaryError;
+  });
   });
 }
