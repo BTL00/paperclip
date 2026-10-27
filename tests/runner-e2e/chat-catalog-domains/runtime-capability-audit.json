@@ -251,8 +251,8 @@
     },
     {
       "scenarioId": "task-coordination.block-on-design",
-      "readinessClass": "local",
-      "needs": "Real unfinished design dependency, actual website admission blocked then resumed only after authorized prerequisite completion and other gates clear."
+      "readinessClass": "implemented",
+      "needs": "Actual first-class Design dependency saved by CEO on Website, reloaded blocker UI and ordinary human start attempt before approval admit no worker. Actual human Design completion clears prerequisite; ordinary eligible admission produces one genuine Morgan document/result. Explicit second source human/native phase reports actual completion. Public full HeartbeatRun.createdAt is joined to real human approval audit timing. No live qualification claimed."
     },
     {
       "scenarioId": "task-coordination.reject-dependency-cycle",
