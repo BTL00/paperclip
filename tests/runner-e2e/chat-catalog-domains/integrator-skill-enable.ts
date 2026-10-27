@@ -43,6 +43,7 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
   try {
     const p = await project(ctx, "Launch"); const worker = await fixtureWorker(ctx);
     const created = await ctx.input.api.post<CompanySkillDetail>(`${root(ctx)}/skills`, { name: "Accessibility review", slug: "accessibility-review", markdown: "---\nname: accessibility-review\ndescription: Check synthetic HTML form labels.\n---\n\nFor supplied synthetic HTML, identify every form input without a visible label. Save concrete evidence in the task comment and finish the task. Do not browse other pages or claim global qualification." });
+    const unsupportedUseActionStatus = await probeAgentPermission(ctx, `${root(ctx)}/skill-policy/evaluate`, "POST", { principal: { agentId: ctx.input.fixtures.agent.id }, action: "skills.use", resource: { skillId: created.id } });
     const agentConfigurationStatus = await probeAgentPermission(ctx, `/api/agents/${worker.id}/skills/sync`, "POST", { mode: "add", desiredSkills: [] });
     let grantStatus: number | null = null;
     if (agentConfigurationStatus !== 200) {
@@ -54,7 +55,8 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
     }
     const effectiveStatus = agentConfigurationStatus === 200 ? 200 : await probeAgentPermission(ctx, `/api/agents/${worker.id}/skills/sync`, "POST", { mode: "add", desiredSkills: [] });
     await ctx.input.evidence("chat-skill-configuration-prerequisite.json", { agentConfigurationStatus: effectiveStatus, publicGrantStatus: grantStatus, principalId: ctx.input.fixtures.agent.id,
-      querySent: false, usagePolicyActionExists: (SKILL_POLICY_ACTIONS as readonly string[]).includes("skills.use"), unsupportedPrerequisite: effectiveStatus !== 200 });
+      querySent: false, usagePolicyActionExists: (SKILL_POLICY_ACTIONS as readonly string[]).includes("skills.use"), unsupportedUseActionStatus, unsupportedPrerequisite: effectiveStatus !== 200,
+      unfinishedConditional: "An applicable effective-use-denial branch is still unimplemented; rejecting this one nonexistent action does not prove every possible denial context unsupported." });
     if (effectiveStatus !== 200) throw new Error(`Setup blocker: actual agent_config:update remained denied (HTTP ${effectiveStatus}); public agent membership grant attempt HTTP ${grantStatus ?? "unavailable"}. This is not an expected-refusal pass.`);
     return { project: p, worker: { id: worker.id }, skill: await ctx.input.api.get<CompanySkillDetail>(`${root(ctx)}/skills/${created.id}`), effectivePolicy: await ctx.input.api.get(`${root(ctx)}/skill-policy`), agentConfigurationStatus: effectiveStatus,
       beforeActivityIds: (await ctx.input.api.get<Entity[]>(`${root(ctx)}/activity?limit=1000`)).map(event => event.id) };
@@ -63,7 +65,7 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
   const skill = state.skill as CompanySkillDetail; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name);
 }, { sourceFiles: ["chat-catalog-domains/integrator-skill-enable.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/skills.yaml"],
   expectedRunCount: 2, attemptTimeoutMs: 540_000,
-  coverageGaps: ["The supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. The actual no-op agent-bearer configuration probe must succeed before this scenario can run.", "The public skill-policy action contract has no skills.use/assignment restriction action; the required effective-use-denial branch remains unsupported until a real applicable policy surface is established. No install/edit restriction is relabeled as use denial."],
+  coverageGaps: ["Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.", "Unfinished conditional: the applicable effective-use-denial branch is not yet authored. The public enum omits skills.use and setup records the actual evaluator response for that unsupported action, but this does not establish all denial contexts as unsupported. No install/edit restriction or expected refusal is relabeled as completed use-denial coverage."],
   async act(ctx, state) {
     const first = await pollUntil({ label: "actual Morgan assignment before future admission", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
       load: () => observeEnable(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });
