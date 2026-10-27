@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, statSync, chmodSync, rmSync } from "node:fs
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
-import { stageChatPrivateInputs, readChatPrivateInputs, chatPrivateInputNameIdentity, scrubChatPrivateEnvironment, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
+import { stageChatPrivateInputs, readChatPrivateInputs, chatPrivateSetupBlockers, chatLaunchCredentialNames, chatPrivateInputNameIdentity, scrubChatPrivateEnvironment, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 import type { MatrixExecution } from "./types.js";
 import type { ChatCatalogDescriptor } from "./chat-catalog-registry.js";
 import { runtimePrivateRequirements } from "./chat-runtime-private-requirements.js";
@@ -77,5 +77,27 @@ it("resolves only the finite SSH private key reference and refuses an alternate 
   const inputs = readChatPrivateInputs("selected", [], { [CHAT_PRIVATE_INPUTS_ENV]: staged.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root });
   expect(inputs.read("PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY")).toBe("selected-ssh-key"); expect(inputs.read("PAPERCLIP_CHAT_EVAL_OTHER_KEY")).toBeUndefined();
   prerequisites.privateKeyEnv = "PAPERCLIP_CHAT_EVAL_OTHER_KEY"; writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
-  expect(() => stageChatPrivateInputs({ execution: { ...execution, task: { id: scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, PAPERCLIP_CHAT_EVAL_OTHER_KEY: "wrong-key" } })).toThrow("finite contract");
+  rmSync(staged.filename);
+  const blocked = stageChatPrivateInputs({ execution: { ...execution, task: { id: scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, PAPERCLIP_CHAT_EVAL_OTHER_KEY: "wrong-key" } });
+  const blockedInputs = readChatPrivateInputs("selected", [], { [CHAT_PRIVATE_INPUTS_ENV]: blocked.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root });
+  expect(chatPrivateSetupBlockers(blockedInputs, descriptor)).toContain("unavailable-external-configuration:ssh"); expect(blockedInputs.read("PAPERCLIP_CHAT_EVAL_OTHER_KEY")).toBeUndefined();
+});
+
+it("retains missing selected credentials inside a reserved setup receipt while profile credentials stay launch prerequisites", () => {
+  const root = fixture(); const descriptor = { requiredCredentials: ["OPENAI_API_KEY" as const] };
+  const selected = { ...execution, requiredCredentials: ["CODEX_AUTH_JSON", "OPENAI_API_KEY"] } as MatrixExecution;
+  const staged = stageChatPrivateInputs({ execution: selected, descriptor, privateDir: root, secrets: [], env: {} });
+  const env = { [CHAT_PRIVATE_INPUTS_ENV]: staged.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root };
+  const inputs = readChatPrivateInputs("selected", [], env);
+  expect(chatPrivateSetupBlockers(inputs, descriptor)).toEqual(["missing-credential:OPENAI_API_KEY"]);
+  expect(chatPrivateInputNameIdentity("selected", env)?.credentialNames).toEqual(["OPENAI_API_KEY"]);
+  expect(chatLaunchCredentialNames(selected, descriptor)).toEqual(["CODEX_AUTH_JSON"]);
+  expect(chatLaunchCredentialNames({ ...selected, profile: { ...selected.profile, credential: "OPENAI_API_KEY" } }, descriptor)).toContain("OPENAI_API_KEY");
+});
+it("stages missing provider fields/configuration as sanitized setup blockers without leaking private filenames", () => {
+  const root = fixture(); const descriptor = { externalInput: { provider: "notion" as const, fields: ["recentFactJson"] } };
+  const staged = stageChatPrivateInputs({ execution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: "/private/not-an-existing-fixture" } });
+  const inputs = readChatPrivateInputs("selected", [], { [CHAT_PRIVATE_INPUTS_ENV]: staged.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root });
+  expect(chatPrivateSetupBlockers(inputs, descriptor)).toEqual(["unavailable-external-configuration:notion"]);
+  expect(JSON.stringify(inputs.setupBlockers)).not.toContain("not-an-existing-fixture");
 });

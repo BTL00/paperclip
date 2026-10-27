@@ -1,4 +1,4 @@
-import { readChatPrivateInputs } from "./chat-private-inputs.js";
+import { readChatPrivateInputs, chatPrivateSetupBlockers, chatPrivateInputRequirements } from "./chat-private-inputs.js";
 import { trackedPrivateSecrets } from "./private-diagnostics.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { runChatBoundaryFlow } from "./chat-boundary-flow.js";
@@ -928,6 +928,15 @@ for (const execution of executions) {
       trace?.phase("setup");
       await saveTrace();
       const catalogDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
+      if (catalogDescriptor) {
+        const blockers = chatPrivateSetupBlockers(privateInputs, catalogDescriptor);
+        if (blockers.length) {
+          failureClassOverride = "permanent_infrastructure";
+          await writeSanitizedJson(snapshotsDir, "chat-catalog-input-prerequisite.json", { scenarioId: execution.task.id, phase: "reserved-setup", querySent: false, modelAdmissions: 0,
+            requirements: chatPrivateInputRequirements(catalogDescriptor), blockers, inputCleanup: "owned by launcher finally" }, secrets);
+          throw new Error(`Selected case setup prerequisite unavailable: ${blockers.join(", ")}`);
+        }
+      }
       if (catalogDescriptor?.journeyKind === "browser-boundary") {
         const scenario = chatCatalogScenarios.find(row => row.id === execution.task.id);
         if (!scenario || !catalogDescriptor.boundaryTarget) throw new Error("Boundary scenario or target identity missing");

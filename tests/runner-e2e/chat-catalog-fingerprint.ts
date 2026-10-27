@@ -1,3 +1,4 @@
+import { verifyRetainedChatOracleIdentity } from "./chat-private-inputs.js";
 import { installedChatFingerprintIdentity, installedChatScenarioIds } from "./chat-installed-lane.js";
 import { chatPrivateInputRequirements, chatPrivateInputNameIdentity } from "./chat-private-inputs.js";
 import { createHash } from "node:crypto";
@@ -91,6 +92,7 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
   selectedExecution = { ...(selectedExecution as Record<string, unknown>), journeyKind: descriptor.journeyKind ?? "agent-chat" };
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const privateInputNameIdentity = retainedPrivateInputNames === undefined ? chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId) : retainedPrivateInputNames;
+  if (retainedPrivateInputNames !== undefined) verifyRetainedChatOracleIdentity(retainedPrivateInputNames, descriptor);
   const lane = assertChatCatalogFingerprintLane({ ...(selectedExecution as Record<string, unknown>), scenarioId: descriptor.scenarioId, installedSource: descriptor.installedSource });
   const installedObservation = descriptor.installedSource && retainedInstalledIdentity === undefined
     ? installedChatFingerprintIdentity(process.env, (selectedExecution as { executionId: string }).executionId) : undefined;

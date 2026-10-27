@@ -1,5 +1,6 @@
+import { CHAT_ORACLE_KEY_ENV } from "./chat-private-oracle.js";
 import { stagePublishedChatInstall, ChatInstalledCleanupError } from "./chat-installed-lane.js";
-import { stageChatPrivateInputs, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
+import { stageChatPrivateInputs, chatLaunchCredentialNames, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 import { createPrivateDiagnosticStream, diagnosticSecrets, PRIVATE_DIAGNOSTICS_ENV, readPrivateDiagnosticSecrets, stagePrivateDiagnostics } from "./private-diagnostics.js";
 import { sanitizePrivateReporterArtifacts } from "./private-reporter-artifacts.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
@@ -497,6 +498,7 @@ async function runAttempt(input: {
   let installedCli = await verifyInstalledCli(process.env, executions);
   const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
   let sourceEnvironment = { ...process.env };
+  delete sourceEnvironment[CHAT_ORACLE_KEY_ENV];
   const installedPlugin = await verifyInstalledDaytonaPlugin(process.env, executions);
   const startedAtMs = Date.now();
   const sharedMemoryBaseline = snapshotDarwinSharedMemory();
@@ -1145,7 +1147,7 @@ async function main() {
   assertRemoteNativeEvidencePrerequisites(executions, process.env);
   const missingCredentials = process.env.PAPERCLIP_E2E_OPERATIONS_MANIFEST ? [] : [
     ...new Set(
-      executions.flatMap((execution) => execution.requiredCredentials),
+      executions.flatMap((execution) => chatLaunchCredentialNames(execution, execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined)),
     ),
   ].filter((name) => !process.env[name]?.trim());
   if (missingCredentials.length > 0) {
