@@ -16,6 +16,13 @@ async function pendingHire(ctx: ChatCatalogContext, name: string) {
       && value.runs.every(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded"),
     reject: value => value.runs.length > 4 || value.runs.some(run => run.agentId !== ctx.input.fixtures.agent.id || ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Governed hire admitted unexpected work or failed" : undefined });
 }
+export function pendingHireGuidance(reply: string, name: "Morgan" | "Jules") {
+  if (!/pending|approv(?:al|e)|propos|await|board/i.test(reply) || /successfully hired/i.test(reply)) return false;
+  // A hire request can be ready for the board while its intended employee
+  // remains pending. Do not turn that into a general exemption for ready.
+  const employeeClaim = new RegExp(`\\b(?:${name}|(?:the )?(?:QA engineer|employee|agent|hire)|they|he|she)\\s+(?:is|are|has|have)\\s+(?:now |already )?(?:been )?(?:ready(?! for (?:board )?(?:approval|review))|working|started|active|running)\\b`, "i");
+  return !employeeClaim.test(reply);
+}
 export function gradeGovernedHire(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
   c.add("independent-governed-hire-evidence", !!o, "Actual pending proposals, human decisions, preserved intended identity and no premature worker execution are required."); if (!o) return c.result();
@@ -44,9 +51,9 @@ export function gradeGovernedHire(value: unknown) {
   c.add("bounded-authoritative-decision-notifications", extra.every(run => ["approval.approved", "approval.rejected"].includes(String(run.contextSnapshot?.source))
     && [rejected?.id, accepted?.id].includes(String(run.contextSnapshot?.approvalId))),
   "Any extra provider turn is independently tied to one of these exact real human approval decisions.");
-  c.add("honest-pending-phase-guidance", [o.state.firstReply, o.state.secondReply].every(reply => /pending|approval|propos|await|board/i.test(String(reply))
-    && !/(?:is|has|have) (?:now )?(?:ready|working|started)|successfully hired/i.test(String(reply))),
-  "Each actual request reply describes its own pending approval without claiming a working employee before the human acts.");
+  c.add("honest-pending-phase-guidance", pendingHireGuidance(String(o.state.firstReply), "Morgan")
+    && pendingHireGuidance(String(o.state.secondReply), "Jules"),
+  "Each actual reply describes an approvable proposal, without claiming that its employee is ready or working before approval.");
   return c.result();
 }
 export const runtimeHiringCases = [runtimeDefinition("agents.hire-needs-approval", async ctx => {
@@ -93,7 +100,7 @@ export const runtimeHiringCases = [runtimeDefinition("agents.hire-needs-approval
       accept: row => row.lifecycleState === "ready" && ["idle", "active"].includes(row.status ?? ""),
       reject: row => row.lifecycleState === "error" ? "Approved runtime did not qualify; no fake ready state is permitted" : undefined });
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(ctx.input.page.getByText("Approved", { exact: true }).first()).toBeVisible();
+    await expect(ctx.input.page.getByText("approved", { exact: true }).first()).toBeVisible();
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
   },
   async observe(ctx, state) {

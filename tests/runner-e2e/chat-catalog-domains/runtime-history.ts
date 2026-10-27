@@ -103,6 +103,9 @@ export function gradeBrowserReconnect(value: unknown) {
 }
 
 export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-follow-up", async ctx => {
+  for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: ctx.input.fixtures.agent.id }])
+    await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500,
+      hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
   const source = await openStandingChat(ctx); const designMarker = `Selected blue preview ${ctx.input.nonce}`; const filename = `blue-preview-${ctx.input.nonce}.html`;
   await sendChatMessage(ctx.input.page, `We have selected the blue design. Save an actual small HTML preview named ${filename} with blue (#0000ff) styling and the exact visible marker ${JSON.stringify(designMarker)}. Register this real file as a downloadable artifact work product titled ${filename}. Keep that blue design and this exact preview as our selected version for the next turn. No delegated task or external action is needed.`);
   const phase = await sourceSettled(ctx, 1);

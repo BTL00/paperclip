@@ -94,6 +94,7 @@ import { resolveRunnerE2ESource } from "./source.js";
 import { isValidNativePrpEnvelope } from "./native-event-envelope.js";
 import {
   isPublicRunnerScreenshotRoute,
+  isDisabledChatBoundaryScreenshotRoute,
   PUBLIC_RUNNER_SCREENSHOT_MARKER,
 } from "./screenshot-policy.js";
 import {
@@ -656,6 +657,7 @@ for (const execution of executions) {
     let nativeInitial: { issueIds: string[]; agentIds: string[]; workspaceDigest: string | null } | undefined;
     const nativeWorkspaceDigest = () => execution.task.id === "native-blocked-report"
       ? nativeCompletionWorkspaceDigest(workspacePath!) : Promise.resolve(null);
+    let boundaryScreenshotResources: { companyId?: string; agentId?: string } = {};
     let fixtures: LiveFixtureValues | undefined;
     let reviewProvider: Awaited<ReturnType<typeof setupConnectionReview>> | undefined;
     let issue: IssueRecord | undefined;
@@ -734,7 +736,22 @@ for (const execution of executions) {
       label: string,
       file: string,
     ) => {
-      if (!isReviewedFixtureScreenshotRoute()) {
+      let reviewedBoundary = false;
+      if (execution.suite.id === "chat-features" && execution.task.id === "agent-chat.chat-disabled"
+        && boundaryScreenshotResources.companyId && boundaryScreenshotResources.agentId
+        && findChatCatalogCase(execution.task.id)?.journeyKind === "browser-boundary") {
+        const [company, agent, session, settings] = await Promise.all([
+          api.get<{ id: string; issuePrefix: string }>(`/api/companies/${boundaryScreenshotResources.companyId}`),
+          api.get<{ id: string; companyId: string }>(`/api/agents/${boundaryScreenshotResources.agentId}`),
+          api.get<{ user: { id: string } }>("/api/auth/get-session"),
+          api.get<{ enableAgentChat: boolean }>("/api/instance/settings/experimental"),
+        ]);
+        reviewedBoundary = company.id === boundaryScreenshotResources.companyId && agent.id === boundaryScreenshotResources.agentId
+          && isDisabledChatBoundaryScreenshotRoute(page.url(), { scenarioId: execution.task.id, origin: api.baseURL,
+            companyId: company.id, agentCompanyId: agent.companyId, issuePrefix: company.issuePrefix,
+            agentId: agent.id, authenticatedPersonId: session.user.id, agentChatEnabled: settings.enableAgentChat });
+      }
+      if (!isReviewedFixtureScreenshotRoute() && !reviewedBoundary) {
         throw new Error(
           `Public runner screenshot blocked on non-task route ${page.url()}`,
         );
@@ -957,6 +974,7 @@ for (const execution of executions) {
             if (name === "chat-boundary-cleanup.json") cleanup = (value as { cleanup?: string }).cleanup === "complete" ? "passed" : "failed";
           },
           observeResources(value) {
+            if (execution.task.id === "agent-chat.chat-disabled") boundaryScreenshotResources = { companyId: value.companyId, agentId: value.agentId };
             // Boundaries independently collect their real resources. They do not
             // manufacture LiveFixtureValues or a source issue for result fields.
             if (value.runIds.length) matcherResults.push({ matcher: { kind: "json_path", path: "boundary.actual-agent-dispatch", expected: true },

@@ -49,12 +49,14 @@ export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
     // actual page with the same genuine human session rather than inspecting
     // a second page while retaining an unrelated screenshot.
     await person.installSessionOn(ctx.page.context());
+    person.bindApiSession(ctx.api); // Capture verification uses the same person through private Node fetch.
     const page = ctx.page;
     await page.goto(`/${fixtures.company.issuePrefix}/chats/${fixtures.agent.id}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByText(/Agent Chat is disabled\. Enable it in Experimental settings/)).toBeVisible();
     await expect(page.getByTestId("task-chat-composer-input")).toHaveCount(0);
     const unavailableVisible = await page.getByText(/Agent Chat is disabled/).isVisible();
     const supportedOperatorStepVisible = await page.getByText(/Enable it in Experimental settings/).isVisible();
+    ctx.observeResources({ companyId: fixtures.company.id, agentId: fixtures.agent.id, runIds: [] });
     await ctx.capture("disabled-agent-chat", "Morgan Chat is genuinely unavailable; canonical intent remains unsent", "runtime-disabled-agent-chat.png");
     const key = await api.postSensitive<{ id: string; token: string }>(`/api/agents/${fixtures.agent.id}/keys`, { name: "disabled-chat-permission-probe" });
     ctx.privateSecrets.push(key.token); resource.keyId = key.id;

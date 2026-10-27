@@ -1,12 +1,12 @@
 import { expect } from "@playwright/test";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { observeCompletionUpdate } from "../completion-update-flow.js";
 import { completionDelivery } from "../completion-updates.js";
 import { checks, hasLink, type Entity } from "./internal-support.js";
 import { openStandingChat } from "./identity-support.js";
-import { prepareRuntimeWorkerGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
+import { prepareRuntimeWorkerGate, readRuntimeTaskGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime, type RuntimeAgent } from "./runtime-support.js";
 
 export function gradeTrackDelegatedWork(value: unknown) {
@@ -35,16 +35,20 @@ export function gradeTrackDelegatedWork(value: unknown) {
   return c.result();
 }
 export const runtimeHandoffCases = [runtimeDefinition("agent-chat.track-delegated-work", async ctx => {
-  const prepared = await prepareRuntimeWorkerGate(ctx); const source = await openStandingChat(ctx);
+  const prepared = await prepareRuntimeWorkerGate(ctx, { taskBound: true }); const source = await openStandingChat(ctx);
   const marker = `Tracked website delivery ${ctx.input.nonce}`;
-  const instructions = `For the website assignment, first run node ${JSON.stringify(prepared.gate.scriptPath)} once and wait for the real human brief. Do not invent the brief or change the script. Once it returns, save a short website deliverable document with key website-delivery on the assigned task containing the supplied reference and complete that same task normally. Do not create other tasks or perform external actions.`;
+  const instructions = `For the website assignment, first run ${prepared.gate.command} once and wait for the real human brief. Do not invent the brief or change the script. Once it returns, save a short website deliverable document with key website-delivery on the assigned task containing the supplied reference and complete that same task normally. Do not create other tasks or perform external actions.`;
   await ctx.input.api.saveAgentInstructions(prepared.worker.id, instructions);
   const prompt = `Create one task titled Website, assigned to Morgan, to draft our launch page. Morgan is waiting for the human brief, which will include the reference ${marker}. Let Morgan implement it on that separate work task. Track the result here and tell me here when the work is complete, with access to the actual result. You may begin that one handoff now; no additional task or project is needed.`;
   await sendChatMessage(ctx.input.page, prompt);
   const phase = await pollUntil({ label: "Actual conversation-created Morgan handoff", deadlineAt: Date.now() + 180_000,
-    load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(),
-      tasks: await ctx.input.api.get<Entity[]>(`${prepared.company}/issues?includeAgentCreatedTasks=true&limit=1000`), runs: await ctx.allRuns(),
-      waiting: await readFile(prepared.gate.ready, "utf8").catch(() => "") }; },
+    load: async () => {
+      await ctx.refreshIssue();
+      const tasks = await ctx.input.api.get<Entity[]>(`${prepared.company}/issues?includeAgentCreatedTasks=true&limit=1000`);
+      const candidates = tasks.filter(task => task.id !== source.id && task.assigneeAgentId === prepared.worker.id);
+      return { source: ctx.issue(), tasks, runs: await ctx.allRuns(),
+        waiting: candidates.length === 1 ? await readRuntimeTaskGate(ctx, prepared.gate, candidates[0]!.id, prepared.worker.id) : "" };
+    },
     accept: value => value.source?.conversationState === "waiting" && value.waiting === "waiting" && value.runs.length === 2
       && value.runs.some(run => run.agentId === prepared.worker.id && run.status === "running")
       && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
