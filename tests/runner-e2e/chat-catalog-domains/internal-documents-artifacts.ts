@@ -4,6 +4,8 @@ import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { privateDownloadCases } from "./internal-private-download.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
+import { selectDocumentSource } from "./internal-document-context.js";
+import type { IssueDocument } from "../../../packages/shared/src/types/issue.js";
 
 export function grade_documents_artifacts(value: unknown) {
   const c = checks(); const o = observation(value);
@@ -78,7 +80,9 @@ export const documents_artifactsCases: readonly ChatCatalogCase[] = [
       const saved = await putDocument(ctx, t.id, body, revisions.at(-1)?.id ?? null);
       revisions.push({ id: saved.latestRevisionId!, body });
     }
-    return { project: p, task: t, originalRevisions: revisions };
+    const document = await ctx.input.api.get<IssueDocument>(`/api/issues/${t.id}/documents/plan`);
+    const selectedSource = await selectDocumentSource(ctx, { task: t, document });
+    return { project: p, task: t, originalRevisions: revisions, selectedSource };
   })),
 
 ];
@@ -103,7 +107,9 @@ function resolveFeedback(): ChatCatalogCase {
     };
     const pricingThread = await createAnnotation(pricing, "Clarify that $19 is the monthly total for the team, not per person. Keep the amount and billing cadence.");
     const siblingThread = await createAnnotation(supportText, "Please add a support contact later; leave this unrelated comment open for now.");
-    return { project: p, task: t, pricingThread, siblingThread, supportText, originalRevisionId: doc.latestRevisionId };
+    const selectedSource = await selectDocumentSource(ctx, { task: t,
+      document: { id: doc.id, key: "plan", latestRevisionId: doc.latestRevisionId! }, annotationId: pricingThread.id });
+    return { project: p, task: t, pricingThread, siblingThread, supportText, originalRevisionId: doc.latestRevisionId, selectedSource };
   });
   return { ...base, sourceFiles: [...base.sourceFiles, "../../packages/shared/src/document-anchors.ts"], async observe(ctx, state) {
     const o = await observeInternal(ctx, state);

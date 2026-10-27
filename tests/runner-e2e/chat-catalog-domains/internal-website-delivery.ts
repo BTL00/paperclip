@@ -9,6 +9,7 @@ import { pollUntil } from "../api.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { checks, entity, hasLink, observation, observeInternal, project, task, type Entity, type InternalObservation } from "./internal-support.js";
+import { selectDocumentSource } from "./internal-document-context.js";
 interface Downloaded { id: string; sha256: string; body: string }
 interface DeliveryObservation extends InternalObservation { attachments: IssueAttachment[]; products: IssueWorkProduct[]; downloaded: Downloaded[] }
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -74,12 +75,15 @@ function websiteDelivery(revising: boolean): ChatCatalogCase {
       const [original] = await readRegisteredArtifacts(ctx.input.api, t.id, priorRunId, [filename]);
       if (original.content !== actual) throw new Error("The prior registered delivery does not match the generated website");
       originalAttachment = (await ctx.input.api.get<IssueAttachment[]>(`/api/issues/${t.id}/attachments`)).find(file => file.id === original.attachmentId)!; originalProductId = original.workProductId;
+      if (!originalAttachment) throw new Error("The original registered delivery attachment is missing from its source task");
     } else if ((await ctx.input.api.get<IssueAttachment[]>(`/api/issues/${t.id}/attachments`)).length) throw new Error("The undelivered prerequisite unexpectedly uploaded the requested outcome");
     // The delivered revision source can be handed over without starting work. The
     // undelivered prerequisite stays honestly blocked with its original worker;
     // assigning a nonterminal task here could admit an undeclared extra run.
     const handedOff = revising ? await ctx.input.api.patch<typeof t>(`/api/issues/${t.id}`, { assigneeAgentId: ctx.input.fixtures.agent.id }) : ready.task;
-    const state = { project: p, task: handedOff, worker, priorRunId, filename, producedBody: actual, producedHash: hash(actual), marker, bodyFact, signupHref, originalAttachment, originalProductId };
+    const selectedSource = await selectDocumentSource(ctx, { task: handedOff,
+      ...(revising ? { attachment: originalAttachment } : { workspaceFilename: filename }) });
+    const state = { project: p, task: handedOff, worker, priorRunId, filename, producedBody: actual, producedHash: hash(actual), marker, bodyFact, signupHref, originalAttachment, originalProductId, selectedSource };
     await ctx.input.evidence("chat-catalog-actual-prior-website.json", state); return state;
   }, gradeWebsiteDelivery);
   return { ...base, expectedRunCount: 2, minimumRunCount: 2, attemptTimeoutMs: 600_000,
