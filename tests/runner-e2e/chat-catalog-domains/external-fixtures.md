@@ -321,3 +321,36 @@ operated on an existing credential-bearing shared account, rather than claiming
 a new credential-free personal draft. The finite case declares four native runs,
 two actual human queries and a 25-minute attempt ceiling. Missing qualified
 credential/session/origin stays separate from authored callback completeness.
+
+`assistant-connections.connect-external-assistant` uses selected runtime provider
+`chatgpt` with only `operatorRef`, `chatgptAuthorizationRef`, and
+`operatorMode=interactive-private-ui`. The authorization reference must be in the
+selected disposable binding's `resourceIds`. These are private reference names,
+not a ChatGPT API key, browser-cookie import, or authority inferred from an
+ambient account. It also requires the exact attempt's validated owned HTTPS
+origin and genuine public sign-in of the same generated Paperclip fixture person.
+
+The finite standalone headed browser first asks the designated human to confirm
+availability. After the unchanged canonical CEO query, that person actually uses
+ChatGPT's supported private custom MCP app UI and the real Paperclip consent tab.
+The child observes the actual named-client request, official ChatGPT callback,
+explicit company and scope acceptance, and one new saved grant. Configuration
+scope is permitted only when requested, visibly disclosed in the real consent,
+and explicitly accepted; agent authority is excluded. The current source's
+write-only consent label does not itself establish configuration disclosure.
+Changed or missing controls and failed provider authorization are nonpassing
+observations, never grounds for a generic-client substitution.
+
+The only qualification mutation is the approved one neutral setup-check comment
+on a newly owned human-controlled backlog task. A real ChatGPT tool read supplies
+the substantive synthetic owner fact; its one actual MCP comment must join the
+same grant/person/client/request ID in public audit. No agent assignment,
+watchdog, mention, REST comment surrogate or new company native run is allowed.
+Actual provider browser creation identifies the unique new private app for
+subsequent human UI deletion; a successful provider response bound to that exact
+app ID is required. The Paperclip grant and owned control task are separately
+removed through public APIs. Private provider state remains in the child and is
+never exported. The case declares one canonical human message/native run and a
+25-minute attempt ceiling; human setup, provider callback, qualification and
+cleanup each have bounded waits. Missing operator/account/origin remains a
+concrete prerequisite, distinct from callback completeness and measured success.

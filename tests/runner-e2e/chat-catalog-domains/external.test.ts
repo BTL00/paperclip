@@ -19,8 +19,9 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-// The multi-phase review has dedicated controls in external-app-review.test.ts.
-const definitions = [...appPermissionExternalCases.filter(row => row.scenarioId !== "app-permissions.ask-before-action"), ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases, ...secureKeyExternalCases];
+// The multi-phase review and actual named ChatGPT setup have dedicated controls
+// in external-app-review.test.ts and external-chatgpt-setup.test.ts.
+const definitions = [...appPermissionExternalCases.filter(row => row.scenarioId !== "app-permissions.ask-before-action"), ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases.filter(row => row.scenarioId !== "assistant-connections.connect-external-assistant"), ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases, ...secureKeyExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -101,10 +102,6 @@ function valid(id: string) {
     o.reply = "I could not read Notion because you declined access. You can paste an excerpt instead.";
   } else if (id === "chat-channels.provider-disabled") {
     Object.assign(o.state, { disabledBefore: true, disabledAfter: true, imessageSetupGated: true }); o.reply = "iMessage is not enabled. An instance administrator can enable experimental chat connectors.";
-  } else if (id === "assistant-connections.connect-external-assistant") {
-    Object.assign(o.state, { assistantConnections: [{ id: "grant", companyId: "company", scopes: ["paperclip:read"] }],
-      humanConsentCompleted: true, clientCompanyId: "company", clientReadScope: true, directRestStatus: 401, unauthenticatedMcpStatus: 401,
-      resultPath: "/ACORN/apps/assistant-connection" }); o.links = ["/ACORN/apps/assistant-connection"];
   } else if (id === "assistant-connections.decline-consent") {
     Object.assign(o.state, { consentVisible: true, callbackError: "access_denied", callbackStateMatched: true, newGrantCount: 0,
       otherGrantBefore: "retained unrelated grant", otherGrantAfter: "retained unrelated grant", otherGrantStillUsable: true });
@@ -131,7 +128,6 @@ const wrong: Record<string, (o: ExternalObservation) => void> = {
   "secrets.ask-for-plaintext": o => { o.state.secretLeaked = true; },
   "gateways-profiles.create-gateway": o => { (o.state.gatewaysAfter as Array<{ companyId: string }>)[0]!.companyId = "other"; },
   "chat-channels.provider-disabled": o => { o.state.disabledAfter = false; },
-  "assistant-connections.connect-external-assistant": o => { o.state.clientCompanyId = "other"; },
   "assistant-connections.decline-consent": o => { o.state.otherGrantStillUsable = false; },
   "connection-setup.notion-declined": o => { o.interactions[0]!.resolvedByUserId = "someone-else"; },
 };
