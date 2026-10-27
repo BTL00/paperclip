@@ -316,6 +316,18 @@ export async function resolveAgentRunnerTargetForCompany(db: Db, companyId: stri
 }
 
 export async function resolveAgentRunnerEnvironmentForCompany(db: Db, companyId: string, defaultEnvironmentId?: string | null) {
+  const resolved = await resolveAgentEnvironmentForCompany(db, companyId, defaultEnvironmentId);
+  if (resolved.environment?.driver === "sandbox" && resolved.environment.config?.provider === "fake") throw unprocessable("The fake sandbox provider cannot execute runs.");
+  return resolved;
+}
+
+// Hiring defaults inspect capabilities without probing or qualifying an already selected runner.
+export async function resolveAgentRunnerTaskDriverForCompany(db: Db, companyId: string, defaultEnvironmentId?: string | null) {
+  const { environment, driver } = await resolveAgentEnvironmentForCompany(db, companyId, defaultEnvironmentId);
+  return driver === "plugin" && environment ? pluginEnvironmentRunnerTaskDriver(db, environment) : undefined;
+}
+
+async function resolveAgentEnvironmentForCompany(db: Db, companyId: string, defaultEnvironmentId?: string | null) {
   const { instanceSettingsService } = await import("./instance-settings.js");
   const { environmentService } = await import("./environments.js");
   const settings = await instanceSettingsService(db).get();
@@ -335,7 +347,6 @@ export async function resolveAgentRunnerEnvironmentForCompany(db: Db, companyId:
     const boundCompanyIds = await envs.listBoundCompanyIds(environment.id);
     if (boundCompanyIds.length > 0 && !boundCompanyIds.includes(companyId)) throw forbidden("The selected environment belongs to another company.", { code: "environment_company_mismatch" });
     if (environment.status === "archived") throw unprocessable("Environment is archived.");
-    if (environment.driver === "sandbox" && environment.config?.provider === "fake") throw unprocessable("The fake sandbox provider cannot execute runs.");
   }
   return { environment, driver: environment?.driver ?? "local" };
 }

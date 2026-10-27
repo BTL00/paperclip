@@ -11134,7 +11134,7 @@ describe("runnerd provider runtime wiring", () => {
     const { permissionPolicy: _permissionPolicy, ...claudeProfile } = QUALIFIED_ACPX_PROFILES.claude;
     const first = { ...scopedNativeExecution(`warm-admission-${provider}-${scenario}`),
       schema: "paperclip.native-execution-input.v5" as const,
-      provider: provider === "claude" ? { kind: "acpx" as const, agent: "claude", model: "claude-sonnet-4-6", permissionMode: "approve-all" as const, profile: claudeProfile } : { kind: "codex" as const, model: null, approvalPolicy: "never" as const },
+      provider: provider === "claude" ? { kind: "acpx" as const, agent: "claude" as const, model: "claude-sonnet-4-6", permissionMode: "approve-all" as const, profile: claudeProfile } : { kind: "codex" as const, model: null, approvalPolicy: "never" as const },
       executionMode: "default" as const, planningContext: null, runtimeContext: nativeRuntimeContextFixture() };
     if (provider === "claude") first.session.driverKind = "acpx_runtime";
     first.session.lifecyclePolicy = { mode: "warm", idleTimeoutMs: 60_000 };
