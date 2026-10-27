@@ -18,8 +18,8 @@
   "privateValueCount": 4,
   "findings": [],
   "sourceSha256": {
-    "runtime-email-private.ts": "38381b54ef3a9903ba26d7c85fa27e327de39ac4055488c02e1106944330801b",
-    "runtime-email-private-worker.ts": "d77652ae26b4a80c4b45fe5c1cf3848b403d9c377c87c6d4ca4d33bcd10e6dc1",
+    "runtime-email-private.ts": "5c3b4378b35c011e4dbe207815c4fa199f30f8c67e5fc687fb9ac80ffc766caa",
+    "runtime-email-private-worker.ts": "84bfcff12f9c29c92e8aa39d06d3e8f0d42fbf3121824f09984d74eff8ad747f",
     "runtime-email-private-privacy.spec.ts": "f7a10150c179ee17862fa819013809df65ce0c4cbe505421203015c52b61dd62"
   },
   "configSha256": "dcfb8e7013a1c2ff81277bb44bc5214357dc6fb5eacd2073cfaafca1790b31b1"
