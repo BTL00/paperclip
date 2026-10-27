@@ -37,6 +37,17 @@ describe("remote Actions cell import", () => {
     const foreign = f.input(); foreign.result.path = "../result.json"; expect(() => validateRemoteCell(foreign)).toThrow("artifact path");
     const rerun = f.input(); rerun.provenance.runAttempt = 2; expect(() => validateRemoteCell(rerun)).toThrow("job rerun");
   });
+  it("accepts proven normal-fleet fallback only under a new explicit intent and matching receipt", () => {
+    const f = fixture(); f.host.hostPolicy = "aws-fleet-spot-or-on-demand"; f.host.lifecycle = "on-demand"; f.host.spotVerified = false;
+    expect(() => validateRemoteCell(f.input())).toThrow("intent policy");
+    const allowed = () => { const input = f.input(); return { ...input, intent: { ...input.intent, hostPolicy: "aws-fleet-spot-or-on-demand" as const } }; };
+    expect(validateRemoteCell(allowed())).toMatchObject({ hostLifecycle: "on-demand", hostPolicy: "aws-fleet-spot-or-on-demand" });
+    f.host.spotVerified = true; expect(() => validateRemoteCell(allowed())).toThrow("intent policy");
+    f.host.spotVerified = false; f.host.lifecycle = "unknown"; expect(() => validateRemoteCell(allowed())).toThrow("intent policy");
+    f.host.lifecycle = "on-demand"; delete f.host.hostPolicy; expect(() => validateRemoteCell(allowed())).toThrow("intent policy");
+    f.host.hostPolicy = "aws-fleet-spot-or-on-demand"; f.host.lifecycle = "spot"; f.host.spotVerified = true;
+    expect(validateRemoteCell(allowed()).hostLifecycle).toBe("spot");
+  });
   it("imports actual On-Demand refusal only as an operation with zero case ordinals", () => {
     const f = fixture(); Object.assign(f.host, { status: "blocked", lifecycle: "on-demand", reason: "on-demand-or-unknown-host-refused-before-evaluation", instanceId: "i-12345678", imageId: "ami-12345678" });
     delete f.host.postgres; delete f.host.dockerEngineSha256;

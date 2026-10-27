@@ -9,6 +9,8 @@ const hex = (value: unknown): value is string => typeof value === "string" && /^
 function requireProof(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(`Remote import: ${message}`); }
 export interface RemoteCellIntent {
   campaignId: string; sourceRevision: string;
+  /** Absent on preserved strict-Spot intents. Only new explicit user-authorized sources opt in. */
+  hostPolicy?: "aws-fleet-spot-or-on-demand";
   selected: Array<{ scenarioId: string; executionId: string; remoteOrdinal: 1 | 2 }>;
 }
 /** Obtained by the coordinator through authenticated Actions run/artifact APIs, not from
@@ -25,6 +27,7 @@ export interface ValidatedRemoteCell {
   scenarioId: string; ordinal: 1 | 2; sourceRevision: string;
   resultPath: string; resultSha256: string; hostSha256: string; definitionSha256: string;
   result: RunnerE2EResult; definitionDigest: string; graderDigest: string;
+  hostLifecycle: "spot" | "on-demand"; hostPolicy: "spot-only" | "aws-fleet-spot-or-on-demand";
   databaseLane: DatabaseFingerprintIdentity;
 }
 function document(value: RemoteArtifactDocument): Record<string, any> {
@@ -55,8 +58,12 @@ export function validateRemoteCell(input: {
   requireProof(result.source?.sha === intent.sourceRevision && result.source.workflowRunUrl === `https://github.com/paperclipai/paperclip/actions/runs/${p.runId}`, "result source/run mismatch");
   requireProof(!!result.accountingIdentity?.campaignId && /^[a-f0-9]{32}$/.test(result.accountingIdentity?.attemptId ?? ""), "missing actual framework accounting identity");
   requireProof(Number.isFinite(Date.parse(result.startedAt)) && Date.parse(result.finishedAt) >= Date.parse(result.startedAt) && Number.isFinite(result.durationMs) && result.durationMs >= 0, "invalid actual timing");
+  const normalFleet = intent.hostPolicy === "aws-fleet-spot-or-on-demand";
+  const allowedHost = normalFleet ? host.hostPolicy === intent.hostPolicy && ["spot", "on-demand"].includes(host.lifecycle)
+    && host.spotVerified === (host.lifecycle === "spot") : host.lifecycle === "spot" && host.spotVerified === true;
+  requireProof(intent.hostPolicy === undefined || normalFleet, "unknown host policy");
   requireProof(host.schema === "paperclip.chat-remote-host/v1" && host.status === "qualified-host-only" && host.scope === "before-evaluation" && host.evaluationAdmitted === false
-    && host.spotVerified === true && host.lifecycle === "spot" && host.architecture === "x86_64" && host.region === "us-east-1", "host not qualified actual Spot");
+    && allowedHost && host.architecture === "x86_64" && host.region === "us-east-1", "host not qualified for explicit intent policy");
   requireProof(host.workflowRef === "paperclipai/paperclip/.github/workflows/runner-full-stack-e2e.yml@refs/heads/master"
     && host.workflowRunId === p.runId && host.workflowAttempt === p.runAttempt && host.sourceRevision === intent.sourceRevision
     && Array.isArray(host.executionIds) && host.executionIds.includes(result.executionId) && host.automaticRetries === 0 && hex(host.dockerEngineSha256), "host/result provenance mismatch");
@@ -69,7 +76,8 @@ export function validateRemoteCell(input: {
     measurementKey: `${result.accountingIdentity!.campaignId}/${result.accountingIdentity!.attemptId}/${result.executionId}`,
     artifactSha256: p.archiveSha256, scenarioId: selection.scenarioId, ordinal: selection.remoteOrdinal, sourceRevision: intent.sourceRevision,
     resultPath: input.result.path, resultSha256: input.result.sha256, hostSha256: input.host.sha256, definitionSha256: input.definition.sha256,
-    result, definitionDigest: definition.definitionDigest, graderDigest: definition.graderDigest, databaseLane };
+    result, definitionDigest: definition.definitionDigest, graderDigest: definition.graderDigest, databaseLane,
+    hostLifecycle: host.lifecycle, hostPolicy: normalFleet ? "aws-fleet-spot-or-on-demand" : "spot-only" };
 }
 /** A pre-attempt qualification refusal is an operation, never a case reservation.
  * Only these two source-qualified host-gate branches prove this zero-admission stage. */
@@ -106,7 +114,7 @@ export function remoteCellUsage(result: RunnerE2EResult): CampaignAttempt["usage
     costUsd: usage && ["reported", "partial"].includes(usage.costStatus) && Number.isFinite(usage.reportedCostUsd) ? usage.reportedCostUsd : null,
     coverage: usage?.costStatus ?? "unavailable" };
 }
-export interface RemoteImportRecord { importKey: string; measurementKey: string; resultSha256: string; artifactSha256: string; ordinal: 1 | 2; scenarioId: string }
+export interface RemoteImportRecord { importKey: string; measurementKey: string; resultSha256: string; artifactSha256: string; ordinal: 1 | 2; scenarioId: string; hostLifecycle: "spot" | "on-demand"; hostPolicy: ValidatedRemoteCell["hostPolicy"] }
 export type RemoteCampaign = ChatCampaign & { remoteImports?: RemoteImportRecord[] };
 /** Pure transaction: caller is the sole writer and atomically persists this returned
  * existing campaign ledger. A failed gate never partially reserves an ordinal.
@@ -134,6 +142,6 @@ export function applyRemoteCell(campaign: RemoteCampaign, cell: ValidatedRemoteC
   requireProof(scenario, "scenario absent from frozen campaign");
   reserveCampaignAttempt(scenario, structuredClone(attempt));
   completeCampaignAttempt(scenario, structuredClone(completion));
-  next.remoteImports = [...records, { importKey: cell.importKey, measurementKey: cell.measurementKey, resultSha256: cell.resultSha256, artifactSha256: cell.artifactSha256, ordinal: cell.ordinal, scenarioId: cell.scenarioId }];
+  next.remoteImports = [...records, { importKey: cell.importKey, measurementKey: cell.measurementKey, resultSha256: cell.resultSha256, artifactSha256: cell.artifactSha256, ordinal: cell.ordinal, scenarioId: cell.scenarioId, hostLifecycle: cell.hostLifecycle, hostPolicy: cell.hostPolicy }];
   return { campaign: next, duplicate: false };
 }
