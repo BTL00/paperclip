@@ -1,3 +1,4 @@
+import { validNativeStopDeclaration, assertNativeStopCallback } from "./chat-native-stop-boundary.js";
 import { validSlackIngressDeclaration } from "./chat-slack-ingress.js";
 import { validCompanionDeclaration } from "./chat-companion-surface.js";
 import { installedChatScenarioIds } from "./chat-installed-lane.js";
@@ -8,7 +9,7 @@ import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
 import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
-export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "verifySlackSupportedTransfer" | "dispatchSlackUnsupportedFile" | "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
+export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "beforeCanonicalSend" | "dispatchSlackOtherThread" | "verifySlackSupportedTransfer" | "dispatchSlackUnsupportedFile" | "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
   journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant" | "native-slack-thread";
   boundaryTarget?: "authenticated-harness" | "empty-installed-target";
   modulePath: string;
@@ -26,6 +27,7 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (!descriptor) return;
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && !validCompanionDeclaration(descriptor)) throw new Error("Only the declared scoped-client catalog case may select an external assistant");
   if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && !validSlackIngressDeclaration(descriptor)) throw new Error("Only two declared Slack thread cases may use native ingress");
+  if (descriptor.canonicalBoundary && !validNativeStopDeclaration(descriptor)) throw new Error("Native Stop boundary is exclusive to the exact human post-stop scenario");
   if (descriptor.browserTimezone && (scenarioId !== "routines.create-daily-brief" || descriptor.browserTimezone !== "America/Chicago"))
     throw new Error("Browser timezone is declared only for the canonical Chicago weekday routine");
   if (descriptor.respondingAgent && (scenarioId !== "cases.handoff-same-task" || Object.keys(descriptor.respondingAgent).length !== 4
@@ -57,13 +59,16 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface", "slackIngress"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface", "slackIngress", "canonicalBoundary"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && (!validCompanionDeclaration(implementation) || typeof implementation.runCompanionSurface !== "function" || implementation.act)) throw new Error("Missing actual finite scoped assistant driver");
   if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && (!validSlackIngressDeclaration(implementation) || typeof implementation.dispatchSlackQuery !== "function" || implementation.act)) throw new Error("Missing finite actual Slack ingress driver");
   if (descriptor.scenarioId === "chat-channels.channel-file" && descriptor.slackIngress && (typeof implementation.verifySlackSupportedTransfer !== "function" || typeof implementation.dispatchSlackUnsupportedFile !== "function")) throw new Error("Slack file case requires actual supported and unsupported transfer phases");
   if ((descriptor.scenarioId !== "chat-channels.channel-file" || !descriptor.slackIngress) && (implementation.verifySlackSupportedTransfer || implementation.dispatchSlackUnsupportedFile)) throw new Error("Undeclared Slack file conditional");
+  const declaredOtherThread = descriptor.scenarioId === "chat-channels.reply-in-thread" && descriptor.slackIngress?.setupThread === "same-agent-distractor";
+  if (declaredOtherThread ? typeof implementation.dispatchSlackOtherThread !== "function" : implementation.dispatchSlackOtherThread !== undefined) throw new Error("Missing or undeclared Slack other-thread callback");
+  assertNativeStopCallback(implementation);
   if (!descriptor.slackIngress && implementation.dispatchSlackQuery) throw new Error("Undeclared Slack ingress driver");
   if (!descriptor.companionSurface && implementation.runCompanionSurface) throw new Error("Undeclared external assistant driver");
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")
@@ -79,7 +84,7 @@ export async function loadChatCatalogImplementation(
 /** Separate typed dispatch: no company, agent, or ChatFlowInput is fabricated. */
 export async function loadIdentityBoundaryImplementation(descriptor: ChatCatalogDescriptor,
   importer: (specifier: string) => Promise<Record<string, unknown>> = specifier => import(specifier)): Promise<IdentityBoundaryCase> {
-  if (descriptor.journeyKind !== "browser-boundary" || !(identityBoundaryScenarioIds as readonly string[]).includes(descriptor.scenarioId))
+  if (descriptor.canonicalBoundary || descriptor.journeyKind !== "browser-boundary" || !(identityBoundaryScenarioIds as readonly string[]).includes(descriptor.scenarioId))
     throw new Error("Only explicit catalog browser boundaries may bypass Agent Chat prerequisites");
   if (descriptor.scenarioId === "agent-chat.chat-disabled" && (descriptor.boundaryTarget !== "authenticated-harness" || descriptor.authentication !== "human-session"))
     throw new Error("Disabled Agent Chat requires the actual owned authenticated company target");

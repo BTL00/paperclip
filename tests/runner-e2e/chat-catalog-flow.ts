@@ -6,6 +6,7 @@ import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./ch
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
 import { collectChatRunEvidence, sendChatMessage } from "./chat-flow.js";
+import { prepareNativeStopCanonicalBoundary } from "./chat-native-stop-boundary.js";
 import { chatCatalogHumanHistoryMatches, validateChatCatalogGrade, type ChatCatalogSetupBoundary, type ChatCatalogContext, type ChatCatalogGrade } from "./chat-catalog-contract.js";
 import { findChatCatalogCase, loadChatCatalogImplementation } from "./chat-catalog-registry.js";
 import { chatCatalogInventoryDigest } from "./chat-catalog-inventory.js";
@@ -125,7 +126,10 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       state.slackIngressReceipt = await dispatchNativeSlackIngress(context, implementation, state, deadlineAt);
       await input.page.goto(new URL(`/${input.fixtures.company.issuePrefix}/issues/${context.issue()!.id}`, input.api.baseURL).href);
       if (implementation.scenarioId === "chat-channels.channel-file") await completeNativeSlackFileConditional(context, implementation, state, deadlineAt);
-    } else await sendChatMessage(input.page, renderedQuery);
+    } else {
+      await prepareNativeStopCanonicalBoundary(context, implementation, state, renderedQuery, setupBoundary);
+      await sendChatMessage(input.page, renderedQuery);
+    }
     if (implementation.queryOutcome === "rejected") {
       const rejection = validateChatCatalogGrade(await implementation.verifyQueryRejection!(context, state));
       await input.evidence("chat-catalog-query-rejection.json", rejection);

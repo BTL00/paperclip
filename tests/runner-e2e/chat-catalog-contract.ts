@@ -46,7 +46,11 @@ export interface ChatSlackIngressReceipt {
   provider: { workspaceId: string; channelId: string; threadId: string; canonicalMessageId: string; senderUserId: string };
 }
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
+export interface NativeStopBoundaryReceipt { runId: string; issueId: string; intentId: string; intentRecordedAt: string }
 export interface ChatCatalogCase {
+  /** Only post-stop-message: actual human Stop after bookkeeping, before unchanged canonical send. */
+  canonicalBoundary?: "native-stop-cleanup";
+  beforeCanonicalSend?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<NativeStopBoundaryReceipt>;
   scenarioId: string;
   /** Real browser locale context for the canonical person's schedule. */
   browserTimezone?: "America/Chicago";
