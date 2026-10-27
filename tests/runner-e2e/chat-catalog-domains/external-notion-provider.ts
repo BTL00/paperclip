@@ -90,3 +90,37 @@ export async function connectNamedNotion(ctx: ChatCatalogContext, binding: Provi
     return { connectionId: result.connectionId, readEntryIds: read };
   } catch (error) { await ctx.input.api.delete(`/api/tool-connections/${result.connectionId}`, { allowNotFound: true }); throw error; }
 }
+
+/** A known-existing personal fixture page must really be inaccessible under the
+ * independently healthy shared workspace credential; never infer mismatch only
+ * from a display name. No discovery or non-allowlisted page is attempted. */
+export async function verifyNotionPersonalPageDenied(
+  ctx: ChatCatalogContext,
+  shared: ProviderBinding,
+  pageId: string,
+) {
+  assertNotionConnection(shared);
+  if (
+    !/^[a-f0-9-]{32,36}$/i.test(pageId) ||
+    !shared.resourceIds.some((id) => normalized(id) === normalized(pageId))
+  )
+    throw new Error(
+      "Setup blocker: personal Notion page is outside explicit disposable resource allowlist",
+    );
+  const token = selectedExternalCredential(ctx, shared, "apiTokenEnv");
+  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    method: "GET",
+    redirect: "error",
+    signal: AbortSignal.timeout(20000),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Notion-Version": shared.prerequisites.apiVersion!,
+    },
+  });
+  await response.body?.cancel();
+  if (![403, 404].includes(response.status))
+    throw new Error(
+      "Setup blocker: healthy shared Notion credential did not prove the selected personal page inaccessible",
+    );
+  return true;
+}

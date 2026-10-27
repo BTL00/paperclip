@@ -9,6 +9,7 @@ export interface NotionOAuthInput {
   intentId?: string;
   issueId?: string;
   draftId?: string;
+  newPersonal?: true;
   workspaceId: string;
   workspaceName: string;
   providerEmail: string;
@@ -98,6 +99,11 @@ export function validNotionOAuthInput(input: NotionOAuthInput) {
       !!input.intentId === !!input.issueId &&
       (!input.issueId || id(input.issueId)) &&
       (!input.draftId || id(input.draftId)) &&
+      (!input.newPersonal ||
+        (input.newPersonal === true &&
+          !input.draftId &&
+          !!input.intentId &&
+          input.operation === "authorize")) &&
       /^[a-f0-9-]{32,36}$/i.test(input.workspaceId) &&
       typeof input.workspaceName === "string" &&
       input.workspaceName.length > 0 &&

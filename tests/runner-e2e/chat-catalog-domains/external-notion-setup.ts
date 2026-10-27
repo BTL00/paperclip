@@ -5,13 +5,24 @@ import type {
   ConnectionGrantsResponse,
   ToolRunDecisionLookup,
   ToolProfileEffectiveSummary,
+  ToolConnectionTestCallResult,
 } from "../../../packages/shared/src/types/tool-access.js";
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
-import { externalRequirements } from "./external-fixtures.js";
+import {
+  externalRequirements,
+  selectedExternalBinding,
+} from "./external-fixtures.js";
 import { privateNotionOAuth } from "./external-notion-oauth.js";
-import type { NotionOAuthReceipt } from "./external-notion-oauth-contract.js";
+import {
+  notionSelfWorkspaceMatches,
+  type NotionOAuthReceipt,
+} from "./external-notion-oauth-contract.js";
 import {
   readNotionFixturePages,
+  connectNamedNotion,
+  verifyNotionWorkspace,
+  verifyNotionPersonalPageDenied,
   type NotionPageOracle,
 } from "./external-notion-provider.js";
 import {
@@ -28,6 +39,59 @@ import {
   verifyRenderedReply,
 } from "./external-support.js";
 
+export function personalNotionGuidance(text: string) {
+  return text
+    .split(/[.!?;\n]+/)
+    .some(
+      (clause) =>
+        /\bpersonal\b/i.test(clause) &&
+        /\b(?:connect|authorize|authorization|sign.?in)\b/i.test(clause) &&
+        !/\bI(?:['’]ve| have)?\s+(?:already\s+)?(?:connected|authorized)\b/i.test(
+          clause,
+        ),
+    );
+}
+async function sharedNotionAuthority(ctx: ChatCatalogContext, id: string) {
+  const connection = await ctx.input.api.get<ToolConnection>(
+    `/api/tool-connections/${id}`,
+  );
+  const { grants } = await ctx.input.api.get<ConnectionGrantsResponse>(
+    `/api/tool-connections/${id}/grants`,
+  );
+  const { installs } = await ctx.input.api.get<{
+    installs: Array<{ targetType: string; targetId: string }>;
+  }>(`/api/tool-connections/${id}/installs`);
+  const sorted = (rows: unknown[]) =>
+    rows.map((row) => JSON.stringify(row)).sort();
+  return {
+    id: connection.id,
+    companyId: connection.companyId,
+    enabled: connection.enabled,
+    credentialPolicy: connection.credentialPolicy,
+    ownership: connection.ownership,
+    grants: sorted(
+      grants.map((g) => ({
+        id: g.id,
+        kind: g.kind,
+        subjectUserId: g.subjectUserId,
+        subjectAgentId: g.subjectAgentId,
+        status: g.status,
+        members: sorted(
+          (g.members ?? []).map((m) => ({
+            subjectType: m.subjectType,
+            subjectId: m.subjectId,
+          })),
+        ),
+        delegations: sorted(
+          (g.delegations ?? []).map((d) => ({ agentId: d.agentId })),
+        ),
+      })),
+    ),
+    installs: sorted(
+      installs.map((i) => ({ targetType: i.targetType, targetId: i.targetId })),
+    ),
+  };
+}
 export function gradeNotionSetup(value: unknown) {
   const c = checks(),
     o = externalObservation(value);
@@ -100,7 +164,8 @@ export function gradeNotionSetup(value: unknown) {
       card.resolvedByUserId === o.state.humanId &&
       !card.resolvedByAgentId &&
       o.state.connectionId === receipt?.connectionId &&
-      o.connections.length === 1 &&
+      o.connections.length ===
+        (o.scenarioId === "connection-setup.notion-wrong-account" ? 2 : 1) &&
       o.state.samePersonalActive === true &&
       o.state.currentHumanPreserved === true &&
       o.state.originalSourcePreserved === true,
@@ -141,6 +206,22 @@ export function gradeNotionSetup(value: unknown) {
       o.state.pagesUnchanged === true,
     "The continuation summarizes the actual recent body fact with its real date/source, distinguishing older background.",
   );
+  if (o.scenarioId === "connection-setup.notion-wrong-account") {
+    c.add(
+      "actual-shared-personal-mismatch",
+      o.state.sharedWorkspaceMatched === true &&
+        o.state.sharedMcpWorkspaceMatched === true &&
+        o.state.sharedCannotReadPersonal === true &&
+        o.state.sharedConnectionId !== o.state.connectionId &&
+        personalNotionGuidance(initial),
+      "The existing healthy shared workspace really lacks the known personal page; actual guidance requests the personal workspace rather than substituting shared notes.",
+    );
+    c.add(
+      "shared-authority-preserved",
+      o.state.sharedAuthorityPreserved === true,
+      "Actual shared account ownership, human audience, agent delegation and installs remain unchanged after creating the explicitly personal account.",
+    );
+  }
   if (o.scenarioId === "connection-setup.save-and-resume") {
     const saved = o.state.savedDraft as NotionOAuthReceipt | undefined;
     c.add(
@@ -187,6 +268,7 @@ export const notionSetupExternalCases = [
   "connection-setup.notion-missing",
   "connection-setup.return-from-login",
   "connection-setup.save-and-resume",
+  "connection-setup.notion-wrong-account",
 ].map((id) =>
   definition(
     id,
@@ -212,6 +294,61 @@ export const notionSetupExternalCases = [
         baselineConnectionIds: [],
         savedBeforeCanonical: false,
       };
+      if (id === "connection-setup.notion-wrong-account") {
+        const binding = selectedExternalBinding(ctx),
+          p = binding.prerequisites;
+        if (
+          p.sharedWorkspaceId!.replaceAll("-", "").toLowerCase() ===
+          p.workspaceId!.replaceAll("-", "").toLowerCase()
+        )
+          throw new Error(
+            "Setup blocker: shared and personal Notion workspaces must be genuinely distinct",
+          );
+        const shared = {
+          ...binding,
+          prerequisites: {
+            ...p,
+            workspaceId: p.sharedWorkspaceId!,
+            apiTokenEnv: p.sharedApiTokenEnv!,
+            mcpTokenEnv: p.sharedMcpTokenEnv!,
+          },
+        };
+        await verifyNotionWorkspace(ctx, shared);
+        await verifyNotionPersonalPageDenied(ctx, shared, p.recentPageId!);
+        const connected = await connectNamedNotion(ctx, shared, [
+          ctx.input.fixtures.agent.id,
+        ]);
+        const proof =
+          await ctx.input.api.postSensitive<ToolConnectionTestCallResult>(
+            `/api/tool-connections/${connected.connectionId}/test-calls`,
+            {
+              agentId: ctx.input.fixtures.agent.id,
+              toolName: "notion-get-self",
+              parameters: {},
+            },
+          );
+        if (
+          proof.decision !== "allowed" ||
+          proof.error ||
+          !notionSelfWorkspaceMatches(proof.result, p.sharedWorkspaceId!)
+        ) {
+          await ctx.input.api.delete(
+            `/api/tool-connections/${connected.connectionId}`,
+            { allowNotFound: true },
+          );
+          throw new Error(
+            "Setup blocker: actual existing shared MCP authorization does not match its designated workspace",
+          );
+        }
+        state.sharedMcpWorkspaceMatched = true;
+        state.sharedConnectionId = connected.connectionId;
+        state.sharedAuthorityBefore = await sharedNotionAuthority(
+          ctx,
+          connected.connectionId,
+        );
+        state.sharedWorkspaceMatched = true;
+        state.sharedCannotReadPersonal = true;
+      }
       if (id === "connection-setup.save-and-resume") {
         try {
           state.savedDraft = await privateNotionOAuth(ctx, {
@@ -299,15 +436,18 @@ export const notionSetupExternalCases = [
         ).connections;
         const saved = state.savedDraft as NotionOAuthReceipt | undefined;
         state.pendingWithoutCredential =
-          before.length === (saved ? 1 : 0) &&
-          before.every(
-            (row) =>
-              row.id === saved?.connectionId &&
-              row.status === "draft" &&
-              row.credentialPolicy === "per_user" &&
-              !row.credentialSecretRefs.length &&
-              !row.credentialRefs?.length,
-          );
+          before.filter((row) => row.id !== state.sharedConnectionId).length ===
+            (saved ? 1 : 0) &&
+          before
+            .filter((row) => row.id !== state.sharedConnectionId)
+            .every(
+              (row) =>
+                row.id === saved?.connectionId &&
+                row.status === "draft" &&
+                row.credentialPolicy === "per_user" &&
+                !row.credentialSecretRefs.length &&
+                !row.credentialRefs?.length,
+            );
         const current = await observeExternal(ctx, state);
         const initial = current.phaseReplies
           .filter((row) => row.runId === card.sourceRunId)
@@ -321,6 +461,13 @@ export const notionSetupExternalCases = [
         )
           throw new Error(
             "Notion request was prematurely satisfied or already exposed unseen fixture facts",
+          );
+        if (
+          id === "connection-setup.notion-wrong-account" &&
+          !personalNotionGuidance(initial)
+        )
+          throw new Error(
+            "Actual Notion guidance does not identify the requested personal workspace before the human acts",
           );
         // The visible addressed card's supported full-page setup host preserves the
         // exact same intent. No API connection or completion substitutes for UI.
@@ -373,6 +520,11 @@ export const notionSetupExternalCases = [
             )
             .map((e) => e.id);
         }
+        if (typeof state.sharedConnectionId === "string")
+          state.sharedAuthorityPreserved =
+            JSON.stringify(
+              await sharedNotionAuthority(ctx, state.sharedConnectionId),
+            ) === JSON.stringify(state.sharedAuthorityBefore);
         state.decisions = await Promise.all(
           (await ctx.allRuns()).map((run) =>
             ctx.input.api.get<ToolRunDecisionLookup>(

@@ -93,6 +93,7 @@ async function main(): Promise<NotionOAuthReceipt> {
     const params = new URLSearchParams({ source: "notion", stage: "setup" });
     if (input.intentId) params.set("intent", input.intentId);
     if (input.draftId) params.set("resume", input.draftId);
+    if (input.newPersonal) params.set("new", "1");
     const setupURL = `${input.publicOrigin}/${input.prefix}/apps/connect?${params}`;
     await page.goto(setupURL, { waitUntil: "domcontentloaded" });
     await page

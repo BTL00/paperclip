@@ -286,3 +286,15 @@ reloads that same draft, then requires its eventual authorization to reuse the
 same connection ID. No literal Save & exit control or API-created draft is
 invented. All of this remains authored/unmeasured until a reserved execution has
 a real authorized disposable Notion session, workspace/pages, and owned origin.
+
+`notion-wrong-account` additionally requires `sharedWorkspaceId`,
+`sharedApiTokenEnv`, and `sharedMcpTokenEnv`, with both workspace IDs and personal
+page IDs explicitly allowlisted. The existing shared connection is prepared via
+the supported board API, independently matched to its real MCP and REST
+workspace, and its healthy REST credential must actually receive 403/404 for the
+known-existing personal page. This historical fixture is separate from the
+human's evaluated personal OAuth setup. The real supported `new=1` personal
+connection route prevents reusing the organization account; no shared audience,
+delegation, or install is broadened. Account refusal alone cannot satisfy this
+case: its actual personal setup, callback and source-bound launch read must all
+complete.

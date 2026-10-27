@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   gradeNotionSetup,
+  personalNotionGuidance,
   notionSetupExternalCases,
 } from "./external-notion-setup.js";
 import {
@@ -246,6 +247,45 @@ describe("named Notion human setup controls", () => {
       mutate(o);
       expect(gradeNotionSetup(o).passed).toBe(false);
     });
+  it("requires independently distinct real shared/personal authority and preserves the shared audience", () => {
+    const o = valid("connection-setup.notion-wrong-account");
+    o.connections.push({ id: "shared" });
+    Object.assign(o.state, {
+      sharedConnectionId: "shared",
+      sharedWorkspaceMatched: true,
+      sharedMcpWorkspaceMatched: true,
+      sharedCannotReadPersonal: true,
+      sharedAuthorityPreserved: true,
+    });
+    expect(gradeNotionSetup(o).passed).toBe(true);
+    for (const key of [
+      "sharedWorkspaceMatched",
+      "sharedMcpWorkspaceMatched",
+      "sharedCannotReadPersonal",
+      "sharedAuthorityPreserved",
+    ]) {
+      const wrong = structuredClone(o);
+      wrong.state[key] = false;
+      expect(gradeNotionSetup(wrong).passed).toBe(false);
+    }
+    const wrong = structuredClone(o);
+    wrong.phaseReplies[0]!.body =
+      "Connect the shared company Notion account and give everyone access.";
+    expect(gradeNotionSetup(wrong).passed).toBe(false);
+  });
+  it("gates human personal setup on actual personal-account guidance", () => {
+    expect(
+      personalNotionGuidance(
+        "Please connect your personal Notion workspace using the setup request.",
+      ),
+    ).toBe(true);
+    for (const text of [
+      "Connect the shared company account.",
+      "I've connected your personal workspace.",
+      "I have already authorized your personal account.",
+    ])
+      expect(personalNotionGuidance(text)).toBe(false);
+  });
   it("rejects a fabricated or replaced resume draft", () => {
     const o = valid("connection-setup.save-and-resume");
     o.state.savedDraft = { ...receipt(), connectionId: "other" };
@@ -253,7 +293,7 @@ describe("named Notion human setup controls", () => {
     expect(gradeNotionSetup(o).passed).toBe(false);
   });
   it("keeps exact concrete callbacks and phase bounds", () => {
-    expect(notionSetupExternalCases.map((c) => c.scenarioId)).toHaveLength(3);
+    expect(notionSetupExternalCases.map((c) => c.scenarioId)).toHaveLength(4);
     for (const c of notionSetupExternalCases) {
       expect(
         [c.setup, c.act, c.observe, c.verifyResult, c.cleanup].every(

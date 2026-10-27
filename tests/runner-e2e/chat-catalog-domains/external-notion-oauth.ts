@@ -94,6 +94,9 @@ export async function privateNotionOAuth(
   );
   const input: NotionOAuthInput = {
     ...options,
+    ...(ctx.scenario.id === "connection-setup.notion-wrong-account"
+      ? { newPersonal: true as const }
+      : {}),
     ...(options.intentId ? { issueId: ctx.issue()?.id } : {}),
     publicOrigin: origin.publicOrigin,
     companyId: ctx.input.fixtures.company.id,
