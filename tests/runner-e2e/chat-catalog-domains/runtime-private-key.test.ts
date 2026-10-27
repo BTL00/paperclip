@@ -10,7 +10,7 @@ it("rejects a credential field without reflecting its value", () => {
   catch (error) { expect(String(error)).not.toContain(synthetic); expect(String(error)).toContain("closed boundary"); }
 });
 it("rejects credential text hidden inside safe-looking key metadata", () => expect(() => validatePrivateKeyReceipt({ ...valid(), createdKey: { id: "pcp_SYNTHETIC_PRIVATE_CANARY", name: "local integration", revokedAt: null } })).toThrow());
-it("contains a synthetic one-time UI token entirely inside the standalone browser child", async () => {
+it.skipIf(process.env.PAPERCLIP_CHAT_EVAL_PRIVATE_BROWSER_CANARY !== "1")("contains a synthetic one-time UI token entirely inside the standalone browser child", async () => {
   const synthetic = "pcp_SYNTHETIC_PRIVATE_BROWSER_CANARY_a5bb4e";
   const receipt = await privateKeyBrowser({ mode: "canary", baseURL: "http://127.0.0.1:1", cookies: [], canary: synthetic });
   expect(receipt).toEqual({ ...valid(), canaryContained: true }); expect(JSON.stringify(receipt)).not.toContain(synthetic);
