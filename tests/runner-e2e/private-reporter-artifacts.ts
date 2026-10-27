@@ -1,16 +1,16 @@
 import { lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { inspectEmbeddedReport, inspectZip } from "./evidence.js";
-import { diagnosticSecrets } from "./private-diagnostics.js";
-import { findSecretLeak, redactText } from "./redaction.js";
+import { diagnosticSecrets, type DiagnosticSecretExpansion } from "./private-diagnostics.js";
+import { findSecretLeak, redactText, sanitizeJson } from "./redaction.js";
 export interface ReporterPrivacyIssue { file: string; disposition: "redacted" | "omitted"; reason: string }
 const sources = ["server.log", "playwright.log", "junit.xml", "html-report", "blob-report", "playwright-output"];
 const text = new Set([".log", ".txt", ".md", ".xml", ".html", ".json", ".js", ".css"]);
 /** Only reporter/diagnostic sinks are touched, after independent product oracles
  * finish. Product API snapshots and work-product bytes are never pre-sanitized.
  * Uninspectable/leaking compressed reports are omitted rather than fabricated. */
-export async function sanitizePrivateReporterArtifacts(root: string, values: readonly string[]): Promise<ReporterPrivacyIssue[]> {
-  const secrets = diagnosticSecrets(values); const issues: ReporterPrivacyIssue[] = [];
+export async function sanitizePrivateReporterArtifacts(root: string, values: readonly string[] | DiagnosticSecretExpansion): Promise<ReporterPrivacyIssue[]> {
+  const secrets = diagnosticSecrets(values).values; const issues: ReporterPrivacyIssue[] = [];
   const visit = async (relative: string): Promise<void> => {
     const filename = path.join(root, relative); const info = await lstat(filename).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return null; throw error; });
     if (!info) return;
@@ -29,7 +29,11 @@ export async function sanitizePrivateReporterArtifacts(root: string, values: rea
       const opaque = extension === ".html" ? await inspectEmbeddedReport(raw, secrets) : null;
       if (opaque) { await rm(filename); issues.push({ file: safeName, disposition: "omitted", reason: opaque }); return; }
       const leak = findSecretLeak(raw, secrets);
-      const safe = redactText(raw, secrets);
+      let safe: string;
+      if (extension === ".json") {
+        try { safe = `${JSON.stringify(sanitizeJson(JSON.parse(raw), secrets), null, 2)}\n`; }
+        catch { await rm(filename); issues.push({ file: safeName, disposition: "omitted", reason: "reporter JSON could not be safely parsed" }); return; }
+      } else safe = redactText(raw, secrets);
       if (safe !== raw) await writeFile(filename, safe, { mode: 0o600 });
       if (leak) issues.push({ file: safeName, disposition: "redacted", reason: leak });
     }

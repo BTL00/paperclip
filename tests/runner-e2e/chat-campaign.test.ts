@@ -1,5 +1,8 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { expect, it } from "vitest";
-import { campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity } from "./chat-campaign.js";
+import { campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity, campaignAttemptProcessed } from "./chat-campaign.js";
 const root = new URL("../../", import.meta.url).pathname;
 const base = "8373d7867963674ff960d2345d0d28086f799bc7";
 function attempt(ordinal: 1 | 2, executionId: string): CampaignAttempt {
@@ -121,4 +124,55 @@ it("does not complete or report a qualifying pass when its product identity is m
   expect(() => completeCampaignAttempt(scenario, completion)).toThrow("eligible product identity");
   Object.assign(reserved, completion);
   expect(campaignSummary(campaign)).toMatchObject({ initialPassed: 0, finalPassed: 0, productEvidence: { identityIneligibleMeasurements: 1, measurementsByIdentity: { unknown: 1 } } });
+});
+
+it("processes concrete unsupported probes without accepting incomplete outcomes or unfinished shells", () => {
+  const campaign = freezeChatCampaign(root, base), scenario = campaign.scenarios.find(s => s.id === "tasks.create-backlog")!;
+  scenario.readiness = "partial"; scenario.authoringStatus = "concrete-blocker";
+  scenario.blockerProbeSources = ["chat-catalog-domains/identity-access-grants.ts"];
+  const a = attempt(1, scenario.executionId!); reserveCampaignAttempt(scenario, a);
+  const completion = { outcome: "passed" as const, finishedAt: new Date().toISOString(), definitionDigest: "fixture", graderDigest: "fixture", evidencePaths: ["tests/runner-e2e/results/fixture/result.json"], cleanup: "passed" as const, usage: a.usage, classification: null, observedFailure: null, corePrDependencies: [] };
+  expect(() => completeCampaignAttempt(scenario, completion)).toThrow("Incomplete conditions");
+  completeCampaignAttempt(scenario, { ...completion, outcome: "blocked" });
+  expect(campaignSummary(campaign)).toMatchObject({ authored: 2, coverageComplete: 1, concreteBlockers: 1, unfinished: 0, authoringResolved: 2, processed: 0, finalPassed: 0, mergeEligible: false });
+  scenario.authoringStatus = "unfinished"; scenario.attempts = [];
+  expect(() => reserveCampaignAttempt(scenario, attempt(1, scenario.executionId!))).toThrow("no executable implementation");
+  expect(campaignSummary(campaign)).toMatchObject({ unfinished: 1, authoringResolved: 1 });
+});
+it("requires a real terminal source-attributed result for processing, not a reservation or calibration receipt", () => {
+  const temporary = mkdtempSync(path.join(tmpdir(), "chat-campaign-processing-"));
+  try {
+    const a = attempt(1, "chat-features.runner-codex-subscription.local.fixture");
+    a.outcome = "blocked"; a.finishedAt = new Date().toISOString();
+    const relative = "tests/runner-e2e/results/owned/result.json", filename = path.join(temporary, relative);
+    a.evidencePaths = [relative]; mkdirSync(path.dirname(filename), { recursive: true });
+    expect(campaignAttemptProcessed(a, temporary)).toBe(false);
+    const raw = { executionId: a.executionId, source: { sha: a.sourceRevision }, status: "failed", startedAt: a.startedAt, finishedAt: a.finishedAt };
+    writeFileSync(filename, JSON.stringify(raw)); expect(campaignAttemptProcessed(a, temporary)).toBe(true);
+    writeFileSync(filename, JSON.stringify({ ...raw, source: { sha: "wrong" } })); expect(campaignAttemptProcessed(a, temporary)).toBe(false);
+    writeFileSync(filename, JSON.stringify({ calibration: true })); expect(campaignAttemptProcessed(a, temporary)).toBe(false);
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+
+it("permits a processed unsupported remainder while requiring every unfinished branch to close", () => {
+  const temporary = mkdtempSync(path.join(tmpdir(), "chat-campaign-gate-"));
+  try {
+    const campaign = freezeChatCampaign(root, base); let passes = 0;
+    for (const [index, s] of campaign.scenarios.entries()) {
+      s.readiness = "implemented"; s.authoringStatus = "complete"; s.executionId = `chat-features.runner-codex-subscription.local.${s.id}`;
+      s.qualifyingDefinitionDigest = "fixture"; s.qualifyingGraderDigest = "fixture";
+      const a = attempt(1, s.executionId); a.finishedAt = a.startedAt; a.cleanup = "passed";
+      a.outcome = s.productPolicy?.lane === "source-build" && passes < 196 ? "passed" : "blocked";
+      if (a.outcome === "passed") passes++;
+      const relative = `tests/runner-e2e/results/gate-${index}/result.json`, filename = path.join(temporary, relative);
+      mkdirSync(path.dirname(filename), { recursive: true });
+      writeFileSync(filename, JSON.stringify({ executionId: a.executionId, source: { sha: a.sourceRevision }, status: a.outcome === "passed" ? "passed" : "failed", startedAt: a.startedAt, finishedAt: a.finishedAt }));
+      a.evidencePaths = [relative]; s.attempts.push(a);
+    }
+    const blocked = campaign.scenarios.find(s => s.attempts[0]!.outcome === "blocked")!;
+    blocked.readiness = "partial"; blocked.authoringStatus = "concrete-blocker"; blocked.blockerProbeSources = ["actual-supported-surface-probe.ts"];
+    expect(campaignSummary(campaign, temporary)).toMatchObject({ authoringResolved: 244, processed: 244, finalPassed: 196, mergeEligible: true });
+    blocked.authoringStatus = "unfinished";
+    expect(campaignSummary(campaign, temporary)).toMatchObject({ authoringResolved: 243, unfinished: 1, mergeEligible: false });
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
 });

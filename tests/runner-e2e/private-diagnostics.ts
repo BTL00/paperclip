@@ -45,25 +45,38 @@ export function trackedPrivateSecrets(initial: string[], executionId: string, en
     return Reflect.set(target, property, value);
   } });
 }
-export function diagnosticSecrets(values: readonly string[]): string[] {
-  const variants = normalizedSecrets(values).flatMap(value => {
+export interface DiagnosticSecretExpansion {
+  readonly kind: "expanded-private-diagnostic-secrets";
+  readonly values: readonly string[];
+}
+// Provenance is process-local. Never infer raw-root status from credential bytes:
+// independently registered roots can legitimately equal another root's encoding.
+const rawDiagnosticRoots = new WeakMap<DiagnosticSecretExpansion, readonly string[]>();
+export function diagnosticSecrets(input: readonly string[] | DiagnosticSecretExpansion): DiagnosticSecretExpansion {
+  if (!Array.isArray(input)) {
+    const expanded = input as DiagnosticSecretExpansion;
+    if (!rawDiagnosticRoots.has(expanded)) throw new Error("Diagnostic expansion has no raw-root provenance");
+    return expanded;
+  }
+  const roots = normalizedSecrets(input);
+  const variants = roots.flatMap(value => {
     let structured = false; try { const parsed = JSON.parse(value); structured = parsed !== null && typeof parsed === "object"; } catch { /* Ordinary secret. */ }
     return [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url"),
-    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"),
-    // Short nonempty password/key lines are private too. JSON punctuation is
-    // structural; its actual string credential values are separately indexed
-    // by normalizedSecrets, and longer serialized field lines remain covered.
-    ...value.split(/\r?\n/).filter(line => structured ? line.length >= 8 : line.length > 0)];
+      value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"),
+      ...value.split(/\r?\n/).filter(line => structured ? line.length >= 8 : line.length > 0)];
   });
-  return normalizedSecrets(variants);
+  const expanded: DiagnosticSecretExpansion = Object.freeze({ kind: "expanded-private-diagnostic-secrets", values: Object.freeze(normalizedSecrets(variants)) });
+  rawDiagnosticRoots.set(expanded, Object.freeze(roots));
+  return expanded;
 }
+
 /** No raw byte reaches a console or log. UTF-8 and secret boundaries may span
  * chunks. Oversized unterminated lines are withheld whole, with a truthful
  * omission marker; arbitrary memory growth never forces an unsafe flush. */
 export function createPrivateDiagnosticStream(secrets: () => readonly string[], emit: (safe: string) => void, maximumLine = 1024 * 1024) {
   const decoder = new StringDecoder("utf8"); let pending = ""; let suppressing = false; let failed = false; let ended = false; let leaked = false;
   const line = (value: string) => {
-    try { const values = diagnosticSecrets(secrets()); leaked ||= !!findSecretLeak(value, values); emit(redactText(value, values)); }
+    try { const values = diagnosticSecrets(secrets()).values; leaked ||= !!findSecretLeak(value, values); emit(redactText(value, values)); }
     catch { failed = true; emit("[diagnostics withheld: private redaction unavailable]\n"); }
   };
   const consume = (text: string) => {

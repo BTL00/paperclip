@@ -25,6 +25,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-access-grants.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/access.yaml",
@@ -49,6 +52,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-access-grants.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/access.yaml",
@@ -113,6 +119,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-sign-in.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-boundary-contract.ts",
       "chat-catalog-domains/internal-support.ts",
       "live-fixtures.ts",
@@ -210,6 +219,73 @@
     "exportName": "runHistoryCases"
   },
   {
+    "scenarioId": "activity.routine-audit",
+    "sourceFiles": [
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-activity.ts",
+      "chat-scenarios/activity.yaml",
+      "chat-catalog-domains/internal-routine-audit.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "coverageGaps": [
+      "supported-owned-prior-day-routine-history-restoration"
+    ],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/internal-routine-audit.js",
+    "exportName": "routineAuditCases"
+  },
+  {
+    "scenarioId": "activity.work-timeline",
+    "sourceFiles": [
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-activity.ts",
+      "chat-scenarios/activity.yaml",
+      "chat-catalog-domains/internal-work-timeline.ts",
+      "chat-catalog-domains/internal-timeline-verifier.ts",
+      "chat-catalog-domains/internal-privacy.ts",
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/internal-routine-audit.ts",
+      "../e2e/fetch-allowed-port.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/internal-work-timeline.js",
+    "exportName": "workTimelineCases"
+  },
+  {
+    "scenarioId": "agent-chat.chat-disabled",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-chat-disabled.ts",
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
+      "chat-catalog-domains/identity-boundary-contract.ts",
+      "live-fixtures.ts",
+      "chat-scenarios/agent-chat.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "expectedRunCount": 0,
+    "expectedHumanMessageCount": 0,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "journeyKind": "browser-boundary",
+    "boundaryTarget": "authenticated-harness",
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-chat-disabled.js",
+    "exportName": "runtimeDisabledChatCases"
+  },
+  {
     "scenarioId": "agent-chat.conference-room",
     "sourceFiles": [
       "chat-catalog-domains/runtime-conference.ts",
@@ -223,6 +299,35 @@
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/runtime-conference.js",
     "exportName": "runtimeConferenceCases"
+  },
+  {
+    "scenarioId": "agent-chat.multiple-handoffs",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-multiple-handoffs.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "registered-artifact.ts",
+      "chat-scenarios/agent-chat.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 5,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1020000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-multiple-handoffs.js",
+    "exportName": "runtimeMultipleHandoffCases"
   },
   {
     "scenarioId": "agent-chat.remember-and-follow-up",
@@ -291,7 +396,10 @@
     "scenarioId": "agents.agent-api-key",
     "sourceFiles": [
       "chat-catalog-domains/runtime-agent-keys.ts",
+      "chat-catalog-domains/runtime-private-key.ts",
+      "chat-catalog-domains/runtime-private-key-worker.ts",
       "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
       "chat-scenarios/agents.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
@@ -403,6 +511,22 @@
     "attemptTimeoutMs": 720000,
     "modulePath": "./chat-catalog-domains/runtime-hiring.js",
     "exportName": "runtimeHiringCases"
+  },
+  {
+    "scenarioId": "agents.managed-profile",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-managed-profile.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/agents.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/runtime-managed-profile.js",
+    "exportName": "runtimeManagedProfileCases"
   },
   {
     "scenarioId": "agents.pause-agent",
@@ -527,6 +651,36 @@
     "exportName": "appPermissionExternalCases"
   },
   {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "mcpTokenEnv"
+      ]
+    },
+    "scenarioId": "app-permissions.grant-one-agent",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-audience.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/app-permissions.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-audience.js",
+    "exportName": "notionAudienceExternalCases"
+  },
+  {
     "scenarioId": "app-permissions.new-quarantined-action",
     "sourceFiles": [
       "chat-catalog-domains/external-app-catalog.ts",
@@ -562,6 +716,55 @@
     "exportName": "appPermissionExternalCases"
   },
   {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "mcpTokenEnv"
+      ]
+    },
+    "scenarioId": "app-permissions.revoke-account",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-revocation.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/app-permissions.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-revocation.js",
+    "exportName": "notionRevocationExternalCases"
+  },
+  {
+    "scenarioId": "app-permissions.test-as-agent",
+    "sourceFiles": [
+      "chat-catalog-domains/external-app-test.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/app-permissions.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-app-test.js",
+    "exportName": "appTestExternalCases"
+  },
+  {
     "scenarioId": "assistant-connections.connect-external-assistant",
     "sourceFiles": [
       "chat-catalog-domains/external-assistant-connections.ts",
@@ -581,6 +784,26 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-assistant-connections.js",
     "exportName": "assistantConnectionExternalCases"
+  },
+  {
+    "scenarioId": "assistant-connections.consent-read-only",
+    "sourceFiles": [
+      "chat-catalog-domains/external-assistant-consent.ts",
+      "chat-catalog-domains/external-assistant-connections.ts",
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "public-mcp-client.ts",
+      "chat-scenarios/assistant-connections.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-assistant-consent.js",
+    "exportName": "assistantConsentExternalCases"
   },
   {
     "scenarioId": "assistant-connections.decline-consent",
@@ -619,6 +842,50 @@
     "exportName": "assistantDeviceExternalCases"
   },
   {
+    "companionSurface": {
+      "kind": "scoped-external-assistant",
+      "model": "gpt-5.4-mini",
+      "maximumModelTurns": 6,
+      "maximumToolCalls": 4,
+      "maximumOutputTokens": 2048
+    },
+    "requiredCredentials": [
+      "OPENAI_API_KEY"
+    ],
+    "scenarioId": "assistant-connections.use-scoped-client",
+    "sourceFiles": [
+      "chat-catalog-domains/external-assistant-scoped.ts",
+      "chat-catalog-domains/external-assistant-model.ts",
+      "chat-catalog-domains/external-assistant-connections.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "public-mcp-client.ts",
+      "public-mcp-model.ts",
+      "public-mcp-cases.ts",
+      "../../integrations/assistant-plugins/shared/skills/review-my-team/SKILL.md",
+      "../../integrations/assistant-plugins/shared/skills/delegate-work/SKILL.md",
+      "../../integrations/assistant-plugins/shared/skills/follow-up-results/SKILL.md",
+      "chat-scenarios/assistant-connections.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 0,
+    "expectedHumanMessageCount": 0,
+    "turnTimeoutMs": 180000,
+    "attemptTimeoutMs": 600000,
+    "journeyKind": "scoped-external-assistant",
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "paused-morgan-creation-fixture",
+        "effective-creation-only-grant"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/external-assistant-scoped.js",
+    "exportName": "scopedAssistantExternalCases"
+  },
+  {
     "scenarioId": "budgets-costs.explain-hard-stop",
     "sourceFiles": [
       "chat-catalog-domains/identity-budget-incidents.ts",
@@ -640,6 +907,30 @@
     },
     "modulePath": "./chat-catalog-domains/identity-budget-incidents.js",
     "exportName": "budgetIncidentIdentityCases"
+  },
+  {
+    "scenarioId": "budgets-costs.repair-cost-recording",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-accounting.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/budgets-costs.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 780000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "funding": "standard",
+      "readiness": "all-ready",
+      "invariantCheckIds": [
+        "genuine-unresolved-saved-native-usage"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/identity-accounting.js",
+    "exportName": "accountingIdentityCases"
   },
   {
     "scenarioId": "budgets-costs.resolve-budget",
@@ -678,6 +969,215 @@
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/identity-budgets-costs.js",
     "exportName": "budgetIdentityCases"
+  },
+  {
+    "scenarioId": "budgets-costs.spend-breakdown",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-accounting.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/budgets-costs.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "funding": "standard",
+      "readiness": "all-ready",
+      "invariantCheckIds": [
+        "genuine-unresolved-saved-native-usage"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/identity-accounting.js",
+    "exportName": "accountingIdentityCases"
+  },
+  {
+    "scenarioId": "budgets-costs.subscription-fees",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-subscriptions.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/budgets-costs.yaml",
+      "../../packages/shared/src/subscriptions.ts",
+      "../../server/src/routes/costs.ts",
+      "../../server/src/routes/ai-connections.ts",
+      "../../server/src/services/subscriptions.ts",
+      "../../ui/src/components/SubscriptionCostCard.tsx"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "coverageGaps": [
+      "No supported admitted fixture establishes two subscription records with independently verified provenance for ONE actual account. Public current-price reports also omit archived price revisions; complete historical-price preservation cannot yet be independently verified. The original context remains blocked, never replaced by different accounts or a nonexistent-resource refusal."
+    ],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/identity-subscriptions.js",
+    "exportName": "subscriptionIdentityCases"
+  },
+  {
+    "scenarioId": "cases.browse-cases",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-cases.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-cases.js",
+    "exportName": "integratorCasesCases"
+  },
+  {
+    "scenarioId": "cases.case-history",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-history.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 5,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1200000,
+    "modulePath": "./chat-catalog-domains/integrator-case-history.js",
+    "exportName": "integratorCaseHistoryCases"
+  },
+  {
+    "scenarioId": "cases.cases-disabled",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-cases.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-cases.js",
+    "exportName": "integratorCasesCases"
+  },
+  {
+    "scenarioId": "cases.close-case",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-close.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 7,
+    "expectedHumanMessageCount": 3,
+    "minimumRunCount": 6,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "modulePath": "./chat-catalog-domains/integrator-case-close.js",
+    "exportName": "integratorCaseCloseCases"
+  },
+  {
+    "scenarioId": "cases.create-case",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-create.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 420000,
+    "runPolicy": {
+      "kind": "source-settled-with-active-work",
+      "maximumActiveWorkerRuns": 1
+    },
+    "modulePath": "./chat-catalog-domains/integrator-case-create.js",
+    "exportName": "integratorCaseCreationCases"
+  },
+  {
+    "respondingAgent": {
+      "kind": "case-primary-owner",
+      "name": "Morgan",
+      "role": "engineer",
+      "canAssignTasks": true
+    },
+    "scenarioId": "cases.handoff-same-task",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-handoff.ts",
+      "chat-catalog-domains/internal-run-brief.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "cancelled": 1,
+        "succeeded": 3
+      }
+    },
+    "modulePath": "./chat-catalog-domains/integrator-case-handoff.js",
+    "exportName": "integratorCaseHandoffCases"
+  },
+  {
+    "scenarioId": "cases.related-work",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-related.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-case-related.js",
+    "exportName": "integratorRelatedWorkCases"
+  },
+  {
+    "scenarioId": "cases.update-case-facts",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-case-facts.ts",
+      "chat-catalog-domains/internal-run-brief.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/cases.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "cancelled": 1,
+        "succeeded": 3
+      }
+    },
+    "modulePath": "./chat-catalog-domains/integrator-case-facts.js",
+    "exportName": "integratorCaseFactsCases"
   },
   {
     "scenarioId": "chat-channels.provider-disabled",
@@ -828,6 +1328,26 @@
     "exportName": "privilegedOwnedDevCases"
   },
   {
+    "scenarioId": "companies.agent-observability",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-observability.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/companies.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/identity-observability.js",
+    "exportName": "observabilityIdentityCases"
+  },
+  {
     "scenarioId": "companies.archive-company",
     "sourceFiles": [
       "chat-catalog-domains/identity-company-lifecycle.ts",
@@ -863,6 +1383,22 @@
     "exportName": "companyModelIdentityCases"
   },
   {
+    "scenarioId": "companies.export-company",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-portability.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/companies.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/identity-portability.js",
+    "exportName": "portabilityIdentityCases"
+  },
+  {
     "requiredCredentials": [
       "OPENROUTER_API_KEY"
     ],
@@ -880,6 +1416,29 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/identity-company-models.js",
     "exportName": "companyModelIdentityCases"
+  },
+  {
+    "scenarioId": "companies.import-preview",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-portability.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/companies.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 420000,
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "packageAttachment",
+        "filename": "company-package.json"
+      }
+    ],
+    "modulePath": "./chat-catalog-domains/identity-portability.js",
+    "exportName": "portabilityIdentityCases"
   },
   {
     "requiredCredentials": [
@@ -932,6 +1491,98 @@
     "exportName": "companyLifecycleIdentityCases"
   },
   {
+    "scenarioId": "connection-setup.choose-provider",
+    "sourceFiles": [
+      "chat-catalog-domains/external-provider-choice.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "../../packages/shared/src/app-definitions.ts",
+      "../../packages/shared/src/app-definitions/notion.json",
+      "chat-scenarios/connection-setup.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-provider-choice.js",
+    "exportName": "providerChoiceExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "mcpTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson"
+      ]
+    },
+    "scenarioId": "connection-setup.notion-agent-unassigned",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-assignment.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-flow.ts",
+      "chat-scenarios/connection-setup.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 480000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-assignment.js",
+    "exportName": "notionAssignmentExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "mcpTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson"
+      ]
+    },
+    "scenarioId": "connection-setup.notion-connected",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-read.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/external-notion-read.js",
+    "exportName": "notionReadExternalCases"
+  },
+  {
     "scenarioId": "connection-setup.notion-declined",
     "sourceFiles": [
       "chat-catalog-domains/external-connection-setup.ts",
@@ -948,6 +1599,29 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-connection-setup.js",
     "exportName": "connectionSetupExternalCases"
+  },
+  {
+    "scenarioId": "connection-setup.secure-api-key",
+    "sourceFiles": [
+      "chat-catalog-domains/external-secure-key.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/connection-setup.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 420000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-secure-key.js",
+    "exportName": "secureKeyExternalCases"
   },
   {
     "scenarioId": "connection-setup.unreachable-mcp",
@@ -1210,6 +1884,58 @@
     "exportName": "gatewayExternalCases"
   },
   {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "mcpTokenEnv"
+      ]
+    },
+    "scenarioId": "gateways-profiles.define-profile",
+    "sourceFiles": [
+      "chat-catalog-domains/external-profile-definition.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/gateways-profiles.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-profile-definition.js",
+    "exportName": "profileDefinitionExternalCases"
+  },
+  {
+    "scenarioId": "gateways-profiles.rotate-token",
+    "sourceFiles": [
+      "chat-catalog-domains/external-gateway-rotation.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "run-observations.ts",
+      "chat-scenarios/gateways-profiles.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-gateway-rotation.js",
+    "exportName": "gatewayRotationExternalCases"
+  },
+  {
     "scenarioId": "goals.align-existing-work",
     "sourceFiles": [
       "chat-catalog-domains/internal-definition.ts",
@@ -1281,6 +2007,30 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/internal-inbox-triage.js",
     "exportName": "inboxTriageCases"
+  },
+  {
+    "scenarioId": "inbox-search.archive-partial-failure",
+    "sourceFiles": [
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-inbox-search.ts",
+      "chat-scenarios/inbox-search.yaml",
+      "chat-catalog-domains/internal-archive-partial.ts",
+      "chat-catalog-domains/internal-archive-transport.ts",
+      "../e2e/fetch-allowed-port.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "coverageGaps": [
+      "native-archive-transport-launcher-wiring"
+    ],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 480000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/internal-archive-partial.js",
+    "exportName": "archivePartialCases"
   },
   {
     "scenarioId": "inbox-search.archive-without-grant",
@@ -1525,6 +2275,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-navigation-boundaries.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/navigation-preferences.yaml"
@@ -1542,6 +2295,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-navigation-boundaries.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/navigation-preferences.yaml"
@@ -1559,6 +2315,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-profile.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/navigation-preferences.yaml"
@@ -1591,6 +2350,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-navigation-preferences.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/navigation-preferences.yaml"
@@ -1608,6 +2370,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-sidebar-order.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/navigation-preferences.yaml"
@@ -1630,6 +2395,8 @@
       "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-onboarding.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
       "chat-catalog-domains/identity-boundary-contract.ts",
       "chat-catalog-domains/internal-support.ts",
       "installed-release.ts",
@@ -1647,6 +2414,45 @@
     "exportName": "wizardIdentityBoundaryCases"
   },
   {
+    "scenarioId": "onboarding.first-work",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-first-work.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/onboarding.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 3,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/identity-first-work.js",
+    "exportName": "firstWorkIdentityCases"
+  },
+  {
+    "requiredCredentials": [
+      "OPENAI_API_KEY"
+    ],
+    "scenarioId": "onboarding.new-company",
+    "sourceFiles": [
+      "chat-catalog-domains/identity-new-company.ts",
+      "chat-catalog-domains/identity-wizard.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/onboarding.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/identity-new-company.js",
+    "exportName": "newCompanyIdentityCases"
+  },
+  {
     "requiredCredentials": [
       "OPENAI_API_KEY"
     ],
@@ -1656,6 +2462,8 @@
       "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-onboarding.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
       "chat-catalog-domains/identity-boundary-contract.ts",
       "chat-catalog-domains/internal-support.ts",
       "installed-release.ts",
@@ -1681,6 +2489,8 @@
       "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-onboarding.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
       "chat-catalog-domains/identity-boundary-contract.ts",
       "chat-catalog-domains/internal-support.ts",
       "installed-release.ts",
@@ -1764,6 +2574,38 @@
     "exportName": "pluginInstallExternalCases"
   },
   {
+    "scenarioId": "plugins.use-plugin-tool",
+    "sourceFiles": [
+      "chat-catalog-domains/external-plugin-tool.ts",
+      "chat-catalog-domains/external-plugin-fixture.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-flow.ts",
+      "../../cli/dist/index.js",
+      "../../cli/src/index.ts",
+      "../../packages/plugins/create-paperclip-plugin/src/index.ts",
+      "../../packages/plugins/sdk/src/index.ts",
+      "../../packages/plugins/sdk/dist/index.js",
+      "chat-scenarios/plugins.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 480000,
+    "modulePath": "./chat-catalog-domains/external-plugin-tool.js",
+    "exportName": "pluginToolExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "github",
+      "fields": [
+        "siteRepositoryId",
+        "siteRepositoryFullName",
+        "tokenEnv"
+      ]
+    },
     "scenarioId": "projects.add-repository",
     "sourceFiles": [
       "chat-catalog-domains/internal-definition.ts",
@@ -1843,6 +2685,31 @@
     "exportName": "projectsCases"
   },
   {
+    "scenarioId": "projects.project-defaults",
+    "sourceFiles": [
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-projects.ts",
+      "chat-scenarios/projects.yaml",
+      "chat-catalog-domains/internal-project-defaults.ts",
+      "chat-catalog-domains/internal-run-brief.ts",
+      "../e2e/fetch-allowed-port.ts",
+      "run-observations.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 660000,
+    "runPolicy": {
+      "kind": "source-settled-with-active-work",
+      "maximumActiveWorkerRuns": 1
+    },
+    "modulePath": "./chat-catalog-domains/internal-project-defaults.js",
+    "exportName": "projectDefaultsCases"
+  },
+  {
     "scenarioId": "projects.project-work",
     "sourceFiles": [
       "chat-catalog-domains/internal-definition.ts",
@@ -1866,6 +2733,16 @@
     "exportName": "projectsCases"
   },
   {
+    "externalInput": {
+      "provider": "github",
+      "fields": [
+        "oldRepositoryId",
+        "oldRepositoryFullName",
+        "newRepositoryId",
+        "newRepositoryFullName",
+        "tokenEnv"
+      ]
+    },
     "scenarioId": "projects.replace-repository",
     "sourceFiles": [
       "chat-catalog-domains/internal-definition.ts",
@@ -2118,6 +2995,9 @@
     "sourceFiles": [
       "chat-catalog-domains/identity-questions-and-approvals.ts",
       "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/questions-and-approvals.yaml"
@@ -2135,21 +3015,23 @@
     "sourceFiles": [
       "chat-catalog-domains/runtime-history.ts",
       "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-native-failure.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-scenarios/recovery.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
-    "coverageGaps": [
-      "Reconnect after a genuinely failed native run remains unexercised; successful and still-running native phases plus failed-evidence negative controls are authored."
-    ],
-    "expectedRunCount": 5,
+    "coverageGaps": [],
+    "expectedRunCount": 7,
     "setupHumanMessageCount": 1,
-    "expectedHumanMessageCount": 3,
+    "expectedHumanMessageCount": 4,
     "turnTimeoutMs": 120000,
-    "attemptTimeoutMs": 900000,
+    "attemptTimeoutMs": 1200000,
     "runPolicy": {
-      "kind": "source-settled-with-active-work",
-      "maximumActiveWorkerRuns": 1
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "succeeded": 6,
+        "failed": 1
+      }
     },
     "modulePath": "./chat-catalog-domains/runtime-history.js",
     "exportName": "runtimeHistoryCases"
@@ -2170,6 +3052,275 @@
     "attemptTimeoutMs": 600000,
     "modulePath": "./chat-catalog-domains/runtime-recovery.js",
     "exportName": "runtimeRecoveryCases"
+  },
+  {
+    "scenarioId": "recovery.explain-stall",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-infrastructure.ts",
+      "chat-catalog-domains/runtime-native-fault.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "../../server/src/services/hot-restart.ts",
+      "../../server/src/vendor/paperclip-runner/index.ts",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1200000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-native-infrastructure-exhaustion",
+        "original-source-action-owner"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 1
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-infrastructure.js",
+    "exportName": "runtimeInfrastructureCases"
+  },
+  {
+    "scenarioId": "recovery.retry-exhausted",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-infrastructure-retry.ts",
+      "chat-catalog-domains/runtime-infrastructure.ts",
+      "chat-catalog-domains/runtime-native-fault.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "../../server/src/services/hot-restart.ts",
+      "../../server/src/vendor/paperclip-runner/index.ts",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 5,
+    "expectedHumanMessageCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1800000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-native-infrastructure-exhaustion",
+        "original-source-action-owner"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 4
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-infrastructure-retry.js",
+    "exportName": "runtimeInfrastructureRetryCases"
+  },
+  {
+    "scenarioId": "recovery.source-action",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-infrastructure.ts",
+      "chat-catalog-domains/runtime-native-fault.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "../../server/src/services/hot-restart.ts",
+      "../../server/src/vendor/paperclip-runner/index.ts",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1200000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-native-infrastructure-exhaustion",
+        "original-source-action-owner"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 1
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-infrastructure.js",
+    "exportName": "runtimeInfrastructureCases"
+  },
+  {
+    "browserTimezone": "America/Chicago",
+    "scenarioId": "routines.create-daily-brief",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-routines.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-routines.js",
+    "exportName": "integratorRoutinesCases"
+  },
+  {
+    "scenarioId": "routines.manage-other-owner",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-routines.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-routines.js",
+    "exportName": "integratorRoutinesCases"
+  },
+  {
+    "scenarioId": "routines.pause-owned",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-routine-pause.ts",
+      "chat-catalog-domains/internal-run-brief.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "owned-routine-real-active-task"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/integrator-routine-pause.js",
+    "exportName": "integratorRoutinePauseCases"
+  },
+  {
+    "scenarioId": "routines.plugin-managed-routine",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-plugin-routine.ts",
+      "chat-catalog-domains/external-plugin-fixture.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "../../cli/dist/index.js",
+      "../../cli/src/index.ts",
+      "../../packages/plugins/create-paperclip-plugin/src/index.ts",
+      "../../packages/plugins/sdk/src/index.ts",
+      "../../packages/plugins/sdk/dist/index.js",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-plugin-routine.js",
+    "exportName": "integratorPluginRoutineCases"
+  },
+  {
+    "scenarioId": "routines.read-history",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-routine-history.ts",
+      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 2
+      }
+    },
+    "modulePath": "./chat-catalog-domains/integrator-routine-history.js",
+    "exportName": "integratorRoutineHistoryCases"
+  },
+  {
+    "scenarioId": "routines.run-now",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-routine-invocation.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/integrator-routine-invocation.js",
+    "exportName": "integratorRoutineInvocationCases"
+  },
+  {
+    "scenarioId": "routines.webhook-trigger",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-routine-webhook.ts",
+      "chat-catalog-domains/integrator-webhook-private.ts",
+      "chat-catalog-domains/integrator-webhook-private-worker.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/routines.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/integrator-routine-webhook.js",
+    "exportName": "integratorRoutineWebhookCases"
+  },
+  {
+    "scenarioId": "runs-adapters.inspect-failed-run",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-failed-runs.ts",
+      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/runs-adapters.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 2
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-failed-runs.js",
+    "exportName": "runtimeFailedRunCases"
   },
   {
     "scenarioId": "runs-adapters.list-model-options",
@@ -2221,6 +3372,368 @@
     "exportName": "secretExternalCases"
   },
   {
+    "scenarioId": "secrets.configure-company-secret",
+    "sourceFiles": [
+      "chat-catalog-domains/external-company-secret.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "run-observations.ts",
+      "chat-flow.ts",
+      "chat-scenarios/secrets.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 480000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-company-secret.js",
+    "exportName": "companySecretExternalCases"
+  },
+  {
+    "scenarioId": "skills.author-skill",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-skills.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-skills.js",
+    "exportName": "integratorSkillsCases"
+  },
+  {
+    "scenarioId": "skills.enable-for-agent",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-skill-enable.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/skills.yaml",
+      "../../server/src/routes/agents.ts",
+      "../../server/src/routes/company-skill-policy.ts",
+      "../../server/src/services/company-skills.ts",
+      "../../packages/shared/src/validators/skill-policy.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "coverageGaps": [
+      "Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.",
+      "Unsupported effective-use context: reserved setup probes the actual unsupported use action plus every real lifecycle action under a denied policy and the actual still-permitted board assignment, restoring policy/assignment in finally. Source runtime version selection has no use-policy principal/action. These receipts establish a prerequisite limitation, never the required model refusal: effective-use-denial outcome remains unqualifiable until a supported actual use-denial contract exists."
+    ],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-skill-enable.js",
+    "exportName": "integratorSkillEnableCases"
+  },
+  {
+    "scenarioId": "skills.explicit-restriction",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-skills.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-skills.js",
+    "exportName": "integratorSkillsCases"
+  },
+  {
+    "scenarioId": "skills.find-and-install",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-skill-imports.ts",
+      "chat-catalog-domains/integrator-skill-source.ts",
+      "chat-catalog-domains/integrator-skills.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-skill-imports.js",
+    "exportName": "integratorSkillImportCases"
+  },
+  {
+    "scenarioId": "skills.fork-read-only",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-skill-imports.ts",
+      "chat-catalog-domains/integrator-skill-source.ts",
+      "chat-catalog-domains/integrator-skills.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 300000,
+    "modulePath": "./chat-catalog-domains/integrator-skill-imports.js",
+    "exportName": "integratorSkillImportCases"
+  },
+  {
+    "scenarioId": "skills.review-update",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-skill-update.ts",
+      "chat-catalog-domains/integrator-skill-source.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-skill-update.js",
+    "exportName": "integratorSkillUpdateCases"
+  },
+  {
+    "scenarioId": "skills.studio-test",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-skill-studio.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-scenarios/skills.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-skill-studio.js",
+    "exportName": "integratorSkillStudioCases"
+  },
+  {
+    "scenarioId": "status-cards.archive-card",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-status-cards.ts",
+      "chat-scenarios/status-cards.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
+    "exportName": "integratorStatusCardsCases"
+  },
+  {
+    "scenarioId": "status-cards.create-card",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-status-cards.ts",
+      "chat-scenarios/status-cards.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
+    "exportName": "integratorStatusCardsCases"
+  },
+  {
+    "scenarioId": "status-cards.explain-card",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-status-cards.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/status-cards.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
+    "exportName": "integratorStatusCardsCases"
+  },
+  {
+    "scenarioId": "status-cards.other-authors-card",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-status-cards.ts",
+      "chat-scenarios/status-cards.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
+    "exportName": "integratorStatusCardsCases"
+  },
+  {
+    "scenarioId": "status-cards.refresh-card",
+    "sourceFiles": [
+      "chat-catalog-domains/integrator-status-cards.ts",
+      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/internal-definition.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/integrator-support.ts",
+      "chat-scenarios/status-cards.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "expectedRunCount": 7,
+    "expectedHumanMessageCount": 4,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1200000,
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 6
+      }
+    },
+    "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
+    "exportName": "integratorStatusCardsCases"
+  },
+  {
+    "scenarioId": "steering.approval-delivery",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-approval-queue.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-approval-queue.js",
+    "exportName": "runtimeApprovalQueueCases"
+  },
+  {
+    "scenarioId": "steering.discard-queued-message",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-discard.ts",
+      "chat-catalog-domains/runtime-queue-controls.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 5,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1020000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-discard.js",
+    "exportName": "runtimeDiscardCases"
+  },
+  {
+    "scenarioId": "steering.edit-queued-message",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-queue-controls.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-queue-controls.js",
+    "exportName": "runtimeQueueControlCases"
+  },
+  {
+    "scenarioId": "steering.interrupt-with-direction",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-interruption.ts",
+      "chat-catalog-domains/runtime-rendered-artifact.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "registered-artifact.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "cancelled": 1,
+        "succeeded": 2
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-interruption.js",
+    "exportName": "runtimeInterruptionCases"
+  },
+  {
     "scenarioId": "steering.preserve-draft",
     "sourceFiles": [
       "chat-catalog-domains/runtime-steering.ts",
@@ -2247,6 +3760,186 @@
     ],
     "modulePath": "./chat-catalog-domains/runtime-steering.js",
     "exportName": "runtimeSteeringCases"
+  },
+  {
+    "scenarioId": "steering.queue-follow-up",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-queue.js",
+    "exportName": "runtimeQueueCases"
+  },
+  {
+    "scenarioId": "steering.steer-active",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-active-steering.ts",
+      "chat-catalog-domains/runtime-rendered-artifact.ts",
+      "chat-catalog-domains/runtime-queue.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "registered-artifact.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "real-busy-worker",
+        "worker-task-scope"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-active-steering.js",
+    "exportName": "runtimeActiveSteeringCases"
+  },
+  {
+    "scenarioId": "steering.stop-versus-pause",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-tree.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/steering.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "two-real-native-workers",
+        "independent-child-pause-budget"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "succeeded": 1,
+        "cancelled": 2
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-tree.js",
+    "exportName": "runtimeTreeCases"
+  },
+  {
+    "scenarioId": "task-coordination.block-on-design",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-dependency.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/task-coordination.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/runtime-dependency.js",
+    "exportName": "runtimeDependencyCases"
+  },
+  {
+    "scenarioId": "task-coordination.delegate-with-context",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-delegation.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "completion-update-flow.ts",
+      "completion-updates.ts",
+      "registered-artifact.ts",
+      "chat-scenarios/task-coordination.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 4,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-delegation.js",
+    "exportName": "runtimeDelegationCases"
+  },
+  {
+    "scenarioId": "task-coordination.independent-review",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-independent-review.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "registered-artifact.ts",
+      "chat-scenarios/task-coordination.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 5,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1020000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-independent-review.js",
+    "exportName": "runtimeIndependentReviewCases"
+  },
+  {
+    "scenarioId": "task-coordination.pause-tree",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-tree.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/task-coordination.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "two-real-native-workers",
+        "independent-child-pause-budget"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "succeeded": 1,
+        "cancelled": 2
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-tree.js",
+    "exportName": "runtimeTreeCases"
   },
   {
     "scenarioId": "task-coordination.reject-dependency-cycle",
@@ -2515,6 +4208,34 @@
     "exportName": "tasksCases"
   },
   {
+    "scenarioId": "teams.configure-team",
+    "sourceFiles": [
+      "chat-catalog-domains/external-team-configure.ts",
+      "chat-catalog-domains/external-team-install.ts",
+      "codex-subscription-fixture.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-flow.ts",
+      "chat-scenarios/teams.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "missing-account-fixture",
+        "working-account-fixture"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/external-team-configure.js",
+    "exportName": "teamConfigureExternalCases"
+  },
+  {
     "scenarioId": "teams.find-team",
     "sourceFiles": [
       "chat-catalog-domains/external-support.ts",
@@ -2529,6 +4250,27 @@
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/external-teams.js",
     "exportName": "teamExternalCases"
+  },
+  {
+    "scenarioId": "teams.install-team",
+    "sourceFiles": [
+      "chat-catalog-domains/external-team-install.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-flow.ts",
+      "chat-scenarios/teams.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "coverageGaps": [
+      "installer-conflict-and-partial-failure-branches"
+    ],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 480000,
+    "modulePath": "./chat-catalog-domains/external-team-install.js",
+    "exportName": "teamInstallExternalCases"
   },
   {
     "scenarioId": "teams.preview-install",
@@ -2594,5 +4336,22 @@
     "attemptTimeoutMs": 540000,
     "modulePath": "./chat-catalog-domains/runtime-workspaces.js",
     "exportName": "runtimeWorkspacesCases"
+  },
+  {
+    "scenarioId": "workspaces.preview-service",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-preview.ts",
+      "chat-catalog-domains/runtime-workspaces.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/workspaces.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "modulePath": "./chat-catalog-domains/runtime-preview.js",
+    "exportName": "runtimePreviewCases"
   }
 ]

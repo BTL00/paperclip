@@ -87,6 +87,9 @@ export interface CampaignScenario {
   qualifyingGraderDigest: string | null;
   owner: string;
   readiness: "unimplemented" | "partial" | "implemented" | "blocked";
+  /** Complete callbacks, executable supported-surface blocker, unfinished conditional, or absent. */
+  authoringStatus?: "complete" | "concrete-blocker" | "unfinished" | "absent";
+  blockerProbeSources?: string[];
   executionId: string | null;
   blocker: string | null;
   productPolicy?: { lane: CampaignProductLane; sourceBaselineRevision: string };
@@ -147,7 +150,7 @@ export function validateFrozenCampaign(campaign: ChatCampaign, root: string): vo
 }
 export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: CampaignAttempt): void {
   if (!scenario.productPolicy || !identityRevision(scenario.productPolicy.sourceBaselineRevision) || scenario.productPolicy.lane !== scenarioProductPolicy(scenario.id, scenario.productPolicy.sourceBaselineRevision).lane) throw new Error("Attempt requires a declared product lane");
-  if (scenario.readiness !== "implemented" || !scenario.executionId) throw new Error("Scenario has no executable implementation");
+  if (!(scenario.readiness === "implemented" || (scenario.readiness === "partial" && scenario.authoringStatus === "concrete-blocker" && scenario.blockerProbeSources?.length)) || !scenario.executionId) throw new Error("Scenario has no executable implementation");
   if (scenario.attempts.some(entry => entry.outcome === "running")) throw new Error("Previous attempt still running");
   if (scenario.attempts.length >= 2 || attempt.ordinal !== scenario.attempts.length + 1) throw new Error("Attempt budget exhausted or incorrect ordinal");
   if (scenario.attempts[0]?.outcome === "passed") throw new Error("Passing scenario cannot be rerun");
@@ -166,24 +169,44 @@ export function completeCampaignAttempt(scenario: CampaignScenario, completion: 
   if (!attempt || attempt.outcome !== "running") throw new Error("No running reserved attempt");
   if (completion.definitionDigest !== attempt.definitionDigest || completion.graderDigest !== attempt.graderDigest) throw new Error("Definition or grader changed during attempt");
   if (completion.evidencePaths.some(value => !value.startsWith("tests/runner-e2e/results/") || value.split("/").includes(".."))) throw new Error("Evidence must use retained sanitized result paths");
+  if (completion.outcome === "passed" && (scenario.readiness !== "implemented" || (scenario.authoringStatus && scenario.authoringStatus !== "complete"))) throw new Error("Incomplete conditions cannot pass");
   if (completion.outcome === "passed" && (!completion.evidencePaths.length || completion.cleanup !== "passed")) throw new Error("Pass requires evidence and successful cleanup");
   if (completion.outcome === "passed" && !campaignProductIdentityEligible(scenario, { ...attempt, ...completion })) throw new Error("Pass requires eligible product identity");
   if (Date.parse(completion.finishedAt) < Date.parse(attempt.startedAt) || !Number.isFinite(Date.parse(completion.finishedAt))) throw new Error("Invalid completion timing");
   Object.assign(attempt, completion);
 }
-export function campaignSummary(campaign: ChatCampaign) {
-  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision); }).length;
-  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision); }).length;
+/** A reservation or offline calibration alone never establishes actual processing. */
+export function campaignAttemptProcessed(attempt: CampaignAttempt, root = process.cwd()): boolean {
+  if (attempt.outcome === "running" || !attempt.finishedAt) return false;
+  return attempt.evidencePaths.some(relative => {
+    if (!relative.startsWith("tests/runner-e2e/results/") || relative.split("/").includes("..") || path.basename(relative) !== "result.json") return false;
+    try {
+      const result = JSON.parse(readFileSync(path.join(root, relative), "utf8"));
+      return result.executionId === attempt.executionId && result.source?.sha === attempt.sourceRevision
+        && ["passed", "failed"].includes(result.status) && (attempt.outcome !== "passed" || result.status === "passed")
+        && Number.isFinite(Date.parse(result.startedAt)) && Number.isFinite(Date.parse(result.finishedAt))
+        && Date.parse(result.finishedAt) >= Date.parse(result.startedAt);
+    } catch { return false; }
+  });
+}
+export function campaignSummary(campaign: ChatCampaign, root = process.cwd()) {
+  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision); }).length;
+  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision); }).length;
   const attempted = campaign.scenarios.filter(scenario => scenario.attempts.length).length;
-  const implemented = campaign.scenarios.filter(scenario => scenario.readiness === "implemented").length;
+  const implemented = campaign.scenarios.filter(scenario => scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete")).length;
+  const concreteBlockers = campaign.scenarios.filter(s => s.authoringStatus === "concrete-blocker" && s.executionId && s.blockerProbeSources?.length).length;
+  const authored = campaign.scenarios.filter(s => s.readiness !== "unimplemented" && s.executionId).length;
+  const unfinished = authored - implemented - concreteBlockers;
+  const authoringResolved = implemented + concreteBlockers;
+  const processed = campaign.scenarios.filter(s => s.attempts.some(a => campaignAttemptProcessed(a, root))).length;
   const measured = campaign.scenarios.flatMap(scenario => scenario.attempts.map(attempt => ({ scenario, attempt })));
   const productEvidence = { sourceBaselineRevision: campaign.baselineRevision,
     measurementsByIdentity: Object.fromEntries(["source-build", "published-release", "source-built-installed", "unknown"].map(kind => [kind, measured.filter(row => (row.attempt.productIdentity?.kind ?? "unknown") === kind).length])),
     identityIneligibleMeasurements: measured.filter(row => !campaignProductIdentityEligible(row.scenario, row.attempt, campaign.baselineRevision)).length };
-  return { productEvidence, denominator: campaign.denominator, implemented, attempted, unrun: campaign.denominator - attempted,
+  return { authored, coverageComplete: implemented, concreteBlockers, unfinished, authoringResolved, processed, sourceChatHumanCountScope: "standing-source-chat-only", productEvidence, denominator: campaign.denominator, implemented, attempted, unrun: campaign.denominator - attempted,
     initialPassed, finalPassed: passed, firstAttemptRate: initialPassed / campaign.denominator,
     finalRate: passed / campaign.denominator, requiredPasses: campaign.requiredPasses,
-    mergeEligible: implemented === campaign.denominator && attempted === campaign.denominator && passed >= campaign.requiredPasses && !campaign.scenarios.some(scenario => scenario.attempts.some(attempt => attempt.outcome === "running")) };
+    mergeEligible: authoringResolved === campaign.denominator && processed === campaign.denominator && passed >= campaign.requiredPasses && !campaign.scenarios.some(scenario => scenario.attempts.some(attempt => attempt.outcome === "running" || attempt.cleanup === "failed" || attempt.cleanup === "pending")) };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [command, baseline] = process.argv.slice(2);

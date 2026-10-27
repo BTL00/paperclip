@@ -34,7 +34,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "access.invite-teammate",
@@ -58,7 +59,11 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "concrete-blocker",
+      "blockerProbeSources": [
+        "chat-catalog-domains/identity-access-grants.ts"
+      ]
     },
     {
       "id": "access.manage-membership",
@@ -82,7 +87,11 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "concrete-blocker",
+      "blockerProbeSources": [
+        "chat-catalog-domains/identity-access-grants.ts"
+      ]
     },
     {
       "id": "access.other-company",
@@ -106,7 +115,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "access.private-resource",
@@ -131,7 +141,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "access.sign-in",
@@ -149,13 +160,63 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.access.sign-in",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null,
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.access.sign-in",
+          "startedAt": "2026-10-27T04:01:40.731Z",
+          "finishedAt": "2026-10-27T04:02:02.423Z",
+          "sourceRevision": "0fdcb539a832684ab03a55cc3342c0bef4a9a41a",
+          "workingTreeDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+          "definitionDigest": "996ed56b9cc3d1f9a14fcf9e13d9f9deedb61e7949a2ec95766144c9a98e984d",
+          "suiteDefinitionDigest": "1571b3e2b3a36e35bab6965f85fc2c5e49ea00a8c22b9c5e7c90ba5c7dbadd00",
+          "graderDigest": "996ed56b9cc3d1f9a14fcf9e13d9f9deedb61e7949a2ec95766144c9a98e984d",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "infrastructure startup failure plus eval-harness diagnostic/finalization defect",
+          "observedFailure": "initdb bootstrap exit1; underlying stderr not captured. Repeated diagnostic expansion corrupted reporter JSON and prevented packaging. Cleanup unconfirmed; private recovery state retained.",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/preflight-access-sign-in-initial.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-selection-0fdcb539a8.json",
+            "tests/runner-e2e/results/local-2026-10-27T04-01-47-918Z/abnormal-finalization/access.sign-in/result.json",
+            "tests/runner-e2e/results/local-2026-10-27T04-01-47-918Z/abnormal-finalization/access.sign-in/original-campaign.json",
+            "tests/runner-e2e/results/local-2026-10-27T04-01-47-918Z/abnormal-finalization/access.sign-in/abnormal-finalization.json",
+            "tests/runner-e2e/results/local-2026-10-27T04-01-47-918Z/abnormal-finalization/access.sign-in/postfailure-preflight.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "coverage": "No native/model admission: webserver PostgreSQL bootstrap failed before browser journey; no heartbeat usage",
+            "tokens": 0
+          },
+          "cleanup": "failed",
+          "corePrDependencies": [],
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "0fdcb539a832684ab03a55cc3342c0bef4a9a41a",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/metadata-ad0907afb9.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
+      "qualifyingDefinitionDigest": "996ed56b9cc3d1f9a14fcf9e13d9f9deedb61e7949a2ec95766144c9a98e984d",
+      "qualifyingGraderDigest": "996ed56b9cc3d1f9a14fcf9e13d9f9deedb61e7949a2ec95766144c9a98e984d",
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "activity.agent-feedback",
@@ -179,7 +240,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "activity.audit-change",
@@ -203,7 +265,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "activity.company-overview",
@@ -227,7 +290,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "activity.find-runs",
@@ -251,7 +315,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "activity.routine-audit",
@@ -267,16 +332,20 @@
       "sourceSha256": "a9b43a3c0500b8628031ed6178dec40c80b1dc0b6df116a32597ba74c9e0de6f",
       "scenarioSha256": "8efcb01df62770379c4e95c1eb673304df9dbef095afda1968ac4685ffc17d1e",
       "owner": "eval_domains",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.activity.routine-audit",
+      "blocker": "supported-owned-prior-day-routine-history-restoration",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "concrete-blocker",
+      "blockerProbeSources": [
+        "chat-catalog-domains/internal-routine-audit.ts"
+      ]
     },
     {
       "id": "activity.work-timeline",
@@ -291,8 +360,8 @@
       "sourceSha256": "a9b43a3c0500b8628031ed6178dec40c80b1dc0b6df116a32597ba74c9e0de6f",
       "scenarioSha256": "e791c9183f991835536ba3f580b2909d01ea2700fcd627bfb743e0b9fb0d46c8",
       "owner": "eval_domains",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.activity.work-timeline",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -300,7 +369,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.chat-disabled",
@@ -317,8 +387,8 @@
       "sourceSha256": "19defd25f25ebd32749e069a1db15af779ba08b482e136a15473ab6897053f4a",
       "scenarioSha256": "9b31e7db3f0ed963148db24a0f411a4453047b333f034200cf145770efa01bae",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agent-chat.chat-disabled",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -326,7 +396,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.conference-room",
@@ -350,7 +421,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.multiple-handoffs",
@@ -366,8 +438,8 @@
       "sourceSha256": "19defd25f25ebd32749e069a1db15af779ba08b482e136a15473ab6897053f4a",
       "scenarioSha256": "c7656a50a81d38de658ecb49a5254c6cf8d4707a882dfe3c44831c1fd877d4d6",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agent-chat.multiple-handoffs",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -375,7 +447,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.remember-and-follow-up",
@@ -399,7 +472,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.reopen-conversation",
@@ -424,7 +498,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agent-chat.track-delegated-work",
@@ -449,7 +524,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.agent-api-key",
@@ -473,7 +549,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.ambiguous-cloud-code",
@@ -498,7 +575,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "agents.change-manager",
@@ -522,7 +600,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.choose-primary",
@@ -547,7 +626,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.configure-required-agent",
@@ -571,7 +651,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.edit-instructions",
@@ -595,7 +676,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.existing-grok-bot",
@@ -620,7 +702,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "agents.hire-claude-code",
@@ -646,7 +729,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "agents.hire-denied",
@@ -671,7 +755,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.hire-needs-account",
@@ -696,7 +781,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "agents.hire-needs-approval",
@@ -721,7 +807,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.managed-profile",
@@ -736,8 +823,8 @@
       "sourceSha256": "a5aa89ff1a55f7a2f580230c72f20d05420d272dbad365c4d7dd963016332bf3",
       "scenarioSha256": "c21c93b1c3bd89f869a540d899850719bfd4b98612f668e79a0ad4ab11eedbb0",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agents.managed-profile",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -745,7 +832,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.pause-agent",
@@ -769,7 +857,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.restore-instructions",
@@ -793,7 +882,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.resume-agent",
@@ -817,7 +907,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.retire-agent",
@@ -841,7 +932,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.ask-before-action",
@@ -866,7 +958,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "unfinished"
     },
     {
       "id": "app-permissions.grant-one-agent",
@@ -882,8 +975,8 @@
       "sourceSha256": "1b036a6b3af46d8d07cd1cb80a40e466285f2c0fcd1f517d161919f8bccb1c75",
       "scenarioSha256": "41bf991c84f7f3055af5f6fb92f626c57eed2c368938907303384ea34658f02a",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.app-permissions.grant-one-agent",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -891,7 +984,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.new-quarantined-action",
@@ -915,7 +1009,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.read-allowed-write-off",
@@ -939,7 +1034,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.revoke-account",
@@ -954,8 +1050,8 @@
       "sourceSha256": "1b036a6b3af46d8d07cd1cb80a40e466285f2c0fcd1f517d161919f8bccb1c75",
       "scenarioSha256": "e67f7e83d34dddb89cb5e51099df0642bab53f1769c810b0f85198b1d845b8a6",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.app-permissions.revoke-account",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -963,7 +1059,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.test-as-agent",
@@ -978,8 +1075,8 @@
       "sourceSha256": "1b036a6b3af46d8d07cd1cb80a40e466285f2c0fcd1f517d161919f8bccb1c75",
       "scenarioSha256": "2a327ebec0a5bbe3b6d331e22c6140487ec8f36be87472a15ba87b3b876771c2",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.app-permissions.test-as-agent",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -987,7 +1084,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "assistant-connections.connect-external-assistant",
@@ -1011,7 +1109,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "unfinished"
     },
     {
       "id": "assistant-connections.consent-read-only",
@@ -1026,8 +1125,8 @@
       "sourceSha256": "b87c34edd99aa5cce96cf2196327b66366ef24bbcea96dc8c86d404030372901",
       "scenarioSha256": "6de5f8b5fc3f35fc31020ba4a260f33934053fa7abee545b12291571ba369d66",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.assistant-connections.consent-read-only",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1035,7 +1134,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "assistant-connections.decline-consent",
@@ -1059,7 +1159,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "assistant-connections.device-login",
@@ -1083,7 +1184,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "assistant-connections.revoke-personal-grant",
@@ -1107,7 +1209,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "assistant-connections.use-scoped-client",
@@ -1123,8 +1226,8 @@
       "sourceSha256": "b87c34edd99aa5cce96cf2196327b66366ef24bbcea96dc8c86d404030372901",
       "scenarioSha256": "b5d8810d44d1e1045f52e3b9c595ed07aeb86b4418cc53652c7aac3bb79d92c8",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.assistant-connections.use-scoped-client",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1132,7 +1235,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.explain-hard-stop",
@@ -1156,7 +1260,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.repair-cost-recording",
@@ -1171,8 +1276,8 @@
       "sourceSha256": "6f78a112b8f93f2f13975a8262fcf658461298516878e48e3f336282731de767",
       "scenarioSha256": "515c5bb62f22aa55c45022542e0c646dd2166ce17e942a2572c6d77f20f14048",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.budgets-costs.repair-cost-recording",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1180,7 +1285,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.resolve-budget",
@@ -1204,7 +1310,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.set-budget",
@@ -1228,7 +1335,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.spend-breakdown",
@@ -1243,8 +1351,8 @@
       "sourceSha256": "6f78a112b8f93f2f13975a8262fcf658461298516878e48e3f336282731de767",
       "scenarioSha256": "4fba41e337fd855861e22dd7ddb2c63b29020a05ad21b26199213389d0537f20",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.budgets-costs.spend-breakdown",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1252,7 +1360,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "budgets-costs.subscription-fees",
@@ -1267,16 +1376,20 @@
       "sourceSha256": "6f78a112b8f93f2f13975a8262fcf658461298516878e48e3f336282731de767",
       "scenarioSha256": "7c4792a9e6506b5089ffc79d595a18bafe1ecfd8cf7c3ab86ff59a8a518e4b37",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.budgets-costs.subscription-fees",
+      "blocker": "No supported admitted fixture establishes two subscription records with independently verified provenance for ONE actual account. Public current-price reports also omit archived price revisions; complete historical-price preservation cannot yet be independently verified. The original context remains blocked, never replaced by different accounts or a nonexistent-resource refusal.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "concrete-blocker",
+      "blockerProbeSources": [
+        "chat-catalog-domains/identity-subscriptions.ts"
+      ]
     },
     {
       "id": "cases.browse-cases",
@@ -1291,8 +1404,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "61a068ac8ec238712a1deec846f25046efac5c7e07dddf48387bf5fb1593a653",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.browse-cases",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1300,7 +1413,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.case-history",
@@ -1315,8 +1429,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "36b9e9878e849af96d2d57f8c6b9e58ff63452df8a9631de496b0dd84d645734",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.case-history",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1324,7 +1438,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.cases-disabled",
@@ -1340,8 +1455,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "3ef8545c490fcf6307773c98dd21ab53cac598e184683ff3efaeace9c0fa78cf",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.cases-disabled",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1349,7 +1464,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.close-case",
@@ -1365,8 +1481,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "1f85b2485793d1552818753062a2c8ada7ec0c341ecf115a6b23049cead16510",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.close-case",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1374,7 +1490,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.create-case",
@@ -1391,8 +1508,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "5e55c5fea7ba28e1c382e9babf7c1cc877ad8079d5bd698f711046fccc03ca42",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.create-case",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1400,7 +1517,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.handoff-same-task",
@@ -1416,8 +1534,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "68d6de41cf4695054a553823b16540210f4b26818732ed901ef3977872cbe350",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.handoff-same-task",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1425,7 +1543,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.related-work",
@@ -1440,8 +1559,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "5ca7936afd83dcee39c511d7baa3567da40b213869b692459dbf2f4743856746",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.related-work",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1449,7 +1568,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cases.update-case-facts",
@@ -1464,8 +1584,8 @@
       "sourceSha256": "a9fd2349130cd7867f55721418e1fb1b0f73f34f3a1079d71541469583562892",
       "scenarioSha256": "8334d517f449ac13d5f7d64a69a9b78f5a6a77ca4934aec441e330b07aed7a84",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.cases.update-case-facts",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1473,7 +1593,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "chat-channels.channel-file",
@@ -1498,7 +1619,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.connect-slack",
@@ -1523,7 +1645,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.link-sender",
@@ -1547,7 +1670,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.outbound-email",
@@ -1571,7 +1695,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.provider-disabled",
@@ -1596,7 +1721,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "chat-channels.repair-endpoint",
@@ -1620,7 +1746,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.reply-in-thread",
@@ -1645,7 +1772,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "chat-channels.reply-to-email",
@@ -1669,7 +1797,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "cli-operations.choose-cli-context",
@@ -1693,7 +1822,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cli-operations.create-from-cli",
@@ -1718,7 +1848,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cli-operations.export-document-cli",
@@ -1743,7 +1874,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cli-operations.feedback-bundle",
@@ -1768,7 +1900,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cli-operations.inspect-run-cli",
@@ -1793,7 +1926,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "cli-operations.owned-dev-instance",
@@ -1818,7 +1952,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.agent-observability",
@@ -1833,8 +1968,8 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "e1630f8c57b74bbb083d26ab21c5c2eb6075102618433ae1d625ec2303fd0173",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.agent-observability",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1842,7 +1977,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.archive-company",
@@ -1866,7 +2002,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.configure-decision-model",
@@ -1890,7 +2027,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.export-company",
@@ -1905,8 +2043,8 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "3fb1874290ec1d806f90406dc7c213180c1d026d01efb3183d908fbd9b25e725",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.export-company",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1914,7 +2052,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.fast-responses",
@@ -1938,7 +2077,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.import-preview",
@@ -1954,8 +2094,8 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "11caa298e64e8f969bbbaa1257b49d27c7fb1e0ed9d888223fc91e18016092df",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.import-preview",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1963,7 +2103,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.prompt-injection-guard",
@@ -1987,7 +2128,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.rename-company",
@@ -2011,7 +2153,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "companies.switch-company",
@@ -2036,7 +2179,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.channel-prerequisites",
@@ -2061,7 +2205,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.choose-provider",
@@ -2076,8 +2221,8 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "b80dc95394c2585b9d6555536e34ecc9ad5448b59ab68fa7080f3bfcd3927626",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.choose-provider",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2085,7 +2230,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.notion-agent-unassigned",
@@ -2101,8 +2247,8 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "5a8848ee215638f3ef3e11b923a36d5924819524925d0f24cf439d7c897144c2",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.notion-agent-unassigned",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2110,7 +2256,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.notion-connected",
@@ -2126,8 +2273,8 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "449ab77566e489dc5b097402158653323636b57d9da009b712f04abf1af9fbe7",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.notion-connected",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2135,7 +2282,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.notion-declined",
@@ -2160,7 +2308,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.notion-expired",
@@ -2185,7 +2334,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.notion-missing",
@@ -2212,7 +2362,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.notion-wrong-account",
@@ -2237,7 +2388,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.return-from-login",
@@ -2262,7 +2414,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.save-and-resume",
@@ -2286,7 +2439,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "connection-setup.secure-api-key",
@@ -2301,8 +2455,8 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "c5d41a0b3887a04075f44b9ba460cae6aa3683505ae77e3eb367c96deb955bf3",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.secure-api-key",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2310,7 +2464,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.unreachable-mcp",
@@ -2334,7 +2489,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "connection-setup.wrong-person-resolves",
@@ -2359,7 +2515,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "developer-labs.component-reference",
@@ -2383,7 +2540,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "developer-labs.gated-lab",
@@ -2408,7 +2566,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "developer-labs.interaction-fixture",
@@ -2432,7 +2591,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "developer-labs.long-thread-performance",
@@ -2456,7 +2616,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.find-artifact",
@@ -2481,7 +2642,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.private-download",
@@ -2506,7 +2668,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.produce-download",
@@ -2531,7 +2694,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.resolve-feedback",
@@ -2555,7 +2719,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.restore-document",
@@ -2579,7 +2744,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.revise-delivery",
@@ -2604,7 +2770,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "documents-artifacts.write-plan",
@@ -2628,7 +2795,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "execution-environments.add-computer",
@@ -2652,7 +2820,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "execution-environments.assign-computer",
@@ -2677,7 +2846,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "execution-environments.choose-capable-target",
@@ -2702,7 +2872,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "execution-environments.prepare-image",
@@ -2726,7 +2897,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "execution-environments.test-computer",
@@ -2751,7 +2923,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "gateways-profiles.connect-client",
@@ -2775,7 +2948,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "gateways-profiles.create-gateway",
@@ -2799,7 +2973,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "gateways-profiles.define-profile",
@@ -2814,8 +2989,8 @@
       "sourceSha256": "8c34eba6c05d3cf4dcd65384b1a7797da734da91c77a4ec8bca64f857a9ac99c",
       "scenarioSha256": "9bda503f2d794dd44987e752e75d868f01792d9c21b70d79c81b3504903ad8d2",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.gateways-profiles.define-profile",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2823,7 +2998,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "gateways-profiles.inspect-gateway-error",
@@ -2847,7 +3023,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "gateways-profiles.rotate-token",
@@ -2862,8 +3039,8 @@
       "sourceSha256": "8c34eba6c05d3cf4dcd65384b1a7797da734da91c77a4ec8bca64f857a9ac99c",
       "scenarioSha256": "ce129c13721ad6b70d769156af2aaaef2bf9c2da496c6e9efdada5cd2de524dd",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.gateways-profiles.rotate-token",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2871,7 +3048,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "goals.align-existing-work",
@@ -2949,7 +3127,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "goals.create-goal-tree",
@@ -3060,7 +3239,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "goals.explain-purpose",
@@ -3130,7 +3310,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.archive-done",
@@ -3154,7 +3335,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.archive-partial-failure",
@@ -3169,16 +3351,17 @@
       "sourceSha256": "afc939f4eec821edd38b8e819274ede302c10550aca68b2ff72c5ebf870aed05",
       "scenarioSha256": "327f96d910bf6645fab9dfcd49b38e26eec57e44d31764bbd2fea13fdb08409d",
       "owner": "eval_domains",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.inbox-search.archive-partial-failure",
+      "blocker": "native-archive-transport-launcher-wiring",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "unfinished"
     },
     {
       "id": "inbox-search.archive-without-grant",
@@ -3202,7 +3385,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.find-design",
@@ -3226,7 +3410,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.notification-audience",
@@ -3251,7 +3436,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.restore-archive",
@@ -3275,7 +3461,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.show-decisions",
@@ -3300,7 +3487,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.show-my-work",
@@ -3324,7 +3512,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.backup-and-restore",
@@ -3348,7 +3537,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.diagnose-health",
@@ -3372,7 +3562,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.instance-settings",
@@ -3396,7 +3587,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.provision-runtime",
@@ -3420,7 +3612,8 @@
       "productPolicy": {
         "lane": "published-global-npm",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.restart-service",
@@ -3444,7 +3637,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "instance-operations.update-instance",
@@ -3468,7 +3662,8 @@
       "productPolicy": {
         "lane": "published-global-npm",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.broken-link",
@@ -3493,7 +3688,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.dismiss-announcement",
@@ -3517,7 +3713,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.edit-profile",
@@ -3541,7 +3738,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.find-project-view",
@@ -3566,7 +3764,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.quick-search",
@@ -3591,7 +3790,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "navigation-preferences.sidebar-order",
@@ -3615,7 +3815,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "onboarding.choose-first-runtime",
@@ -3640,7 +3841,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "onboarding.first-work",
@@ -3657,8 +3859,8 @@
       "sourceSha256": "b759a43d8cfaafaee368b25f863a88786e8277352a9fe6ab798192ff9ee39732",
       "scenarioSha256": "2888d4d56a04602b636cb0b607494b1510ff13ef2c60039487039eefbfe99264",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.onboarding.first-work",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -3666,7 +3868,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "onboarding.new-company",
@@ -3683,8 +3886,8 @@
       "sourceSha256": "b759a43d8cfaafaee368b25f863a88786e8277352a9fe6ab798192ff9ee39732",
       "scenarioSha256": "9edba22d1b88098c7a52508572d642a8aba73d9b29bd0f9397eee9ae20717a25",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.onboarding.new-company",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -3692,7 +3895,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "onboarding.new-instance",
@@ -3717,7 +3921,8 @@
       "productPolicy": {
         "lane": "empty-installed-boundary",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "onboarding.resume-wizard",
@@ -3741,7 +3946,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "plugins.configure-plugin",
@@ -3765,7 +3971,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "plugins.disable-plugin",
@@ -3789,7 +3996,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "plugins.install-plugin",
@@ -3813,7 +4021,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "plugins.use-plugin-tool",
@@ -3828,8 +4037,8 @@
       "sourceSha256": "a136eb30c3acd32d2bf4ef90a1c5724bc16c9adbd7643a2243dfcbd22a558611",
       "scenarioSha256": "66affa421e336eb69a035da224c0fef3c6760b44859739f6546ec5269e69daa0",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.plugins.use-plugin-tool",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -3837,7 +4046,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.add-repository",
@@ -3862,7 +4072,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.archive-project",
@@ -3886,7 +4097,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.create-project",
@@ -3910,7 +4122,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.private-project",
@@ -3935,7 +4148,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.project-defaults",
@@ -3951,8 +4165,8 @@
       "sourceSha256": "c81afa8fc014f1dd6263635521f561f477be3881d6405c11e84d6d71321251dd",
       "scenarioSha256": "0c3db411b7ff2c924dd28f5fca82d8400edf9904014e18c434dcd4407ccb1a93",
       "owner": "eval_domains",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.projects.project-defaults",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -3960,7 +4174,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.project-work",
@@ -3985,7 +4200,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.replace-repository",
@@ -4009,7 +4225,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "projects.share-project",
@@ -4033,7 +4250,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.accept-one-proposal",
@@ -4058,7 +4276,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.ambiguous-yes",
@@ -4082,7 +4301,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.approve-tool-once",
@@ -4107,7 +4327,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.decline-tool",
@@ -4132,7 +4353,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.defer-and-reopen",
@@ -4157,7 +4379,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.duplicate-answer",
@@ -4181,7 +4404,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.formal-hire-revision",
@@ -4206,7 +4430,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.multi-part-question",
@@ -4230,7 +4455,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.necessary-question",
@@ -4255,7 +4481,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.reject-and-revise",
@@ -4279,7 +4506,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.review-plan",
@@ -4305,7 +4533,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "questions-and-approvals.wrong-reviewer",
@@ -4330,7 +4559,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.browser-reconnect",
@@ -4346,16 +4576,17 @@
       "sourceSha256": "f74fb387ab717d656e4ce11b8abc03960946f0cba83ccf76e83f4ac77c520a3a",
       "scenarioSha256": "1a24782c0adce5db07abd005849c5b7770936902d43d18ba51ff57e117e6a4cf",
       "owner": "eval_runtime",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.recovery.browser-reconnect",
-      "blocker": "Reconnect after a genuinely failed native run remains unexercised; successful and still-running native phases plus failed-evidence negative controls are authored.",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.controller-restart",
@@ -4380,7 +4611,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.explain-stall",
@@ -4396,8 +4628,8 @@
       "sourceSha256": "f74fb387ab717d656e4ce11b8abc03960946f0cba83ccf76e83f4ac77c520a3a",
       "scenarioSha256": "933e66564a6f64c965d99da0872d9507a71b002e02872de37e1fee66460fda75",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.recovery.explain-stall",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4405,7 +4637,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.post-stop-message",
@@ -4430,7 +4663,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "recovery.retry-exhausted",
@@ -4445,8 +4679,8 @@
       "sourceSha256": "f74fb387ab717d656e4ce11b8abc03960946f0cba83ccf76e83f4ac77c520a3a",
       "scenarioSha256": "3786c691002a37a1088a6a6823d1ced58ca56220182323bf4f39532c9372eb66",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.recovery.retry-exhausted",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4454,7 +4688,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.source-action",
@@ -4469,8 +4704,8 @@
       "sourceSha256": "f74fb387ab717d656e4ce11b8abc03960946f0cba83ccf76e83f4ac77c520a3a",
       "scenarioSha256": "affee225ec52dfd629234f595baeb441d6522cc1124988f95abf1ddf1148b7f7",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.recovery.source-action",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4478,7 +4713,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.unknown-email-outcome",
@@ -4503,7 +4739,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "recovery.workspace-repair",
@@ -4528,7 +4765,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "routines.create-daily-brief",
@@ -4544,8 +4782,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "a6b4ab5bb048afa5370142c140573ac16d5b671950d91d34a5c03f9d33df1d8c",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.create-daily-brief",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4553,7 +4791,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.manage-other-owner",
@@ -4569,8 +4808,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "63cede64def0e26965bb9d4bb479d52630e296f0c7de1b9f9ae51dcdc23bac7e",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.manage-other-owner",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4578,7 +4817,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.pause-owned",
@@ -4593,8 +4833,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "6bf910d88313dcdba2054e5ff3c0a5361f05947c11a2dfd07064224dc606c678",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.pause-owned",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4602,7 +4842,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.plugin-managed-routine",
@@ -4618,8 +4859,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "151317880c55983be3b898b485c3d3569258be04dafc3c73a12fcd5b2de1c3b6",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.plugin-managed-routine",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4627,7 +4868,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.read-history",
@@ -4643,8 +4885,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "e9137f834e3cc93b22fc5a7e78446127ea33abe5543e8558152b2a9056b425c1",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.read-history",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4652,7 +4894,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.run-now",
@@ -4667,8 +4910,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "5a6cf2e8b16228efaa559e26f76e02b3831efaf1ac2f363ea205350a49a85bf8",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.run-now",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4676,7 +4919,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "routines.webhook-trigger",
@@ -4691,8 +4935,8 @@
       "sourceSha256": "d9dddc2e63abce4092aaefe7771ad9323f77364ee314fc39de5339db8832d0dc",
       "scenarioSha256": "9f063c4f513fd39eb060b423458fbd3243c725523d0b75c1ea4b50149540ccd9",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.routines.webhook-trigger",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4700,7 +4944,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "runs-adapters.inspect-failed-run",
@@ -4716,8 +4961,8 @@
       "sourceSha256": "15d3741baab816afe14d24043d8229010fc204146ccb4bb2f525eb0f8d3037fa",
       "scenarioSha256": "05545e38ec47530024f4f3487c4189a8c38ae27729c061b0a06d030f9d1cc8f4",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.runs-adapters.inspect-failed-run",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4725,7 +4970,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "runs-adapters.list-model-options",
@@ -4749,7 +4995,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "runs-adapters.reset-session",
@@ -4773,7 +5020,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "runs-adapters.upgrade-runner",
@@ -4799,7 +5047,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "runs-adapters.validate-hire",
@@ -4824,7 +5073,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "secrets.ask-for-plaintext",
@@ -4849,7 +5099,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.configure-company-secret",
@@ -4865,8 +5116,8 @@
       "sourceSha256": "1530cfcde791db75809556d90b5529f3d77f07040a2f7b411562f39efd7572b0",
       "scenarioSha256": "0a13c2b4f2a01fe9f25ed516b9192bbd58cf72de57749b04c3d5193101073a70",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.secrets.configure-company-secret",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4874,7 +5125,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.least-scope-delivery",
@@ -4898,7 +5150,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "secrets.personal-secret",
@@ -4922,7 +5175,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "secrets.secret-proposal",
@@ -4946,7 +5200,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "secrets.vault-reference",
@@ -4970,7 +5225,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "skills.author-skill",
@@ -4985,8 +5241,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "388dfd1075fbb5ecf31eb3eb58c19e7505b5599cb4e8fc15d97f6ff62dcba12e",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.author-skill",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4994,7 +5250,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "skills.enable-for-agent",
@@ -5010,16 +5267,20 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "eea18284250b1258b8589ba1d9a587cdbf893e55804468824a61d7e183ec9489",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.enable-for-agent",
+      "blocker": "Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.; Unsupported effective-use context: reserved setup probes the actual unsupported use action plus every real lifecycle action under a denied policy and the actual still-permitted board assignment, restoring policy/assignment in finally. Source runtime version selection has no use-policy principal/action. These receipts establish a prerequisite limitation, never the required model refusal: effective-use-denial outcome remains unqualifiable until a supported actual use-denial contract exists.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "concrete-blocker",
+      "blockerProbeSources": [
+        "chat-catalog-domains/integrator-skill-enable.ts"
+      ]
     },
     {
       "id": "skills.explicit-restriction",
@@ -5035,8 +5296,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "d65e36c69a490ea26479cc0f06a2e72867b5ecd86e4ee1fe81b9d191f76c4f2e",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.explicit-restriction",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5044,7 +5305,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "skills.find-and-install",
@@ -5059,8 +5321,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "65e979f67eb2ddefb6e283cef944bce5314eb7c49f3c666804ac8a81d460b0b4",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.find-and-install",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5068,7 +5330,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "skills.fork-read-only",
@@ -5084,8 +5347,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "426fd67b68d50f5842669cb45fb65132dff39a95e93ce29d789d863758a75fec",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.fork-read-only",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5093,7 +5356,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "skills.review-update",
@@ -5108,8 +5372,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "2dd9aef6ae3e8d091872390eee730ee1a7c5ac476eb289d495b41ee3aa923092",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.review-update",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5117,7 +5381,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "skills.studio-test",
@@ -5133,8 +5398,8 @@
       "sourceSha256": "b582ed3468b5b77cb252afc6dca5e26b94cfe1b0cfdb6e585f6a1e7ba92dddcf",
       "scenarioSha256": "e3f804cadd95df5b99dfb3f684cdb733d72a9a7a504211695bff9a92eccd7457",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.skills.studio-test",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5142,7 +5407,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "status-cards.archive-card",
@@ -5157,8 +5423,8 @@
       "sourceSha256": "ce8d272944d7b391e3f693f954a17b7aacc0bb1b42aef28795034f39fc3ed314",
       "scenarioSha256": "e845d0bae36e4eed7c943c59f89590f6329de98cc69d782dc1ba2090d42497ec",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.status-cards.archive-card",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5166,7 +5432,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "status-cards.create-card",
@@ -5181,8 +5448,8 @@
       "sourceSha256": "ce8d272944d7b391e3f693f954a17b7aacc0bb1b42aef28795034f39fc3ed314",
       "scenarioSha256": "a25646758d0b6469bea8f83b0ae5234b043a8d8a50fb628281b4269784a87c3d",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.status-cards.create-card",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5190,7 +5457,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "status-cards.explain-card",
@@ -5205,8 +5473,8 @@
       "sourceSha256": "ce8d272944d7b391e3f693f954a17b7aacc0bb1b42aef28795034f39fc3ed314",
       "scenarioSha256": "5c06a66c278b8488a524ff0052be9f512df6b8a9f893e85e713867c947db2a51",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.status-cards.explain-card",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5214,7 +5482,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "status-cards.other-authors-card",
@@ -5230,8 +5499,8 @@
       "sourceSha256": "ce8d272944d7b391e3f693f954a17b7aacc0bb1b42aef28795034f39fc3ed314",
       "scenarioSha256": "9d7441822051ffd472c0930af852ef65fc7c9bed9bc15f880b68697720fb88e1",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.status-cards.other-authors-card",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5239,7 +5508,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "status-cards.refresh-card",
@@ -5254,8 +5524,8 @@
       "sourceSha256": "ce8d272944d7b391e3f693f954a17b7aacc0bb1b42aef28795034f39fc3ed314",
       "scenarioSha256": "25e749c7a39bd52f65f3e0b6c0332e18193a40794b641a047b88c652e869226d",
       "owner": "eval_integrator",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.status-cards.refresh-card",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5263,7 +5533,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.approval-delivery",
@@ -5279,8 +5550,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "14cfa14e4d5c70779b425231e75e752af6b83f34b99cde8562b18f763e7c2972",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.approval-delivery",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5288,7 +5559,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.discard-queued-message",
@@ -5303,8 +5575,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "1b830184fa4ff85a4a4d8537f2f1f90feb8d80da95a079d9e1bf461ba49c2d15",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.discard-queued-message",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5312,7 +5584,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.edit-queued-message",
@@ -5327,8 +5600,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "9bd7488c6e9cd13ae28da827dd5234997efacb2f6c560929399a75959a0f1263",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.edit-queued-message",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5336,7 +5609,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.interrupt-with-direction",
@@ -5352,8 +5626,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "44b96a10a90c592f8f99b4b611a98bf102c3f98f118e5cb9f020dd70be8b96ff",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.interrupt-with-direction",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5361,7 +5635,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.preserve-draft",
@@ -5386,7 +5661,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.queue-follow-up",
@@ -5401,8 +5677,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "eaa4f06336336d4a6a91ad560a517258d057443e70a54b0a7d35b4d64fc0c80d",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.queue-follow-up",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5410,7 +5686,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.steer-active",
@@ -5425,8 +5702,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "f5b756787a8acbcc7652090678a341aeae3a8505cf0f8933d17f07e4e6373399",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.steer-active",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5434,7 +5711,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "steering.stop-versus-pause",
@@ -5450,8 +5728,8 @@
       "sourceSha256": "73b5ab29c4ad01d355be5214b663798d35eae2f3e5aa3ebea078970c81560b69",
       "scenarioSha256": "a23062fe9bca8c217fd35b1f924f3d63aef06d087311be744b15419c2f8d6a80",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.steering.stop-versus-pause",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5459,7 +5737,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "task-coordination.block-on-design",
@@ -5474,8 +5753,8 @@
       "sourceSha256": "a7beb3354584511c8ab3a23e1c6eb94603feffb4fbd9e83d086d6594f054d0f7",
       "scenarioSha256": "d22c8fb04d14fa5a8a11e36d575486bcebad7d3073c2a51eb7377f483cf14302",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.task-coordination.block-on-design",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5483,7 +5762,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "task-coordination.delegate-with-context",
@@ -5499,8 +5779,8 @@
       "sourceSha256": "a7beb3354584511c8ab3a23e1c6eb94603feffb4fbd9e83d086d6594f054d0f7",
       "scenarioSha256": "2b1931ce3efd61022241e52822b9c01223b0675977c8366e57d706ea709df229",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.task-coordination.delegate-with-context",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5508,7 +5788,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "task-coordination.independent-review",
@@ -5524,8 +5805,8 @@
       "sourceSha256": "a7beb3354584511c8ab3a23e1c6eb94603feffb4fbd9e83d086d6594f054d0f7",
       "scenarioSha256": "7ad1e79a3c1734be57fff2d92518d0f856ef37f6573c55661f4cb811a4bea664",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.task-coordination.independent-review",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5533,7 +5814,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "task-coordination.pause-tree",
@@ -5549,8 +5831,8 @@
       "sourceSha256": "a7beb3354584511c8ab3a23e1c6eb94603feffb4fbd9e83d086d6594f054d0f7",
       "scenarioSha256": "9405bbd2b7f1eaa6c92ee8b78f4c454dc9ed3b58dc1e922fce349e34df4a42e1",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.task-coordination.pause-tree",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5558,7 +5840,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "task-coordination.reject-dependency-cycle",
@@ -5582,7 +5865,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.ambiguous-task",
@@ -5607,7 +5891,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.assignment-conflict",
@@ -5632,7 +5917,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.attachment-brief",
@@ -5657,7 +5943,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.comment-with-reference",
@@ -5681,7 +5968,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.completion-with-gate",
@@ -5706,7 +5994,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.create-backlog",
@@ -5732,7 +6021,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.delegate-announcement",
@@ -5759,7 +6049,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.edit-properties",
@@ -5783,7 +6074,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.organize-open-work",
@@ -5807,7 +6099,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.private-task",
@@ -5832,7 +6125,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.share-private-task",
@@ -5856,7 +6150,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.website-task",
@@ -5882,7 +6177,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "tasks.website-without-project",
@@ -5908,7 +6204,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "teams.configure-team",
@@ -5924,8 +6221,8 @@
       "sourceSha256": "a7580fd090c62ad9b8a0d27dd0ae11512d6df965109f6f4622e0934583def056",
       "scenarioSha256": "31d1af3f9097f47dab5418d031da40d529056d9df7a6051b15b94e1be6ddc2d3",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.teams.configure-team",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5933,7 +6230,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "teams.find-team",
@@ -5957,7 +6255,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "teams.install-team",
@@ -5973,16 +6272,17 @@
       "sourceSha256": "a7580fd090c62ad9b8a0d27dd0ae11512d6df965109f6f4622e0934583def056",
       "scenarioSha256": "1c72931bf4a9e13daf3cd4a26dea88665bceae1816308ea9c9575cc3b219a1a2",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.teams.install-team",
+      "blocker": "installer-conflict-and-partial-failure-branches",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "unfinished"
     },
     {
       "id": "teams.preview-install",
@@ -6006,7 +6306,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.close-and-reopen",
@@ -6030,7 +6331,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.inspect-git",
@@ -6054,7 +6356,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.locate-files",
@@ -6078,7 +6381,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.prepare-repository",
@@ -6103,7 +6407,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "workspaces.preview-service",
@@ -6119,8 +6424,8 @@
       "sourceSha256": "6b4be6151f155981ae7a68ac69c3a31420d54fe33f1ac567de0db73b651b3ae7",
       "scenarioSha256": "e6fe0218ebd0cc43508679c5fba72bdfe5bd59a33febb10969aa19b3d21a334e",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.workspaces.preview-service",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -6128,7 +6433,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.private-repository-no-access",
@@ -6153,7 +6459,8 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     },
     {
       "id": "workspaces.recover-lost-sandbox",
@@ -6178,15 +6485,16 @@
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
-      }
+      },
+      "authoringStatus": "absent"
     }
   ],
   "implementationCheckpoint": {
-    "sourceRevision": "ad0907afb9ca7b6d528d90616c3a12b52c94620c",
-    "descriptorSha256": "caddd992cd120e2a83c463669e5d480859830b566c57f03f2e56148eeece6e00",
-    "authored": 134,
-    "complete": 129,
-    "partial": 5,
-    "unimplemented": 110
+    "sourceRevision": "e4b62f48aacef0bef16fd1f5a28433a8192af8ba",
+    "descriptorSha256": "dc3ef609f877a88a8546e6e9c2c29d9462dcfe693b85e15d398b56ccb4c2c069",
+    "authored": 207,
+    "complete": 198,
+    "partial": 9,
+    "unimplemented": 37
   }
 }

@@ -1,7 +1,8 @@
+import { abnormalFinalizationResult } from "./abnormal-finalization.js";
 import { CHAT_ORACLE_KEY_ENV } from "./chat-private-oracle.js";
 import { stagePublishedChatInstall, ChatInstalledCleanupError } from "./chat-installed-lane.js";
 import { stageChatPrivateInputs, chatLaunchCredentialNames, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
-import { createPrivateDiagnosticStream, diagnosticSecrets, PRIVATE_DIAGNOSTICS_ENV, readPrivateDiagnosticSecrets, stagePrivateDiagnostics } from "./private-diagnostics.js";
+import { createPrivateDiagnosticStream, PRIVATE_DIAGNOSTICS_ENV, readPrivateDiagnosticSecrets, stagePrivateDiagnostics } from "./private-diagnostics.js";
 import { sanitizePrivateReporterArtifacts } from "./private-reporter-artifacts.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { recoverWorkerTiming } from "./worker-timing.js";
@@ -648,7 +649,7 @@ async function runAttempt(input: {
       options.ui || options.debug,
       () => readPrivateDiagnosticSecrets(diagnosticRegistry, temporaryRoot),
     );
-    credentials.splice(0, credentials.length, ...diagnosticSecrets(readPrivateDiagnosticSecrets(diagnosticRegistry, temporaryRoot)));
+    credentials.splice(0, credentials.length, ...readPrivateDiagnosticSecrets(diagnosticRegistry, temporaryRoot));
     processCleanupFailed = processResult.processCleanupError !== null;
     if (options.installedStartupOnly) {
       const proofDir = path.join(resultsRoot, campaignId, "installed-startup-only");
@@ -898,6 +899,30 @@ async function runAttempt(input: {
         candidate.id,
         path.join(uploadDir, "result.json"),
       );
+    }
+    return [...publishedResults];
+  } catch (error) {
+    // Packaging/diagnostic failures must not erase an actually launched attempt
+    // or its primary startup failure. Retain only closed sanitized metadata;
+    // raw reports stay private when their normal packaging path failed.
+    for (const candidate of executions) {
+      if (publishedResultPaths.has(candidate.id)) continue;
+      const casePrivateDir = path.join(temporaryRoot, "artifacts-private", "cases", candidate.task.id);
+      const fallback = syntheticResult(candidate, attempt, startedAtMs, "Attempt terminated before a worker result was retained");
+      const original = await readResult(path.join(casePrivateDir, "result.json"), fallback);
+      const result = abnormalFinalizationResult(original, error);
+      const uploadDir = path.join(resultsRoot, campaignId, candidate.suite.id, candidate.profile.id, candidate.environment.id, candidate.task.id, `attempt-${attempt}`);
+      await mkdir(uploadDir, { recursive: true });
+      const resultPath = path.join(uploadDir, "result.json");
+      const safe = `${JSON.stringify(sanitizeJson(result, attemptSecrets), null, 2)}\n`;
+      assertSecretFree(safe, attemptSecrets, resultPath);
+      await writeFile(resultPath, safe, "utf8");
+      await writeFile(path.join(uploadDir, "abnormal-finalization.json"), `${JSON.stringify(sanitizeJson({
+        schemaVersion: 1, executionId: candidate.id, originalResult: original,
+        packaging: "failed; raw diagnostics retained privately", error: error instanceof Error ? error.message : String(error),
+      }, attemptSecrets), null, 2)}\n`, { mode: 0o600 });
+      if (rawCleanupResults.length < executions.length) rawCleanupResults.push({ cleanup: original.cleanup, synthetic: original === fallback, status: original.status });
+      publishedResults.push(result); publishedResultPaths.set(candidate.id, resultPath);
     }
     return [...publishedResults];
   } finally {
