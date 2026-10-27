@@ -278,8 +278,16 @@ function valid(scenario: string): InternalObservation {
     }
     case "documents-artifacts.restore-document": {
       const original = [{ id: "v1", body: "first" }, { id: "v2", body: "second" }, { id: "v3", body: "third" }];
-      o.state.originalRevisions = original; o.revisions = [...original, { id: "v4", body: "second" }]; o.documents = [{ id: "doc", key: "plan", body: "second", latestRevisionId: "v4" }];
-      o.activity = [event("issue.document_restored", "task", { restoredFromRevisionId: "v2" })]; o.reply = "Restored version 2 as revision 4."; break;
+      o.state.originalRevisions = original; o.revisions = [...original, { id: "v4", body: "second" }]; o.documents = [{ id: "doc", key: "plan", body: "second", latestRevisionId: "v4", latestRevisionNumber: 4 }];
+      o.activity = [event("issue.document_restored", "task", { restoredFromRevisionId: "v2" })]; o.reply = "Restored version 2 as revision 4."; o.state.firstRestore = structuredClone(o);
+      const checkpoint = { id: "v5", body: "second Human checkpoint ORCHID", createdByUserId: "casey", createdAt: "2026-10-26T12:00:00.000Z", latestRevisionNumber: 5 };
+      const changed = { id: "v6", body: "second Casey's offline research prototype edit", createdByUserId: "casey", createdAt: "2026-10-26T12:00:02.000Z", latestRevisionNumber: 6 };
+      o.revisions.push(checkpoint); o.documents[0] = { ...o.documents[0], body: checkpoint.body, latestRevisionId: "v5", latestRevisionNumber: 5 }; o.reply += " Human checkpoint ORCHID v5."; o.runs.push({ id: "read", companyId: "company", agentId: "ceo", status: "succeeded" });
+      o.state.readCheckpoint = structuredClone(o); Object.assign(o.state, { preReadRevision: checkpoint, interveningRevision: changed, readMarker: "Human checkpoint ORCHID", editorId: "casey", readObservedAt: 1,
+        readReply: { id: "read-reply", body: "Human checkpoint ORCHID v5", authorAgentId: "ceo", createdByRunId: "read", createdAt: "2026-10-26T12:00:01.000Z" } });
+      o.revisions.push(changed, { id: "v7", body: "second", createdByAgentId: "ceo" }); o.documents[0] = { ...o.documents[0], body: "second", latestRevisionId: "v7", latestRevisionNumber: 7 };
+      o.activity.push({ id: "human-edit", action: "issue.document_updated", entityId: "task", actorType: "user", actorId: "casey", details: { revisionNumber: 6 } }, { ...event("issue.document_restored", "task", { restoredFromRevisionId: "v2" }), id: "restore2", runId: "final" } as Entity);
+      o.runs.push({ id: "final", companyId: "company", agentId: "ceo", status: "succeeded" }); Object.assign(o, { phaseReply: "Casey's newer offline research prototype edit is retained in history. I restored the selected revision 2 as current revision 7." }); break;
     }
     case "activity.company-overview": {
       o.tasks[0] = { ...o.tasks[0]!, status: "in_progress" }; o.state.task = { ...o.tasks[0] };
@@ -354,7 +362,7 @@ describe("internal chat scenario independent oracles", () => {
       expect(gradeInternal(wrong).passed).toBe(false);
       expect(gradeInternal(undefined).passed).toBe(false);
       const noLinks = structuredClone(good); noLinks.links = [];
-      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download", "inbox-search.archive-done", "inbox-search.restore-archive"].includes(definition.scenarioId));
+      expect(gradeInternal(noLinks).passed).toBe(["goals.align-existing-work", "projects.add-repository", "projects.replace-repository", "tasks.completion-with-gate", "documents-artifacts.private-download", "inbox-search.archive-done", "inbox-search.restore-archive", "documents-artifacts.restore-document"].includes(definition.scenarioId));
     });
   }
   it("never treats an unimplemented scenario as passing", () => expect(gradeInternal(base("inbox-search.archive-partial-failure")).passed).toBe(false));

@@ -1,3 +1,4 @@
+import { withRestoreConcurrency } from "./internal-restore-concurrency.js";
 import { projectMarkdownToText, resolveProjectionRange, createDocumentAnchorSelector } from "../../../packages/shared/src/document-anchors.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { privateDownloadCases } from "./internal-private-download.js";
@@ -53,7 +54,7 @@ export function grade_documents_artifacts(value: unknown) {
         && revisions.every(original => o.revisions.some(row => row.id === original.id && row.body === original.body)), "All three historical revisions remain unmodified alongside the restoration.");
       c.add("restore-path-attribution", !!before && o.activity.some(row => row.action === "issue.document_restored" && row.entityId === before.id
         && row.agentId === o.leadId && row.details?.restoredFromRevisionId === previous?.id), "An independently observed restore audit identifies the exact source revision.");
-      c.add("no-execution-rewind", !!before && sameTask(before, current) && linkedTask() && /\b(?:revision|version)\b/i.test(o.reply), "Chat identifies a document revision and leaves task execution unchanged.");
+      c.add("no-execution-rewind", !!before && sameTask(before, current) && /\b(?:revision|version)\b/i.test(o.reply), "Chat identifies a document revision and leaves task execution unchanged.");
       break;
     }
     default: c.add("implemented-scenario", false, "No independent oracle is implemented for this scenario.");
@@ -71,7 +72,7 @@ export const documents_artifactsCases: readonly ChatCatalogCase[] = [
       description: `Build a single-page website for ${requirement}, with accessible signup and responsive layout. Verify keyboard navigation and mobile presentation.` });
     return { project: p, task: t, requirement };
   }),
-  define("documents-artifacts.restore-document", async ctx => {
+  withRestoreConcurrency(define("documents-artifacts.restore-document", async ctx => {
     const p = await project(ctx); const t = await task(ctx, "Website task", p.id, { description: "The website task's plan has three saved revisions. The previous version before the last edit is the desired content." });
     const revisions: Entity[] = [];
     for (const body of [`# Plan\nBuild a responsive website for ${ctx.input.nonce}.`, `# Plan\nBuild accessible signup for ${ctx.input.nonce}.\nVerify keyboard operation.`, `# Plan\nReplace signup with an unrelated pricing experiment for ${ctx.input.nonce}.`]) {
@@ -79,7 +80,7 @@ export const documents_artifactsCases: readonly ChatCatalogCase[] = [
       revisions.push({ id: saved.latestRevisionId!, body });
     }
     return { project: p, task: t, originalRevisions: revisions };
-  }),
+  })),
 
 ];
 
