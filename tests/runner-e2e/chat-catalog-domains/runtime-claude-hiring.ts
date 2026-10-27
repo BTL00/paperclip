@@ -1,12 +1,13 @@
 import { expect } from "@playwright/test";
 import { agentHarnessType } from "../../../packages/shared/src/agent-runner.js";
 import type { ActivityEvent } from "../../../packages/shared/src/types/activity.js";
+import type { Environment } from "../../../packages/shared/src/types/environment.js";
 import type { Agent } from "../../../packages/shared/src/types/agent.js";
 import type { AiConnectionList } from "../../../packages/shared/src/ai-connections.js";
 import { checks } from "./internal-support.js";
 import { waitForReply } from "./identity-support.js";
 import { runtimePrivateSpec, selectedRuntimeInputs } from "./runtime-private.js";
-import { privateClaudeOperation, type ClaudePrivateReceipt } from "./runtime-claude-private.js";
+import { matchesClaudeFixtureTarget, privateClaudeOperation, type ClaudePrivateReceipt } from "./runtime-claude-private.js";
 import { agentLink, openRuntimeAgentProfile, observeRuntime, runtimeDefinition, runtimeObservation, type RuntimeAgent } from "./runtime-support.js";
 export function claudeValidationReplyMatches(reply: string, probe: Pick<ClaudePrivateReceipt, "probeStatus" | "probeCheckCodes">) {
   const falseReady = /(?:is|now|already|fully|runtime)\s+(?:fully\s+)?(?:ready|working|validated)|validation (?:passed|succeeded)/i;
@@ -37,18 +38,19 @@ export function gradeClaudeHire(value: unknown) {
 export const runtimeClaudeHiringCases = [runtimeDefinition("agents.hire-claude-code", async ctx => {
   const selected = selectedRuntimeInputs(ctx, "agents.hire-claude-code");
   if (selected.values.targetRef !== "fixture.environment" || selected.values.accountBindingRef !== "selected.ANTHROPIC_API_KEY") throw new Error("Setup blocker agents.hire-claude-code: require explicit owned fixture.environment and selected.ANTHROPIC_API_KEY references; values withheld");
-  const environment = await ctx.input.api.get<{ id: string; companyId: string; driver: string }>(`/api/environments/${ctx.input.fixtures.environment.id}`);
-  if (environment.companyId !== ctx.input.fixtures.company.id || environment.driver !== "local") throw new Error("Setup blocker: selected Claude target must be the actual owned local computer, independently qualified below");
-  const before = await ctx.input.api.get<RuntimeAgent[]>(`/api/companies/${environment.companyId}/agents`);
+  const companyId = ctx.input.fixtures.company.id;
+  const [environment, inventory, authority] = await Promise.all([ctx.input.api.get<Environment>(`/api/environments/${ctx.input.fixtures.environment.id}`), ctx.input.api.get<Environment[]>(`/api/companies/${companyId}/environments`), ctx.input.api.get<{ id: string }>(`/api/companies/${companyId}`)]);
+  if (!matchesClaudeFixtureTarget({ company: authority, expectedCompanyId: companyId, fixtureEnvironmentId: ctx.input.fixtures.environment.id, detail: environment, listed: inventory })) throw new Error("Setup blocker: selected Claude target must be the exact owned active local fixture, independently qualified below");
+  const before = await ctx.input.api.get<RuntimeAgent[]>(`/api/companies/${companyId}/agents`);
   if (before.some(row => row.name === "Morgan")) throw new Error("Claude hire setup requires Morgan to be absent");
-  await ctx.input.api.patch(`/api/companies/${environment.companyId}`, { requireBoardApprovalForNewAgents: false });
-  const company = await ctx.input.api.get<{ requireBoardApprovalForNewAgents: boolean }>(`/api/companies/${environment.companyId}`);
+  await ctx.input.api.patch(`/api/companies/${companyId}`, { requireBoardApprovalForNewAgents: false });
+  const company = await ctx.input.api.get<{ requireBoardApprovalForNewAgents: boolean }>(`/api/companies/${companyId}`);
   if (!ctx.input.privateSecrets) throw new Error("Selected Claude prerequisite requires the owned private redaction sink");
   const credential = selected.credentials.ANTHROPIC_API_KEY!; ctx.input.privateSecrets.push(credential);
-  const account = await privateClaudeOperation({ operation: "prepare-account", baseURL: ctx.input.api.baseURL, companyId: environment.companyId, environmentId: environment.id,
+  const account = await privateClaudeOperation({ operation: "prepare-account", baseURL: ctx.input.api.baseURL, companyId: companyId, environmentId: environment.id,
     credential, harnessExecutable: selected.values.harnessExecutable, model: selected.values.model, cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) });
   if (account.probeStatus !== "pass") throw new Error("Setup blocker: actual selected Anthropic account/Claude command/model/target validation did not pass; private diagnostics withheld");
-  const connections = await ctx.input.api.get<AiConnectionList>(`/api/companies/${environment.companyId}/ai-connections`);
+  const connections = await ctx.input.api.get<AiConnectionList>(`/api/companies/${companyId}/ai-connections`);
   const connection = connections.connections.find(row => row.id === account.connectionId && row.grantId === account.grantId);
   if (!connection || connection.provider !== "anthropic" || connection.status !== "connected" || !connection.isDefault) throw new Error("Actual selected Claude account is not a usable responsible-user default");
   return { connectionId: account.connectionId, grantId: account.grantId, selectedEnvironmentId: environment.id, prerequisiteProbePassed: true, noApprovalPolicy: !company.requireBoardApprovalForNewAgents };

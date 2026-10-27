@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { gradeClaudeHire, claudeValidationReplyMatches } from "./runtime-claude-hiring.js";
-import { validateClaudePrivateReceipt } from "./runtime-claude-private.js";
+import { validateClaudePrivateReceipt, matchesClaudeFixtureTarget } from "./runtime-claude-private.js";
 function valid() {
   return { origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", agents: [{ id: "morgan", name: "Morgan", companyId: "company", reportsTo: "ceo", role: "engineer", title: "Frontend engineer", adapterType: "paperclip_runner", adapterConfig: { provider: "acpx", acpxAgent: "claude" }, lifecycleState: "ready" }], links: ["/ACORN/agents/morgan"], humanQueries: ["Hire Morgan"], reply: "", tasks: [], activity: [{ id: "hire", action: "agent.hire_created", entityId: "morgan", actorType: "agent", actorId: "ceo", runId: "source" }], runs: [{ id: "source", agentId: "ceo", status: "succeeded" }], state: { actualAccountBinding: true, savedTargetBound: true, selectedEnvironmentId: "environment", noApprovalPolicy: true, prerequisiteProbePassed: true, savedValidation: { agentId: "morgan", environmentId: "environment", probeStatus: "pass", probeCheckCodes: ["claude_hello_passed"] }, canonicalReply: "Morgan is created as your frontend engineer. The account is connected and runtime validation passed; the saved profile is linked here." } };
 }
@@ -22,4 +22,14 @@ it("allows only closed scoped ID/check-code receipts from the standalone private
   const receipt = { ...expected, processIsolation: true, testRunnerAttached: false, apiStepRecorder: false, connectionId: id, grantId: id, probeStatus: "pass", probeCheckCodes: ["claude_hello_passed"] };
   expect(validateClaudePrivateReceipt(receipt, expected)).toEqual(receipt);
   for (const patch of [{ credential: "synthetic-private-key" }, { testRunnerAttached: true }, { companyId: "foreign" }, { probeCheckCodes: ["raw diagnostic with a credential"] }]) expect(() => validateClaudePrivateReceipt({ ...receipt, ...patch }, expected)).toThrow("closed");
+});
+
+it("binds real instance-scoped Environment DTOs through exact fixture and authorized public inventory", () => {
+  const detail = { id: "environment", driver: "local" as const, status: "active" as const };
+  const input = { company: { id: "company" }, expectedCompanyId: "company", fixtureEnvironmentId: "environment", detail, listed: [{ ...detail }] };
+  expect(matchesClaudeFixtureTarget(input)).toBe(true); // There is deliberately no invented companyId on the DTO.
+  expect(matchesClaudeFixtureTarget({ ...input, company: { id: "foreign" } })).toBe(false);
+  expect(matchesClaudeFixtureTarget({ ...input, listed: [] })).toBe(false);
+  expect(matchesClaudeFixtureTarget({ ...input, fixtureEnvironmentId: "another-environment" })).toBe(false);
+  expect(matchesClaudeFixtureTarget({ ...input, listed: [{ ...detail, status: "archived" }] })).toBe(false);
 });

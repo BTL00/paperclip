@@ -12,7 +12,10 @@ for (const branch of ["success", "private-child-failure", "parent-failure"] as c
   const server = createServer(async (req, res) => {
     cookieObserved ||= req.headers.cookie === `canary=${cookie}`;
     res.setHeader("content-type", "application/json");
-    if (req.method === "GET") { res.end(JSON.stringify({ id: environmentId, companyId, driver: "local" })); return; }
+    if (req.method === "GET") {
+      const environment = { id: environmentId, driver: "local", status: "active" };
+      res.end(JSON.stringify(req.url?.endsWith("/environments") ? [environment] : req.url?.includes("/environments/") ? environment : { id: companyId })); return;
+    }
     let raw = ""; for await (const chunk of req) raw += chunk; const body = JSON.parse(raw);
     if (req.url?.endsWith("/ai-connections")) {
       keyObserved = body.apiKey === credential;

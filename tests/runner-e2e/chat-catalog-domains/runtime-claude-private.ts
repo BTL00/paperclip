@@ -4,7 +4,15 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Environment } from "../../../packages/shared/src/types/environment.js";
 import type { Cookie } from "@playwright/test";
+export function matchesClaudeFixtureTarget(input: { company: { id: string }; expectedCompanyId: string; fixtureEnvironmentId: string; detail: Pick<Environment, "id" | "driver" | "status">; listed: Array<Pick<Environment, "id" | "driver" | "status">> }) {
+  // Environments are instance resources, not company rows. The authenticated
+  // company read + public inventory authority and exact attempt fixture bind it.
+  const { detail } = input;
+  return input.company.id === input.expectedCompanyId && detail.id === input.fixtureEnvironmentId && detail.driver === "local" && detail.status === "active"
+    && input.listed.some(row => row.id === detail.id && row.driver === detail.driver && row.status === detail.status);
+}
 export interface ClaudePrivateReceipt {
   processIsolation: true; testRunnerAttached: false; apiStepRecorder: false;
   operation: "prepare-account" | "validate-saved"; companyId: string; environmentId: string; connectionId: string; grantId: string; agentId?: string;

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { test, type Cookie } from "@playwright/test";
-import type { ClaudePrivateRequest, ClaudePrivateReceipt } from "./runtime-claude-private.js";
+import { matchesClaudeFixtureTarget, type ClaudePrivateRequest, type ClaudePrivateReceipt } from "./runtime-claude-private.js";
+import type { Environment } from "../../../packages/shared/src/types/environment.js";
 import type { AiRuntimeConnectionBinding } from "../../../packages/shared/src/ai-connection-router.js";
 import type { Agent } from "../../../packages/shared/src/types/agent.js";
 import { agentHarnessType } from "../../../packages/shared/src/agent-runner.js";
@@ -16,8 +17,8 @@ async function main(): Promise<ClaudePrivateReceipt> {
     const response = await fetch(target, { method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : JSON.stringify(body), headers, redirect: "error", signal: AbortSignal.timeout(150000) });
     if (!response.ok) { await response.body?.cancel(); throw new Error("Actual selected Claude public operation rejected"); } return response.json() as Promise<T>;
   }
-  const environment = await json<{ id: string; companyId: string; driver: string }>(`/api/environments/${input.environmentId}`);
-  if (environment.id !== input.environmentId || environment.companyId !== input.companyId || environment.driver !== "local") throw new Error("Selected Claude fixture requires its actual same-company local execution target");
+  const [environment, inventory, company] = await Promise.all([json<Environment>(`/api/environments/${input.environmentId}`), json<Environment[]>(`/api/companies/${input.companyId}/environments`), json<{ id: string }>(`/api/companies/${input.companyId}`)]);
+  if (!matchesClaudeFixtureTarget({ company, expectedCompanyId: input.companyId, fixtureEnvironmentId: input.environmentId, detail: environment, listed: inventory })) throw new Error("Selected Claude fixture requires the exact owned local target with actual public inventory/company authority");
   let connectionId: string, grantId: string, config: Record<string, unknown>, agentId: string | undefined, savedType: string | undefined, savedBinding: AiRuntimeConnectionBinding | undefined;
   if (input.operation === "prepare-account") {
     if (!input.credential || !input.harnessExecutable || !input.model) throw new Error("Missing selected Claude credential/command/model");
@@ -25,8 +26,10 @@ async function main(): Promise<ClaudePrivateReceipt> {
     connectionId = connection.connectionId; grantId = connection.grantId; config = { command: input.harnessExecutable, model: input.model };
   } else {
     agentId = input.agentId; const agent = await json<Agent>(`/api/agents/${agentId}`);
-    const environments = await json<Array<{ id: string; isDefault?: boolean }>>(`/api/companies/${input.companyId}/environments`);
-    const effectiveEnvironmentId = agent.defaultEnvironmentId ?? environments.find(row => row.isDefault)?.id;
+    const settings = await json<{ defaultEnvironmentId?: string | null; experimental?: { enableManagedSandboxOnly?: boolean }; general?: { executionMode?: string } }>("/api/instance/settings");
+    const managedLocal = inventory.filter(row => row.driver === "local");
+    const effectiveEnvironmentId = agent.defaultEnvironmentId ?? settings.defaultEnvironmentId ?? (managedLocal.length === 1 ? managedLocal[0]!.id : undefined);
+    if (settings.experimental?.enableManagedSandboxOnly || settings.general?.executionMode === "kubernetes") throw new Error("Saved target requires its actual managed/sandbox execution qualification, not an implicit host fallback");
     if (agent.companyId !== input.companyId || effectiveEnvironmentId !== input.environmentId || agentHarnessType(agent.adapterType, agent.adapterConfig) !== "claude_local") throw new Error("Saved hire is not the selected same-company Claude target");
     connectionId = input.connectionId; grantId = input.grantId; config = agent.adapterConfig; savedType = agent.adapterType;
     savedBinding = agent.runtimeConfig.aiConnection;

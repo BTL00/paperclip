@@ -18,12 +18,13 @@
     "error-context"
   ],
   "scannedItems": 13,
-  "privateValueCount": 12,
+  "privateValueCount": 24,
   "findings": [],
   "sourceSha256": {
-    "runtime-claude-private.ts": "12805653235725987079a38cdcbca609ec60ffd4a33782d007b30f1b36879689",
-    "runtime-claude-private-worker.ts": "38d1299d6ed030807ad9296fb6feb7b313c4244bf5a2c5fdbc13f101098cace0",
-    "runtime-claude-private-privacy.spec.ts": "da1aceeb242da84b19f81b26b5572c4587996f2ed53e6c64f128bb1217360172"
+    "runtime-claude-private.ts": "435ce9b149120cf2c76c7cb309e68dbe1b30403ff2af094be0b96c7e2ac407a1",
+    "runtime-claude-private-worker.ts": "3ad40e48955e41197334688900a7ec76225d6f9739b88ecd360b0582ba4ac434",
+    "runtime-claude-private-privacy.spec.ts": "19975f6048808e53bdf98633fb7e3b6470bd5336a3141032f80d0237561546c7"
   },
-  "configSha256": "890c62895e7b90eb24c2b96a321edc58b2f6b800531c2607a663fa6e4a155554"
+  "configSha256": "890c62895e7b90eb24c2b96a321edc58b2f6b800531c2607a663fa6e4a155554",
+  "environmentDtoCorrectionCovered": true
 }
