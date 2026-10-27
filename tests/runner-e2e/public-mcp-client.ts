@@ -90,8 +90,8 @@ export async function mcp(tokens: Tokens) {
   const client = new Client({ name: "paperclip-product-eval", version: "1.0.0" });
   await client.connect(new StreamableHTTPClientTransport(new URL(resource), { requestInit: { headers: { Authorization: `Bearer ${tokens.access_token}` } } }));
   return {
-    list: async () => await client.listTools() as { tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown>; annotations: { readOnlyHint: boolean } }> },
-    call: async (name: string, args: Record<string, unknown> = {}) => await client.callTool({ name, arguments: args }) as ToolResult,
+    list: async (options?: { signal?: AbortSignal }) => await client.listTools({}, options) as { tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown>; annotations: { readOnlyHint: boolean } }> },
+    call: async (name: string, args: Record<string, unknown> = {}, options?: { signal?: AbortSignal }) => await client.callTool({ name, arguments: args }, undefined, options) as ToolResult,
     close: async () => { await client.close(); },
   };
 }

@@ -23,3 +23,4 @@ export { notionAssignmentExternalCases } from "./external-notion-assignment.js";
 export { appTestExternalCases } from "./external-app-test.js";
 export { notionAudienceExternalCases } from "./external-notion-audience.js";
 export { notionRevocationExternalCases } from "./external-notion-revocation.js";
+export { scopedAssistantExternalCases } from "./external-assistant-scoped.js";

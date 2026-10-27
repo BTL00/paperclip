@@ -141,3 +141,14 @@ require launch-summary pages or dates. The independent account probe verifies
 the declared workspace through the official API, and the product connects to the
 official MCP endpoint. Human audience changes use the real agent-selection UI;
 public effective access verifies Morgan-only reach and unchanged action rules.
+
+The `assistant-connections.use-scoped-client` companion declares a separate
+external-model surface: selected `OPENAI_API_KEY`, the existing qualified
+`gpt-5.4-mini` model, at most six provider requests, four tool invocations and
+2048 total output tokens. It receives the original canonical query and actual
+public MCP catalog, with no board API or native Agent Chat credential. Current
+public scope names alone do not qualify a creation-only grant: valid comment
+and update attempts against a separate readable control task must actually be
+denied, leaving the control unchanged, before model dispatch. The requested
+Website task is never created during setup. Unsupported effective authority is
+an executable prerequisite blocker, distinct from the implemented model surface.
