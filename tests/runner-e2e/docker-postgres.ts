@@ -9,6 +9,29 @@ export const DOCKER_DATABASE_ENV = "PAPERCLIP_RUNNER_E2E_DOCKER_DATABASE_RECEIPT
 export const POSTGRES_IMAGE = "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336";
 export const POSTGRES_IMAGE_ID = "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336";
 export const POSTGRES_VERSION = "18.6-1.pgdg13+2";
+// Separate official Linux/amd64 artifact for GitHub AWS execution. Historical
+// arm64 defaults/receipts keep their exact bytes and identities.
+export const POSTGRES_ARTIFACT_ENV = "PAPERCLIP_RUNNER_E2E_POSTGRES_ARTIFACT";
+export const POSTGRES_IMAGE_ID_ENV = "PAPERCLIP_RUNNER_E2E_POSTGRES_IMAGE_ID";
+export const POSTGRES_AMD64_IMAGE = "postgres@sha256:9770878138a2e83abcb10856d30cc3f24dae0d317bb956db6ab9159de6c3c80d";
+export const POSTGRES_AMD64_IMAGE_IDS = ["sha256:79061104669bb30919d015b549c764e2d8021a18ee39cb175581a2588fe90dbe", "sha256:9770878138a2e83abcb10856d30cc3f24dae0d317bb956db6ab9159de6c3c80d"] as const;
+type PostgresImage = typeof POSTGRES_IMAGE | typeof POSTGRES_AMD64_IMAGE;
+type PostgresImageId = typeof POSTGRES_IMAGE_ID | typeof POSTGRES_AMD64_IMAGE_IDS[number];
+export function selectedPostgresArtifact(env = process.env): { image: PostgresImage; imageId: PostgresImageId; architecture: "arm64" | "amd64"; version: typeof POSTGRES_VERSION } {
+  if (!env[POSTGRES_ARTIFACT_ENV]) {
+    if (env[POSTGRES_IMAGE_ID_ENV]) throw new Error("Undeclared PostgreSQL image identity override");
+    return { image: POSTGRES_IMAGE, imageId: POSTGRES_IMAGE_ID, architecture: "arm64" as const, version: POSTGRES_VERSION };
+  }
+  if (env[POSTGRES_ARTIFACT_ENV] !== "linux-amd64") throw new Error("Unknown explicit PostgreSQL artifact");
+  const imageId = POSTGRES_AMD64_IMAGE_IDS.find(id => id === (env[POSTGRES_IMAGE_ID_ENV] ?? POSTGRES_AMD64_IMAGE_IDS[0]));
+  if (!imageId) throw new Error("Unreviewed amd64 PostgreSQL image identity");
+  return { image: POSTGRES_AMD64_IMAGE, imageId, architecture: "amd64" as const, version: POSTGRES_VERSION };
+}
+function knownPostgresReceipt(receipt: { image: string; imageId: string; architecture?: string }) {
+  return receipt.image === POSTGRES_IMAGE && receipt.imageId === POSTGRES_IMAGE_ID && !receipt.architecture
+    || receipt.image === POSTGRES_AMD64_IMAGE && POSTGRES_AMD64_IMAGE_IDS.some(id => id === receipt.imageId) && receipt.architecture === "amd64";
+}
+
 export type DockerRun = (args: string[], timeout?: number) => Promise<string>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const fullId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -18,7 +41,7 @@ export interface DockerEngineIdentity { context: string; endpoint: string; engin
 export interface DockerDatabaseReceipt {
   schemaVersion: 1; lane: "owned-docker-postgres"; temporaryRoot: string; nonce: string;
   engine: DockerEngineIdentity; containerId: string | null; containerName: string; volumeName: string;
-  image: typeof POSTGRES_IMAGE; imageId: typeof POSTGRES_IMAGE_ID; imageVersion: typeof POSTGRES_VERSION;
+  image: PostgresImage; imageId: PostgresImageId; architecture?: "amd64"; imageVersion: typeof POSTGRES_VERSION;
   username: string; database: string; connectionString?: string; port?: number;
   status: "creating" | "ready" | "failed" | "removed" | "cleanup-failed";
   artifactVerified?: boolean;
@@ -92,7 +115,7 @@ function exactPasswordBindSource(source: unknown, receipt: DockerDatabaseReceipt
 export function assertOwnedContainer(value: any, receipt: DockerDatabaseReceipt, running?: boolean) {
   const mounts = value?.Mounts, data = mounts?.find((m: any) => m.Destination === "/var/lib/postgresql"), password = mounts?.find((m: any) => m.Destination === "/run/secrets/postgres-password");
   const ports = value?.HostConfig?.PortBindings?.["5432/tcp"], config = value?.Config;
-  if (!fullId(receipt.containerId) || value?.Id !== receipt.containerId || value.Name !== `/${receipt.containerName}` || value.Image !== POSTGRES_IMAGE_ID || config?.Image !== POSTGRES_IMAGE || !hasLabels(config.Labels, receipt)
+  if (!fullId(receipt.containerId) || value?.Id !== receipt.containerId || value.Name !== `/${receipt.containerName}` || !knownPostgresReceipt(receipt) || value.Image !== receipt.imageId || config?.Image !== receipt.image || !hasLabels(config.Labels, receipt)
     || value.HostConfig.Privileged !== false || !["default", "bridge"].includes(value.HostConfig.NetworkMode) || !Array.isArray(mounts) || mounts.length !== 2
     || data?.Type !== "volume" || data.Name !== receipt.volumeName || data.RW !== true || password?.Type !== "bind" || !exactPasswordBindSource(password.Source, receipt) || password.RW !== false
     || !Array.isArray(ports) || ports.length !== 1 || ports[0].HostIp !== "127.0.0.1" || Object.keys(value.HostConfig.PortBindings).join() !== "5432/tcp"
@@ -109,7 +132,7 @@ async function privateRoot(root: string) {
 }
 function assertReceipt(value: DockerDatabaseReceipt, root: string) {
   if (value?.schemaVersion !== 1 || value.lane !== "owned-docker-postgres" || value.temporaryRoot !== root || !uuidHex(value.nonce) || value.containerName !== `paperclip-e2e-pg-${value.nonce}` || value.volumeName !== `paperclip-e2e-pg-data-${value.nonce}`
-    || value.image !== POSTGRES_IMAGE || value.imageId !== POSTGRES_IMAGE_ID || value.imageVersion !== POSTGRES_VERSION || !/^[a-z][a-z0-9_]{1,60}$/.test(value.username) || !/^[a-z][a-z0-9_]{1,60}$/.test(value.database)) throw new Error("Invalid private Docker database receipt");
+    || !knownPostgresReceipt(value) || value.imageVersion !== POSTGRES_VERSION || !/^[a-z][a-z0-9_]{1,60}$/.test(value.username) || !/^[a-z][a-z0-9_]{1,60}$/.test(value.database)) throw new Error("Invalid private Docker database receipt");
 }
 async function readPrivateDockerReceipt(filename: string, root: string) {
   await privateRoot(root);
@@ -132,22 +155,24 @@ export async function readDockerDatabaseReceipt(filename: string, root: string, 
   return receipt;
 }
 export interface DockerDatabaseIdentity {
-  lane: "owned-docker-postgres"; image: typeof POSTGRES_IMAGE; imageId: typeof POSTGRES_IMAGE_ID; imageVersion: typeof POSTGRES_VERSION;
+  lane: "owned-docker-postgres"; image: PostgresImage; imageId: PostgresImageId; architecture?: "amd64"; imageVersion: typeof POSTGRES_VERSION;
   artifactVerified: boolean; contextSha256: string | null; engineSha256: string | null; containerId: string | null;
   cluster?: { version: string; systemIdentifier: string }; status: DockerDatabaseReceipt["status"] | "startup-unconfirmed";
 }
-export function publicDockerDatabaseIdentity(receipt: DockerDatabaseReceipt): DockerDatabaseIdentity { return { lane: receipt.lane, image: receipt.image, imageId: receipt.imageId, imageVersion: receipt.imageVersion, artifactVerified: receipt.artifactVerified === true, contextSha256: hash(`${receipt.engine.context}\n${receipt.engine.endpoint}`), engineSha256: hash(receipt.engine.engineId), containerId: receipt.containerId, cluster: receipt.cluster ? { version: receipt.cluster.version, systemIdentifier: receipt.cluster.systemIdentifier } : undefined, status: receipt.status }; }
+export function publicDockerDatabaseIdentity(receipt: DockerDatabaseReceipt): DockerDatabaseIdentity { return { lane: receipt.lane, image: receipt.image, imageId: receipt.imageId, imageVersion: receipt.imageVersion, ...(receipt.architecture ? { architecture: receipt.architecture } : {}), artifactVerified: receipt.artifactVerified === true, contextSha256: hash(`${receipt.engine.context}\n${receipt.engine.endpoint}`), engineSha256: hash(receipt.engine.engineId), containerId: receipt.containerId, cluster: receipt.cluster ? { version: receipt.cluster.version, systemIdentifier: receipt.cluster.systemIdentifier } : undefined, status: receipt.status }; }
 /** Also used when startup throws before returning a ready handle. Never confuse
  * an unavailable receipt/daemon with proven absence or embedded fallback. */
 export async function dockerDatabaseLaunchState(lane: string, root: string) {
   if (lane === "embedded-postgres") return { allowDarwinReap: true, cleanupUnconfirmed: false, identity: undefined };
-  const unknown: DockerDatabaseIdentity = { lane: "owned-docker-postgres", image: POSTGRES_IMAGE, imageId: POSTGRES_IMAGE_ID, imageVersion: POSTGRES_VERSION, artifactVerified: false, contextSha256: null, engineSha256: null, containerId: null, status: "startup-unconfirmed" };
+  const artifact = selectedPostgresArtifact();
+  const unknown: DockerDatabaseIdentity = { lane: "owned-docker-postgres", image: artifact.image, imageId: artifact.imageId, imageVersion: POSTGRES_VERSION, ...(artifact.architecture === "amd64" ? { architecture: artifact.architecture } : {}), artifactVerified: false, contextSha256: null, engineSha256: null, containerId: null, status: "startup-unconfirmed" };
   try {
     const receipt = await readPrivateDockerReceipt(path.join(root, "docker-postgres-private", "receipt.json"), root);
     return { allowDarwinReap: false, cleanupUnconfirmed: receipt.status !== "removed" || !!receipt.cleanupFailures?.length, identity: publicDockerDatabaseIdentity(receipt) };
   } catch { return { allowDarwinReap: false, cleanupUnconfirmed: true, identity: unknown }; }
 }
 export async function startOwnedDockerDatabase(input: { temporaryRoot: string; privateSecrets: string[]; run?: DockerRun }) {
+  const artifact = selectedPostgresArtifact();
   const rawRun = input.run ?? runDocker, root = input.temporaryRoot; await privateRoot(root);
   const startupDeadline = Date.now() + 120000; let cleaning = false;
   const run: DockerRun = (args, timeout = 15000) => {
@@ -157,7 +182,7 @@ export async function startOwnedDockerDatabase(input: { temporaryRoot: string; p
   };
   const engine = await currentDockerEngine(run), nonce = randomBytes(16).toString("hex"), password = randomBytes(32).toString("hex"), directory = path.join(root, "docker-postgres-private"), filename = path.join(directory, "receipt.json");
   await mkdir(directory, { mode: 0o700 });
-  const receipt: DockerDatabaseReceipt = { schemaVersion: 1, lane: "owned-docker-postgres", temporaryRoot: root, nonce, engine, containerId: null, containerName: `paperclip-e2e-pg-${nonce}`, volumeName: `paperclip-e2e-pg-data-${nonce}`, image: POSTGRES_IMAGE, imageId: POSTGRES_IMAGE_ID, imageVersion: POSTGRES_VERSION, username: `pc_${nonce.slice(0, 20)}`, database: `pc_${nonce.slice(0, 20)}`, status: "creating", startedAt: new Date().toISOString() };
+  const receipt: DockerDatabaseReceipt = { schemaVersion: 1, lane: "owned-docker-postgres", temporaryRoot: root, nonce, engine, containerId: null, containerName: `paperclip-e2e-pg-${nonce}`, volumeName: `paperclip-e2e-pg-data-${nonce}`, image: artifact.image, imageId: artifact.imageId, imageVersion: POSTGRES_VERSION, ...(artifact.architecture === "amd64" ? { architecture: artifact.architecture } : {}), username: `pc_${nonce.slice(0, 20)}`, database: `pc_${nonce.slice(0, 20)}`, status: "creating", startedAt: new Date().toISOString() };
   input.privateSecrets.push(password); await writeFile(path.join(directory, "password"), password, { mode: 0o600, flag: "wx" });
   const persist = () => writeFile(filename, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 }); await persist();
   const command = async (args: string[], timeout?: number) => { await pinnedEngine(engine, run); return run(["--context", engine.context, ...args], timeout); };
@@ -198,15 +223,15 @@ export async function startOwnedDockerDatabase(input: { temporaryRoot: string; p
     closed = true; await rm(path.join(directory, "password"), { force: true });
   };
   try {
-    const image = JSON.parse(await command(["image", "inspect", POSTGRES_IMAGE]))[0];
-    if (image?.Id !== POSTGRES_IMAGE_ID || image.Os !== "linux" || image.Architecture !== "arm64" || !image.RepoDigests?.includes(POSTGRES_IMAGE) || !image.Config.Env.includes(`PG_VERSION=${POSTGRES_VERSION}`)) throw new Error("Installed official PostgreSQL artifact differs from pinned identity; no pull permitted");
+    const image = JSON.parse(await command(["image", "inspect", artifact.image]))[0];
+    if (image?.Id !== artifact.imageId || image.Os !== "linux" || image.Architecture !== artifact.architecture || !image.RepoDigests?.includes(artifact.image) || !image.Config.Env.includes(`PG_VERSION=${POSTGRES_VERSION}`)) throw new Error("Installed official PostgreSQL artifact differs from pinned identity; no pull permitted");
     receipt.artifactVerified = true; await persist();
     const labelArgs = Object.entries(labels(receipt)).flatMap(([k, v]) => ["--label", `${k}=${v}`]);
     receipt.volumeCreationAttempted = true; await persist();
     await command(["volume", "create", "--driver", "local", ...labelArgs, receipt.volumeName]);
     assertOwnedVolume(JSON.parse(await command(["volume", "inspect", receipt.volumeName]))[0], receipt);
     receipt.containerCreationAttempted = true; await persist();
-    const cid = await command(["create", "--cidfile", path.join(directory, "container.id"), "--pull=never", "--name", receipt.containerName, ...labelArgs, "--publish", "127.0.0.1::5432/tcp", "--memory", "1g", "--cpus", "2", "--pids-limit", "256", "--shm-size", "128m", "--mount", `type=volume,src=${receipt.volumeName},dst=/var/lib/postgresql`, "--mount", `type=bind,src=${path.join(directory, "password")},dst=/run/secrets/postgres-password,readonly`, "--env", "POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password", "--env", `POSTGRES_USER=${receipt.username}`, "--env", `POSTGRES_DB=${receipt.database}`, POSTGRES_IMAGE]);
+    const cid = await command(["create", "--cidfile", path.join(directory, "container.id"), "--pull=never", "--name", receipt.containerName, ...labelArgs, "--publish", "127.0.0.1::5432/tcp", "--memory", "1g", "--cpus", "2", "--pids-limit", "256", "--shm-size", "128m", "--mount", `type=volume,src=${receipt.volumeName},dst=/var/lib/postgresql`, "--mount", `type=bind,src=${path.join(directory, "password")},dst=/run/secrets/postgres-password,readonly`, "--env", "POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password", "--env", `POSTGRES_USER=${receipt.username}`, "--env", `POSTGRES_DB=${receipt.database}`, artifact.image]);
     if (!fullId(cid)) throw new Error("Docker create returned no exact container ID"); receipt.containerId = cid; await persist();
     assertOwnedContainer(JSON.parse(await command(["inspect", cid]))[0], receipt, false); await command(["start", cid], 20000);
     const deadline = Date.now() + 60000; let ready = false;
@@ -233,7 +258,7 @@ export async function startOwnedDockerDatabase(input: { temporaryRoot: string; p
  * before constructing the actual Paperclip/native environment. */
 export async function dockerDatabaseSupervisorEnvironment(input: { temporaryRoot: string; env: NodeJS.ProcessEnv; run?: DockerRun }) {
   const lane = selectedDatabaseLane(input.env), source = { ...input.env }, filename = source[DOCKER_DATABASE_ENV];
-  delete source[DOCKER_DATABASE_ENV]; delete source[DATABASE_LANE_ENV];
+  delete source[DOCKER_DATABASE_ENV]; delete source[DATABASE_LANE_ENV]; delete source[POSTGRES_ARTIFACT_ENV]; delete source[POSTGRES_IMAGE_ID_ENV];
   if (lane === "embedded-postgres") { if (filename) throw new Error("Undeclared Docker database receipt"); return { source, filename: undefined }; }
   if (!filename) throw new Error("Selected Docker database lane is missing its owned receipt");
   await readDockerDatabaseReceipt(filename, input.temporaryRoot, input.run);
@@ -242,14 +267,15 @@ export async function dockerDatabaseSupervisorEnvironment(input: { temporaryRoot
 }
 
 export function databaseFingerprintIdentity(env = process.env) {
+  const artifact = selectedPostgresArtifact(env);
   return selectedDatabaseLane(env) === "owned-docker-postgres"
-    ? { lane: "owned-docker-postgres" as const, image: POSTGRES_IMAGE, imageId: POSTGRES_IMAGE_ID, version: POSTGRES_VERSION }
+    ? { lane: "owned-docker-postgres" as const, image: artifact.image, imageId: artifact.imageId, version: POSTGRES_VERSION, ...(artifact.architecture === "amd64" ? { architecture: artifact.architecture } : {}) }
     : { lane: "embedded-postgres" as const };
 }
 export type DatabaseFingerprintIdentity = ReturnType<typeof databaseFingerprintIdentity>;
 export function databaseIdentityMatches(expected: DatabaseFingerprintIdentity, actual?: DockerDatabaseIdentity) {
   if (expected.lane === "embedded-postgres") return actual === undefined;
-  return !!actual && actual.lane === expected.lane && actual.image === expected.image && actual.imageId === expected.imageId && actual.imageVersion === expected.version
+  return !!actual && actual.lane === expected.lane && actual.image === expected.image && actual.imageId === expected.imageId && actual.imageVersion === expected.version && knownPostgresReceipt(actual) && (expected.architecture ?? undefined) === actual.architecture
     && actual.artifactVerified && !!actual.contextSha256 && !!actual.engineSha256 && fullId(actual.containerId) && !!actual.cluster
     && /^18\.6(?:\s|$)/.test(actual.cluster.version) && /^[0-9]+$/.test(actual.cluster.systemIdentifier) && ["ready", "removed"].includes(actual.status);
 }

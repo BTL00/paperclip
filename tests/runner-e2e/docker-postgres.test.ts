@@ -1,3 +1,4 @@
+import { publicDockerDatabaseIdentity, selectedPostgresArtifact, POSTGRES_ARTIFACT_ENV, POSTGRES_IMAGE_ID_ENV, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS } from "./docker-postgres.js";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, symlink, chmod } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -18,6 +19,7 @@ beforeEach(() => { vi.stubEnv("DOCKER_HOST", ""); vi.stubEnv("DOCKER_CONTEXT", "
 afterEach(async () => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function root() { const p = await realpath(await mkdtemp(path.join(os.tmpdir(), "paperclip-runner-e2e-"))); roots.push(p); return p; }
 function daemon() {
+  const artifact = selectedPostgresArtifact();
   const state = { calls: [] as string[][], engine: "engine-one", operatingSystem: "Docker Desktop", endpoint: "unix:///private/offline-docker.sock", container: null as any, volume: null as any, loseVolumeAck: false, loseContainerAck: false, inspectionError: false, volumeInspectionError: false, badImage: false, failStart: false };
   const missing = (args: string[], name: string) => new DockerCommandError({ args, stdout: "[]", stderr: `Error: No such object: ${name}`, exitCode: 1, signal: null });
   const run: DockerRun = async args => {
@@ -25,7 +27,7 @@ function daemon() {
     if (cmd.join() === "context,show") return "offline-context";
     if (cmd[0] === "context") return JSON.stringify([{ Endpoints: { docker: { Host: state.endpoint } } }]);
     if (cmd[0] === "info") return JSON.stringify({ id: state.engine, os: "linux", operatingSystem: state.operatingSystem });
-    if (cmd[0] === "image") return JSON.stringify([{ Id: state.badImage ? "wrong-image" : POSTGRES_IMAGE_ID, Os: "linux", Architecture: "arm64", RepoDigests: [POSTGRES_IMAGE], Config: { Env: [`PG_VERSION=${POSTGRES_VERSION}`] } }]);
+    if (cmd[0] === "image") return JSON.stringify([{ Id: state.badImage ? "wrong-image" : artifact.imageId, Os: "linux", Architecture: artifact.architecture, RepoDigests: [artifact.image], Config: { Env: [`PG_VERSION=${POSTGRES_VERSION}`] } }]);
     if (cmd[0] === "volume") {
       if (cmd[1] === "create") { const labels: Record<string, string> = {}; for (let i = 0; i < cmd.length; i++) if (cmd[i] === "--label") { const [key, value] = cmd[i + 1]!.split("="); labels[key!] = value!; }
         state.volume = { Name: cmd.at(-1), Driver: "local", Scope: "local", Options: null, Labels: labels };
@@ -41,7 +43,7 @@ function daemon() {
         if (cmd[i] === "--env") env.push(cmd[i + 1]!);
         if (cmd[i] === "--mount") { const fields = Object.fromEntries(cmd[i + 1]!.split(",").map(p => p.split("="))); mounts.push({ Type: fields.type, ...(fields.type === "volume" ? { Name: fields.src } : { Source: fields.src }), Destination: fields.dst, RW: !cmd[i + 1]!.includes("readonly") }); }
       }
-      state.container = { Id: "a".repeat(64), Name: `/${cmd[cmd.indexOf("--name") + 1]}`, Image: POSTGRES_IMAGE_ID, Config: { Image: POSTGRES_IMAGE, Env: env, Labels: labels }, HostConfig: { Privileged: false, NetworkMode: "default", PortBindings: { "5432/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] } }, Mounts: mounts, State: { Running: false }, NetworkSettings: { Ports: {} } };
+      state.container = { Id: "a".repeat(64), Name: `/${cmd[cmd.indexOf("--name") + 1]}`, Image: artifact.imageId, Config: { Image: artifact.image, Env: env, Labels: labels }, HostConfig: { Privileged: false, NetworkMode: "default", PortBindings: { "5432/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] } }, Mounts: mounts, State: { Running: false }, NetworkSettings: { Ports: {} } };
       if (state.loseContainerAck) throw new Error("lost container ACK"); return state.container.Id;
     }
     if (cmd[0] === "inspect") { if (state.inspectionError) throw new Error("daemon inspection unavailable"); if (!state.container) throw missing(args, cmd.at(-1)!); return JSON.stringify([state.container]); }
@@ -232,4 +234,20 @@ it("requires exact current UID, type and private custody modes", () => {
   expect(() => assertDockerCustodyMetadata({ ...metadata, mode: 0o640 }, false)).toThrow();
   expect(() => assertDockerCustodyMetadata({ ...metadata, isSymbolicLink: () => true }, false)).toThrow();
   expect(() => assertDockerCustodyMetadata(metadata, true)).toThrow();
+});
+
+it("keeps historical arm64 identity unchanged and admits only the explicit reviewed amd64 artifact", () => {
+  expect(databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres" })).toEqual({ lane: "owned-docker-postgres", image: POSTGRES_IMAGE, imageId: POSTGRES_IMAGE_ID, version: POSTGRES_VERSION });
+  const remote = databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres", [POSTGRES_ARTIFACT_ENV]: "linux-amd64", [POSTGRES_IMAGE_ID_ENV]: POSTGRES_AMD64_IMAGE_IDS[1] });
+  expect(remote).toEqual({ lane: "owned-docker-postgres", image: POSTGRES_AMD64_IMAGE, imageId: POSTGRES_AMD64_IMAGE_IDS[1], version: POSTGRES_VERSION, architecture: "amd64" });
+  expect(() => selectedPostgresArtifact({ [POSTGRES_ARTIFACT_ENV]: "linux-amd64", [POSTGRES_IMAGE_ID_ENV]: "foreign" })).toThrow("Unreviewed");
+  expect(() => selectedPostgresArtifact({ [POSTGRES_IMAGE_ID_ENV]: POSTGRES_AMD64_IMAGE_IDS[0] })).toThrow("Undeclared");
+});
+it("creates, verifies and cleans the explicit amd64 receipt using only the owned fake daemon", async () => {
+  vi.stubEnv(POSTGRES_ARTIFACT_ENV, "linux-amd64"); vi.stubEnv(POSTGRES_IMAGE_ID_ENV, POSTGRES_AMD64_IMAGE_IDS[0]);
+  const temp = await root(), { run, state } = daemon(); const owned = await startOwnedDockerDatabase({ temporaryRoot: temp, privateSecrets: [], run });
+  expect(owned.receipt).toMatchObject({ image: POSTGRES_AMD64_IMAGE, imageId: POSTGRES_AMD64_IMAGE_IDS[0], architecture: "amd64", artifactVerified: true });
+  expect(databaseIdentityMatches(databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres", [POSTGRES_ARTIFACT_ENV]: "linux-amd64" }), publicDockerDatabaseIdentity(owned.receipt))).toBe(true);
+  expect(databaseIdentityMatches(databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres" }), publicDockerDatabaseIdentity(owned.receipt))).toBe(false);
+  await owned.close(); expect(state.container).toBeNull(); expect(state.volume).toBeNull(); expect(owned.receipt.status).toBe("removed");
 });

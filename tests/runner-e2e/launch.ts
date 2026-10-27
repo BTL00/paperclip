@@ -1,3 +1,5 @@
+import { prepareChatRemoteHost } from "./chat-remote-host.js";
+import { POSTGRES_ARTIFACT_ENV, POSTGRES_IMAGE_ID_ENV } from "./docker-postgres.js";
 import { prepareOwnedPublicOrigin, PublicOriginCleanupError, PUBLIC_ORIGIN_CONTROL_ENV, PUBLIC_ORIGIN_RECEIPT_ENV } from "./chat-public-origin.js";
 import { DATABASE_LANE_ENV, DOCKER_DATABASE_ENV, dockerDatabaseLaunchState, publicDockerDatabaseIdentity, selectedDatabaseLane, startOwnedDockerDatabase } from "./docker-postgres.js";
 import { ARCHIVE_CONTROL_ENV, ARCHIVE_SCENARIO, startArchiveFaultControl } from "./chat-archive-fault-control.js";
@@ -1193,6 +1195,14 @@ async function main() {
   );
   const summaryDir = path.join(resultsRoot, campaignId);
   await mkdir(summaryDir, { recursive: true });
+  const remoteChat = await prepareChatRemoteHost({ executions, env: process.env, repositoryRoot, outputDirectory: summaryDir });
+  if (remoteChat) {
+    process.env[DATABASE_LANE_ENV] = remoteChat.databaseLane;
+    process.env[POSTGRES_ARTIFACT_ENV] = remoteChat.postgresArtifact;
+    process.env[POSTGRES_IMAGE_ID_ENV] = remoteChat.postgresImageId;
+    options.maxAutomaticRetries = remoteChat.maxAutomaticRetries;
+    options.maxParallel = Math.min(options.maxParallel, remoteChat.maxParallel);
+  }
   if (executions.some(execution => execution.suite.id === "native-completion")) {
     process.env[NATIVE_COMPLETION_PREFLIGHT_ENV] = prepareNativeCompletionPreflight(summaryDir);
   }
