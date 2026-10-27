@@ -11,6 +11,20 @@ import { identityDefinition, identityObservation, identityWorker, observeIdentit
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 interface NativeAccountingState { worker: Entity; project: Entity; preflightTask: Entity; originalRun: HeartbeatRun; originalRunId: string; originalUsageHash: string; originalLogHash: string | null; unresolvedBefore: CostDataQualityReport }
+/** Public UI retry eligibility is narrower than unresolved event valuation.
+ * Unknown billing on an acknowledged receipt is real debt, but not a pending
+ * saved-run retry (CostDataQualityNotice only renders that action for retryable).
+ */
+export function nativeAccountingPrerequisite(run: Pick<HeartbeatRun, "id" | "status" | "usageJson">, quality: CostDataQualityReport, retryable: boolean) {
+  const rows = [...quality.runs, ...quality.events].filter(row => row.runId === run.id);
+  const savedUsage = run.usageJson != null && Object.keys(run.usageJson).length > 0;
+  const retryControlAvailable = quality.canRetry
+    && quality.runs.some(row => row.runId === run.id && row.reason === "retryable");
+  const eligible = run.status === "succeeded" && savedUsage && (retryable ? retryControlAvailable : rows.length > 0);
+  const disposition = eligible ? "eligible" : !savedUsage ? "missing-saved-usage" : !rows.length ? "settled-accounting"
+    : "unresolved-without-saved-run-retry";
+  return { eligible, disposition, savedUsage, retryControlAvailable, unresolvedReasons: rows.map(row => row.reason) };
+}
 async function nativeUnresolvedContext(ctx: ChatCatalogContext, retryable: boolean): Promise<NativeAccountingState> {
   await openStandingChat(ctx); const worker = await identityWorker(ctx); const p = await project(ctx, "Launch");
   const root = `/api/companies/${ctx.input.fixtures.company.id}`;
@@ -24,12 +38,11 @@ async function nativeUnresolvedContext(ctx: ChatCatalogContext, retryable: boole
     load: () => ctx.allRuns(), accept: rows => rows.some(row => row.agentId === worker.id && row.status === "succeeded" && row.runtimeMode === "native") }).then(rows => rows.find(row => row.agentId === worker.id && row.status === "succeeded" && row.runtimeMode === "native")!);
   const original = await ctx.input.api.get<HeartbeatRun>(`/api/heartbeat-runs/${run.id}`);
   const quality = await ctx.input.api.get<CostDataQualityReport>(`${root}/costs/data-quality?period=all`);
-  const matching = [...quality.runs, ...quality.events].filter(row => row.runId === run.id);
-  const eligible = original.usageJson != null && Object.keys(original.usageJson).length > 0 && matching.some(row => !retryable || row.reason === "retryable");
+  const prerequisite = nativeAccountingPrerequisite(original, quality, retryable);
   await ctx.input.evidence("identity-native-accounting-context.json", { runId: run.id, taskId: preflightTask.id, workerId: worker.id, nativeRunActuallyCompleted: true,
-    usageEvidenceExists: original.usageJson != null && Object.keys(original.usageJson).length > 0, actualUnresolvedReasons: matching.map(row => row.reason), requiresRetryableSavedUsage: retryable,
-    prerequisiteMet: eligible, usageAccountingFabricated: false, setupNativeUsageMustCountInCampaignAccounting: true });
-  if (!eligible) throw new Error(`Setup blocker: the actual completed native run has ${matching.length ? "no eligible saved retryable usage" : "fully settled accounting"}; the frozen unresolved context cannot be fabricated`);
+    usageEvidenceExists: prerequisite.savedUsage, actualUnresolvedReasons: prerequisite.unresolvedReasons, requiresRetryableSavedUsage: retryable,
+    prerequisiteDisposition: prerequisite.disposition, actualRetryControlAvailable: prerequisite.retryControlAvailable, prerequisiteMet: prerequisite.eligible, usageAccountingFabricated: false, setupNativeUsageMustCountInCampaignAccounting: true });
+  if (!prerequisite.eligible) throw new Error(`Setup blocker: actual completed native accounting prerequisite is ${prerequisite.disposition}; unresolved reasons=${prerequisite.unresolvedReasons.join(",") || "none"}. Saved retry debt cannot be fabricated`);
   return { worker, project: p, preflightTask: await ctx.input.api.get<Entity>(`/api/issues/${preflightTask.id}`), originalRun: original, originalRunId: run.id, originalUsageHash: digest(original.usageJson), originalLogHash: original.logSha256, unresolvedBefore: quality };
 }
 export function gradeAccounting(value: unknown) {

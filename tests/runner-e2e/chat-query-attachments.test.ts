@@ -76,3 +76,17 @@ it("also matches the active TaskChatComposer for its one declared upload", () =>
   const production = new Function("trimmed", "attachedRefs", "escapeMarkdownLabel", `return [trimmed,attachedRefs.map(item => ${template}).join("\\n")].filter(Boolean).join("\\n\\n")`) as (query: string, refs: Array<{ name: string; contentPath: string }>, escape: Function) => string;
   for (const name of ["website-brief.md", "brief[1].md"]) expect(chatQueryWithAttachments("Canonical query", [{ ...receipt, originalFilename: name }])).toBe(production("Canonical query", [{ name, contentPath: receipt.contentPath }], escape));
 });
+
+it("admits only the declared human company-preview package with independent receipt checks", async () => {
+  const actual = { ...receipt, originalFilename: "company-package.json" };
+  const ctx = { scenario: { id: "companies.import-preview" }, refreshIssue: async () => {}, issue: () => ({ id: "source" }), input: {
+    fixtures: { company: { id: "company" } }, api: { get: async () => [actual], getAttachmentContent: async () => bytes },
+  } } as unknown as ChatCatalogContext;
+  const spec = { stateKey: "packageAttachment", filename: "company-package.json" };
+  expect(await resolveChatQueryAttachments(ctx, [spec], { packageAttachment: actual })).toEqual([actual]);
+  for (const invalid of [{ ...spec, filename: "arbitrary.zip" }, { ...spec, stateKey: "otherUpload" }])
+    await expect(resolveChatQueryAttachments(ctx, [invalid], { packageAttachment: actual })).rejects.toThrow("exact declared");
+  await expect(resolveChatQueryAttachments(ctx, [spec, spec], { packageAttachment: actual })).rejects.toThrow("duplicate");
+  await expect(resolveChatQueryAttachments(ctx, [spec], { packageAttachment: { ...actual, createdByUserId: "forged" } })).rejects.toThrow("attribution");
+  await expect(resolveChatQueryAttachments(ctx, [spec], { packageAttachment: { ...actual, sha256: "0".repeat(64) } })).rejects.toThrow("hash");
+});

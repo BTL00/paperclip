@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountingIdentityCases } from "./identity-accounting.js";
+import { accountingIdentityCases, nativeAccountingPrerequisite } from "./identity-accounting.js";
 import type { IdentityObservation } from "./identity-support.js";
 function valid(scenarioId: string): IdentityObservation {
   const repair = scenarioId.endsWith("repair-cost-recording");
@@ -32,4 +32,25 @@ describe("actual saved native accounting contexts", () => {
   it("a price-estimate ledger cannot substitute for confirmed recording", () => { const o = valid("budgets-costs.repair-cost-recording"); o.state.confirmedPricedRepair = true; o.state.retryLedger = [{ agentId: "morgan", eventCount: 1, estimatedEventCount: 1 }]; expect(accountingIdentityCases[1]!.grade(o).passed).toBe(false); });
   it("no hidden human receipt or missing phase may pass", () => { const o = valid("budgets-costs.repair-cost-recording"); o.humanQueries = []; expect(accountingIdentityCases[1]!.grade(o).passed).toBe(false); });
   it("an actual agent retry bypass fails", () => { const o = valid("budgets-costs.repair-cost-recording"); o.state.agentRetryStatus = 200; expect(accountingIdentityCases[1]!.grade(o).passed).toBe(false); });
+});
+
+describe("saved-run retry prerequisite classification", () => {
+  const run = { id: "original", status: "succeeded" as const, usageJson: { inputTokens: 10 } };
+  const item = { id: "original", runId: "original", agentId: "morgan", agentName: "Morgan", occurredAt: "2026-10-27T00:00:00Z", provider: "openai", model: "actual" };
+  const quality = { canRetry: true, runs: [{ ...item, reason: "retryable" as const }], events: [], hasMoreRuns: false, hasMoreEvents: false };
+  it("accepts genuine pending saved usage exposed by the public retry control", () => {
+    expect(nativeAccountingPrerequisite(run, quality, true)).toMatchObject({ eligible: true, disposition: "eligible", retryControlAvailable: true });
+  });
+  it("does not mistake acknowledged unknown billing for settled or retryable accounting", () => {
+    const q = { ...quality, runs: [], events: [{ ...item, reason: "unknown_billing" as const }] };
+    expect(nativeAccountingPrerequisite(run, q, true)).toMatchObject({ eligible: false, disposition: "unresolved-without-saved-run-retry", unresolvedReasons: ["unknown_billing"] });
+    expect(nativeAccountingPrerequisite(run, q, false).eligible).toBe(true);
+  });
+  it("rejects missing usage, foreign-run debt, event-only retry labels and unauthorized retry", () => {
+    expect(nativeAccountingPrerequisite({ ...run, usageJson: null }, quality, true).eligible).toBe(false);
+    expect(nativeAccountingPrerequisite(run, { ...quality, runs: [{ ...item, runId: "foreign", reason: "retryable" }] }, true).eligible).toBe(false);
+    expect(nativeAccountingPrerequisite(run, { ...quality, runs: [], events: quality.runs }, true).eligible).toBe(false);
+    expect(nativeAccountingPrerequisite(run, { ...quality, canRetry: false }, true).eligible).toBe(false);
+    expect(nativeAccountingPrerequisite(run, { ...quality, runs: [] }, true).disposition).toBe("settled-accounting");
+  });
 });

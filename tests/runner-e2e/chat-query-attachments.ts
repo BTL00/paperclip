@@ -21,7 +21,7 @@ const factualFiles: Readonly<Record<string, string>> = {
   "skills.review-update": "skill-context.md", "skills.find-and-install": "skill-context.md", "skills.fork-read-only": "skill-context.md",
   "cases.create-case": "customer-bug-brief.md", "app-permissions.ask-before-action": "launch-update.md",
 };
-const permitted = new Set(["steering.preserve-draft", "tasks.attachment-brief", ...Object.keys(factualFiles)]);
+const permitted = new Set(["steering.preserve-draft", "tasks.attachment-brief", "companies.import-preview", ...Object.keys(factualFiles)]);
 export const factualContextQueryAttachment = (filename: string): readonly ChatCatalogQueryAttachment[] => [{ stateKey: "factualContextAttachment", filename }];
 
 /** Upload factual user input through the real composer. This creates neither a
@@ -91,6 +91,8 @@ export async function resolveChatQueryAttachments(ctx: ChatCatalogContext, specs
   if (!specs.length) return [];
   if (!permitted.has(ctx.scenario.id) || specs.length !== 1 || new Set(specs.map(row => row.stateKey)).size !== specs.length) throw new Error("Undeclared or duplicate catalog query attachment");
   if (factualFiles[ctx.scenario.id] && specs[0]?.filename !== factualFiles[ctx.scenario.id]) throw new Error("Factual query attachment does not match its exact scenario filename");
+  if (ctx.scenario.id === "companies.import-preview" && (specs[0]?.filename !== "company-package.json" || specs[0]?.stateKey !== "packageAttachment"))
+    throw new Error("Company preview requires its exact declared package attachment");
   await ctx.refreshIssue(); const issue = ctx.issue(); if (!issue) throw new Error("UI upload has no persisted source issue");
   const saved = await ctx.input.api.get<ChatQueryAttachmentReceipt[]>(`/api/issues/${issue.id}/attachments`);
   const receipts: ChatQueryAttachmentReceipt[] = [];

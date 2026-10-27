@@ -7,6 +7,11 @@ import { checks, entity, project, sameTask, task, type Entity } from "./internal
 import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, probeAgentPermission, waitForReply } from "./identity-support.js";
 
 interface PausedAgent { id: string; status: string; pauseReason: string | null; lifecycleState: string }
+export function budgetHoldSurvivesChat(budget: BudgetOverview, incident: BudgetIncident, worker: PausedAgent): boolean {
+  return worker.id === incident.scopeId && worker.status === "paused" && worker.pauseReason === "budget"
+    && budget.policies.some(row => row.policyId === incident.policyId && row.scopeType === incident.scopeType && row.scopeId === incident.scopeId && row.amount === incident.amountLimit)
+    && budget.activeIncidents.some(row => row.id === incident.id && row.policyId === incident.policyId && row.status === "open");
+}
 export function gradeBudgetIncident(value: unknown) {
   const c = checks(); const o = identityObservation(value); c.add("complete-actual-budget-incident", !!o, "Actual imported receipt provenance, policy incident, paused agents and independent human action are required."); if (!o) return c.result();
   const incident = o.state.incident as BudgetIncident | undefined; const budget = o.state.budget as BudgetOverview | undefined;
@@ -67,7 +72,13 @@ export const budgetIncidentIdentityCases: readonly ChatCatalogCase[] = ["budgets
   async act(ctx, state) {
     await waitForReply(ctx); if (scenarioId.endsWith("explain-hard-stop")) return;
     const root = `/api/companies/${ctx.input.fixtures.company.id}`; const incident = state.incident as BudgetIncident;
-    state.beforeHumanAmount = (await ctx.input.api.get<BudgetOverview>(`${root}/budgets/overview`)).policies.find(row => row.policyId === incident.policyId)?.amount;
+    const beforeHuman = await ctx.input.api.get<BudgetOverview>(`${root}/budgets/overview`);
+    const beforeHumanWorker = await ctx.input.api.get<PausedAgent>(`/api/agents/${entity(state, "worker").id}`);
+    const holdPreserved = budgetHoldSurvivesChat(beforeHuman, incident, beforeHumanWorker);
+    state.beforeHumanAmount = beforeHuman.policies.find(row => row.policyId === incident.policyId)?.amount;
+    await ctx.input.evidence("identity-budget-before-human-resolution.json", { incidentId: incident.id,
+      beforeHumanAmount: state.beforeHumanAmount, originalAmount: incident.amountLimit, holdPreserved, workerPauseReason: beforeHumanWorker.pauseReason });
+    if (!holdPreserved) throw new Error("Before human resolution, chat changed the actual budget policy or cleared its recorded hold; no human control may mask that mutation");
     state.agentResolutionStatus = await probeAgentPermission(ctx, `${root}/budget-incidents/${incident.id}/resolve`, "POST", { action: "raise_budget_and_resume", amount: 1000 });
     const source = ctx.input.page.url(); await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/activity/costs?tab=budgets&agentId=${entity(state, "worker").id}`, { waitUntil: "domcontentloaded" });
     const card = ctx.input.page.locator('[data-slot="card"]').filter({ has: ctx.input.page.getByText(entity(state, "worker").name!, { exact: true }) }).filter({ has: ctx.input.page.getByRole("button", { name: "Raise budget & resume", exact: true }) }).first();
