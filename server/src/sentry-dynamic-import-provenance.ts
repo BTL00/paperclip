@@ -6,8 +6,11 @@
 // produce that exact frame: `vm.compileFunction` without a filename, and code
 // that a client evaluates in the process through the Node inspector. No
 // shipped server code takes either path. This hook records whether an
-// inspector session was open in the reporting process, so the next event can
-// tell the two paths apart.
+// inspector session was open in the reporting process when the event was
+// reported. That state is evidence, not proof of origin: code compiled
+// without a filename fails the same way while a debugger is attached. A
+// `closed` state rules out an evaluated expression from a session that is
+// still open; an `open` state needs other evidence before blaming a debugger.
 //
 // Privacy: the inspector URL embeds a session secret, so only a three-value
 // state leaves the process. Flag values are dropped; only allow-listed Node

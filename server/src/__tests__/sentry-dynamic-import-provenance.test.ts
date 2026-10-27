@@ -19,6 +19,14 @@ const sentryPackage = (() => {
   }
 })();
 
+if (process.env.PAPERCLIP_REQUIRE_SENTRY_TEST_SDK === "1" && !sentryPackage) {
+  throw new Error("The Sentry SDK contract job requires the audited optional peer");
+}
+
+// A developer may debug this file with an inspector already open. Only the
+// test that opens its own session may close it.
+const inspectorOpenAtStart = inspector.url() !== undefined;
+
 /** The real Node error: code compiled without a filename calls `import()`. */
 async function dynamicImportCallbackMissing(): Promise<Error> {
   const run = vm.compileFunction("return import('node:fs')", []) as () => Promise<unknown>;
@@ -34,7 +42,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.doUnmock("@sentry/node");
   vi.doUnmock("../peer-version-check.js");
-  if (inspector.url()) inspector.close();
 });
 
 describe("Sentry dynamic import provenance", () => {
@@ -59,16 +66,20 @@ describe("Sentry dynamic import provenance", () => {
     });
   });
 
-  it("reports an open inspector session without sending its secret URL", async () => {
+  it.skipIf(inspectorOpenAtStart)("reports an open inspector session without sending its secret URL", async () => {
     expect(await readInspectorState()).toBe("closed");
     inspector.open(0, "127.0.0.1");
-    const url = inspector.url();
-    expect(url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\//);
-    const event = await addDynamicImportProvenance<ProvenanceEvent>({}, { originalException: await dynamicImportCallbackMissing() });
-    expect(event).toMatchObject({ tags: { dynamic_import_inspector: "open" }, contexts: { dynamic_import_provenance: { inspector: "open" } } });
-    const serialized = JSON.stringify(event);
-    expect(serialized).not.toContain(url!);
-    expect(serialized).not.toContain(url!.split("/").at(-1)!);
+    try {
+      const url = inspector.url();
+      expect(url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\//);
+      const event = await addDynamicImportProvenance<ProvenanceEvent>({}, { originalException: await dynamicImportCallbackMissing() });
+      expect(event).toMatchObject({ tags: { dynamic_import_inspector: "open" }, contexts: { dynamic_import_provenance: { inspector: "open" } } });
+      const serialized = JSON.stringify(event);
+      expect(serialized).not.toContain(url!);
+      expect(serialized).not.toContain(url!.split("/").at(-1)!);
+    } finally {
+      inspector.close();
+    }
   });
 
   it("keeps only allow-listed Node flag names and drops their values", async () => {
@@ -99,7 +110,7 @@ describe("Sentry dynamic import provenance", () => {
     expect(result).toEqual({ tags: { existing: "kept" } });
   });
 
-  it.skipIf(!sentryPackage)("receives the original rejection through the real SDK beforeSend", async () => {
+  it.skipIf(!sentryPackage || inspectorOpenAtStart)("receives the original rejection through the real SDK beforeSend", async () => {
     const Sentry = sentryPackage!;
     const events: Array<Record<string, unknown>> = [];
     vi.stubEnv("SENTRY_DSN_BACKEND", "https://public@example.invalid/1");
