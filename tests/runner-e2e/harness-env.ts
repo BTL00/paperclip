@@ -1,3 +1,4 @@
+import { scrubChatPrivateEnvironment } from "./chat-private-inputs.js";
 import { installedDaytonaPluginKeys } from "./installed-daytona-plugin.js";
 import { QUALIFIED_ACPX_PROFILES } from "../../packages/paperclip-runner/src/drivers/acpx/qualified-profiles.js";
 import { assertInstalledCliSelection, installedCliKeys, usesInstalledCli } from "./installed-cli.js";
@@ -131,6 +132,8 @@ export function buildRunnerE2EProcessEnvironment(
   const installed = usesInstalledCli(source);
   if (installed) assertInstalledCliSelection(source, executions);
   const result = { ...source };
+  if (executions.some(execution => execution.suite.id === "chat-features")) scrubChatPrivateEnvironment(result, executions);
+  else scrubChatPrivateEnvironment(result, []);
   delete result.PAPERCLIP_E2E_GATEWAY_PHASE_PATH;
   delete result.PAPERCLIP_E2E_OTLP_RELAY_URL;
   // Announcements are unrelated to the scenarios and obscure screenshot evidence.
@@ -194,7 +197,7 @@ export function buildPaperclipServerEnvironment(
   source: NodeJS.ProcessEnv,
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
-  const result = { ...source };
+  const result = scrubChatPrivateEnvironment({ ...source }, [], true);
   for (const key of Object.keys(result)) {
     if (PROVIDER_SECRET_KEY.test(key)) delete result[key];
   }

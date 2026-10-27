@@ -1,4 +1,6 @@
 import type { ChatFlowInput, ChatIssue, ChatRun } from "./chat-flow.js";
+import type { CredentialName } from "./types.js";
+import type { ChatExternalInputRequirement } from "./chat-private-inputs.js";
 import type { ChatScenario } from "./chat-feature-cases.js";
 
 export interface ChatCatalogCheck { id: string; passed: boolean; detail: string }
@@ -32,6 +34,8 @@ export interface ChatCatalogQueryAttachment {
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
+  requiredCredentials?: readonly CredentialName[];
+  externalInput?: ChatExternalInputRequirement;
   journeyKind?: "agent-chat";
   authentication?: "local-trusted" | "human-session";
   setupPolicy?: ChatCatalogSetupPolicy;

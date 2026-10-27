@@ -1,3 +1,4 @@
+import type { ChatPrivateInputs } from "./chat-private-inputs.js";
 import { chatCatalogAllowedRunStatuses } from "./chat-catalog-run-policy.js";
 import { runHiringTemplateFlow } from "./hiring-template-flow.js";
 import { gradeHiringTemplateTurns } from "./hiring-template-turn-accounting.js";
@@ -365,6 +366,7 @@ export interface ChatFlowInput {
   workspacePath: string;
   /** Attempt-private redaction sink for synthetic secondary-user credentials. Never evidence. */
   privateSecrets?: string[];
+  privateInputs?: ChatPrivateInputs;
   restart: () => Promise<void>;
   observe: (issue: ChatIssue, runs: ChatRun[]) => void;
   capture: (id: string, label: string, file: string) => Promise<void>;

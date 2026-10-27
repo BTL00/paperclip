@@ -1,3 +1,4 @@
+import { readChatPrivateInputs } from "./chat-private-inputs.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { runChatBoundaryFlow } from "./chat-boundary-flow.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
@@ -624,6 +625,7 @@ for (const execution of executions) {
     }
     const credentials = credentialValues();
     const secrets = normalizedSecrets([...Object.values(credentials), ...EVAL_OBSERVABILITY_SECRET_NAMES.map(name => process.env[name]), process.env.PAPERCLIP_E2E_GATEWAY_TOKEN]);
+    const privateInputs = execution.suite.id === "chat-features" ? readChatPrivateInputs(execution.id, secrets) : undefined;
     const traceConfig = evalBraintrustConfig(process.env);
     const trace = traceConfig ? new EvalAttemptTrace(traceConfig, {
       campaignId: process.env.PAPERCLIP_E2E_ACCOUNTING_CAMPAIGN_ID ?? "",
@@ -927,7 +929,7 @@ for (const execution of executions) {
         if (!scenario || !catalogDescriptor.boundaryTarget) throw new Error("Boundary scenario or target identity missing");
         await workerTiming.enter("execution"); trace?.phase("execution");
         const checks = await runChatBoundaryFlow({ journeyKind: "browser-boundary", boundaryTarget: catalogDescriptor.boundaryTarget,
-          scenario, page, api, execution, nonce, credentials, privateSecrets: secrets, privateDir, deadlineAt: startedAtMs + deadlineMs,
+          scenario, page, api, execution, nonce, credentials: { ...credentials, ...privateInputs?.credentials }, privateSecrets: secrets, privateDir, deadlineAt: startedAtMs + deadlineMs,
           capture: captureScreenshot,
           evidence: async (name, value) => {
             await writeSanitizedJson(snapshotsDir, name, value, secrets);
@@ -1296,7 +1298,7 @@ for (const execution of executions) {
         selectedRuns = contextIntegrity.runs as unknown as RunRecord[];
       } else if (execution.task.flow === "agent_chat") {
         const chat = await runChatFlow({
-          privateSecrets: secrets,
+          privateSecrets: secrets, privateInputs,
           page, api, fixtures, execution, nonce, workspacePath,
           restart: () => restartChatServer(page, () => restartIsolatedPaperclipServer({ api, requestId: `chat-${nonce}`, deadlineAt: startedAtMs + deadlineMs })),
           observe: (chatIssue, chatRuns) => { issue = chatIssue; selectedRuns = chatRuns; },

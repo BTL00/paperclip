@@ -191,7 +191,9 @@ export async function setupLiveFixtures(input: {
     async setup(resolved) {
       const company = value<CompanyRecord>(resolved, "company");
       const refs: SecretReferenceMap = {};
-      for (const credentialName of execution.requiredCredentials) {
+      for (const credentialName of execution.suite.id === "chat-features"
+        ? [...new Set([execution.profile.credential, execution.environment.credential].filter((name): name is CredentialName => !!name))]
+        : execution.requiredCredentials) {
         if (["GROK_AUTH_JSON", "CODEX_AUTH_JSON"].includes(credentialName)) continue;
         const rawValue = input.credentials[credentialName];
         if (!rawValue) throw new Error(`Missing credential ${credentialName}`);

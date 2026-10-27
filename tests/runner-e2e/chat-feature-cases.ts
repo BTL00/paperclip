@@ -85,6 +85,7 @@ export const chatFeatureTasks: readonly RunnerTaskFixture[] = CHAT_FEATURE_CASES
 export const chatCatalogTasks: readonly RunnerTaskFixture[] = chatCatalogCases.map(implementation => {
   const scenario = chatCatalogScenarios.find(row => row.id === implementation.scenarioId)!;
   return {
+    requiredCredentials: implementation.requiredCredentials,
     id: scenario.id, label: scenario.id, groups: ["chat"], flow: "agent_chat", workMode: "standard",
     expectedRunCount: implementation.expectedRunCount, minimumExpectedRunCount: implementation.minimumRunCount,
     automaticRetryPolicy: "single_attempt", turnTimeoutMs: implementation.turnTimeoutMs,

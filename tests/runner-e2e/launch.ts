@@ -1,3 +1,4 @@
+import { stageChatPrivateInputs, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { recoverWorkerTiming } from "./worker-timing.js";
 import { openEvalOperations, type EvalOperations } from "./operations.js";
@@ -549,6 +550,10 @@ async function runAttempt(input: {
     };
     const credentials = normalizedSecrets(Object.values(credentialSources));
     attemptSecrets = credentials;
+    const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
+    const needsPrivateInputs = selectedDescriptor && ((selectedDescriptor.requiredCredentials?.length ?? 0) > 0 || selectedDescriptor.externalInput);
+    if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
+    const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir, env: process.env, secrets: credentials }) : undefined;
     if (installedCli) await writeFile(path.join(privateDir, "installed-cli-admission.json"), `${JSON.stringify(installedCli, null, 2)}\n`, { mode: 0o600 });
     if (installedPlugin) await writeFile(path.join(privateDir, "installed-daytona-plugin-admission.json"), `${JSON.stringify(installedPlugin, null, 2)}\n`, { mode: 0o600 });
     const runnerBinary = installedCli ? undefined : resolvePaperclipRunnerBinaryForHarness(
@@ -557,6 +562,7 @@ async function runAttempt(input: {
     );
     const childEnv: NodeJS.ProcessEnv = {
       ...buildRunnerE2EProcessEnvironment(process.env, executions),
+      [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
       PATH: providerPath,
       PAPERCLIP_RUNNER_E2E_EXECUTION_IDS: JSON.stringify(
         executions.map((candidate) => candidate.id),

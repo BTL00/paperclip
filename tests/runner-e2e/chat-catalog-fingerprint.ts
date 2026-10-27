@@ -1,3 +1,4 @@
+import { chatPrivateInputRequirements, chatPrivateInputNameIdentity } from "./chat-private-inputs.js";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -100,7 +101,7 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
       "tests/runner-e2e/chat-scenarios/defaults.yaml", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, selectedExecution, lane, attachmentFormatter, scenario: { id, capabilities, context, query, expected_outcome } },
+    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity: chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId), scenario: { id, capabilities, context, query, expected_outcome } },
     reviewedDynamicResolutions,
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,
@@ -112,7 +113,7 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
 export function normalizedChatCatalogExecution(execution: MatrixExecution) {
   return { executionId: execution.id, suiteId: execution.suite.id, flow: execution.task.flow, journeyKind: "agent-chat",
     profile: { id: execution.profile.id, provider: execution.profile.provider, model: execution.profile.model, credential: execution.profile.credential },
-    environment: execution.environment.id, task: { expectedRunCount: execution.task.expectedRunCount,
+    environment: execution.environment.id, requiredCredentialNames: execution.requiredCredentials, task: { expectedRunCount: execution.task.expectedRunCount,
       minimumExpectedRunCount: execution.task.minimumExpectedRunCount, turnTimeoutMs: execution.task.turnTimeoutMs,
       attemptTimeoutMs: execution.task.attemptTimeoutMs } };
 }

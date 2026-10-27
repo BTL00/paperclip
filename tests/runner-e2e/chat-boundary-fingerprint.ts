@@ -1,3 +1,4 @@
+import { chatPrivateInputRequirements, chatPrivateInputNameIdentity } from "./chat-private-inputs.js";
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -32,7 +33,7 @@ export function chatBoundaryFingerprint(descriptor: ChatCatalogDescriptor, execu
   return fingerprintChatDependencyClosure({ root,
     entries: [`tests/runner-e2e/${descriptor.modulePath.slice(2)}`, "tests/runner-e2e/chat-boundary-flow.ts", "tests/runner-e2e/chat-boundary-fingerprint.ts",
       "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, journeyKind: "browser-boundary", executionId: execution.id, environment: execution.environment.id, installedIdentity },
+    selected: { descriptor, journeyKind: "browser-boundary", executionId: execution.id, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity: chatPrivateInputNameIdentity(execution.id, env), requiredCredentialNames: execution.requiredCredentials, environment: execution.environment.id, installedIdentity },
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor },
   });
