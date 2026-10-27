@@ -1,14 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create"; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+import { validGrokRoutinePrivateInput, matchesConfiguredGrokRoutine, type GrokRoutinePrivateInput } from "./external-grok-private-contract.js";
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure"; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > 8192 || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
@@ -20,6 +21,61 @@ async function main() {
       const field = page.getByLabel("App key"); await field.fill(input.credential);
       if (await field.inputValue() !== input.credential) throw new Error("Canary entry failed");
       return { processIsolation: true, testRunnerAttached: false, credentialEntered: true, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false };
+    }
+    if (input.mode === "grok-routine-configure") {
+      const grok = input.grok;
+      if (!validGrokRoutinePrivateInput(input.companyId, grok, input.setupURL) || !grok) {
+        throw new Error("Invalid finite Grok routine operation");
+      }
+      const endpoint = `/api/companies/${input.companyId}/agents/${grok.agentId}/grok-binding`;
+      const beforeResponse = await context.request.get(endpoint);
+      if (!beforeResponse.ok()) throw new Error("Existing Grok binding is unavailable");
+      const before = await beforeResponse.json() as { enabled?: boolean; canConfigureConnection?: boolean; binding?: { id?: string; connected?: boolean; routine?: { revision?: number; configured?: boolean } } };
+      if (!before.enabled || !before.canConfigureConnection || before.binding?.id !== grok.bindingId ||
+        before.binding.connected !== true || (before.binding.routine?.revision ?? 0) !== grok.expectedRevision) {
+        throw new Error("Genuine connected Grok binding and exact revision are required");
+      }
+      await page.goto(input.setupURL, { waitUntil: "domcontentloaded" });
+      const section = page.getByRole("region", { name: "Grok Bot connection", exact: true });
+      await section.waitFor();
+      if (before.binding.routine?.configured) {
+        await section.getByRole("button", { name: "Replace routine credentials", exact: true }).click();
+      }
+      const urlField = section.getByLabel("Webhook URL", { exact: true });
+      const keyField = section.getByLabel("Webhook key", { exact: true });
+      if (await urlField.getAttribute("type") !== "password" || await keyField.getAttribute("type") !== "password") {
+        throw new Error("Grok credential fields are not protected");
+      }
+      await section.getByLabel("Bot name in Grok", { exact: true }).fill(grok.botName);
+      await urlField.fill(grok.webhookUrl);
+      await keyField.fill(input.credential);
+      const savedResponse = page.waitForResponse(response => new URL(response.url()).pathname === `${endpoint}/routine` &&
+        response.request().method() === "PUT" && response.ok());
+      await section.getByRole("button", { name: "Save routine", exact: true }).click();
+      const response = await savedResponse;
+      const submitted = response.request().postDataJSON() as { bindingId?: string; expectedRevision?: number; botName?: string; webhookUrl?: string; webhookKey?: string };
+      if (submitted.bindingId !== grok.bindingId || submitted.expectedRevision !== grok.expectedRevision ||
+        submitted.botName !== grok.botName || submitted.webhookUrl !== grok.webhookUrl || submitted.webhookKey !== input.credential) {
+        throw new Error("Grok form did not submit the intended scoped private configuration");
+      }
+      const saved = await response.json() as { bindingId?: string; configured?: boolean; verified?: boolean; revision?: number };
+      if (!matchesConfiguredGrokRoutine(saved, grok.bindingId, grok.expectedRevision)) {
+        throw new Error("Grok routine response does not match the configured unverified binding");
+      }
+      await section.getByRole("button", { name: "Verify connection", exact: true }).waitFor();
+      await keyField.waitFor({ state: "detached" });
+      const afterResponse = await context.request.get(endpoint);
+      if (!afterResponse.ok()) throw new Error("Saved Grok binding could not be independently read");
+      const after = await afterResponse.json() as { binding?: { id?: string; connected?: boolean; routine?: { configured?: boolean; revision?: number } } };
+      if (after.binding?.id !== grok.bindingId || after.binding.connected !== true ||
+        after.binding.routine?.configured !== true || after.binding.routine.revision !== saved.revision) {
+        throw new Error("Saved Grok configuration did not persist on the same connected binding");
+      }
+      const storageClean = await page.evaluate(values => !values.some(value =>
+        JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.body.innerText, location.href]).includes(value)),
+      [input.credential, grok.webhookUrl]);
+      return { processIsolation: true, testRunnerAttached: false, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false,
+        bindingId: grok.bindingId, routineConfigured: true, routineUiVisible: true, humanSubmittedSecurely: true, storageClean };
     }
     if(input.mode === "personal-secret-create"){
       const personal=input.personal,setup=new URL(input.setupURL);
