@@ -8,21 +8,22 @@ import { chromium, type Cookie } from "@playwright/test";
 export interface SshComputerRequest {
   operation: "create" | "probe"; baseURL: string; companyId: string; companyPrefix: string; cookies: Cookie[];
   name: string; environmentId?: string; host: string; port: number; username: string; remoteWorkspacePath: string;
-  knownHosts: string; privateKey: string; harness: "claude_local";
+  knownHosts: string; privateKey: string; harness: "claude_local" | "saved-agent"; agentId?: string;
 }
 export interface SshComputerReceipt {
   processIsolation: true; testRunnerAttached: false; apiStepRecorder: false;
   operation: "create" | "probe"; companyId: string; environmentId: string;
   savedIdentityMatched: true; login: boolean | null; runtimeStatus: "pass" | "warn" | "fail" | null;
-  runtimeCodes: string[];
+  runtimeCodes: string[]; selectedHarness: string | null; agentId?: string;
 }
-export function validateSshComputerReceipt(value: unknown, request: Pick<SshComputerRequest, "operation" | "companyId" | "environmentId">): SshComputerReceipt {
+export function validateSshComputerReceipt(value: unknown, request: Pick<SshComputerRequest, "operation" | "companyId" | "environmentId" | "agentId">): SshComputerReceipt {
   const r = value as SshComputerReceipt;
   if (!r || r.processIsolation !== true || r.testRunnerAttached !== false || r.apiStepRecorder !== false || r.savedIdentityMatched !== true
     || r.operation !== request.operation || r.companyId !== request.companyId || !/^[a-f0-9-]{36}$/i.test(r.environmentId)
     || request.environmentId && r.environmentId !== request.environmentId || ![true, false, null].includes(r.login)
+    || (r.selectedHarness !== null && !/^[a-z0-9_:-]{1,80}$/.test(r.selectedHarness)) || (r.agentId !== undefined && r.agentId !== request.agentId)
     || !["pass", "warn", "fail", null].includes(r.runtimeStatus) || !Array.isArray(r.runtimeCodes) || !r.runtimeCodes.every(x => /^[a-z0-9_.-]{1,100}$/i.test(x))
-    || Object.keys(r).some(k => !["processIsolation", "testRunnerAttached", "apiStepRecorder", "operation", "companyId", "environmentId", "savedIdentityMatched", "login", "runtimeStatus", "runtimeCodes"].includes(k))) throw new Error("Private SSH child returned invalid closed evidence");
+    || Object.keys(r).some(k => !["processIsolation", "testRunnerAttached", "apiStepRecorder", "operation", "companyId", "environmentId", "savedIdentityMatched", "login", "runtimeStatus", "runtimeCodes", "selectedHarness", "agentId"].includes(k))) throw new Error("Private SSH child returned invalid closed evidence");
   return r;
 }
 export async function privateSshComputer(request: SshComputerRequest) {

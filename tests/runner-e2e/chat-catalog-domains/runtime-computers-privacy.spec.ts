@@ -59,3 +59,25 @@ for (const branch of ["success", "private-terminal-failure", "parent-failure"] a
     expect(authenticated).toBe(true); if (branch === "parent-failure") { test.fail(); throw new Error("Deliberate safe synthetic parent failure after private operator terminal"); }
   } finally { for (const ws of wss.clients) ws.terminate(); wss.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+for (const foreign of [false, true]) test(`saved Morgan runtime binding ${foreign ? "foreign denied" : "exact Codex target"}`, async () => {
+  test.skip(!process.env.PAPERCLIP_COMPUTER_CANARY_PRIVATE_FILE, "Explicit synthetic-only saved runtime calibration");
+  const companyId = randomUUID(), environmentId = randomUUID(), agentId = randomUUID(), key = `synthetic-ssh-${randomUUID()}`, cookie = `synthetic-cookie-${randomUUID()}`;
+  await appendFile(process.env.PAPERCLIP_COMPUTER_CANARY_PRIVATE_FILE!, `${key}\n${cookie}\n`, { mode: 0o600 });
+  let actualCodexSavedConfig = false;
+  const config = { host: "synthetic.invalid", port: 22, username: "synthetic", remoteWorkspacePath: "/owned/synthetic", knownHosts: "synthetic-public-key", strictHostKeyChecking: true };
+  const server = createServer(async (req, res) => {
+    res.setHeader("content-type", "application/json");
+    const env = { id: environmentId, name: "Development server", driver: "ssh", status: "active", config };
+    if (req.method === "GET") { res.end(JSON.stringify(req.url?.includes(`/agents/${agentId}`) ? { id: agentId, companyId: foreign ? randomUUID() : companyId, adapterType: "paperclip_runner", adapterConfig: { provider: "codex", model: "synthetic-saved-model" }, runtimeConfig: { aiConnection: { provider: "openai", mode: "responsible_user" } } } : req.url?.endsWith("/environments") ? [env] : env)); return; }
+    let raw = ""; for await (const c of req) raw += c; const body = JSON.parse(raw);
+    if (req.url?.includes("test-environment")) { actualCodexSavedConfig = req.url.includes("/adapters/paperclip_runner/") && body.agentId === agentId && body.environmentId === environmentId && body.adapterConfig.provider === "codex" && body.adapterConfig.model === "synthetic-saved-model" && body.aiConnection.mode === "responsible_user" && body.runner === undefined; res.end(JSON.stringify({ status: "pass", checks: [{ code: "synthetic_saved_runtime" }] })); }
+    else res.end(JSON.stringify({ ok: true, driver: "ssh", summary: "synthetic transport", details: {} }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve)); const addr = server.address(); if (!addr || typeof addr === "string") throw new Error("Synthetic runtime unavailable");
+  try {
+    const pending = privateSshComputer({ operation: "probe", baseURL: `http://127.0.0.1:${addr.port}`, companyId, companyPrefix: "QA", environmentId, agentId, name: "Development server", ...config, privateKey: key, harness: "saved-agent", cookies: [{ name: "canary", value: cookie, domain: "127.0.0.1", path: "/", expires: -1, secure: false, httpOnly: true, sameSite: "Lax" }] });
+    if (foreign) { await expect(pending).rejects.toThrow("diagnostics withheld"); expect(actualCodexSavedConfig).toBe(false); }
+    else { const r = await pending; expect(r.agentId === agentId && r.selectedHarness === "codex_local" && actualCodexSavedConfig).toBe(true); }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
