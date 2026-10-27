@@ -13,10 +13,20 @@ interface Member { id: string; principalId: string; status: string; membershipRo
 type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
 const people = new WeakMap<ChatCatalogContext, Person[]>();
 interface Invitation { id: string; companyId: string; state: string; humanRole: string; tokenHash?: string }
+/** Bind a role question to the canonical invitee. Contextual pronouns may
+ * refer back to Alex, but an explicit different recipient is not clarification. */
+function inviteeRolePrompt(prompt: string) {
+  if (!/\b(?:role|access level|permissions?|viewer|operator|admin|owner)\b/i.test(prompt)) return false;
+  const emails = prompt.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g) ?? [];
+  if (emails.some(email => email.toLowerCase() !== "alex@example.test")) return false;
+  const recipients = [...prompt.matchAll(/\b(?:should|does|will)\s+([\w-]+)\s+(?:receive|have|need|get|be|join)\b|\b(?:role|access(?: level)?|permissions?|viewer|operator|admin|owner)\s+(?:for|to)\s+([\w-]+)/gi)]
+    .map(match => (match[1] ?? match[2]!).toLowerCase());
+  return recipients.every(name => ["alex", "they", "he", "she", "them", "him", "her", "the", "this", "that", "our"].includes(name));
+}
 function roleQuestion(o: ReturnType<typeof identityObservation>) {
   return !!o && o.interactions.some(row => row.kind === "ask_user_questions" && row.status === "pending"
     && row.companyId === o.companyId && row.createdByAgentId === o.leadId && o.runs.some(run => run.id === row.sourceRunId && run.agentId === o.leadId)
-    && /\b(?:role|access level|permissions?)\b/i.test(row.payload.questionSet?.questions.map(question => question.prompt).join(" ") ?? ""));
+    && row.payload.questionSet?.questions.some(question => inviteeRolePrompt(question.prompt)));
 }
 function sameMember(a: Member | undefined, b: Member | undefined) { return !!a && !!b && JSON.stringify(a) === JSON.stringify(b); }
 export function gradeAccessGrant(value: unknown) {

@@ -56,3 +56,23 @@ it.each(["companyId", "companySkillId", "id"])("rejects a foreign or unselected 
  const o = valid(); (o.versions[0] as Record<string, unknown>)[field] = "wrong";
  expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
 });
+
+it.each([
+ "Morgan cannot use accessibility review, but the installed skill is available.",
+ "Morgan can't use accessibility review. The skill is installed and available.",
+ "Morgan is not allowed to use it, but the assignment is saved.",
+ "Morgan still cannot use it; they are assigned the installed skill.",
+ "Morgan cannot currently use it, but they are assigned the skill.",
+ "Morgan now has no access to it, but the installed skill is available.",
+ "Earlier Morgan could not use it, and Morgan still cannot use it. The skill is available.",
+])("rejects contradictory current use claim: %s", reply => {
+ const o = valid(); o.reply = reply; expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+});
+it.each([
+ "Previously Morgan could not use the skill, but Morgan can now use it on future work.",
+ "Morgan could not use it before. It is now assigned to them.",
+ "Morgan was not assigned the skill earlier; they are now configured to use it.",
+ "The installed skill is ready for Morgan. No policy changes were needed.",
+])("accepts natural current assignment and historical negation: %s", reply => {
+ const o = valid(); o.reply = reply; expect(gradeIntegratorSkillEnable(o).passed).toBe(true);
+});

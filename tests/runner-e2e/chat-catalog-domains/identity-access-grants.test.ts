@@ -54,3 +54,23 @@ describe("membership baseline invariants", () => {
     (o.state.alexAfter as any).grants.push({ permissionKey: "issues:read" }); expect(membership.grade(o).passed).toBe(true);
   });
 });
+
+function clarifiedInvite(prompt: string) {
+ const o = intended(invitation.scenarioId); delete o.state.invitationCreated; o.state.invitations = []; o.state.alexMembershipAfter = null;
+ o.runs = [{ id: "run", agentId: "ceo" }] as any;
+ o.interactions = [{ id: "role", companyId: "acorn", createdByAgentId: "ceo", sourceRunId: "run", kind: "ask_user_questions", status: "pending", payload: { questionSet: { questions: [{ id: "role", prompt, answerMode: "text" }] } } }];
+ return o;
+}
+it.each([
+ "What company role should Morgan receive?",
+ "What company role should morgan receive?",
+ "Which access level for Riley?",
+ "Viewer or operator for Morgan?",
+ "Which role should alex@other.test receive?",
+])("rejects a role question explicitly about a different invitee: %s", prompt => expect(invitation.grade(clarifiedInvite(prompt)).passed).toBe(false));
+it.each([
+ "What company role should Alex receive?",
+ "What company role should they receive?",
+ "Which access level should the new teammate have?",
+ "Viewer or operator for Alex?",
+])("accepts target-bound or contextual role clarification: %s", prompt => expect(invitation.grade(clarifiedInvite(prompt)).passed).toBe(true));

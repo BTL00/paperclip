@@ -8,7 +8,7 @@ import { pollUntil } from "../api.js";
 import { checks, observation, project, task, type Entity, type InternalObservation } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { probeAgentPermission, cleanupIdentityProbes } from "./identity-support.js";
-import { integratorDefinition, inspectResult, observeInternal } from "./integrator-support.js";
+import { integratorDefinition, inspectResult, observeInternal, groundedStatement } from "./integrator-support.js";
 interface EnableObservation extends InternalObservation { skill: CompanySkillDetail; assignment: AgentSkillSnapshot; effectivePolicy: unknown; versions: CompanySkillVersion[] }
 const root = (ctx: ChatCatalogContext) => `/api/companies/${ctx.input.fixtures.company.id}`;
 async function observeEnable(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<EnableObservation> {
@@ -18,6 +18,18 @@ async function observeEnable(ctx: ChatCatalogContext, state: Record<string, unkn
     versions: await ctx.input.api.get(`${root(ctx)}/skills/${(state.skill as CompanySkillDetail).id}/versions`) };
 }
 function enableObservation(value: unknown): EnableObservation | undefined { const o = value as EnableObservation; return observation(value) && !!o.skill && Array.isArray(o.assignment?.desiredSkills) && !!o.effectivePolicy && Array.isArray(o.versions) ? o : undefined; }
+/** Past lack of access is not a present denial. Keep contrastive clauses
+ * separate so an installed-library statement cannot cancel a current denial. */
+function truthfulAssignmentReply(reply: string) {
+  const clauses = reply.split(/(?<=[.!?])\s+|\n+|[;,]|\b(?:but|however|yet|whereas)\b/i).map(clause => clause.trim()).filter(Boolean);
+  const current = clauses.filter(clause => !/\b(?:previously|formerly|earlier|before|used to|could not|couldn't|was unable|was not|wasn't|had not|hadn't)\b/i.test(clause)
+    || /\b(?:now|currently|still|remains?|continues?)\b/i.test(clause));
+  const denial = /\b(?:cannot|can't|unable to|not able to|must not|may not|not permitted to|not allowed to|does not|doesn't)\s+(?:(?:now|currently|still)\s+)?(?:use|access|receive|have)|\b(?:not|isn't|is not|aren't|are not)\s+(?:now\s+)?(?:assigned|enabled|configured|available|ready)|\b(?:has|have)\s+no\s+(?:access|permission)|\bcan no longer\s+(?:use|access)|\b(?:denied|unavailable|unassigned|disabled)\b/i;
+  return groundedStatement(current.join(". "), /\b(?:Morgan|they|he|she|them|him|her)\b/i,
+    /\b(?:enabled|assigned|configured|added|available|ready|can (?:now )?use|will (?:receive|use)|now has)\b/i, denial)
+    && /\bMorgan\b/i.test(reply)
+    && !/\b(?:all agents|every agent|changed (?:the )?policy|overrode (?:the )?policy|installed (?:the )?skill again)\b/i.test(reply);
+}
 export function gradeIntegratorSkillEnable(value: unknown) {
   const c = checks(); const o = enableObservation(value); c.add("real-assignment-policy-and-future-admission", !!o, "Requires actual permitted assignment, unchanged installed revision/policy and a real subsequent native admission."); if (!o) return c.result();
   const original = o.state.skill as CompanySkillDetail; const worker = o.state.worker as Entity;
@@ -40,10 +52,8 @@ export function gradeIntegratorSkillEnable(value: unknown) {
   c.add("future-execution-receives-intended-version", future?.runtimeMode === "native" && future.status === "succeeded"
     && exactBytes && (!original.currentVersionId || selectedId === original.currentVersionId),
   "A separately admitted actual Morgan task receives the selected immutable skill revision in its saved native skill selection snapshot.");
-  c.add("truthful-assignment-not-global-policy", /Morgan/i.test(o.reply)
-    && /\b(?:enabled|assigned|configured|added|available|ready|can (?:now )?use|will (?:receive|use)|now has)\b/i.test(o.reply)
-    && !/\b(?:not assigned|not enabled|not installed|all agents|every agent|changed (?:the )?policy|overrode (?:the )?policy|installed (?:the )?skill again)\b/i.test(o.reply),
-  "Natural assignment wording is accepted; the independent saved installation, policy and runtime bytes establish the distinctions without prescribed nouns.");
+  c.add("truthful-assignment-not-global-policy", truthfulAssignmentReply(o.reply),
+  "Current target assignment must be affirmed without a contradictory current-use denial; historical lack of access is not a current denial.");
   return c.result();
 }
 /** This is a public prerequisite experiment, never a substitute for the
