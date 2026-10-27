@@ -2866,6 +2866,19 @@ The caller supplies an explicit campaign ceiling, deadline, request count, and
 concurrency. Monetary decisions use integer nanodollars. Model list prices remain
 estimates with a pinned version; they do not become provider invoices.
 
+A versioned pricecard may declare `responseModels`, a list of one to sixteen
+additional exact response model identities with the same reviewed rates. Request
+admission still requires the exact `model`; the list only permits those response
+identities for usage estimates and reviewed reservation bounds. Entries must be
+unique, valid ledger identities and distinct from `model`. No prefix matching or
+date removal is performed. Add or change mappings only with a new price version
+and verified provider provenance. The reviewed bound digest includes the mapping;
+changing it invalidates old bound evidence. An unlisted response remains unpriced
+and disqualifies the bound. Historical receipts and ledgers remain unchanged.
+The existing supported request cache policy also uses that exact mapping when
+the pricecard provider and request model match. It does not repair missing write
+counters, malformed TTL details or an unqualified cache policy.
+
 The journal retains setup/agent/judge/tool/infrastructure attribution separately
 from heartbeat IDs. Multiple sources for the same request are retained but only
 one cost contributes to the total: reconciled, reported, estimated, then allocated.

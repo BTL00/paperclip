@@ -580,6 +580,16 @@ PostgreSQL backends and checks rejection, pool recovery, and transaction isolati
 Remove the patch when an upstream release passes these tests. Installs of the
 unmodified `postgres` package outside this workspace do not include the patch.
 
+The patch also preserves transaction connection reservation when pipelining is
+disabled with `PGMAX_PIPELINE=0`. Without this fix, the driver's pipeline capacity
+check skips the transaction reservation callback and `BEGIN` fails with
+`UNSAFE_TRANSACTION`. Disabling pipelining makes a queued query wait for the next
+available pool connection instead of sending it behind unrelated work on a busy
+connection. This can help interactive requests that share a prepared-query pool
+with slow background work. It does not make the SQL itself faster. The default
+pipeline limit remains unchanged. Test transaction behavior before using this
+setting with a driver build that does not include the patch.
+
 Trusted-header actor synchronization retries transient connection failures,
 including `CONNECT_TIMEOUT`, at most twice. This retry applies only to the
 idempotent actor synchronization operations, not arbitrary transactions. A
@@ -1408,3 +1418,23 @@ human's decision to leave a pending request in history. They are independent of
 The board-only dismissal path locks the task then interaction, checks audience,
 and never enqueues a continuation. Ordinary deferred requests are excluded from
 completion arbitration; protected authorization gates remain active.
+
+### GitHub inherited review-wait reads
+
+Passive GitHub review waits select only the assessment's `reviewedCommit` JSON
+value. The read preserves its JSON type for strict comparison with the review
+head. It still checks current requester provenance, company and agent bindings,
+connection state, repository identity, latest review, and processed publication.
+The complete assessment remains stored for review and publication.
+
+The synthetic PostgreSQL benchmark captures the service-generated baseline and
+treatment queries, compares complete outputs, and measures raw DataRow bytes:
+
+```sh
+pnpm --filter @paperclipai/server exec tsx ../scripts/benchmark-github-review-wait.ts --baseline-ref=663fe667d66d3863d0919a8724f1d99500feef0b
+```
+
+It uses disposable embedded PostgreSQL by default. A disposable local database
+named `review_wait_benchmark...` can be supplied through
+`PAPERCLIP_TEST_DATABASE_URL` to compare another PostgreSQL major version.
+DataRow bytes exclude response metadata and transport overhead.
