@@ -21,6 +21,7 @@ import {
   setupCheckComment,
   createdChatgptAppId,
   exactAcceptedChatgptScopes,
+  chatgptConsentDisclosure,
   type ChatgptInput,
   type ChatgptReceipt,
 } from "./external-chatgpt-contract.js";
@@ -320,14 +321,32 @@ async function main() {
       throw new Error(
         "Actual ChatGPT client/company/write request does not match qualification",
       );
-    const configureDisclosed =
-      !request.requestedConfigure ||
-      (await consent
-        .getByText(/configure agents, projects (?:and|&) skills/i)
-        .isVisible());
+    const consentLabel = consent.getByText("Write all of your Paperclip data", {
+      exact: true,
+    });
+    await consentLabel.waitFor({ state: "visible" });
+    const consentWording = await consentLabel.innerText();
+    await pane(
+      operator,
+      "Review and approve the actual Paperclip consent",
+      identity +
+        `<p>On the real Paperclip consent tab, select this exact company and explicitly approve read and write access for the single controlled qualification below. ${request.requestedConfigure ? "Configuration authority is also requested. The actual broad Write all of your Paperclip data choice includes configuring agents, projects and skills in this isolated company; explicitly acknowledge that authority here, then knowingly accept the real broad write choice on the actual consent tab." : "No configuration authority is requested or accepted."} Never approve agent/impersonation scope. Click Connect organization THERE, then finish creating the private ChatGPT app. This panel never approves consent.</p>`,
+      request.requestedConfigure
+        ? [
+            "I explicitly accept the requested configuration authority for this isolated company under the real broad write consent choice.",
+          ]
+        : [],
+      "I reviewed the real consent tab",
+    );
+    await confirm(operator, 120000);
+    const configureDisclosed = chatgptConsentDisclosure(
+      request.requestedConfigure === true,
+      consentWording,
+      true,
+    );
     if (!configureDisclosed)
       throw new Error(
-        "Actual requested configure authority is not visibly disclosed on Paperclip consent",
+        "Actual broad write consent and explicit requested configuration acceptance were not established",
       );
     const submitted = consent.waitForResponse(
       (r) =>
@@ -336,14 +355,6 @@ async function main() {
           `/api/mcp/requests/${requestId}/consent` &&
         r.request().method() === "POST",
       { timeout: 120000 },
-    );
-    await pane(
-      operator,
-      "Review and approve the actual Paperclip consent",
-      identity +
-        `<p>On the real Paperclip consent tab, select this exact company and explicitly approve read and write access for the single controlled qualification below. ${request.requestedConfigure ? "Configuration authority is also requested: explicitly review the real visible Configure agents, projects and skills disclosure before accepting it for this isolated company." : "No configuration authority is requested or accepted."} Never approve agent/impersonation scope. Click Connect organization THERE, then finish creating the private ChatGPT app. This panel never approves consent.</p>`,
-      [],
-      "I reviewed the real consent tab",
     );
     await consent.bringToFront();
     const response = await submitted,
@@ -523,6 +534,7 @@ async function main() {
       ],
       acceptedScopes: [...grant.scopes],
       configureDisclosed,
+      consentWording,
     };
     await writeFile(
       path.join(directory, "qualified.json"),

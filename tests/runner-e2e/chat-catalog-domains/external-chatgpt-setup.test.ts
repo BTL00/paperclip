@@ -7,6 +7,7 @@ import {
 import {
   namedChatgptRequest,
   exactAcceptedChatgptScopes,
+  chatgptConsentDisclosure,
   validChatgptInput,
   validChatgptReceipt,
   createdChatgptAppId,
@@ -79,6 +80,7 @@ function receipt(): ChatgptReceipt {
     requestedScopes: [...scopes],
     acceptedScopes: [...scopes],
     configureDisclosed: true,
+    consentWording: "Write all of your Paperclip data",
   };
 }
 function valid(): ExternalObservation {
@@ -307,6 +309,24 @@ describe("finite private named-provider contract", () => {
           input(),
         ),
       ).toBe(false);
+  });
+  it("accepts actual broad write wording plus explicit requested configure acknowledgement", () => {
+    expect(
+      chatgptConsentDisclosure(true, "Write all of your Paperclip data", true),
+    ).toBe(true);
+    expect(
+      chatgptConsentDisclosure(true, "Write all of your Paperclip data", false),
+    ).toBe(false);
+    expect(
+      chatgptConsentDisclosure(true, "Read all of your Paperclip data", true),
+    ).toBe(false);
+    expect(
+      chatgptConsentDisclosure(
+        false,
+        "Write all of your Paperclip data",
+        false,
+      ),
+    ).toBe(true);
   });
   it("requires actual named official callback/person/company request", () => {
     const r = {

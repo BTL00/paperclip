@@ -335,9 +335,13 @@ availability. After the unchanged canonical CEO query, that person actually uses
 ChatGPT's supported private custom MCP app UI and the real Paperclip consent tab.
 The child observes the actual named-client request, official ChatGPT callback,
 explicit company and scope acceptance, and one new saved grant. Configuration
-scope is permitted only when requested, visibly disclosed in the real consent,
-and explicitly accepted; agent authority is excluded. The current source's
-write-only consent label does not itself establish configuration disclosure.
+scope is permitted only when actually requested and explicitly accepted by the
+authorized person under the real broad **Write all of your Paperclip data**
+choice. The private prompt separately requires that person's explicit
+acknowledgement of the requested configuration authority; it does not require
+an invented separate picker or literal agents/projects/skills enumeration on
+the product consent page. Actual visible consent wording and the exact scope
+intersection are recorded; agent authority is excluded.
 Changed or missing controls and failed provider authorization are nonpassing
 observations, never grounds for a generic-client substitution.
 

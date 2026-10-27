@@ -25,6 +25,7 @@ import {
 import {
   setupCheckComment,
   exactAcceptedChatgptScopes,
+  chatgptConsentDisclosure,
   type ChatgptReceipt,
 } from "./external-chatgpt-contract.js";
 import { waitForReply } from "./identity-support.js";
@@ -112,7 +113,12 @@ export function gradeChatgptSetup(value: unknown) {
       r.realHumanConsent === true &&
       r.actualProviderCallback === true &&
       r.boundMcpComment === true &&
-      r.zeroNativeAdmissions === true,
+      r.zeroNativeAdmissions === true &&
+      chatgptConsentDisclosure(
+        r.requestedScopes?.includes("paperclip:configure") === true,
+        r.consentWording,
+        r.configureDisclosed,
+      ),
     "The selected human really uses ChatGPT's private custom-app UI and submits the actual Paperclip OAuth consent; an operator acknowledgement or generic MCP client alone is insufficient.",
   );
 
@@ -428,6 +434,8 @@ export const chatgptSetupCase = definition(
         actualNamedUi: true,
         actualHumanConsent: true,
         zeroNativeAdmissions: state.zeroNativeAdmissions,
+        consentWording: receipt.consentWording,
+        acceptedScopes: receipt.acceptedScopes,
       });
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     },

@@ -46,6 +46,7 @@ export interface ChatgptReceipt {
   requestedScopes?: string[];
   acceptedScopes?: string[];
   configureDisclosed?: boolean;
+  consentWording?: string;
 }
 const uuid = (s: unknown) =>
   typeof s === "string" &&
@@ -135,6 +136,7 @@ export function validChatgptReceipt(r: ChatgptReceipt, i: ChatgptInput) {
     "requestedScopes",
     "acceptedScopes",
     "configureDisclosed",
+    "consentWording",
   ];
   return (
     !!r &&
@@ -162,6 +164,11 @@ export function validChatgptReceipt(r: ChatgptReceipt, i: ChatgptInput) {
         r.actualProviderCallback === true &&
         r.boundMcpComment === true &&
         r.zeroNativeAdmissions === true &&
+        chatgptConsentDisclosure(
+          r.requestedScopes?.includes("paperclip:configure") === true,
+          r.consentWording,
+          r.configureDisclosed,
+        ) &&
         exactAcceptedChatgptScopes(
           r.requestedScopes,
           r.acceptedScopes,
@@ -222,5 +229,20 @@ export function exactAcceptedChatgptScopes(
     requested.length === accepted.length &&
     requested.every((s) => accepted.includes(s)) &&
     (!requested.includes("paperclip:configure") || configureDisclosed === true)
+  );
+}
+
+/** Broad actual write consent is supported; configuration acceptance also needs
+ * the selected person's explicit private acknowledgement of requested authority. */
+export function chatgptConsentDisclosure(
+  requestedConfigure: boolean,
+  wording: unknown,
+  acknowledged: unknown,
+) {
+  return (
+    typeof wording === "string" &&
+    wording.trim().replace(/\s+/g, " ") ===
+      "Write all of your Paperclip data" &&
+    (!requestedConfigure || acknowledged === true)
   );
 }
