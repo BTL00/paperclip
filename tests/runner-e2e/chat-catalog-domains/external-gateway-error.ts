@@ -76,6 +76,7 @@ export const gatewayErrorExternalCases=[definition("gateways-profiles.inspect-ga
   const rows=await Promise.all([state.morganRunId,state.ownRunId].map(id=>ctx.input.api.get<ToolRunDecisionLookup>(`${root(ctx)}/tools/runs/${id}/decisions`)));
   if(!failedInvocation(rows,state.morganRunId,state.morganId,state.morganTaskId,state)||!failedInvocation(rows,state.ownRunId,ctx.input.fixtures.agent.id,state.ownTaskId,state))throw new Error("Setup blocker: two distinct actual native provider-error receipts are required before diagnostic chat");
   if(state.agentAuditStatus!==403||state.agentDecisionStatus!==403)throw new Error("Setup blocker: company audit and board receipt lookup must deny the ordinary agent");
+  return {passed:true,checks:[{id:"distinct-native-provider-receipts-and-board-boundary",passed:true,detail:"Two independently observed provider tool_error invocations bind separate agent/task native reports; company audit and decision lookup deny the ordinary agent."}]};
  },
  async observe(ctx,state){
   const provider=providers.get(ctx)!;state.decisions=await Promise.all((await ctx.allRuns()).map(run=>ctx.input.api.get<ToolRunDecisionLookup>(`${root(ctx)}/tools/runs/${run.id}/decisions`)));
