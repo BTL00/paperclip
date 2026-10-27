@@ -55,6 +55,20 @@ export function campaignProductIdentityEligible(scenario: CampaignScenario, atte
   if (scenario.id === "instance-operations.update-instance") return !!product.target && product.target.version !== product.source.version && samePublishedIdentity(product.target, product.observed);
   return !product.target && samePublishedIdentity(product.source, product.observed);
 }
+export interface CampaignRevalidationIdentity {
+  definitionDigest: string; graderDigest: string; productBaseline: string | null; databaseLane: DatabaseFingerprintIdentity;
+}
+/** Source checkout revisions alone are not qualifying identity changes. */
+export function campaignRevalidationIdentity(attempt: CampaignAttempt): CampaignRevalidationIdentity {
+  const product = attempt.productIdentity;
+  let productBaseline: string | null = null;
+  if (product?.kind === "source-build" || product?.kind === "source-built-installed") productBaseline = JSON.stringify({ kind: product.kind, source: product.productionSourceRevision });
+  if (product?.kind === "published-release") {
+    const pin = (v: CampaignPublishedIdentity) => ({ version: v.version, treeSha256: v.treeSha256, artifacts: [...v.artifacts].sort((a, b) => a.package.localeCompare(b.package)) });
+    productBaseline = JSON.stringify({ kind: product.kind, lane: product.declaredLane, source: pin(product.source), target: product.target ? pin(product.target) : null });
+  }
+  return { definitionDigest: attempt.definitionDigest, graderDigest: attempt.graderDigest, productBaseline, databaseLane: attempt.databaseLane ?? { lane: "embedded-postgres" } };
+}
 export interface CampaignAttempt {
   /** Stable declared DB environment, excluding passwords/IDs. Missing only on historical embedded attempts. */
   databaseLane?: DatabaseFingerprintIdentity;
@@ -74,6 +88,8 @@ export interface CampaignAttempt {
   environment: string;
   automaticRetries: 0;
   correction: string | null;
+  /** One final-B measurement only when actual qualifying identity was invalidated. */
+  passedRevalidation?: { reason: string; previous: CampaignRevalidationIdentity; next: CampaignRevalidationIdentity };
   classification: string | null;
   diagnosisHistory?: Array<{ at: string; classification: string | null; detail: string | null; supersededBy: string }>;
   observedFailure: string | null;
@@ -156,13 +172,21 @@ export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: Camp
   if (!(scenario.readiness === "implemented" || (scenario.readiness === "partial" && scenario.authoringStatus === "concrete-blocker" && scenario.blockerProbeSources?.length)) || !scenario.executionId) throw new Error("Scenario has no executable implementation");
   if (scenario.attempts.some(entry => entry.outcome === "running")) throw new Error("Previous attempt still running");
   if (scenario.attempts.length >= 2 || attempt.ordinal !== scenario.attempts.length + 1) throw new Error("Attempt budget exhausted or incorrect ordinal");
-  if (scenario.attempts[0]?.outcome === "passed") throw new Error("Passing scenario cannot be rerun");
   if (attempt.ordinal === 2 && !attempt.correction?.trim()) throw new Error("Fix cycle requires a recorded correction");
   if (attempt.automaticRetries !== 0 || attempt.executionId !== scenario.executionId || attempt.outcome !== "running") throw new Error("Invalid attempt reservation");
   if ([attempt.sourceRevision, attempt.workingTreeDigest, attempt.definitionDigest, attempt.suiteDefinitionDigest, attempt.graderDigest, attempt.model, attempt.profile, attempt.environment].some(value => !value.trim())) throw new Error("Missing attempt provenance");
   const selectedDatabase = databaseFingerprintIdentity();
   if (attempt.databaseLane && JSON.stringify(attempt.databaseLane) !== JSON.stringify(selectedDatabase)) throw new Error("Attempt database lane differs from selected fingerprint environment");
   attempt.databaseLane ??= selectedDatabase;
+  const first = scenario.attempts[0];
+  if (first?.outcome === "passed") {
+    const record = attempt.passedRevalidation, previous = campaignRevalidationIdentity(first), next = campaignRevalidationIdentity(attempt);
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const actualInvalidation = previous.definitionDigest !== next.definitionDigest || previous.graderDigest !== next.graderDigest
+      || !same(previous.databaseLane, next.databaseLane) || previous.productBaseline !== null && next.productBaseline !== null && previous.productBaseline !== next.productBaseline && campaignProductIdentityEligible(scenario, attempt);
+    if (!record?.reason.trim() || !attempt.correction?.trim() || !actualInvalidation || !same(record.previous, previous) || !same(record.next, next)
+      || attempt.definitionDigest !== scenario.qualifyingDefinitionDigest || attempt.graderDigest !== scenario.qualifyingGraderDigest) throw new Error("Passing scenario cannot be rerun without recorded actual qualifying identity invalidation");
+  } else if (attempt.passedRevalidation) throw new Error("Passed-result revalidation requires an original pass");
   scenario.attempts.push(attempt);
 }
 export function completeCampaignAttempt(scenario: CampaignScenario, completion: {

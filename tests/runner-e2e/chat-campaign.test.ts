@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity, campaignAttemptProcessed } from "./chat-campaign.js";
+import { campaignRevalidationIdentity, campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity, campaignAttemptProcessed } from "./chat-campaign.js";
 const root = new URL("../../", import.meta.url).pathname;
 const base = "8373d7867963674ff960d2345d0d28086f799bc7";
 function attempt(ordinal: 1 | 2, executionId: string): CampaignAttempt {
@@ -175,4 +175,21 @@ it("permits a processed unsupported remainder while requiring every unfinished b
     blocked.authoringStatus = "unfinished";
     expect(campaignSummary(campaign, temporary)).toMatchObject({ authoringResolved: 243, unfinished: 1, mergeEligible: false });
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+
+it("permits exactly one recorded final revalidation only after an actual selected qualifying identity change", () => {
+  const scenario = freezeChatCampaign(root, base).scenarios.find(x => x.id === "tasks.create-backlog")!, first = attempt(1, scenario.executionId!);
+  reserveCampaignAttempt(scenario, first); first.outcome = "passed"; const original = JSON.stringify(first);
+  const next = attempt(2, scenario.executionId!); next.sourceRevision = "c".repeat(40);
+  next.passedRevalidation = { reason: "Shared selected closure changed for final baseline", previous: campaignRevalidationIdentity(first), next: campaignRevalidationIdentity(next) };
+  scenario.qualifyingDefinitionDigest = next.definitionDigest; scenario.qualifyingGraderDigest = next.graderDigest;
+  expect(() => reserveCampaignAttempt(scenario, next)).toThrow("actual qualifying identity invalidation");
+  next.definitionDigest = "actual-new-selected-closure"; scenario.qualifyingDefinitionDigest = next.definitionDigest;
+  next.passedRevalidation.next = campaignRevalidationIdentity(next); next.passedRevalidation.previous.definitionDigest = "invented-old";
+  expect(() => reserveCampaignAttempt(scenario, next)).toThrow("actual qualifying identity invalidation");
+  next.passedRevalidation.previous = campaignRevalidationIdentity(first); next.correction = null;
+  expect(() => reserveCampaignAttempt(scenario, next)).toThrow("recorded correction");
+  next.correction = "Coherent shared closure correction on final B"; reserveCampaignAttempt(scenario, next);
+  expect(JSON.stringify(first)).toBe(original); next.outcome = "failed";
+  expect(() => reserveCampaignAttempt(scenario, attempt(2, scenario.executionId!))).toThrow("budget exhausted");
 });
