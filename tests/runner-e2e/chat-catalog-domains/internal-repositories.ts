@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { makeDefinition } from "./internal-definition.js";
-import { externalPrerequisiteReceipt, readExternalConfig, requireExternalPrerequisites } from "./external-fixtures.js";
+import { externalRequirements, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface Repository { id: string; fullName: string; url: string; connectionIds?: string[] }
@@ -14,15 +14,13 @@ interface RepositoryObservation extends InternalObservation {
 function repositoriesOf(p: RepositoryProject | undefined) { return p?.workspaces.filter(row => row.repoUrl) ?? []; }
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 async function connectRepositoryFixture(ctx: ChatCatalogContext) {
-  const config = readExternalConfig(); const receipt = externalPrerequisiteReceipt(ctx.scenario.id, config);
-  await ctx.input.evidence("chat-catalog-github-prerequisite.json", receipt);
-  const binding = requireExternalPrerequisites(ctx.scenario.id, config);
+  const binding = selectedExternalBinding(ctx);
+  await ctx.input.evidence("chat-catalog-github-prerequisite.json", { scenarioId: ctx.scenario.id, provider: "github", configured: true, missing: [] });
   const envName = binding.prerequisites.tokenEnv!;
   if (!binding.credentialEnv.includes(envName) || !/^PAPERCLIP_CHAT_EVAL_[A-Z0-9_]+$/.test(envName))
     throw new Error("Setup blocker: GitHub tokenEnv must name an explicitly authorized scoped credentialEnv binding");
-  const token = process.env[envName]?.trim();
-  if (!token || !ctx.input.privateSecrets) throw new Error("Setup blocker: disposable GitHub credential and attempt-private redaction sink are required");
-  ctx.input.privateSecrets.push(token);
+  if (!ctx.input.privateSecrets) throw new Error("Setup blocker: disposable GitHub credential and attempt-private redaction sink are required");
+  const token = selectedExternalCredential(ctx, binding, "tokenEnv");
   const requested = ctx.scenario.id === "projects.add-repository"
     ? [{ id: binding.prerequisites.siteRepositoryId!, fullName: binding.prerequisites.siteRepositoryFullName! }]
     : [{ id: binding.prerequisites.oldRepositoryId!, fullName: binding.prerequisites.oldRepositoryFullName! }, { id: binding.prerequisites.newRepositoryId!, fullName: binding.prerequisites.newRepositoryFullName! }];
@@ -134,7 +132,7 @@ function repositoryCase(scenarioId: string): ChatCatalogCase {
       await ctx.input.api.delete(`/api/secrets/${fixture.secretId}`, { allowNotFound: true }); throw error;
     }
   }, gradeRepositories);
-  return { ...base, authentication: "human-session", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-repositories.ts", "chat-catalog-domains/external-fixtures.ts"],
+  return { ...base, authentication: "human-session", externalInput: externalRequirements[scenarioId], sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-repositories.ts", "chat-catalog-domains/external-fixtures.ts"],
     queryBindings: scenarioId === "projects.add-repository"
       ? [{ catalogToken: "acorn/site", stateKey: "siteRepository", resourceKind: "project-repository", valueField: "fullName" }]
       : [{ catalogToken: "acorn/site-old", stateKey: "oldRepository", resourceKind: "project-repository", valueField: "fullName" },
