@@ -566,8 +566,8 @@
       "sourceSha256": "a5aa89ff1a55f7a2f580230c72f20d05420d272dbad365c4d7dd963016332bf3",
       "scenarioSha256": "d4710a904414f73b76984775cd6725be0d3a2dee38bf92244a3a9ae18d9f31d4",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agents.ambiguous-cloud-code",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -576,7 +576,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.change-manager",
@@ -693,9 +693,9 @@
       "sourceSha256": "a5aa89ff1a55f7a2f580230c72f20d05420d272dbad365c4d7dd963016332bf3",
       "scenarioSha256": "f1aed5652250f3553f4089a6e1135cb3a67cdc055a87f9718ea037df516f5ae6",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.agents.existing-grok-bot",
+      "blocker": "Disposable harness public/auth origin is pinned to loopback HTTP; actual owned HTTPS origin/tunnel binding is not yet supported. This is separate from the genuine existing Bot human OAuth/pairing prerequisite.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
@@ -703,7 +703,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "unfinished"
     },
     {
       "id": "agents.hire-claude-code",
@@ -720,8 +720,8 @@
       "sourceSha256": "a5aa89ff1a55f7a2f580230c72f20d05420d272dbad365c4d7dd963016332bf3",
       "scenarioSha256": "a33d8faadbf3dfc5024d460b004c106d881cae8ecb1b23cb97ad457d1422b692",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agents.hire-claude-code",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -730,7 +730,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.hire-denied",
@@ -772,8 +772,8 @@
       "sourceSha256": "a5aa89ff1a55f7a2f580230c72f20d05420d272dbad365c4d7dd963016332bf3",
       "scenarioSha256": "9d716979cc4f3273f48a5aa8655571465f2e33f38c872e75903f96dbf6975c58",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.agents.hire-needs-account",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -782,7 +782,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "agents.hire-needs-approval",
@@ -949,9 +949,9 @@
       "sourceSha256": "1b036a6b3af46d8d07cd1cb80a40e466285f2c0fcd1f517d161919f8bccb1c75",
       "scenarioSha256": "8d2407af9c351bc593a1145183ea49706121e6ae422ebb9c0f444f5801109031",
       "owner": "eval_external",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.app-permissions.ask-before-action",
-      "blocker": "rejection-and-supported-always-allow-branch",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
@@ -959,7 +959,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "unfinished"
+      "authoringStatus": "complete"
     },
     {
       "id": "app-permissions.grant-one-agent",
@@ -1200,8 +1200,8 @@
       "sourceSha256": "b87c34edd99aa5cce96cf2196327b66366ef24bbcea96dc8c86d404030372901",
       "scenarioSha256": "de4110275b885dfd893c5bad41c5e716415e51fee9c2d7868c17a572c95dd62c",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.assistant-connections.revoke-personal-grant",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1210,7 +1210,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "assistant-connections.use-scoped-client",
@@ -1610,8 +1610,8 @@
       "sourceSha256": "e9eacfaf22ab445de8ecd131439a2bab37708b6bd9ea1edcf72c55a2948e6c46",
       "scenarioSha256": "263de3a7c8bfb3327648dd53bddaab19212e10cd2cc211712d4e291167893559",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.chat-channels.channel-file",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1620,7 +1620,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "chat-channels.connect-slack",
@@ -2811,8 +2811,8 @@
       "sourceSha256": "7d4501ffeac360239a84d1ea19722e4c686e09a5cab3d6d28919c84aaa1d359d",
       "scenarioSha256": "f814ba7865ff51571fd6749a283579bd4b4a5749d0857307f1eb20877eedd551",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.execution-environments.add-computer",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2821,7 +2821,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "execution-environments.assign-computer",
@@ -2837,8 +2837,8 @@
       "sourceSha256": "7d4501ffeac360239a84d1ea19722e4c686e09a5cab3d6d28919c84aaa1d359d",
       "scenarioSha256": "0510e169761e2edbcf8f20e5db961561f71feb2ded3382324d7e9533605c2bbd",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.execution-environments.assign-computer",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2847,7 +2847,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "execution-environments.choose-capable-target",
@@ -2863,8 +2863,8 @@
       "sourceSha256": "7d4501ffeac360239a84d1ea19722e4c686e09a5cab3d6d28919c84aaa1d359d",
       "scenarioSha256": "bf1f78b42a50c46d52a3c89458fd6dbcfbae9c28b9bc9c4dd91ff0fb3e7b3dd0",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.execution-environments.choose-capable-target",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2873,7 +2873,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "execution-environments.prepare-image",
@@ -2888,8 +2888,8 @@
       "sourceSha256": "7d4501ffeac360239a84d1ea19722e4c686e09a5cab3d6d28919c84aaa1d359d",
       "scenarioSha256": "d644d1ad7670d65efa5a7319c64f49601943812d2223600e43dfad85a9b4a42d",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.execution-environments.prepare-image",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2898,7 +2898,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "execution-environments.test-computer",
@@ -2914,8 +2914,8 @@
       "sourceSha256": "7d4501ffeac360239a84d1ea19722e4c686e09a5cab3d6d28919c84aaa1d359d",
       "scenarioSha256": "97ecec8fad3a17a37c14d93afca5391807981c22eb3ff9cebd72503766b9e8b7",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.execution-environments.test-computer",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2924,7 +2924,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "gateways-profiles.connect-client",
@@ -3014,8 +3014,8 @@
       "sourceSha256": "8c34eba6c05d3cf4dcd65384b1a7797da734da91c77a4ec8bca64f857a9ac99c",
       "scenarioSha256": "517e85aca2f35412d53863d87efa9e0fbf90bb0dec2707d413eb49811ded4bc1",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.gateways-profiles.inspect-gateway-error",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -3024,7 +3024,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "gateways-profiles.rotate-token",
@@ -5038,8 +5038,8 @@
       "sourceSha256": "15d3741baab816afe14d24043d8229010fc204146ccb4bb2f525eb0f8d3037fa",
       "scenarioSha256": "8338e23d440dea019241228448d8a9bdac86f6f76c3bae650ac3ef78add9839d",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.runs-adapters.upgrade-runner",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5048,7 +5048,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "runs-adapters.validate-hire",
@@ -5064,8 +5064,8 @@
       "sourceSha256": "15d3741baab816afe14d24043d8229010fc204146ccb4bb2f525eb0f8d3037fa",
       "scenarioSha256": "3e62a7bac4900cab9f6fcf94599142d2c0ce7e3b2e2725f61a9ad8df0977c0b9",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.runs-adapters.validate-hire",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5074,7 +5074,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.ask-for-plaintext",
@@ -5141,8 +5141,8 @@
       "sourceSha256": "1530cfcde791db75809556d90b5529f3d77f07040a2f7b411562f39efd7572b0",
       "scenarioSha256": "ddeca689175ba10eb4f42fc55a59b10bb78fe345dcf5159583ddd94f68da4e00",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.secrets.least-scope-delivery",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5151,7 +5151,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.personal-secret",
@@ -5166,8 +5166,8 @@
       "sourceSha256": "1530cfcde791db75809556d90b5529f3d77f07040a2f7b411562f39efd7572b0",
       "scenarioSha256": "d9e6932b213e55ed659368d64d46dfcd8e4692606d9a1b92ec944d2fa5fd3170",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.secrets.personal-secret",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5176,7 +5176,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.secret-proposal",
@@ -5191,8 +5191,8 @@
       "sourceSha256": "1530cfcde791db75809556d90b5529f3d77f07040a2f7b411562f39efd7572b0",
       "scenarioSha256": "2e3b3b70520ab0310b0489951bd4552b430605c0d23d6db452c22f73cef9f686",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.secrets.secret-proposal",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -5201,7 +5201,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "secrets.vault-reference",
@@ -6398,8 +6398,8 @@
       "sourceSha256": "6b4be6151f155981ae7a68ac69c3a31420d54fe33f1ac567de0db73b651b3ae7",
       "scenarioSha256": "4fa2cf4b3001a3d63bf7aacb396d7cb77b9d176dbd9106ac9c6f42f8146440d1",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.workspaces.prepare-repository",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -6408,7 +6408,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "workspaces.preview-service",
@@ -6450,9 +6450,9 @@
       "sourceSha256": "6b4be6151f155981ae7a68ac69c3a31420d54fe33f1ac567de0db73b651b3ae7",
       "scenarioSha256": "e00dc78e1cc306e89ca407c275f2a06d9dbbde3cec2cfe176a37e4090c81a063",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.workspaces.private-repository-no-access",
+      "blocker": "Unfinished required after-grant conditional: the selected metadata-only fixture has no executable protected human GitHub account/installation completion callback and therefore cannot yet resume preparation/fix the header after authorization. Reserved act preserves the actual initial request and probes real setup options, then stops instead of fabricating a grant. Missing designated disposable repo is a separate external prerequisite, not this authoring gap.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
@@ -6460,7 +6460,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "unfinished"
     },
     {
       "id": "workspaces.recover-lost-sandbox",
@@ -6490,11 +6490,11 @@
     }
   ],
   "implementationCheckpoint": {
-    "sourceRevision": "4043cf898485d8a4cff9789d6b2708ab581b195c",
-    "descriptorSha256": "ca0146b40da076fd21a5a1e4670c317b40b613638a794f921c3ebc0e795fdbb7",
-    "authored": 210,
-    "complete": 202,
-    "partial": 8,
-    "unimplemented": 34
+    "sourceRevision": "32b472dfa5640987e199c2e0aa21b2c7c02555c6",
+    "descriptorSha256": "4af3b967a5df0ea72b1d4e5df2ec82c1da8db343d816f45f66ade1072d427e2e",
+    "authored": 229,
+    "complete": 220,
+    "partial": 9,
+    "unimplemented": 15
   }
 }

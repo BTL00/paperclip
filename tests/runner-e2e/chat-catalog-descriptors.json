@@ -412,6 +412,44 @@
     "exportName": "runtimeAgentKeyCases"
   },
   {
+    "requiredCredentials": [
+      "ANTHROPIC_API_KEY",
+      "DAYTONA_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "daytona",
+      "fields": [
+        "imageDigest",
+        "imageRef",
+        "region",
+        "disposableNamespace",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "agents.ambiguous-cloud-code",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-cloud-choice.ts",
+      "chat-catalog-domains/runtime-daytona-target.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-claude-private.ts",
+      "chat-catalog-domains/runtime-claude-private-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "live-fixtures.ts",
+      "../../packages/plugins/sandbox-providers/daytona/src/plugin.ts",
+      "chat-scenarios/agents.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-cloud-choice.js",
+    "exportName": "runtimeCloudChoiceCases"
+  },
+  {
     "scenarioId": "agents.change-manager",
     "sourceFiles": [
       "chat-catalog-domains/runtime-support.ts",
@@ -481,6 +519,75 @@
     "exportName": "runtimeAgentsCases"
   },
   {
+    "requiredCredentials": [],
+    "externalInput": {
+      "provider": "grok",
+      "fields": [
+        "botId",
+        "endpoint",
+        "challengeMethod",
+        "credentialEnvName"
+      ]
+    },
+    "scenarioId": "agents.existing-grok-bot",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-grok.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-grok-private-contract.ts",
+      "../../server/src/routes/grok-bot.ts",
+      "../../server/src/services/grok-bot/routine.ts",
+      "../../server/src/services/dot-runner-broker.ts",
+      "../../ui/src/components/GrokBotConnection.tsx",
+      "../../ui/src/components/new-agent/GrokBotSetupContent.tsx",
+      "chat-scenarios/agents.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [
+      "Disposable harness public/auth origin is pinned to loopback HTTP; actual owned HTTPS origin/tunnel binding is not yet supported. This is separate from the genuine existing Bot human OAuth/pairing prerequisite."
+    ],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-grok.js",
+    "exportName": "runtimeGrokCases"
+  },
+  {
+    "requiredCredentials": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "claude",
+      "fields": [
+        "targetRef",
+        "harnessExecutable",
+        "model",
+        "accountBindingRef"
+      ]
+    },
+    "scenarioId": "agents.hire-claude-code",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-claude-hiring.ts",
+      "chat-catalog-domains/runtime-claude-private.ts",
+      "chat-catalog-domains/runtime-claude-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/agents.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-claude-hiring.js",
+    "exportName": "runtimeClaudeHiringCases"
+  },
+  {
     "scenarioId": "agents.hire-denied",
     "sourceFiles": [
       "chat-catalog-domains/runtime-support.ts",
@@ -494,6 +601,41 @@
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/runtime-agents.js",
     "exportName": "runtimeAgentsCases"
+  },
+  {
+    "requiredCredentials": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "claude",
+      "fields": [
+        "targetRef",
+        "harnessExecutable",
+        "model",
+        "accountBindingRef"
+      ]
+    },
+    "scenarioId": "agents.hire-needs-account",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-claude-account.ts",
+      "chat-catalog-domains/runtime-claude-private.ts",
+      "chat-catalog-domains/runtime-claude-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "../../server/src/routes/connection-intents.ts",
+      "../../server/src/services/connection-intent-delivery.ts",
+      "chat-scenarios/agents.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-claude-account.js",
+    "exportName": "runtimeClaudeAccountCases"
   },
   {
     "scenarioId": "agents.hire-needs-approval",
@@ -631,24 +773,32 @@
   {
     "scenarioId": "app-permissions.ask-before-action",
     "sourceFiles": [
-      "chat-catalog-domains/external-app-permissions.ts",
+      "chat-catalog-domains/external-app-review.ts",
       "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
-      "everyday-decisions.ts",
-      "chat-scenarios/app-permissions.yaml",
-      "chat-catalog-domains/identity-support.ts"
+      "chat-flow.ts",
+      "run-observations.ts",
+      "../../server/src/routes/issues.ts",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-gateway.ts",
+      "../../server/src/services/tool-action-review.ts",
+      "../../server/src/services/tool-action-delivery.ts",
+      "../../server/src/services/tool-access-policy.ts",
+      "../../ui/src/components/IssueThreadInteractionCard.tsx",
+      "chat-scenarios/app-permissions.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.external.v1",
-    "coverageGaps": [
-      "rejection-and-supported-always-allow-branch"
-    ],
-    "expectedRunCount": 2,
-    "minimumRunCount": 1,
+    "expectedRunCount": 6,
+    "expectedHumanMessageCount": 3,
+    "minimumRunCount": 6,
     "turnTimeoutMs": 120000,
-    "attemptTimeoutMs": 420000,
-    "modulePath": "./chat-catalog-domains/external-app-permissions.js",
-    "exportName": "appPermissionExternalCases"
+    "attemptTimeoutMs": 1140000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-app-review.js",
+    "exportName": "appReviewExternalCases"
   },
   {
     "externalInput": {
@@ -704,7 +854,6 @@
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
-      "everyday-decisions.ts",
       "chat-scenarios/app-permissions.yaml",
       "chat-catalog-domains/identity-support.ts"
     ],
@@ -840,6 +989,33 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-assistant-device.js",
     "exportName": "assistantDeviceExternalCases"
+  },
+  {
+    "scenarioId": "assistant-connections.revoke-personal-grant",
+    "sourceFiles": [
+      "chat-catalog-domains/external-assistant-revoke.ts",
+      "chat-catalog-domains/external-assistant-connections.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-stories.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "public-mcp-client.ts",
+      "run-observations.ts",
+      "../../server/src/routes/public-mcp.ts",
+      "../../server/src/services/public-mcp/oauth.ts",
+      "chat-scenarios/assistant-connections.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-assistant-revoke.js",
+    "exportName": "personalRevokeExternalCases"
   },
   {
     "companionSurface": {
@@ -1178,6 +1354,61 @@
     },
     "modulePath": "./chat-catalog-domains/integrator-case-facts.js",
     "exportName": "integratorCaseFactsCases"
+  },
+  {
+    "slackIngress": {
+      "kind": "native-slack-thread",
+      "maximumProviderCalls": 20,
+      "ingressTimeoutMs": 120000
+    },
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.channel-file",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-file.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-slack-ingress.ts",
+      "run-observations.ts",
+      "native-event-envelope.ts",
+      "../../server/src/attachment-types.ts",
+      "../../server/src/services/chat-channels/inbound-attachments.ts",
+      "../../server/src/services/chat-channels/inbound/wakeups.ts",
+      "../../server/src/services/issue-assignment-wakeup.ts",
+      "../../server/src/services/chat-channels/slack/file-receipts.ts",
+      "../../server/src/services/chat-channels/outbound-attachments.ts",
+      "chat-scenarios/chat-channels.yaml",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 6,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "journeyKind": "native-slack-thread",
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-file.js",
+    "exportName": "slackFileExternalCases"
   },
   {
     "scenarioId": "chat-channels.provider-disabled",
@@ -1930,6 +2161,215 @@
     "exportName": "documents_artifactsCases"
   },
   {
+    "requiredCredentials": [],
+    "externalInput": {
+      "provider": "ssh",
+      "fields": [
+        "hostname",
+        "port",
+        "login",
+        "hostKeySha256",
+        "knownHosts",
+        "allowedRemoteRoot",
+        "privateKeyEnv",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "execution-environments.add-computer",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-computers-ssh.ts",
+      "chat-catalog-domains/runtime-computers-private.ts",
+      "chat-catalog-domains/runtime-computers-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/execution-environments.yaml",
+      "../../server/src/routes/environments.ts",
+      "../../server/src/routes/agents.ts",
+      "../../packages/shared/src/environment-support.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx",
+      "../../ui/src/components/agent-config-primitives.tsx",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-computers-ssh.js",
+    "exportName": "runtimeComputerSshCases"
+  },
+  {
+    "requiredCredentials": [
+      "DAYTONA_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "daytona",
+      "fields": [
+        "imageDigest",
+        "imageRef",
+        "region",
+        "disposableNamespace",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "execution-environments.assign-computer",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-computers-cloud.ts",
+      "chat-catalog-domains/runtime-daytona-target.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/execution-environments.yaml",
+      "../../server/src/routes/environments.ts",
+      "../../server/src/routes/agents.ts",
+      "../../server/src/services/environment-probe.ts",
+      "../../server/src/services/environment-custom-images.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-computers-cloud.js",
+    "exportName": "runtimeComputerCloudCases"
+  },
+  {
+    "requiredCredentials": [],
+    "externalInput": {
+      "provider": "ssh",
+      "fields": [
+        "hostname",
+        "port",
+        "login",
+        "hostKeySha256",
+        "knownHosts",
+        "allowedRemoteRoot",
+        "privateKeyEnv",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "execution-environments.choose-capable-target",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-computers-ssh.ts",
+      "chat-catalog-domains/runtime-computers-private.ts",
+      "chat-catalog-domains/runtime-computers-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/execution-environments.yaml",
+      "../../server/src/routes/environments.ts",
+      "../../server/src/routes/agents.ts",
+      "../../packages/shared/src/environment-support.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx",
+      "../../ui/src/components/agent-config-primitives.tsx",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-computers-ssh.js",
+    "exportName": "runtimeComputerSshCases"
+  },
+  {
+    "requiredCredentials": [
+      "DAYTONA_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "daytona",
+      "fields": [
+        "imageDigest",
+        "imageRef",
+        "region",
+        "disposableNamespace",
+        "toolsManifest"
+      ]
+    },
+    "scenarioId": "execution-environments.prepare-image",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-computers-cloud.ts",
+      "chat-catalog-domains/runtime-daytona-target.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/execution-environments.yaml",
+      "../../server/src/routes/environments.ts",
+      "../../server/src/routes/agents.ts",
+      "../../server/src/services/environment-probe.ts",
+      "../../server/src/services/environment-custom-images.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts",
+      "chat-catalog-domains/runtime-computers-image-private.ts",
+      "chat-catalog-domains/runtime-computers-image-worker.ts",
+      "../../server/src/realtime/environment-custom-image-terminal-ws.ts",
+      "../../packages/shared/src/validators/environment-custom-images.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-computers-cloud.js",
+    "exportName": "runtimeComputerCloudCases"
+  },
+  {
+    "requiredCredentials": [],
+    "externalInput": {
+      "provider": "ssh",
+      "fields": [
+        "hostname",
+        "port",
+        "login",
+        "hostKeySha256",
+        "knownHosts",
+        "allowedRemoteRoot",
+        "privateKeyEnv",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "execution-environments.test-computer",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-computers-ssh.ts",
+      "chat-catalog-domains/runtime-computers-private.ts",
+      "chat-catalog-domains/runtime-computers-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-scenarios/execution-environments.yaml",
+      "../../server/src/routes/environments.ts",
+      "../../server/src/routes/agents.ts",
+      "../../packages/shared/src/environment-support.ts",
+      "../../ui/src/pages/CompanyEnvironments.tsx",
+      "../../ui/src/components/agent-config-primitives.tsx",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "run-observations.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-computers-ssh.js",
+    "exportName": "runtimeComputerSshCases"
+  },
+  {
     "scenarioId": "gateways-profiles.connect-client",
     "sourceFiles": [
       "chat-catalog-domains/external-gateway-client.ts",
@@ -1991,6 +2431,33 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-profile-definition.js",
     "exportName": "profileDefinitionExternalCases"
+  },
+  {
+    "scenarioId": "gateways-profiles.inspect-gateway-error",
+    "sourceFiles": [
+      "chat-catalog-domains/external-gateway-error.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "run-observations.ts",
+      "native-event-envelope.ts",
+      "../../server/src/routes/tool-gateway.ts",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-gateway.ts",
+      "../../ui/src/App.tsx",
+      "chat-scenarios/gateways-profiles.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 660000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-gateway-error.js",
+    "exportName": "gatewayErrorExternalCases"
   },
   {
     "scenarioId": "gateways-profiles.rotate-token",
@@ -3475,6 +3942,81 @@
     "exportName": "runtimeSessionCases"
   },
   {
+    "requiredCredentials": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "claude",
+      "fields": [
+        "targetRef",
+        "harnessExecutable",
+        "model",
+        "accountBindingRef",
+        "legacySettingsRef"
+      ]
+    },
+    "scenarioId": "runs-adapters.upgrade-runner",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-claude-upgrade.ts",
+      "chat-catalog-domains/runtime-claude-private.ts",
+      "chat-catalog-domains/runtime-claude-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "../../server/src/services/agent-runner-selection.ts",
+      "../../ui/src/components/AgentConfigForm.tsx",
+      "chat-scenarios/runs-adapters.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-claude-upgrade.js",
+    "exportName": "runtimeClaudeUpgradeCases"
+  },
+  {
+    "requiredCredentials": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "claude",
+      "fields": [
+        "targetRef",
+        "harnessExecutable",
+        "model",
+        "accountBindingRef"
+      ]
+    },
+    "scenarioId": "runs-adapters.validate-hire",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-claude-validation.ts",
+      "chat-catalog-domains/runtime-claude-private.ts",
+      "chat-catalog-domains/runtime-claude-private-worker.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "run-observations.ts",
+      "../../server/src/routes/agents.ts",
+      "../../server/src/services/ai-connection-runtime.ts",
+      "chat-scenarios/runs-adapters.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 1,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "saved-eligible-account-with-genuine-auth-failure"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-claude-validation.js",
+    "exportName": "runtimeClaudeValidationCases"
+  },
+  {
     "scenarioId": "secrets.ask-for-plaintext",
     "sourceFiles": [
       "chat-catalog-domains/external-secrets.ts",
@@ -3515,6 +4057,106 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-company-secret.js",
     "exportName": "companySecretExternalCases"
+  },
+  {
+    "scenarioId": "secrets.least-scope-delivery",
+    "sourceFiles": [
+      "chat-catalog-domains/external-secret-delivery.ts",
+      "chat-catalog-domains/external-secret-endpoint.ts",
+      "chat-catalog-domains/external-instance-custody.ts",
+      "chat-catalog-domains/external-plugin-fixture.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "run-observations.ts",
+      "../e2e/fetch-allowed-port.ts",
+      "../../server/src/home-paths.ts",
+      "../../server/src/routes/secrets.ts",
+      "../../server/src/services/secrets.ts",
+      "../../server/src/agent-auth-jwt.ts",
+      "../../server/src/services/agent-instance-secrets.ts",
+      "../../server/src/services/agent-lifecycle-driver.ts",
+      "../../server/src/services/heartbeat/run-preparation.ts",
+      "../../cli/dist/index.js",
+      "../../cli/src/index.ts",
+      "../../packages/plugins/create-paperclip-plugin/src/index.ts",
+      "../../packages/plugins/sdk/src/index.ts",
+      "../../packages/plugins/sdk/dist/index.js",
+      "chat-scenarios/secrets.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 660000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-secret-delivery.js",
+    "exportName": "secretDeliveryExternalCases"
+  },
+  {
+    "scenarioId": "secrets.personal-secret",
+    "sourceFiles": [
+      "chat-catalog-domains/external-personal-secret.ts",
+      "chat-catalog-domains/external-secret-endpoint.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "run-observations.ts",
+      "chat-flow.ts",
+      "../../server/src/home-paths.ts",
+      "../e2e/fetch-allowed-port.ts",
+      "../../server/src/routes/secrets.ts",
+      "../../server/src/services/secrets.ts",
+      "../../server/src/services/heartbeat/run-preparation.ts",
+      "../../ui/src/pages/secrets/SetMyUserSecretDialog.tsx",
+      "chat-scenarios/secrets.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 660000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-personal-secret.js",
+    "exportName": "personalSecretExternalCases"
+  },
+  {
+    "scenarioId": "secrets.secret-proposal",
+    "sourceFiles": [
+      "chat-catalog-domains/external-secret-proposal.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-flow.ts",
+      "run-observations.ts",
+      "../../server/src/routes/secrets.ts",
+      "../../server/src/services/secret-proposals.ts",
+      "../../server/src/services/secret-proposal-notifications.ts",
+      "chat-scenarios/secrets.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 4,
+    "minimumRunCount": 4,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 840000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-secret-proposal.js",
+    "exportName": "secretProposalExternalCases"
   },
   {
     "scenarioId": "skills.author-skill",
@@ -4459,6 +5101,50 @@
     "exportName": "runtimeWorkspacesCases"
   },
   {
+    "externalInput": {
+      "provider": "github",
+      "fields": [
+        "siteRepositoryId",
+        "siteRepositoryFullName",
+        "tokenEnv"
+      ]
+    },
+    "scenarioId": "workspaces.prepare-repository",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-workspace-repositories.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-support.ts",
+      "chat-catalog-domains/runtime-workspaces.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/internal-repositories.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/workspaces.yaml",
+      "../../server/src/services/execution-workspace-repositories.ts",
+      "../../server/src/services/git-credentials.ts",
+      "../../server/src/services/github-operation-credentials.ts",
+      "../../packages/adapter-utils/src/github-launcher.ts",
+      "../../server/src/routes/secrets.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 8,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 5,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1200000,
+    "authentication": "human-session",
+    "queryBindings": [
+      {
+        "catalogToken": "acorn/site",
+        "stateKey": "siteRepository",
+        "resourceKind": "project-repository",
+        "valueField": "fullName"
+      }
+    ],
+    "modulePath": "./chat-catalog-domains/runtime-workspace-repositories.js",
+    "exportName": "runtimeWorkspaceRepositoryCases"
+  },
+  {
     "scenarioId": "workspaces.preview-service",
     "sourceFiles": [
       "chat-catalog-domains/runtime-preview.ts",
@@ -4474,5 +5160,51 @@
     "attemptTimeoutMs": 720000,
     "modulePath": "./chat-catalog-domains/runtime-preview.js",
     "exportName": "runtimePreviewCases"
+  },
+  {
+    "externalInput": {
+      "provider": "github",
+      "fields": [
+        "siteRepositoryId",
+        "siteRepositoryFullName",
+        "tokenEnv"
+      ]
+    },
+    "scenarioId": "workspaces.private-repository-no-access",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-workspace-repositories.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-support.ts",
+      "chat-catalog-domains/runtime-workspaces.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-catalog-domains/internal-repositories.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/workspaces.yaml",
+      "../../server/src/services/execution-workspace-repositories.ts",
+      "../../server/src/services/git-credentials.ts",
+      "../../server/src/services/github-operation-credentials.ts",
+      "../../packages/adapter-utils/src/github-launcher.ts",
+      "../../server/src/routes/secrets.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [
+      "Unfinished required after-grant conditional: the selected metadata-only fixture has no executable protected human GitHub account/installation completion callback and therefore cannot yet resume preparation/fix the header after authorization. Reserved act preserves the actual initial request and probes real setup options, then stops instead of fabricating a grant. Missing designated disposable repo is a separate external prerequisite, not this authoring gap."
+    ],
+    "expectedRunCount": 10,
+    "expectedHumanMessageCount": 3,
+    "minimumRunCount": 7,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "queryBindings": [
+      {
+        "catalogToken": "acorn/site",
+        "stateKey": "siteRepository",
+        "resourceKind": "project-repository",
+        "valueField": "fullName"
+      }
+    ],
+    "modulePath": "./chat-catalog-domains/runtime-workspace-repositories.js",
+    "exportName": "runtimeWorkspaceRepositoryCases"
   }
 ]
