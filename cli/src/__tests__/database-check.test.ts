@@ -122,6 +122,7 @@ describe("databaseCheck effective PostgreSQL target", () => {
   });
   it("keeps embedded storage when DATABASE_URL is empty", async () => {
     vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("PAPERCLIP_IN_WORKTREE", "false");
     expect((await databaseCheck(embeddedConfig(path.join(makeBase(), "db")))).status).toBe("pass");
     expect(database.createDb).not.toHaveBeenCalled();
   });
