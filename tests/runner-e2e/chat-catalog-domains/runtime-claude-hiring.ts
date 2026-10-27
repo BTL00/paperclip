@@ -53,7 +53,7 @@ export const runtimeClaudeHiringCases = [runtimeDefinition("agents.hire-claude-c
   const connections = await ctx.input.api.get<AiConnectionList>(`/api/companies/${companyId}/ai-connections`);
   const connection = connections.connections.find(row => row.id === account.connectionId && row.grantId === account.grantId);
   if (!connection || connection.provider !== "anthropic" || connection.status !== "connected" || !connection.isDefault) throw new Error("Actual selected Claude account is not a usable responsible-user default");
-  return { connectionId: account.connectionId, grantId: account.grantId, selectedEnvironmentId: environment.id, prerequisiteProbePassed: true, noApprovalPolicy: !company.requireBoardApprovalForNewAgents };
+  return { connectionId: account.connectionId, grantId: account.grantId, selectedEnvironmentId: environment.id, prerequisiteProbePassed: true, providerProbes: [{ phase: "setup", operation: account.operation, publicProbeCount: 2, status: account.probeStatus, usage: "unavailable", cost: "unavailable" }], noApprovalPolicy: !company.requireBoardApprovalForNewAgents };
 }, gradeClaudeHire, {
   ...runtimePrivateSpec("agents.hire-claude-code"), authentication: "human-session", expectedRunCount: 1, attemptTimeoutMs: 600000,
   sourceFiles: ["chat-catalog-domains/runtime-claude-hiring.ts", "chat-catalog-domains/runtime-claude-private.ts", "chat-catalog-domains/runtime-claude-private-worker.ts", "chat-catalog-domains/runtime-private.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agents.yaml"],
@@ -63,6 +63,7 @@ export const runtimeClaudeHiringCases = [runtimeDefinition("agents.hire-claude-c
     state.worker = candidates[0]; state.canonicalReply = observation.reply;
     state.savedValidation = await privateClaudeOperation({ operation: "validate-saved", companyId: observation.companyId, environmentId: String(state.selectedEnvironmentId), agentId: candidates[0]!.id,
       connectionId: String(state.connectionId), grantId: String(state.grantId), baseURL: ctx.input.api.baseURL, cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) }, ctx.input.privateInputs?.credentials.ANTHROPIC_API_KEY);
+    (state.providerProbes as unknown[]).push({ phase: "saved-hire", operation: "validate-saved", publicProbeCount: 1, status: (state.savedValidation as ClaudePrivateReceipt).probeStatus, usage: "unavailable", cost: "unavailable" });
     state.savedTargetBound = (state.savedValidation as ClaudePrivateReceipt).environmentId === state.selectedEnvironmentId;
   },
   async observe(ctx, state) {

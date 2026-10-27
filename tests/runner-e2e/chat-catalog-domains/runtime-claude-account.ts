@@ -49,7 +49,7 @@ export const runtimeClaudeAccountCases = [runtimeDefinition("agents.hire-needs-a
   const key = selected.credentials.ANTHROPIC_API_KEY!; ctx.input.privateSecrets.push(key);
   const available = await privateClaudeOperation({ operation: "check-harness", harnessExecutable: selected.values.harnessExecutable, companyId, environmentId: detail.id, baseURL: ctx.input.api.baseURL, cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) }, key);
   await ctx.input.api.patch(`/api/companies/${companyId}`, { requireBoardApprovalForNewAgents: false });
-  return { selectedEnvironmentId: detail.id, initialAnthropicAccounts: 0, actualInstalledClaude: available.probeStatus === "pass" };
+  return { selectedEnvironmentId: detail.id, initialAnthropicAccounts: 0, actualInstalledClaude: available.probeStatus === "pass", providerProbes: [{ phase: "setup", operation: available.operation, publicProbeCount: 0, localProcessProbeCount: 1, status: available.probeStatus, usage: "unavailable", cost: "unavailable" }] };
 }, gradeClaudeAccount, {
   ...runtimePrivateSpec("agents.hire-needs-account"), authentication: "human-session", expectedRunCount: 3, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000,
   sourceFiles: ["chat-catalog-domains/runtime-claude-account.ts", "chat-catalog-domains/runtime-claude-private.ts", "chat-catalog-domains/runtime-claude-private-worker.ts", "chat-catalog-domains/runtime-private.ts", "chat-catalog-domains/runtime-support.ts", "../../server/src/routes/connection-intents.ts", "../../server/src/services/connection-intent-delivery.ts", "chat-scenarios/agents.yaml"],
@@ -74,6 +74,7 @@ export const runtimeClaudeAccountCases = [runtimeDefinition("agents.hire-needs-a
     await expect(ctx.input.page.getByRole("heading", { name: /connections|Connect.*Anthropic|Connect a model provider/i }).first()).toBeVisible(); state.supportedSetupVisible = true;
     const selected = selectedRuntimeInputs(ctx, "agents.hire-needs-account");
     const account = await privateClaudeOperation({ operation: "prepare-account", companyId: before.companyId, environmentId: String(state.selectedEnvironmentId), credential: selected.credentials.ANTHROPIC_API_KEY!, harnessExecutable: selected.values.harnessExecutable, model: selected.values.model, baseURL: ctx.input.api.baseURL, cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) });
+    (state.providerProbes as unknown[]).push({ phase: "human-account", operation: account.operation, publicProbeCount: 2, status: account.probeStatus, usage: "unavailable", cost: "unavailable" });
     state.connectionId = account.connectionId; state.grantId = account.grantId;
     const accounts = await ctx.input.api.get<AiConnectionList>(`/api/companies/${before.companyId}/ai-connections`), saved = accounts.connections.find(row => row.id === account.connectionId && row.grantId === account.grantId);
     state.accountOwnerIsHuman = saved?.ownerUserId === session.user.id; state.humanAccountConnected = saved?.status === "connected" && saved.provider === "anthropic" && account.probeStatus === "pass";
@@ -116,6 +117,7 @@ export const runtimeClaudeAccountCases = [runtimeDefinition("agents.hire-needs-a
     state.continuationRunId = run.id; state.continuationReply = after.filter(row => row.authorAgentId === before.leadId && row.createdByRunId === run.id).map(row => row.body).join("\n");
     const worker = settled.agents.find(row => row.name === "Morgan")!; state.worker = worker;
     state.savedValidation = await privateClaudeOperation({ operation: "validate-saved", companyId: before.companyId, environmentId: String(state.selectedEnvironmentId), agentId: worker.id, connectionId: String(state.connectionId), grantId: String(state.grantId), baseURL: ctx.input.api.baseURL, cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL) }, selected.credentials.ANTHROPIC_API_KEY);
+    (state.providerProbes as unknown[]).push({ phase: "saved-hire", operation: "validate-saved", publicProbeCount: 1, status: (state.savedValidation as ClaudePrivateReceipt).probeStatus, usage: "unavailable", cost: "unavailable" });
   },
   async observe(ctx, state) { const o = await observeRuntime(ctx, state), worker = o.agents.find(row => row.name === "Morgan"), binding = worker?.runtimeConfig?.aiConnection as { provider?: string; mode?: string; connectionId?: string; grantId?: string } | undefined;
     const accounts = await ctx.input.api.get<AiConnectionList>(`/api/companies/${o.companyId}/ai-connections`);
