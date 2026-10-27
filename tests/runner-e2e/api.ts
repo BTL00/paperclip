@@ -41,6 +41,7 @@ export class RunnerApi {
   }
 
   async get<T>(path: string, options?: { timeout: number }): Promise<T> {
+    if (this.browserCookie) return this.authenticatedJson<T>("GET", path, undefined, options);
     const response = await this.request.get(path, { ...this.sessionOptions(), ...options });
     if (!response.ok()) throw new RunnerApiHttpError(response.status(), await failureMessage(response, "GET"));
     return response.json() as Promise<T>;
@@ -49,12 +50,18 @@ export class RunnerApi {
   /** Fetch owned attachment bytes with the same authenticated actor as JSON reads. */
   async getAttachmentContent(attachmentId: string): Promise<Buffer> {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(attachmentId)) throw new Error("Invalid fixture attachment identity");
+    if (this.browserCookie) {
+      const path = `/api/attachments/${attachmentId}/content`; const response = await this.authenticatedResponse("GET", path);
+      if (!response.ok) { await response.body?.cancel(); throw new RunnerApiHttpError(response.status, `GET ${path} returned ${response.status}; body withheld`); }
+      try { return Buffer.from(await response.arrayBuffer()); } catch { throw new Error(`GET ${path} byte response failed; details withheld`); }
+    }
     const response = await this.request.get(`/api/attachments/${attachmentId}/content`, this.sessionOptions());
     if (!response.ok()) throw new RunnerApiHttpError(response.status(), await failureMessage(response, "GET"));
     return response.body();
   }
 
   async post<T>(path: string, data?: unknown, options?: { timeout: number }): Promise<T> {
+    if (this.browserCookie) return this.authenticatedJson<T>("POST", path, data, options);
     const response = await this.request.post(path, { data, ...this.sessionOptions(), ...options });
     if (!response.ok()) throw new Error(await failureMessage(response, "POST"));
     return response.json() as Promise<T>;
@@ -73,7 +80,11 @@ export class RunnerApi {
     return this.sensitive<T>("PUT", path, data);
   }
 
-  private async sensitive<T>(method: "POST" | "PUT", path: string, data: unknown): Promise<T> {
+  async patchSensitive<T>(path: string, data: unknown): Promise<T> {
+    return this.sensitive<T>("PATCH", path, data);
+  }
+
+  private async sensitive<T>(method: "POST" | "PUT" | "PATCH", path: string, data: unknown): Promise<T> {
     const url = new URL(path, this.baseURL);
     if (url.origin !== this.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Sensitive request must use the fixture API");
     let response: Response;
@@ -88,10 +99,11 @@ export class RunnerApi {
       await response.body?.cancel();
       throw new Error(`Sensitive ${method} ${url.pathname} returned ${response.status}; response body withheld`);
     }
-    return response.json() as Promise<T>;
+    try { return await response.json() as T; } catch { throw new Error(`Sensitive ${method} ${url.pathname} returned invalid JSON; response body withheld`); }
   }
 
   async patch<T>(path: string, data: unknown): Promise<T> {
+    if (this.browserCookie) return this.authenticatedJson<T>("PATCH", path, data);
     const response = await this.request.patch(path, { data, ...this.sessionOptions() });
     if (!response.ok())
       throw new Error(await failureMessage(response, "PATCH"));
@@ -101,6 +113,15 @@ export class RunnerApi {
   /** Use the public revision fence when configuring a fixture's instruction entry. */
   async saveAgentInstructions(agentId: string, content: string): Promise<void> {
     const path = `/api/agents/${agentId}/instructions-bundle/file`;
+    if (this.browserCookie) {
+      let baseHash: string | null = null;
+      try {
+        const detail = await this.authenticatedJson<{ contentHash: string }>("GET", `${path}?path=AGENTS.md`);
+        if (typeof detail.contentHash !== "string" || !detail.contentHash) throw new Error("Existing fixture instructions have no revision hash");
+        baseHash = detail.contentHash;
+      } catch (error) { if (!(error instanceof RunnerApiHttpError) || error.status !== 404) throw error; }
+      await this.authenticatedJson("PUT", path, { path: "AGENTS.md", content, baseHash }); return;
+    }
     const current = await this.request.get(`${path}?path=AGENTS.md`);
     let baseHash: string | null = null;
     if (current.ok()) {
@@ -120,10 +141,34 @@ export class RunnerApi {
     path: string,
     options?: { allowNotFound?: boolean },
   ): Promise<void> {
+    if (this.browserCookie) {
+      const response = await this.authenticatedResponse("DELETE", path); await response.body?.cancel();
+      if (response.ok || options?.allowNotFound && response.status === 404) return;
+      throw new RunnerApiHttpError(response.status, `DELETE ${new URL(path, this.baseURL).pathname} returned ${response.status}; body withheld`);
+    }
     const response = await this.request.delete(path, this.sessionOptions());
     if (response.ok() || (options?.allowNotFound && response.status() === 404))
       return;
     throw new Error(await failureMessage(response, "DELETE"));
+  }
+
+  /** Explicit session cookies never become Playwright API-step parameters.
+   * Public responses remain untouched for independent product/leak oracles. */
+  private async authenticatedResponse(method: string, path: string, data?: unknown, options?: { timeout: number }): Promise<Response> {
+    const url = new URL(path, this.baseURL);
+    if (url.origin !== this.baseURL || !url.pathname.startsWith("/api/")) throw new Error("Authenticated request must use the fixture API");
+    const timeout = options?.timeout ?? 30_000;
+    try {
+      return await fetch(url, { method, redirect: "error", ...(timeout === 0 ? {} : { signal: AbortSignal.timeout(timeout) }),
+        headers: { "content-type": "application/json", ...this.sessionOptions().headers }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
+    } catch { throw new Error(`Authenticated ${method} ${url.pathname} connection request failed; details withheld`); }
+  }
+
+  private async authenticatedJson<T>(method: string, path: string, data?: unknown, options?: { timeout: number }): Promise<T> {
+    const response = await this.authenticatedResponse(method, path, data, options);
+    const endpoint = new URL(path, this.baseURL).pathname;
+    if (!response.ok) { await response.body?.cancel(); throw new RunnerApiHttpError(response.status, `${method} ${endpoint} returned ${response.status}; body withheld`); }
+    try { return await response.json() as T; } catch { throw new Error(`${method} ${endpoint} returned ${response.status} with invalid JSON; body withheld`); }
   }
 }
 
