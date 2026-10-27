@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomBytes } from "node:crypto";
@@ -13,7 +14,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const fullId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const uuidHex = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
 const labelPrefix = "ai.paperclip.runner-e2e";
-export interface DockerEngineIdentity { context: string; endpoint: string; engineId: string }
+export interface DockerEngineIdentity { context: string; endpoint: string; engineId: string; operatingSystem: string }
 export interface DockerDatabaseReceipt {
   schemaVersion: 1; lane: "owned-docker-postgres"; temporaryRoot: string; nonce: string;
   engine: DockerEngineIdentity; containerId: string | null; containerName: string; volumeName: string;
@@ -62,9 +63,10 @@ export async function currentDockerEngine(run: DockerRun = runDocker, env = proc
   const rows = JSON.parse(await run(["context", "inspect", context]));
   const endpoint = rows?.[0]?.Endpoints?.docker?.Host;
   if (rows.length !== 1 || typeof endpoint !== "string" || !endpoint.startsWith("unix:///") || endpoint.includes("\n") || env.DOCKER_HOST && env.DOCKER_HOST !== endpoint) throw new Error("Docker context must resolve to the exact local Unix socket");
-  const info = JSON.parse(await run(["--context", context, "info", "--format", '{"id":{{json .ID}},"os":{{json .OSType}}}']));
+  const info = JSON.parse(await run(["--context", context, "info", "--format", '{"id":{{json .ID}},"os":{{json .OSType}},"operatingSystem":{{json .OperatingSystem}}}']));
   if (info.os !== "linux" || typeof info.id !== "string" || !info.id.trim()) throw new Error("A running local Linux Docker engine is required");
-  return { context, endpoint, engineId: info.id };
+  if (typeof info.operatingSystem !== "string") throw new Error("Docker engine operating-system identity is missing");
+  return { context, endpoint, engineId: info.id, operatingSystem: info.operatingSystem };
 }
 async function pinnedEngine(expected: DockerEngineIdentity, run: DockerRun) {
   const observed = await currentDockerEngine(run);
@@ -75,12 +77,24 @@ function hasLabels(actual: Record<string, string> | undefined, receipt: DockerDa
 export function assertOwnedVolume(value: any, receipt: DockerDatabaseReceipt) {
   if (!value || value.Name !== receipt.volumeName || value.Driver !== "local" || value.Scope !== "local" || Object.keys(value.Options ?? {}).length || !hasLabels(value.Labels, receipt)) throw new Error("Docker volume ownership/configuration mismatch");
 }
+function exactPasswordBindSource(source: unknown, receipt: DockerDatabaseReceipt) {
+  const expected = path.join(receipt.temporaryRoot, "docker-postgres-private", "password");
+  if (source === expected) return true;
+  // Docker Desktop exposes its exact host bind through this Linux VM prefix.
+  // Never accept arbitrary suffixes, another engine, another root or a symlink.
+  if (receipt.engine.operatingSystem !== "Docker Desktop" || source !== `/host_mnt${expected}`) return false;
+  try {
+    const entry = lstatSync(expected);
+    return entry.isFile() && !entry.isSymbolicLink() && entry.uid === process.getuid?.()
+      && (entry.mode & 0o777) === 0o600 && realpathSync(expected) === expected;
+  } catch { return false; }
+}
 export function assertOwnedContainer(value: any, receipt: DockerDatabaseReceipt, running?: boolean) {
   const mounts = value?.Mounts, data = mounts?.find((m: any) => m.Destination === "/var/lib/postgresql"), password = mounts?.find((m: any) => m.Destination === "/run/secrets/postgres-password");
   const ports = value?.HostConfig?.PortBindings?.["5432/tcp"], config = value?.Config;
   if (!fullId(receipt.containerId) || value?.Id !== receipt.containerId || value.Name !== `/${receipt.containerName}` || value.Image !== POSTGRES_IMAGE_ID || config?.Image !== POSTGRES_IMAGE || !hasLabels(config.Labels, receipt)
     || value.HostConfig.Privileged !== false || !["default", "bridge"].includes(value.HostConfig.NetworkMode) || !Array.isArray(mounts) || mounts.length !== 2
-    || data?.Type !== "volume" || data.Name !== receipt.volumeName || data.RW !== true || password?.Type !== "bind" || password.Source !== path.join(receipt.temporaryRoot, "docker-postgres-private", "password") || password.RW !== false
+    || data?.Type !== "volume" || data.Name !== receipt.volumeName || data.RW !== true || password?.Type !== "bind" || !exactPasswordBindSource(password.Source, receipt) || password.RW !== false
     || !Array.isArray(ports) || ports.length !== 1 || ports[0].HostIp !== "127.0.0.1" || Object.keys(value.HostConfig.PortBindings).join() !== "5432/tcp"
     || !config.Env.includes("POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password") || !config.Env.includes(`POSTGRES_USER=${receipt.username}`) || !config.Env.includes(`POSTGRES_DB=${receipt.database}`) || config.Env.some((v: string) => /^POSTGRES_PASSWORD=/.test(v))
     || running !== undefined && value.State?.Running !== running) throw new Error("Docker container ownership/isolation mismatch");

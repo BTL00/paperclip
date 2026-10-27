@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, symlink } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
@@ -15,13 +15,13 @@ beforeEach(() => { vi.stubEnv("DOCKER_HOST", ""); vi.stubEnv("DOCKER_CONTEXT", "
 afterEach(async () => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function root() { const p = await realpath(await mkdtemp(path.join(os.tmpdir(), "paperclip-runner-e2e-"))); roots.push(p); return p; }
 function daemon() {
-  const state = { calls: [] as string[][], engine: "engine-one", endpoint: "unix:///private/offline-docker.sock", container: null as any, volume: null as any, loseVolumeAck: false, loseContainerAck: false, inspectionError: false, volumeInspectionError: false, badImage: false, failStart: false };
+  const state = { calls: [] as string[][], engine: "engine-one", operatingSystem: "Docker Desktop", endpoint: "unix:///private/offline-docker.sock", container: null as any, volume: null as any, loseVolumeAck: false, loseContainerAck: false, inspectionError: false, volumeInspectionError: false, badImage: false, failStart: false };
   const missing = (args: string[], name: string) => new DockerCommandError({ args, stdout: "[]", stderr: `Error: No such object: ${name}`, exitCode: 1, signal: null });
   const run: DockerRun = async args => {
     state.calls.push(args); const cmd = args[0] === "--context" ? args.slice(2) : args;
     if (cmd.join() === "context,show") return "offline-context";
     if (cmd[0] === "context") return JSON.stringify([{ Endpoints: { docker: { Host: state.endpoint } } }]);
-    if (cmd[0] === "info") return JSON.stringify({ id: state.engine, os: "linux" });
+    if (cmd[0] === "info") return JSON.stringify({ id: state.engine, os: "linux", operatingSystem: state.operatingSystem });
     if (cmd[0] === "image") return JSON.stringify([{ Id: state.badImage ? "wrong-image" : POSTGRES_IMAGE_ID, Os: "linux", Architecture: "arm64", RepoDigests: [POSTGRES_IMAGE], Config: { Env: [`PG_VERSION=${POSTGRES_VERSION}`] } }]);
     if (cmd[0] === "volume") {
       if (cmd[1] === "create") { const labels: Record<string, string> = {}; for (let i = 0; i < cmd.length; i++) if (cmd[i] === "--label") { const [key, value] = cmd[i + 1]!.split("="); labels[key!] = value!; }
@@ -165,4 +165,21 @@ it("fingerprints stable database lane/artifacts and rejects cross-lane retained 
   expect(campaignDatabaseEvidenceEligible(attempt, temp)).toBe(true);
   expect(campaignDatabaseEvidenceEligible({ ...attempt, databaseLane: embedded }, temp)).toBe(false);
   expect(campaignDatabaseEvidenceEligible({ ...attempt, databaseLane: undefined }, temp)).toBe(false);
+});
+
+it("allows only exact Docker Desktop host translation with an owned canonical private password", async () => {
+  const temp = await root(), { state, run } = daemon(), owned = await startOwnedDockerDatabase({ temporaryRoot: temp, privateSecrets: [], run });
+  const password = path.join(temp, "docker-postgres-private", "password");
+  const mount = state.container.Mounts.find((m: any) => m.Destination === "/run/secrets/postgres-password");
+  mount.Source = `/host_mnt${password}`;
+  expect(() => assertOwnedContainer(state.container, owned.receipt, true)).not.toThrow();
+  const wrongRoot = structuredClone(state.container); wrongRoot.Mounts.find((m: any) => m.Destination === "/run/secrets/postgres-password").Source = `/host_mnt${password}-foreign`;
+  expect(() => assertOwnedContainer(wrongRoot, owned.receipt)).toThrow("ownership");
+  expect(() => assertOwnedContainer(state.container, { ...owned.receipt, engine: { ...owned.receipt.engine, operatingSystem: "Debian GNU/Linux" } })).toThrow("ownership");
+  const writable = structuredClone(state.container); writable.Mounts.find((m: any) => m.Destination === "/run/secrets/postgres-password").RW = true;
+  expect(() => assertOwnedContainer(writable, owned.receipt)).toThrow("ownership");
+  const contents = await readFile(password); await rm(password); const target = path.join(temp, "other-password"); await writeFile(target, contents, { mode: 0o600 }); await symlink(target, password);
+  expect(() => assertOwnedContainer(state.container, owned.receipt)).toThrow("ownership");
+  await rm(password); await writeFile(password, contents, { mode: 0o600 });
+  await owned.close(); expect(state.container).toBeNull(); expect(state.volume).toBeNull();
 });
