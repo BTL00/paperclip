@@ -13,7 +13,13 @@ export function isBlueColor(color: string) {
   const parts = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/i);
   if (!parts) return false;
   const [, red, green, blue] = parts.map(Number);
+  const alpha = color.match(/^rgba?\([^)]*[,/]\s*(\d*(?:\.\d+)?)\s*\)$/i);
+  if (/^rgba\(/i.test(color) && (!alpha || Number(alpha[1]) < 0.25)) return false;
   return blue! >= 64 && blue! > red! + 24 && blue! >= green!;
+}
+export function hasVisibleBlueDesign(elements: Array<{ tag: string; role?: string | null; color: string; background: string }>) {
+  return elements.some(element => ["BODY", "MAIN", "SECTION", "HEADER", "H1", "H2", "H3", "BUTTON"].includes(element.tag) || element.role === "button"
+    ? isBlueColor(element.background) || element.tag !== "BODY" && isBlueColor(element.color) : false);
 }
 const direction = "Switch to a blue design while you are working.";
 export function gradeActiveSteering(value: unknown) {
@@ -29,10 +35,10 @@ export function gradeActiveSteering(value: unknown) {
     && /steer|steering/i.test(String(s.queryReply)) && !/I(?:'ve| have)? (?:already )?(?:steered|delivered|implemented)|blue (?:design|page) (?:is|has been) (?:ready|complete)/i.test(String(s.queryReply)),
   "Chat identifies the supported human Steer control; it cannot forge the action or claim queue admission already changed the active result.");
   const accepted = s.steerStatus === 200;
-  c.add("delivery-distinct-from-queue-with-no-loss", accepted
+  c.add("delivery-distinct-from-queue-with-no-loss", s.steerObservedBranch === (accepted ? "same-run-acknowledged" : "provider-rejected-normal-continuation") && (accepted
     ? s.acknowledgedSameRun === true && after?.entries.length === 0 && s.steerAuditBound === true && s.idempotentRetryStatus === 200 && s.ordinaryConsumerCount === 0
-    : s.steerStatus === 409 && s.providerFailureVisible === true && s.failureRetainedMessage === true && after?.entries.some(row => row.comment.id === s.targetId && row.comment.body === direction) === true
-      && s.supportedContinuationVisible === true && s.ordinaryConsumerCount === 1 && s.continuationInputBound === true,
+    : ["steering_rejected", "steering_unsupported"].includes(String(s.steerFailureCode)) && s.steerStatus === 409 && s.providerFailureVisible === true && s.failureRetainedMessage === true && after?.entries.some(row => row.comment.id === s.targetId && row.comment.body === direction) === true
+      && s.supportedContinuationVisible === true && s.ordinaryConsumerCount === 1 && s.continuationInputBound === true),
   "A durable same-run ACK is required for delivery; an actual provider rejection instead retains the exact message and visible failure until one normal continuation consumes it.");
   c.add("actual-blue-output-correct-native-owner", s.actualBlueArtifact === true && s.blueRevisionBound === true && s.workerTaskDone === true && s.queueEmptyAtEnd === true
     && o.runs.length === (accepted ? 2 : 3) && o.runs.every(row => row.status === "succeeded") && o.tasks.length === 1,
@@ -72,19 +78,23 @@ export const runtimeActiveSteeringCases = [runtimeDefinition("steering.steer-act
     const result = await response; state.steerStatus = result.status();
     const after = await ctx.input.api.get<IssueQueuedCommentQueue>(endpoint); state.queueAfterAction = after;
     if (result.status() === 200) {
+      state.steerObservedBranch = "same-run-acknowledged";
       const run = await ctx.input.api.get<{ resultJson?: { queuedSteeringAcknowledgements?: Record<string, { status?: string; queueId?: string; turnId?: string }> } }>(`/api/heartbeat-runs/${state.workerRunId}`);
       const ack = run.resultJson?.queuedSteeringAcknowledgements?.[targetId];
       state.acknowledgedSameRun = ack?.status === "acknowledged" && ack.queueId === before.queueId && typeof ack.turnId === "string" && ack.turnId.length > 0;
       const retry = await ctx.input.page.request.post(`${endpoint}/${targetId}/steer`, { data: mutation }); state.idempotentRetryStatus = retry.status(); await retry.dispose();
     } else {
       if (result.status() !== 409) throw new Error("Steering failed outside its supported visible rejection contract");
+      state.steerObservedBranch = "provider-rejected-normal-continuation";
       const body = await result.json() as { code?: string; details?: { code?: string } };
-      if (!/steering/.test(body.code ?? body.details?.code ?? "")) throw new Error("A non-provider queue conflict does not qualify as a provider steering rejection");
+      state.steerFailureCode = body.code ?? body.details?.code;
+      if (!["steering_rejected", "steering_unsupported"].includes(String(state.steerFailureCode))) throw new Error("A non-provider queue conflict does not qualify as a provider steering rejection");
       await expect(ctx.input.page.getByText(/steer|temporarily unavailable|timed out/i).filter({ hasNot: ctx.input.page.locator("button") }).first()).toBeVisible();
       state.providerFailureVisible = true; state.failureRetainedMessage = after.entries.some(row => row.comment.id === targetId && row.comment.body === direction);
       await expect(ctx.input.page.getByTestId(`task-chat-queued-message-${targetId}`)).toBeVisible();
       await expect(ctx.input.page.getByTestId("task-chat-composer-input").last()).toBeVisible(); state.supportedContinuationVisible = true;
     }
+    await ctx.input.evidence("runtime-steering-observed-branch.json", { branch: state.steerObservedBranch, failureCode: state.steerFailureCode ?? null, status: state.steerStatus, issueId: task.id, runId: state.workerRunId, commentId: targetId, otherBranchLiveQualified: false });
     await ctx.input.capture("actual-steering-delivery", "Selected human steering action and actual native delivery or retained rejection", "runtime-steer-active.png");
     await writeFile((state.gate as { gate: string }).gate, "The human brief is ready. Implement a small semantic website.html using the actual design direction you received, with a visible h1 and a labelled signup action. Register the real website.html file as a downloadable artifact work product. Save the actual chosen color and design in a non-plan website-delivery task document, then complete normally. Preserve saved human requirements for normal admission; do not create tasks or publish externally.", "utf8");
     const finished = await pollUntil({ label: "Actual selected steering or preserved normal continuation produces its website", deadlineAt: Date.now() + 240_000,
@@ -112,11 +122,11 @@ export const runtimeActiveSteeringCases = [runtimeDefinition("steering.steer-act
         try {
           const page = await preview.newPage(); await page.route("**/*", route => route.abort());
           await page.setContent(artifact.content, { waitUntil: "domcontentloaded" });
-          const colors = await page.locator("body, body *").evaluateAll(nodes => nodes.filter(node => {
+          const colors = await page.locator("body, main, section, header, h1, h2, h3, button, [role=button]").evaluateAll(nodes => nodes.filter(node => {
             const box = node.getBoundingClientRect(), style = getComputedStyle(node);
             return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-          }).flatMap(node => { const style = getComputedStyle(node); return [style.color, style.backgroundColor, style.borderColor]; }));
-          state.actualBlueArtifact = colors.some(isBlueColor);
+          }).map(node => { const style = getComputedStyle(node); return { tag: node.tagName, role: node.getAttribute("role"), color: style.color, background: style.backgroundColor }; }));
+          state.actualBlueArtifact = hasVisibleBlueDesign(colors);
         } finally { await preview.close(); }
       }
       state.blueRevisionBound = o.revisions.some(row => row.createdByRunId === state.outputRunId && row.createdByAgentId === (state.worker as Entity).id && /blue/i.test(row.body ?? "")
