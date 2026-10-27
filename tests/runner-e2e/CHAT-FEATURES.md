@@ -245,3 +245,14 @@ single ordinary lifecycle hello. The closed receipt records only HTTP status,
 recognition, expiry and key-budget availability; unlimited/unknown key budgets do
 not establish account credit or model access. Response bodies, labels, amounts,
 account identities and key values are never retained. There is no retry.
+
+Before freezing a campaign candidate, run the offline runtime-declaration guard:
+
+```sh
+node --import ./cli/node_modules/tsx/dist/loader.mjs tests/runner-e2e/chat-catalog-consistency.ts
+```
+
+It imports all 242 lazy declarations through the existing runtime loaders without
+calling fixture, browser, database, or provider callbacks. Catalog listing alone
+reads the discovery JSON and cannot establish runtime declaration consistency.
+The same guard also runs in the existing Product E2E unit-test command.

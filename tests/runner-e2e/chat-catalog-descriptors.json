@@ -38,7 +38,7 @@
     ],
     "oracleVersion": "paperclip.chat-catalog.identity.v1",
     "coverageGaps": [
-      "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; actual intended mutation and human acceptance/reuse callbacks remain unqualified until this setup capability is available."
+      "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; the actual intended mutation and human acceptance/reuse callbacks are authored but remain unqualified until this setup capability is available."
     ],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
@@ -65,7 +65,7 @@
     ],
     "oracleVersion": "paperclip.chat-catalog.identity.v1",
     "coverageGaps": [
-      "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; actual intended mutation and human acceptance/reuse callbacks remain unqualified until this setup capability is available."
+      "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; the actual intended mutation and human acceptance/reuse callbacks are authored but remain unqualified until this setup capability is available."
     ],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
@@ -147,7 +147,9 @@
       "chat-scenarios/activity.yaml",
       "chat-catalog-domains/internal-agent-feedback.ts",
       "chat-catalog-domains/internal-privacy.ts",
-      "chat-catalog-domains/identity-auth.ts"
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/internal-commentary-reader.ts",
+      "chat-run-evidence-observer.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.internal.v1",
     "coverageGaps": [],
@@ -805,6 +807,7 @@
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-flow.ts",
+      "chat-query-attachments.ts",
       "run-observations.ts",
       "../../server/src/routes/issues.ts",
       "../../server/src/routes/tool-access.ts",
@@ -823,7 +826,13 @@
     "attemptTimeoutMs": 1140000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-app-review.js",
-    "exportName": "appReviewExternalCases"
+    "exportName": "appReviewExternalCases",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "launch-update.md"
+      }
+    ]
   },
   {
     "externalInput": {
@@ -936,6 +945,11 @@
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/identity-support.ts",
+      "../../ui/src/pages/apps/Browse.tsx",
+      "../../ui/src/pages/apps/ConnectorsToolbar.tsx",
+      "../../ui/src/pages/apps/connection-owner.tsx",
+      "../../ui/src/pages/apps/AppDetail.tsx",
+      "../../ui/src/pages/apps/app-detail/PermissionsPanel.tsx",
       "chat-scenarios/app-permissions.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.external.v1",
@@ -1031,6 +1045,13 @@
     "scenarioId": "assistant-connections.device-login",
     "sourceFiles": [
       "chat-catalog-domains/external-assistant-device.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-device-private-contract.ts",
+      "../../ui/src/pages/McpConnect.tsx",
+      "../../server/src/routes/public-mcp.ts",
+      "../../server/src/services/public-mcp/oauth.ts",
+      "../../packages/shared/src/public-mcp.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/identity-support.ts",
@@ -1335,7 +1356,14 @@
       "maximumActiveWorkerRuns": 1
     },
     "modulePath": "./chat-catalog-domains/integrator-case-create.js",
-    "exportName": "integratorCaseCreationCases"
+    "exportName": "integratorCaseCreationCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "customer-bug-brief.md"
+      }
+    ]
   },
   {
     "respondingAgent": {
@@ -1817,7 +1845,14 @@
     "attemptTimeoutMs": 420000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/privileged-cli.js",
-    "exportName": "privilegedCliCases"
+    "exportName": "privilegedCliCases",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "owned-manual-pause"
+      ]
+    }
   },
   {
     "scenarioId": "cli-operations.export-document-cli",
@@ -2138,11 +2173,14 @@
     "scenarioId": "connection-setup.choose-provider",
     "sourceFiles": [
       "chat-catalog-domains/external-provider-choice.ts",
+      "run-observations.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/identity-support.ts",
       "../../packages/shared/src/app-definitions.ts",
       "../../packages/shared/src/app-definitions/notion.json",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
       "chat-scenarios/connection-setup.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.external.v1",
@@ -2232,6 +2270,8 @@
       "chat-catalog-domains/external-connection-setup.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../ui/src/api/connection-intents.ts",
       "chat-scenarios/connection-setup.yaml",
       "chat-catalog-domains/identity-support.ts"
     ],
@@ -2523,6 +2563,10 @@
     "scenarioId": "connection-setup.secure-api-key",
     "sourceFiles": [
       "chat-catalog-domains/external-secure-key.ts",
+      "chat-query-attachments.ts",
+      "../../ui/src/App.tsx",
+      "../../ui/src/pages/apps/app-connect-policy.ts",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
       "chat-catalog-domains/external-private-browser.ts",
       "chat-catalog-domains/external-private-browser-worker.ts",
       "chat-catalog-domains/external-credential-language.ts",
@@ -2540,7 +2584,13 @@
     "attemptTimeoutMs": 420000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-secure-key.js",
-    "exportName": "secureKeyExternalCases"
+    "exportName": "secureKeyExternalCases",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "provider-account.md"
+      }
+    ]
   },
   {
     "scenarioId": "connection-setup.unreachable-mcp",
@@ -2616,7 +2666,8 @@
       "chat-catalog-domains/privileged-production-ui.ts",
       "../../ui/vite.config.ts",
       "../../ui/src/App.tsx",
-      "../../ui/src/pages/NotFound.tsx"
+      "../../ui/src/pages/NotFound.tsx",
+      "chat-query-attachments.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.privileged.v1",
     "coverageGaps": [],
@@ -2625,7 +2676,13 @@
     "attemptTimeoutMs": 600000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/privileged-gated-lab.js",
-    "exportName": "privilegedGatedLabCases"
+    "exportName": "privilegedGatedLabCases",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "historical-lab-link.md"
+      }
+    ]
   },
   {
     "scenarioId": "developer-labs.interaction-fixture",
@@ -2723,7 +2780,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 600000,
     "modulePath": "./chat-catalog-domains/internal-website-delivery.js",
-    "exportName": "websiteDeliveryCases"
+    "exportName": "websiteDeliveryCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-source.md"
+      }
+    ]
   },
   {
     "scenarioId": "documents-artifacts.resolve-feedback",
@@ -2740,7 +2804,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/internal-documents-artifacts.js",
-    "exportName": "documents_artifactsCases"
+    "exportName": "documents_artifactsCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-source.md"
+      }
+    ]
   },
   {
     "scenarioId": "documents-artifacts.restore-document",
@@ -2761,7 +2832,13 @@
     "attemptTimeoutMs": 660000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/internal-documents-artifacts.js",
-    "exportName": "documents_artifactsCases"
+    "exportName": "documents_artifactsCases",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-source.md"
+      }
+    ]
   },
   {
     "scenarioId": "documents-artifacts.revise-delivery",
@@ -2780,7 +2857,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 600000,
     "modulePath": "./chat-catalog-domains/internal-website-delivery.js",
-    "exportName": "websiteDeliveryCases"
+    "exportName": "websiteDeliveryCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-source.md"
+      }
+    ]
   },
   {
     "scenarioId": "documents-artifacts.write-plan",
@@ -2894,7 +2978,6 @@
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
     "expectedRunCount": 1,
-    "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 900000,
     "authentication": "human-session",
@@ -3081,6 +3164,11 @@
     "scenarioId": "gateways-profiles.rotate-token",
     "sourceFiles": [
       "chat-catalog-domains/external-gateway-rotation.ts",
+      "chat-catalog-domains/external-gateway-handoff.ts",
+      "../../ui/src/components/AppsSidebar.tsx",
+      "../../ui/src/components/IssueThreadInteractionCard.tsx",
+      "../../ui/src/pages/apps/gateways/GatewaysList.tsx",
+      "../../ui/src/pages/apps/gateways/GatewayDetail.tsx",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-secret-scan.ts",
       "chat-catalog-domains/external-support.ts",
@@ -3322,6 +3410,8 @@
       "chat-catalog-domains/privileged-support.ts",
       "chat-catalog-domains/privileged-backup.ts",
       "chat-scenarios/instance-operations.yaml",
+      "chat-catalog-domains/privileged-docker-database.ts",
+      "docker-postgres.ts",
       "../../packages/db/src/backup-lib.ts",
       "../../server/src/routes/instance-database-backups.ts"
     ],
@@ -3342,6 +3432,8 @@
       "chat-catalog-domains/privileged-diagnose-health.ts",
       "chat-scenarios/instance-operations.yaml",
       "chat-catalog-domains/privileged-database-fault.ts",
+      "chat-catalog-domains/privileged-docker-database.ts",
+      "docker-postgres.ts",
       "../../cli/src/checks/database-check.ts",
       "../../server/src/routes/health.ts"
     ],
@@ -4591,7 +4683,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 720000,
     "modulePath": "./chat-catalog-domains/integrator-routine-webhook.js",
-    "exportName": "integratorRoutineWebhookCases"
+    "exportName": "integratorRoutineWebhookCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-routine.md"
+      }
+    ]
   },
   {
     "scenarioId": "runs-adapters.inspect-failed-run",
@@ -4599,7 +4698,11 @@
       "chat-catalog-domains/runtime-failed-runs.ts",
       "chat-catalog-domains/runtime-native-failure.ts",
       "chat-catalog-domains/runtime-support.ts",
-      "chat-scenarios/runs-adapters.yaml"
+      "chat-scenarios/runs-adapters.yaml",
+      "../../ui/src/components/TaskChatThread.tsx",
+      "../../ui/src/components/task-chat/TaskChatMarker.tsx",
+      "../../ui/src/components/task-chat/TaskChatThreadView.tsx",
+      "../../ui/src/pages/AgentDetail.tsx"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
@@ -4637,7 +4740,9 @@
       "chat-catalog-domains/runtime-session.ts",
       "chat-catalog-domains/runtime-workspaces.ts",
       "chat-catalog-domains/runtime-support.ts",
-      "chat-scenarios/runs-adapters.yaml"
+      "chat-scenarios/runs-adapters.yaml",
+      "../../ui/src/components/AgentActionButtons.tsx",
+      "../../ui/src/pages/AgentDetail.tsx"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
@@ -4787,6 +4892,9 @@
       "../../server/src/services/heartbeat/run-preparation.ts",
       "../../cli/dist/index.js",
       "../../cli/src/index.ts",
+      "../../cli/node_modules/tsx/dist/loader.mjs",
+      "chat-catalog-domains/external-plugin-sdk-mirror.ts",
+      "../../packages/plugins/sdk/package.json",
       "../../packages/plugins/create-paperclip-plugin/src/index.ts",
       "../../packages/plugins/sdk/src/index.ts",
       "../../packages/plugins/sdk/dist/index.js",
@@ -4926,7 +5034,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/integrator-skills.js",
-    "exportName": "integratorSkillsCases"
+    "exportName": "integratorSkillsCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "skill-context.md"
+      }
+    ]
   },
   {
     "scenarioId": "skills.enable-for-agent",
@@ -4986,7 +5101,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/integrator-skill-imports.js",
-    "exportName": "integratorSkillImportCases"
+    "exportName": "integratorSkillImportCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "skill-context.md"
+      }
+    ]
   },
   {
     "scenarioId": "skills.fork-read-only",
@@ -5004,7 +5126,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/integrator-skill-imports.js",
-    "exportName": "integratorSkillImportCases"
+    "exportName": "integratorSkillImportCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "skill-context.md"
+      }
+    ]
   },
   {
     "scenarioId": "skills.review-update",
@@ -5021,7 +5150,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 540000,
     "modulePath": "./chat-catalog-domains/integrator-skill-update.js",
-    "exportName": "integratorSkillUpdateCases"
+    "exportName": "integratorSkillUpdateCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "skill-context.md"
+      }
+    ]
   },
   {
     "scenarioId": "skills.studio-test",
@@ -5038,7 +5174,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 540000,
     "modulePath": "./chat-catalog-domains/integrator-skill-studio.js",
-    "exportName": "integratorSkillStudioCases"
+    "exportName": "integratorSkillStudioCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "skill-context.md"
+      }
+    ]
   },
   {
     "scenarioId": "status-cards.archive-card",
@@ -5054,7 +5197,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 720000,
     "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
-    "exportName": "integratorStatusCardsCases"
+    "exportName": "integratorStatusCardsCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-status-card.md"
+      }
+    ]
   },
   {
     "scenarioId": "status-cards.create-card",
@@ -5088,7 +5238,14 @@
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 720000,
     "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
-    "exportName": "integratorStatusCardsCases"
+    "exportName": "integratorStatusCardsCases",
+    "authentication": "human-session",
+    "queryAttachments": [
+      {
+        "stateKey": "factualContextAttachment",
+        "filename": "selected-status-card.md"
+      }
+    ]
   },
   {
     "scenarioId": "status-cards.other-authors-card",
