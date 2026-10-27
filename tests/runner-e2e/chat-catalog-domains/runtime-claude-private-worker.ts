@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { test, type Cookie } from "@playwright/test";
 import { matchesClaudeFixtureTarget, type ClaudePrivateRequest, type ClaudePrivateReceipt } from "./runtime-claude-private.js";
@@ -10,7 +13,7 @@ async function main(): Promise<ClaudePrivateReceipt> {
   if (attached) throw new Error("Claude credential operation cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as ClaudePrivateRequest & { companyId: string; environmentId: string; baseURL: string; cookies: Cookie[] };
   const base = new URL(input.baseURL);
-  if (base.protocol !== "http:" || base.hostname !== "127.0.0.1" || ![input.companyId, input.environmentId].every(id => /^[a-f0-9-]{36}$/i.test(id)) || !["prepare-account", "validate-saved"].includes(input.operation)) throw new Error("Invalid private Claude operation binding");
+  if (base.protocol !== "http:" || base.hostname !== "127.0.0.1" || ![input.companyId, input.environmentId].every(id => /^[a-f0-9-]{36}$/i.test(id)) || !["check-harness", "prepare-account", "validate-saved"].includes(input.operation)) throw new Error("Invalid private Claude operation binding");
   const headers = { Cookie: input.cookies.map(row => `${row.name}=${row.value}`).join("; "), Origin: base.origin, "Content-Type": "application/json" };
   async function json<T>(pathname: string, body?: unknown): Promise<T> {
     const target = new URL(pathname, base); if (target.origin !== base.origin || !pathname.startsWith("/api/")) throw new Error("Private Claude request escaped its actual instance");
@@ -19,6 +22,12 @@ async function main(): Promise<ClaudePrivateReceipt> {
   }
   const [environment, inventory, company] = await Promise.all([json<Environment>(`/api/environments/${input.environmentId}`), json<Environment[]>(`/api/companies/${input.companyId}/environments`), json<{ id: string }>(`/api/companies/${input.companyId}`)]);
   if (!matchesClaudeFixtureTarget({ company, expectedCompanyId: input.companyId, fixtureEnvironmentId: input.environmentId, detail: environment, listed: inventory })) throw new Error("Selected Claude fixture requires the exact owned local target with actual public inventory/company authority");
+  if (input.operation === "check-harness") {
+    if (!path.isAbsolute(input.harnessExecutable)) throw new Error("Claude command qualification requires its actual explicit executable path");
+    const version = await promisify(execFile)(input.harnessExecutable, ["--version"], { timeout: 15000, maxBuffer: 16384 });
+    if (!/\bClaude Code\b/i.test(version.stdout) || !/\b\d+\.\d+\.\d+\b/.test(version.stdout)) throw new Error("The selected executable did not identify the real installed Claude Code CLI");
+    return { processIsolation: true, testRunnerAttached: false, apiStepRecorder: false, operation: input.operation, companyId: input.companyId, environmentId: input.environmentId, probeStatus: "pass", probeCheckCodes: ["actual_claude_code_version_observed"] };
+  }
   let connectionId: string, grantId: string, config: Record<string, unknown>, agentId: string | undefined, savedType: string | undefined, savedBinding: AiRuntimeConnectionBinding | undefined;
   if (input.operation === "prepare-account") {
     if (!input.credential || !input.harnessExecutable || !input.model) throw new Error("Missing selected Claude credential/command/model");

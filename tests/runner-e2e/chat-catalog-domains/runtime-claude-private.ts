@@ -15,18 +15,18 @@ export function matchesClaudeFixtureTarget(input: { company: { id: string }; exp
 }
 export interface ClaudePrivateReceipt {
   processIsolation: true; testRunnerAttached: false; apiStepRecorder: false;
-  operation: "prepare-account" | "validate-saved"; companyId: string; environmentId: string; connectionId: string; grantId: string; agentId?: string;
+  operation: "check-harness" | "prepare-account" | "validate-saved"; companyId: string; environmentId: string; connectionId?: string; grantId?: string; agentId?: string;
   probeStatus: "pass" | "warn" | "fail"; probeCheckCodes: string[];
 }
 export function validateClaudePrivateReceipt(value: unknown, expected: Pick<ClaudePrivateReceipt, "operation" | "companyId" | "environmentId">): ClaudePrivateReceipt {
   const r = value as ClaudePrivateReceipt;
   if (!r || r.processIsolation !== true || r.testRunnerAttached !== false || r.apiStepRecorder !== false || r.operation !== expected.operation || r.companyId !== expected.companyId || r.environmentId !== expected.environmentId
     || Object.keys(r).some(key => !["processIsolation", "testRunnerAttached", "apiStepRecorder", "operation", "companyId", "environmentId", "connectionId", "grantId", "agentId", "probeStatus", "probeCheckCodes"].includes(key))
-    || ![r.companyId, r.environmentId, r.connectionId, r.grantId, ...(r.agentId ? [r.agentId] : [])].every(id => typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id))
+    || ![r.companyId, r.environmentId, ...(r.operation === "check-harness" ? [] : [r.connectionId, r.grantId]), ...(r.agentId ? [r.agentId] : [])].every(id => typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id))
     || !["pass", "warn", "fail"].includes(r.probeStatus) || !Array.isArray(r.probeCheckCodes) || r.probeCheckCodes.length > 100 || !r.probeCheckCodes.every(code => /^[a-z0-9_.-]{1,100}$/i.test(code))) throw new Error("Invalid closed Claude qualification receipt; private diagnostics withheld");
   return r;
 }
-export type ClaudePrivateRequest = { operation: "prepare-account"; credential: string; harnessExecutable: string; model: string } | { operation: "validate-saved"; agentId: string; connectionId: string; grantId: string };
+export type ClaudePrivateRequest = { operation: "check-harness"; harnessExecutable: string } | { operation: "prepare-account"; credential: string; harnessExecutable: string; model: string } | { operation: "validate-saved"; agentId: string; connectionId: string; grantId: string };
 /** Only the selected per-attempt key/session crosses the private0600 file.
  * No Test request API, browser arguments, argv, env or raw child diagnostic gets it. */
 export async function privateClaudeOperation(input: ClaudePrivateRequest & { companyId: string; environmentId: string; baseURL: string; cookies: Cookie[] }, scanSecret = input.operation === "prepare-account" ? input.credential : undefined) {
