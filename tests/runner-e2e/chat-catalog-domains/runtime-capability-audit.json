@@ -81,8 +81,8 @@
     },
     {
       "scenarioId": "agents.managed-profile",
-      "readinessClass": "provider",
-      "needs": "Operator-managed Anthropic references, genuinely qualified locked environment and actual retention acknowledgement are needed for the completion branch; private discovery remains coordinator-owned."
+      "readinessClass": "implemented",
+      "needs": "Credential-free exact unavailable starting context: actual empty managed profile inventory, ordinary-agent read/provision403, actual operator GET/OpenAPI contract and rejected retention/qualification422 probes before any provisioning. Native chat must identify operator qualification, locked/restricted environment and retention acknowledgement without false readiness; all profiles/tasks/agent configuration remain unchanged. No provider resources or ready-profile end state required by frozen YAML."
     },
     {
       "scenarioId": "agent-chat.reopen-conversation",
