@@ -6013,9 +6013,61 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.tasks.comment-with-reference",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null,
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.tasks.comment-with-reference",
+          "startedAt": "2026-10-27T07:15:25.823Z",
+          "finishedAt": "2026-10-27T07:17:18.738Z",
+          "sourceRevision": "f73390f925edcddd3af977e337adf16d5818fb41",
+          "workingTreeDigest": "36eb221b1aac43603d0d0491168ef2ad3bc7886b6bafe930cb1fe9b05b1b1a9a",
+          "definitionDigest": "8e9f310d6d71093b705645721c44e93d8dd7f04576091fff15c5a747fdf6221b",
+          "suiteDefinitionDigest": "eb1ebed9782e97b2f456f163d2ab91ed1a97a025f9f7acd6fc9015261c2c3d8c",
+          "graderDigest": "8e9f310d6d71093b705645721c44e93d8dd7f04576091fff15c5a747fdf6221b",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "eval_harness_startup_doctor_requires_persisted_database_dsn",
+          "observedFailure": "Normal onboard doctor rejected postgres config without connectionString despite supported server DATABASE_URL. Actual result: Playwright exited 1 before writing a result; Temporary runner E2E state cleanup failed at /private/var/folders/74/zhncxl_j05xb5_r6_vfbk73h0000gn/T/paperclip-runner-e2e-hZhllt: Preserving private recovery state after unconfirmed cleanup: /private/var/folders/74/zhncxl_j05xb5_r6_vfbk73h0000gn/T/paperclip-runner-e2e-hZhllt",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-selection-f73390f925.json",
+            "tests/runner-e2e/results/catalog-initial-2026-10-27T07-15-25-823Z-tasks-comment-with-reference/chat-features/runner-codex-subscription/local/tasks.comment-with-reference/attempt-1/result.json",
+            "tests/runner-e2e/results/catalog-initial-2026-10-27T07-15-25-823Z-tasks-comment-with-reference/chat-features/runner-codex-subscription/local/tasks.comment-with-reference/attempt-1/server.log",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-tasks.comment-with-reference.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 0,
+            "coverage": "No scenario/browser/native/model admission; startup doctor failed before serving. Docker infrastructure only."
+          },
+          "cleanup": "failed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "f73390f925edcddd3af977e337adf16d5818fb41",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-f73390f925.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
+      "qualifyingDefinitionDigest": "8e9f310d6d71093b705645721c44e93d8dd7f04576091fff15c5a747fdf6221b",
+      "qualifyingGraderDigest": "8e9f310d6d71093b705645721c44e93d8dd7f04576091fff15c5a747fdf6221b",
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
