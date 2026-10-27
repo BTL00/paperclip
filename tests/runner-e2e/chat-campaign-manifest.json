@@ -3682,9 +3682,68 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.navigation-preferences.broken-link",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null,
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.navigation-preferences.broken-link",
+          "startedAt": "2026-10-27T07:35:44.803Z",
+          "finishedAt": "2026-10-27T07:40:48.275Z",
+          "sourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+          "workingTreeDigest": "2a18d79fd9b9a9d9e72e8ae512c837477246cd8cd3c7bd95f20c282147668e4f",
+          "definitionDigest": "0a5ee01627586a70777f18d6ebc2e5fec840e639f8da05ef4963321416cbf110",
+          "suiteDefinitionDigest": "87540a2990ac4e8af4ec918da2550547cc10e18fc0ec557941d427080951430a",
+          "graderDigest": "0a5ee01627586a70777f18d6ebc2e5fec840e639f8da05ef4963321416cbf110",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "eval_fixture_deduplicated_distractor_and_private_invitation_url_logging",
+          "observedFailure": "Timed out waiting for navigation-preferences.broken-link: GET /api/issues/d31f5db9-1b2e-407e-87ef-2c348a892fb7 returned 404; body withheld; Reporter privacy violation: redacted server.log, omitted blob-report/report.zip, redacted playwright process stdout/stderr",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-selection-6beacfe0a9.json",
+            "tests/runner-e2e/results/catalog-initial-2026-10-27T07-35-44-803Z-navigation-preferences-broken-link/chat-features/runner-codex-subscription/local/navigation-preferences.broken-link/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-navigation-preferences.broken-link.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 323491,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-6beacfe0a9.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          },
+          "diagnosisHistory": [
+            {
+              "at": "2026-10-27T07:46:43.984946+00:00",
+              "classification": "candidate_failure",
+              "detail": "Original result class preserved. Saved stale and similar fixture IDs were identical because normal public same-title task creation deduplicated; later similarAfter GET queried the deleted alias. Separate retained diagnostics show invitation-token URL in product request log, redacted/withheld by report safeguards.",
+              "supersededBy": "eval_fixture_deduplicated_distractor_and_private_invitation_url_logging"
+            }
+          ]
+        }
+      ],
+      "qualifyingDefinitionDigest": "0a5ee01627586a70777f18d6ebc2e5fec840e639f8da05ef4963321416cbf110",
+      "qualifyingGraderDigest": "0a5ee01627586a70777f18d6ebc2e5fec840e639f8da05ef4963321416cbf110",
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
