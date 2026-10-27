@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { gradeIntegratorSkillEnable, integratorSkillEnableCases } from "./integrator-skill-enable.js";
+import { SKILL_POLICY_ACTIONS } from "../../../packages/shared/src/validators/skill-policy.js";
+import { gradeIntegratorSkillEnable, integratorSkillEnableCases, unsupportedUsePrerequisite } from "./integrator-skill-enable.js";
 function valid() {
   const skill = { id: "skill", key: "company/accessibility-review", currentVersionId: "revision", markdown: "Check form labels" };
   return { scenarioId: "skills.enable-for-agent", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { skill: structuredClone(skill), worker: { id: "morgan" }, futureTask: { id: "future" }, agentConfigurationStatus: 200, beforeActivityIds: ["setup-probe"], effectivePolicy: { revision: 1, rules: [] } },
@@ -9,6 +10,16 @@ function valid() {
     activity: [{ id: "actual-assignment", action: "agent.skills_synced", agentId: "ceo", entityId: "morgan", runId: "source" }],
     reply: "Assigned the existing skill from our company library to Morgan. Installation was already complete; usage remains subject to the existing policy." };
 }
+describe("effective-use prerequisite classification", () => {
+  it("requires the complete real lifecycle-denial probe and actual retained assignment, never a single unsupported action", () => {
+    const receipt = { useStatus: 400, decisions: SKILL_POLICY_ACTIONS.map(action => ({ action, allowed: false })), assignmentRetained: true };
+    expect(unsupportedUsePrerequisite(receipt)).toBe(true);
+    expect(unsupportedUsePrerequisite({ ...receipt, decisions: [] })).toBe(false);
+    expect(unsupportedUsePrerequisite({ ...receipt, useStatus: 403 })).toBe(false);
+    expect(unsupportedUsePrerequisite({ ...receipt, assignmentRetained: false })).toBe(false);
+    expect(unsupportedUsePrerequisite({ ...receipt, decisions: receipt.decisions.map((row, index) => index ? row : { ...row, allowed: true }) })).toBe(false);
+  });
+});
 describe("actual permitted skill assignment and future immutable delivery", () => {
   it("keeps unsupported grant/use-policy prerequisites partial, never an expected-refusal pass", () => {
     expect(integratorSkillEnableCases[0]!.coverageGaps).toHaveLength(2);

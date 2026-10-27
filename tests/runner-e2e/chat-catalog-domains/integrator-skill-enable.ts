@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { CompanySkillDetail } from "../../../packages/shared/src/types/company-skill.js";
 import type { AgentSkillSnapshot } from "../../../packages/shared/src/types/adapter-skills.js";
-import { SKILL_POLICY_ACTIONS } from "../../../packages/shared/src/validators/skill-policy.js";
+import { SKILL_POLICY_ACTIONS, type EffectiveSkillPolicy, type SkillPolicyDecision } from "../../../packages/shared/src/validators/skill-policy.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, task, type Entity, type InternalObservation } from "./internal-support.js";
@@ -39,11 +41,43 @@ export function gradeIntegratorSkillEnable(value: unknown) {
   "Chat distinguishes the saved Morgan assignment from the preexisting installation and the separate usage-policy boundary.");
   return c.result();
 }
+/** This is a public prerequisite experiment, never a substitute for the
+ * scenario's required model refusal. Lifecycle denials cannot be relabelled
+ * as a use denial when actual assignment remains allowed. */
+export function unsupportedUsePrerequisite(value: { useStatus: number; decisions: Array<{ action: string; allowed: boolean }>; assignmentRetained: boolean }) {
+  return !(SKILL_POLICY_ACTIONS as readonly string[]).includes("skills.use") && value.useStatus === 400
+    && value.decisions.length === SKILL_POLICY_ACTIONS.length
+    && SKILL_POLICY_ACTIONS.every(action => value.decisions.some(decision => decision.action === action && !decision.allowed))
+    && value.assignmentRetained;
+}
+async function probeUsePrerequisite(ctx: ChatCatalogContext, workerId: string, skill: CompanySkillDetail, useStatus: number) {
+  const api = ctx.input.api; const path = `${root(ctx)}/skill-policy`;
+  const original = await api.get<EffectiveSkillPolicy>(path);
+  let changed: EffectiveSkillPolicy | undefined;
+  try {
+    changed = await api.putSensitive<EffectiveSkillPolicy>(path, { expectedRevision: original.revision, schemaVersion: 1, defaultEffect: "deny", rules: [{ id: "prerequisite-deny-all-skill-lifecycle", priority: 1, effect: "deny", subject: { type: "agents", agentIds: [workerId] }, actions: [...SKILL_POLICY_ACTIONS] }] });
+    const decisions: SkillPolicyDecision[] = [];
+    for (const action of SKILL_POLICY_ACTIONS) decisions.push(await api.post<SkillPolicyDecision>(`${path}/evaluate`, { principal: { agentId: workerId }, action, resource: { skillId: skill.id } }));
+    await api.post<AgentSkillSnapshot>(`/api/agents/${workerId}/skills/sync`, { mode: "add", desiredSkills: [skill.key] });
+    const assignment = await api.get<AgentSkillSnapshot>(`/api/agents/${workerId}/skills`);
+    const receipt = { useStatus, decisions: decisions.map(({ action, allowed }) => ({ action, allowed })), assignmentRetained: assignment.desiredSkills.includes(skill.key) };
+    await ctx.input.evidence("chat-skill-effective-use-prerequisite.json", { ...receipt, unsupportedUsePrerequisite: unsupportedUsePrerequisite(receipt),
+      querySent: false, modelAdmissions: 0, lifecycleDenialIsNotUseDenial: true,
+      sourceContracts: ["../../../packages/shared/src/validators/skill-policy.ts", "../../../server/src/routes/agents.ts", "../../../server/src/services/company-skills.ts"].map(relative => { const url = new URL(relative, import.meta.url); return { source: relative.replace("../../../", ""), sha256: createHash("sha256").update(readFileSync(url)).digest("hex") }; }),
+      runtimeSourceContract: "buildRuntimeSkillConfig/listRuntimeSkillEntries resolve selected skill versions without a skill-use principal/action; no runtime denial is inferred from this assignment probe." });
+    if (!unsupportedUsePrerequisite(receipt)) throw new Error("Effective-use prerequisite contract changed; re-author the actual denied-use branch before qualification");
+    return receipt;
+  } finally {
+    try { await api.post(`/api/agents/${workerId}/skills/sync`, { mode: "remove", desiredSkills: [skill.key] }); }
+    finally { if (changed) await api.putSensitive(path, { expectedRevision: changed.revision, schemaVersion: original.schemaVersion, defaultEffect: original.defaultEffect, rules: original.rules }); }
+  }
+}
 export const integratorSkillEnableCases = [integratorDefinition("skills", "skills.enable-for-agent", async ctx => {
   try {
     const p = await project(ctx, "Launch"); const worker = await fixtureWorker(ctx);
     const created = await ctx.input.api.post<CompanySkillDetail>(`${root(ctx)}/skills`, { name: "Accessibility review", slug: "accessibility-review", markdown: "---\nname: accessibility-review\ndescription: Check synthetic HTML form labels.\n---\n\nFor supplied synthetic HTML, identify every form input without a visible label. Save concrete evidence in the task comment and finish the task. Do not browse other pages or claim global qualification." });
     const unsupportedUseActionStatus = await probeAgentPermission(ctx, `${root(ctx)}/skill-policy/evaluate`, "POST", { principal: { agentId: ctx.input.fixtures.agent.id }, action: "skills.use", resource: { skillId: created.id } });
+    const usePrerequisite = await probeUsePrerequisite(ctx, worker.id, created, unsupportedUseActionStatus);
     const agentConfigurationStatus = await probeAgentPermission(ctx, `/api/agents/${worker.id}/skills/sync`, "POST", { mode: "add", desiredSkills: [] });
     let grantStatus: number | null = null;
     if (agentConfigurationStatus !== 200) {
@@ -56,16 +90,16 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
     const effectiveStatus = agentConfigurationStatus === 200 ? 200 : await probeAgentPermission(ctx, `/api/agents/${worker.id}/skills/sync`, "POST", { mode: "add", desiredSkills: [] });
     await ctx.input.evidence("chat-skill-configuration-prerequisite.json", { agentConfigurationStatus: effectiveStatus, publicGrantStatus: grantStatus, principalId: ctx.input.fixtures.agent.id,
       querySent: false, usagePolicyActionExists: (SKILL_POLICY_ACTIONS as readonly string[]).includes("skills.use"), unsupportedUseActionStatus, unsupportedPrerequisite: effectiveStatus !== 200,
-      unfinishedConditional: "An applicable effective-use-denial branch is still unimplemented; rejecting this one nonexistent action does not prove every possible denial context unsupported." });
+      effectiveUsePrerequisite: unsupportedUsePrerequisite(usePrerequisite), useDenialOutcomeCovered: false, lifecycleDenialIsNotUseDenial: true });
     if (effectiveStatus !== 200) throw new Error(`Setup blocker: actual agent_config:update remained denied (HTTP ${effectiveStatus}); public agent membership grant attempt HTTP ${grantStatus ?? "unavailable"}. This is not an expected-refusal pass.`);
     return { project: p, worker: { id: worker.id }, skill: await ctx.input.api.get<CompanySkillDetail>(`${root(ctx)}/skills/${created.id}`), effectivePolicy: await ctx.input.api.get(`${root(ctx)}/skill-policy`), agentConfigurationStatus: effectiveStatus,
       beforeActivityIds: (await ctx.input.api.get<Entity[]>(`${root(ctx)}/activity?limit=1000`)).map(event => event.id) };
   } catch (error) { await cleanupIdentityProbes(ctx); throw error; }
 }, observeEnable, gradeIntegratorSkillEnable, async (ctx, state) => {
   const skill = state.skill as CompanySkillDetail; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name);
-}, { sourceFiles: ["chat-catalog-domains/integrator-skill-enable.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/skills.yaml"],
+}, { sourceFiles: ["chat-catalog-domains/integrator-skill-enable.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/skills.yaml", "../../server/src/routes/agents.ts", "../../server/src/routes/company-skill-policy.ts", "../../server/src/services/company-skills.ts", "../../packages/shared/src/validators/skill-policy.ts"],
   expectedRunCount: 2, attemptTimeoutMs: 540_000,
-  coverageGaps: ["Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.", "Unfinished conditional: the applicable effective-use-denial branch is not yet authored. The public enum omits skills.use and setup records the actual evaluator response for that unsupported action, but this does not establish all denial contexts as unsupported. No install/edit restriction or expected refusal is relabeled as completed use-denial coverage."],
+  coverageGaps: ["Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.", "Unsupported effective-use context: reserved setup probes the actual unsupported use action plus every real lifecycle action under a denied policy and the actual still-permitted board assignment, restoring policy/assignment in finally. Source runtime version selection has no use-policy principal/action. These receipts establish a prerequisite limitation, never the required model refusal: effective-use-denial outcome remains unqualifiable until a supported actual use-denial contract exists."],
   async act(ctx, state) {
     const first = await pollUntil({ label: "actual Morgan assignment before future admission", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
       load: () => observeEnable(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });
