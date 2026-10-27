@@ -19,7 +19,8 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases, ...secureKeyExternalCases];
+// The multi-phase review has dedicated controls in external-app-review.test.ts.
+const definitions = [...appPermissionExternalCases.filter(row => row.scenarioId !== "app-permissions.ask-before-action"), ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases, ...secureKeyExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -176,7 +177,7 @@ describe("external domain independent oracles", () => {
     expect(appCatalogExternalCases[0]!.grade(o).passed).toBe(true);
   });
   it("an initial response cannot substitute for a continuation outcome", () => {
-    for (const id of ["app-permissions.ask-before-action", "connection-setup.notion-declined"]) {
+    for (const id of ["connection-setup.notion-declined"]) {
       const o = valid(id); o.phaseReplies[0]!.runId = "initial";
       expect(definitions.find(row => row.scenarioId === id)!.grade(o).passed).toBe(false);
     }

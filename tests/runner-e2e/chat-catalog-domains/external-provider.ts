@@ -6,7 +6,7 @@ import { root } from "./external-support.js";
 
 export interface Tool { name: string; title: string; description: string; readOnly: boolean }
 export interface ProviderCall { method: string; name?: string; authorized: boolean; arguments?: Record<string, unknown>; sequence: number }
-export async function startNotesProvider(marker: string) {
+export async function startNotesProvider(marker: string, options: { nonDestructiveWrites?: boolean } = {}) {
   const token = randomBytes(32).toString("hex");
   const calls: ProviderCall[] = []; let writeResult: string | undefined; let failWrites = false;
   const tools: Tool[] = [
@@ -25,7 +25,7 @@ export async function startNotesProvider(marker: string) {
       let result: unknown = {};
       if (message.method === "initialize") result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "paperclip-eval-synthetic-notes", version: "1.0.0" } };
       if (message.method === "tools/list") result = { tools: tools.map(tool => ({ name: tool.name, title: tool.title, description: tool.description,
-        annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly }, inputSchema: { type: "object", properties: { text: { type: "string" } }, additionalProperties: false } })) };
+        annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly && !options.nonDestructiveWrites }, inputSchema: { type: "object", properties: { text: { type: "string" } }, additionalProperties: false } })) };
       if (message.method === "tools/call") {
         const tool = tools.find(tool => tool.name === message.params?.name);
         if (!tool) result = { isError: true, content: [{ type: "text", text: "Unknown action" }] };
@@ -38,7 +38,7 @@ export async function startNotesProvider(marker: string) {
   });
   const port = await listenOnFetchAllowedPort(server);
   return { url: `http://127.0.0.1:${port}/`, token, tools, calls,
-    written: () => writeResult, failWrites: () => { failWrites = true; },
+    written: () => writeResult, failWrites: () => { failWrites = true; }, allowWrites: () => { failWrites = false; },
     close: () => new Promise<void>(resolve => server.close(() => resolve())) };
 }
 export type NotesProvider = Awaited<ReturnType<typeof startNotesProvider>>;
