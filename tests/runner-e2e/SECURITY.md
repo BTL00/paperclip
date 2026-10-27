@@ -292,6 +292,11 @@ latest pointers are mutable, and S3 versioning makes those updates recoverable.
 
 ## Public evidence boundary
 
+Ordinary `chat-features` catalog captures remain private Actions evidence, including
+the required genuine final-state PNG. They receive no public screenshot marker;
+canonical agent slugs and legitimate result navigation do not expand the public
+route allowlist. Pre-chat boundary and other suite capture guards remain unchanged.
+
 CloudFront and GitHub Pages are public. Fixture identifiers, timing, token
 usage, costs, normalized results, and trusted runner PNG screenshots are
 expected public data. Each

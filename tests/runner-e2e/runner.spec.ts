@@ -1,3 +1,4 @@
+import { ordinaryChatCapture } from "./chat-screenshot-capture.js";
 import { checkSetupHealthCredential } from "./chat-setup-credential.js";
 import { SetupHealthAbort, runChatSetupHealth, captureSetupHealthProfile } from "./chat-setup-health.js";
 import { bindInvitationEnrollmentPrerequisite } from "./chat-catalog-domains/identity-invite-prerequisite.js";
@@ -1355,7 +1356,7 @@ for (const execution of executions) {
           page, api, fixtures, execution, nonce, workspacePath,
           restart: () => restartChatServer(page, () => restartIsolatedPaperclipServer({ api, requestId: `chat-${nonce}`, deadlineAt: startedAtMs + deadlineMs })),
           observe: (chatIssue, chatRuns) => { issue = chatIssue; selectedRuns = chatRuns; },
-          capture: captureScreenshot,
+          capture: ordinaryChatCapture(execution.suite.id, capturePrivateScreenshot, captureScreenshot),
           evidence: completionEvidence,
           check: (id, passed, detail) => matcherResults.push({ matcher: { kind: "json_path", path: `chat.${id}`, expected: true }, passed, detail }),
         });
