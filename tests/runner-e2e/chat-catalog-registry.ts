@@ -1,3 +1,4 @@
+import { validCompanionDeclaration } from "./chat-companion-surface.js";
 import { installedChatScenarioIds } from "./chat-installed-lane.js";
 import { existsSync, readFileSync } from "node:fs";
 import { validChatCatalogHumanCounts } from "./chat-catalog-contract.js";
@@ -6,8 +7,8 @@ import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
 import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
-export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
-  journeyKind?: "agent-chat" | "browser-boundary";
+export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
+  journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant";
   boundaryTarget?: "authenticated-harness" | "empty-installed-target";
   modulePath: string;
   exportName: string;
@@ -22,6 +23,7 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (matches.length > 1) throw new Error(`Duplicate chat implementation: ${scenarioId}`);
   const descriptor = matches[0];
   if (!descriptor) return;
+  if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && !validCompanionDeclaration(descriptor)) throw new Error("Only the declared scoped-client catalog case may select an external assistant");
   if (descriptor.browserTimezone && (scenarioId !== "routines.create-daily-brief" || descriptor.browserTimezone !== "America/Chicago"))
     throw new Error("Browser timezone is declared only for the canonical Chicago weekday routine");
   if (descriptor.respondingAgent && (scenarioId !== "cases.handoff-same-task" || Object.keys(descriptor.respondingAgent).length !== 4
@@ -31,7 +33,7 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
     throw new Error("Installed ordinary Chat is allowlisted only for the two published-source operator scenarios");
   if (!known.has(scenarioId) || !descriptor.oracleVersion || !descriptor.sourceFiles.length
     || !/^\.\/chat-catalog-domains\/[a-z0-9-]+\.js$/.test(descriptor.modulePath)
-    || !descriptor.exportName || (descriptor.journeyKind !== "browser-boundary" && !validChatCatalogHumanCounts(descriptor)) || descriptor.expectedRunCount < 0 || descriptor.turnTimeoutMs <= 0 || descriptor.attemptTimeoutMs <= 0
+    || !descriptor.exportName || (!["browser-boundary", "scoped-external-assistant"].includes(descriptor.journeyKind ?? "agent-chat") && !validChatCatalogHumanCounts(descriptor)) || descriptor.expectedRunCount < 0 || descriptor.turnTimeoutMs <= 0 || descriptor.attemptTimeoutMs <= 0
     || (descriptor.minimumRunCount ?? descriptor.expectedRunCount) > descriptor.expectedRunCount)
     throw new Error(`Incomplete bounds/provenance for ${scenarioId}`);
   return descriptor;
@@ -53,9 +55,11 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
+  if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && (!validCompanionDeclaration(implementation) || typeof implementation.runCompanionSurface !== "function" || implementation.act)) throw new Error("Missing actual finite scoped assistant driver");
+  if (!descriptor.companionSurface && implementation.runCompanionSurface) throw new Error("Undeclared external assistant driver");
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")
     && (!descriptor.setupPolicy.invariantCheckIds.length || typeof implementation.verifySetup !== "function"))
     throw new Error("Scenario-specific setup policy requires independent prerequisite assertions");

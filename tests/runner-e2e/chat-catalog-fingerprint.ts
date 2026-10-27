@@ -88,6 +88,7 @@ export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.
 }
 
 export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>, retainedInstalledIdentity?: Omit<ReturnType<typeof installedChatFingerprintIdentity>, "observedProcess">) {
+  selectedExecution = { ...(selectedExecution as Record<string, unknown>), journeyKind: descriptor.journeyKind ?? "agent-chat" };
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const privateInputNameIdentity = retainedPrivateInputNames === undefined ? chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId) : retainedPrivateInputNames;
   const lane = assertChatCatalogFingerprintLane({ ...(selectedExecution as Record<string, unknown>), scenarioId: descriptor.scenarioId, installedSource: descriptor.installedSource });

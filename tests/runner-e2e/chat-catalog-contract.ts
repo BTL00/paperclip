@@ -31,6 +31,12 @@ export interface ChatCatalogQueryAttachment {
   stateKey: string;
   filename: string;
 }
+export interface ChatCompanionSurface { kind: "scoped-external-assistant"; model: string; maximumModelTurns: 6; maximumToolCalls: 4; maximumOutputTokens: 2048 }
+export interface ChatCompanionResult {
+  query: string; reply: string; model: string; usage: { inputTokens: number; outputTokens: number };
+  messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
+  providerResponseIds: string[]; toolCalls: Array<{ name: string; arguments: unknown; result: unknown }>; links: string[];
+}
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
@@ -40,7 +46,9 @@ export interface ChatCatalogCase {
   requiredCredentials?: readonly CredentialName[];
   externalInput?: ChatExternalInputRequirement;
   installedSource?: "published-global-npm";
-  journeyKind?: "agent-chat";
+  journeyKind?: "agent-chat" | "scoped-external-assistant";
+  companionSurface?: ChatCompanionSurface;
+  runCompanionSurface?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatCompanionResult>;
   authentication?: "local-trusted" | "human-session";
   setupPolicy?: ChatCatalogSetupPolicy;
   runPolicy?: ChatCatalogRunPolicy;

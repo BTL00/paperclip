@@ -1,3 +1,4 @@
+import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
 import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
 import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./chat-catalog-fingerprint.js";
@@ -16,6 +17,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   if (!descriptor) throw new Error(`No executable chat scenario: ${scenario.id}`);
   const fingerprint = chatCatalogCaseFingerprint(descriptor, normalizedChatCatalogExecution(input.execution));
   const implementation = await loadChatCatalogImplementation(descriptor);
+  if (implementation.companionSurface) return runScopedCompanionSurface(context, implementation, fingerprint);
   const deadlineAt = Date.now() + implementation.attemptTimeoutMs - 30_000;
   let state: Record<string, unknown> | undefined;
   let observation: unknown;

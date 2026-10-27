@@ -399,6 +399,11 @@ export async function runChatFlow(input: ChatFlowInput) {
       rows.map((row) => api.get<ChatRun>(`/api/heartbeat-runs/${row.id}`)),
     );
   };
+  if (catalogDescriptor?.journeyKind === "scoped-external-assistant") {
+    await runChatFeatureFlow({ input, issue: () => issue, allRuns,
+      refreshIssue: async () => { issue = await api.get<ChatIssue>(chatPath); } });
+    return { issue: await api.get<ChatIssue>(chatPath), runs: await allRuns() };
+  }
   const tasks = () =>
     api.get<ChatIssue[]>(`/api/companies/${f.company.id}/issues`);
   const comments = async () =>
