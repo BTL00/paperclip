@@ -48,14 +48,14 @@ const sources = ["chat-catalog-domains/identity-navigation-boundaries.ts", "chat
 export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
   identityDefinition("navigation-preferences.broken-link", async ctx => {
     const source = await openStandingChat(ctx); const p = await project(ctx);
-    const stale = await task(ctx, "Launch website draft", p.id, { description: "Original removed draft" });
+    const stale = await task(ctx, "Launch website draft", p.id, { description: "Website draft for Launch." });
     const elsewhere = await ctx.input.api.post<Entity>(`/api/companies/${ctx.input.fixtures.company.id}/projects`, { name: "Archived launch context" });
-    const similar = await task(ctx, "Launch website draft", elsewhere.id, { description: "A different current draft; never substitute for the removed original." });
+    const similar = await task(ctx, "Launch website draft", elsewhere.id, { description: "Current draft for the Archived launch context project." });
     const restrictedMarker = `Private unrelated acquisition ${ctx.input.nonce}`;
     const restricted = await task(ctx, "Private acquisition", elsewhere.id, { visibility: "private", description: restrictedMarker });
     const path = `/${ctx.input.fixtures.company.issuePrefix}/issues/${stale.identifier}?tab=activity`;
     await ctx.input.api.delete(`/api/issues/${stale.id}`);
-    await ctx.input.api.patch(`/api/issues/${source.id}`, { description: `The person supplied this old task link: ${ctx.input.api.baseURL}${path}. It refers to the removed Launch website draft. Preserve its exact identity and company when explaining the missing resource. Another similarly named task is a separate record, not a redirect.` });
+    await ctx.input.api.patch(`/api/issues/${source.id}`, { description: `The person supplied this old task link: ${ctx.input.api.baseURL}${path}` });
     const browser = ctx.input.page.context().browser(); if (!browser || !ctx.input.privateSecrets) throw new Error("Missing independent real-user setup");
     const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" }); observers.set(ctx, observer);
     try {

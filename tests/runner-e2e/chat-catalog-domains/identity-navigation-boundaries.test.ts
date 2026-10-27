@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { navigationBoundaryIdentityCases } from "./identity-navigation-boundaries.js";
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { IdentityObservation } from "./identity-support.js";
 function valid(scenarioId: string): IdentityObservation {
   const similar = { id: "similar", identifier: "ACO-2", title: "Launch draft", companyId: "acorn", status: "backlog" };
@@ -25,4 +26,18 @@ describe("real missing link and instance-wide personal dismissal", () => {
   }
   it("rejects substituting the similarly named linked task even when the original is described as missing", () => { const d = navigationBoundaryIdentityCases[0]!; const o = valid(d.scenarioId); o.links = ["/ACO/issues/ACO-2"]; expect(d.grade(o).passed).toBe(false); });
   it("rejects company content deletion disguised as personal dismissal", () => { const d = navigationBoundaryIdentityCases[1]!; const o = valid(d.scenarioId); o.activity.push({ id: "bad", action: "announcement.deleted" }); expect(d.grade(o).passed).toBe(false); });
+});
+
+it("actual broken-link setup exposes only the supplied URL and factual distinct-project context", async () => {
+  const writes: Array<{ path: string; body?: Record<string, unknown> }> = [], deleted: string[] = []; let projectId = 0, taskId = 0;
+  const source = { id: "standing-chat" };
+  const ctx = { input: { nonce: "fixture", fixtures: { company: { id: "company", issuePrefix: "ACO" }, agent: { id: "ceo" } },
+    page: { context: () => ({ browser: () => null }) }, api: { baseURL: "http://fixture.invalid",
+      async post(path: string, body?: Record<string, unknown>) { writes.push({ path, body }); return path.endsWith("/projects") ? { id: `project-${++projectId}` } : path.endsWith("/issues") ? { ...body, id: `task-${++taskId}`, identifier: `ACO-${taskId}` } : {}; },
+      async patch(path: string, body: Record<string, unknown>) { writes.push({ path, body }); return body; }, async delete(path: string) { deleted.push(path); } } },
+    refreshIssue: async () => {}, issue: () => source } as unknown as ChatCatalogContext;
+  await expect(navigationBoundaryIdentityCases[0]!.setup(ctx)).rejects.toThrow("independent real-user setup");
+  expect(writes.find(x => x.path === "/api/issues/standing-chat")?.body?.description).toBe("The person supplied this old task link: http://fixture.invalid/ACO/issues/ACO-1?tab=activity");
+  const tasks = writes.filter(x => x.path.endsWith("/issues")); expect(tasks[0]?.body?.projectId).not.toBe(tasks[1]?.body?.projectId);
+  expect(tasks[1]?.body?.description).toBe("Current draft for the Archived launch context project."); expect(deleted).toEqual(["/api/issues/task-1"]);
 });
