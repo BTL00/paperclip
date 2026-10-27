@@ -62,7 +62,12 @@ describe("resolveProtocol", () => {
 
     const { resolveProtocol } = await importFreshInstrumentation();
 
-    expect(resolveProtocol().protocol).toBe("grpc");
+    // The fallback must also select the grpc exporter package, not just a
+    // grpc-labeled protocol.
+    expect(resolveProtocol()).toEqual({
+      protocol: "grpc",
+      packageName: "@opentelemetry/exporter-trace-otlp-grpc",
+    });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("carrier-pigeon"));
     // One unknown input logs exactly one warning, not one per lookup.
     expect(warn).toHaveBeenCalledOnce();
