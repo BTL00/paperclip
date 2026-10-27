@@ -162,3 +162,29 @@ and update attempts against a separate readable control task must actually be
 denied, leaving the control unchanged, before model dispatch. The requested
 Website task is never created during setup. Unsupported effective authority is
 an executable prerequisite blocker, distinct from the implemented model surface.
+
+`chat-channels.reply-in-thread` constructs its own two real Slack threads and
+therefore takes no pre-existing thread IDs. Its selected Slack fields are
+`workspaceId`, `channelId`, `senderUserId`, `botUserId`, `appId`,
+`registeredWebhookOrigin`, `webhookRelayPort`, `botTokenEnv`, `senderTokenEnv`,
+`signingSecretEnv`, and `configurationTokenEnv`. Every provider ID must be in the
+explicit disposable resource allowlist; the human and bot must be distinct. The
+already-authorized app must have message event subscriptions and scopes for its
+selected channel. The registered HTTPS origin must already forward to the
+reserved loopback relay port and match the isolated server's actual advertised
+webhook origin. The fixture does not manufacture a tunnel, widen OAuth scopes,
+or adopt a production connector. Missing references fail setup before provider
+operations. All three token references and the signing secret resolve only from
+the selected private envelope.
+
+The actual app manifest is kept privately for restoration. Only existing callback
+URLs change. Endpoint setup and signed-in identity confirmation use supported
+operator APIs with sensitive transport; they are not reported as completed
+browser wizard steps. The canonical query and one separate status-discussion
+precondition are actual human Slack messages. The latter has exactly one native
+setup run on another source; its human comment is not canonical-source history.
+That run counts within the four-run limit. One genuine signed canonical event
+is replayed once to test idempotency. Cleanup restores the app manifest, removes
+the new endpoint, restores the instance experiment flag, and deletes only
+creation-receipted messages/uploads plus this app's replies within owned threads.
+Provider response/account metadata and original manifest contents stay private.

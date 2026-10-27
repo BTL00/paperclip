@@ -23,11 +23,12 @@ export async function prepareSlackFixture(ctx:ChatCatalogContext){
  const binding=selectedExternalBinding(ctx);assertSlackFixture(binding);const p=binding.prerequisites;
  if(!ctx.input.privateSecrets)throw new Error("Slack fixture requires private credential redaction");
  const port=Number(p.webhookRelayPort);if(!Number.isInteger(port)||port<1024||port>65535)throw new Error("Setup blocker: dedicated webhookRelayPort for the isolated HTTPS tunnel is required");
+ const priorExperiments=await ctx.input.api.get<{enableChatConnectors?:boolean}>("/api/instance/settings/experimental");
  const provider=slackProvider(ctx,binding);let endpoint:ChatEndpoint|undefined,relay:Awaited<ReturnType<typeof startSlackRelay>>|undefined,originalManifest:Record<string,unknown>|undefined,manifestChanged=false;
  const createdThreads:string[]=[],createdFiles:string[]=[];
  async function cleanup(){
   try{if(endpoint)await ctx.input.api.post(`/api/chat-endpoints/${endpoint.id}/setup`,{action:"remove"});}
-  finally{try{if(manifestChanged&&originalManifest)await provider.call("configuration","apps.manifest.update",{app_id:p.appId,manifest:originalManifest});}finally{try{await provider.cleanupOwned();}finally{await relay?.close();}}}
+  finally{try{if(manifestChanged&&originalManifest)await provider.call("configuration","apps.manifest.update",{app_id:p.appId,manifest:originalManifest});}finally{try{await provider.cleanupOwned();}finally{try{await relay?.close();}finally{await ctx.input.api.patch("/api/instance/settings/experimental",{enableChatConnectors:priorExperiments.enableChatConnectors===true});}}}}
  }
  try{
   await ctx.input.api.patch("/api/instance/settings/experimental",{enableChatConnectors:true});
@@ -62,10 +63,11 @@ export async function prepareSlackFixture(ctx:ChatCatalogContext){
   return {binding,provider,relay,endpoint,threadId,createdThreads,createdFiles,linkedPaperclipUserId:linked[0]!.paperclipUserId,
    async createDistractor(text:string){return postRoot(text);},
    async readThread(rootTs:string){if(!createdThreads.includes(rootTs))throw new Error("Slack egress read escaped an owned thread");const result=await provider.call<{ok:true;messages:SlackMessage[];has_more?:boolean}>("bot","conversations.replies",{channel:p.channelId,ts:rootTs,limit:100});if(result.has_more||!Array.isArray(result.messages))throw new Error("Slack thread exceeds bounded fixture observation");return result.messages;},
-   async resolveIngress(query:string,messageId:string,providerCalls:number):Promise<ChatSlackIngressReceipt>{
-    const conversations=await pollUntil({label:"actual Slack canonical source persistence",deadlineAt:Date.now()+60000,load:()=>ctx.input.api.get<ChatConversation[]>(`/api/chat-endpoints/${endpoint!.id}/conversations`),accept:rows=>rows.some(row=>row.externalThreadId===`slack:${p.channelId}:${threadId}`)}),conversation=conversations.find(row=>row.externalThreadId===`slack:${p.channelId}:${threadId}`)!;
+   async resolveIngress(query:string,messageId:string,providerCalls:number,rootTs=threadId):Promise<ChatSlackIngressReceipt>{
+    if(!createdThreads.includes(rootTs))throw new Error("Slack ingress resolution escaped an owned actual root");
+    const conversations=await pollUntil({label:"actual Slack canonical source persistence",deadlineAt:Date.now()+60000,load:()=>ctx.input.api.get<ChatConversation[]>(`/api/chat-endpoints/${endpoint!.id}/conversations`),accept:rows=>rows.some(row=>row.externalThreadId===`slack:${p.channelId}:${rootTs}`)}),conversation=conversations.find(row=>row.externalThreadId===`slack:${p.channelId}:${rootTs}`)!;
     const comments=await ctx.input.api.get<Array<{id:string;body:string;authorUserId:string;metadata?:{sourceChannel?:string}}>>(`/api/issues/${conversation.issueId}/comments?order=asc`),humanComments=comments.filter(row=>row.body===query&&row.authorUserId===linked[0]!.paperclipUserId&&row.metadata?.sourceChannel==="slack");
-    if(!humanComments.length)throw new Error("Canonical Slack input did not persist under the linked human identity");return {query,endpointId:endpoint!.id,conversationId:conversation.id,issueId:conversation.issueId,humanCommentId:humanComments.at(-1)!.id,linkedPaperclipUserId:linked[0]!.paperclipUserId!,providerCalls,provider:{workspaceId:p.workspaceId!,channelId:p.channelId!,senderUserId:p.senderUserId!,threadId,canonicalMessageId:messageId}};
+    if(!humanComments.length)throw new Error("Canonical Slack input did not persist under the linked human identity");return {query,endpointId:endpoint!.id,conversationId:conversation.id,issueId:conversation.issueId,humanCommentId:humanComments.at(-1)!.id,linkedPaperclipUserId:linked[0]!.paperclipUserId!,providerCalls,provider:{workspaceId:p.workspaceId!,channelId:p.channelId!,senderUserId:p.senderUserId!,threadId:rootTs,canonicalMessageId:messageId}};
    },cleanup};
  }catch(error){await cleanup();throw error;}
 }

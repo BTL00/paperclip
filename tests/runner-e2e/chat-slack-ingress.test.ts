@@ -57,11 +57,11 @@ describe("only real declared Slack canonical ingress", () => {
     const descriptor: ChatCatalogDescriptor = { ...metadata, journeyKind: "native-slack-thread", modulePath: "./chat-catalog-domains/external-slack.js", exportName: "slackCases", sourceFiles: ["chat-slack-ingress.ts"], oracleVersion: "controls", turnTimeoutMs: 120000, attemptTimeoutMs: 600000 };
     const implementation = { ...descriptor, setup: async () => ({}), observe: async () => ({}), grade: () => ({ passed: false, checks: [{ id: "unobserved", passed: false, detail: "Not an observed outcome" }] }), verifyResult: async () => {} };
     await expect(loadChatCatalogImplementation(descriptor, async () => ({ slackCases: [implementation] }))).rejects.toThrow("actual Slack ingress");
-    const actual = { ...implementation, dispatchSlackQuery: async () => input().receipt };
+    const actual = { ...implementation, dispatchSlackQuery: async () => input().receipt, dispatchSlackOtherThread:async()=>({...input().receipt,runId:"setup-native"}) };
     await expect(loadChatCatalogImplementation(descriptor, async () => ({ slackCases: [actual] }))).resolves.toBe(actual);
     await expect(loadChatCatalogImplementation(descriptor, async () => ({ slackCases: [{ ...actual, act: async () => {} }] }))).rejects.toThrow("actual Slack ingress");
     const fileDescriptor: ChatCatalogDescriptor = { ...descriptor, scenarioId: "chat-channels.channel-file", slackIngress:{kind:"native-slack-thread" as const,maximumProviderCalls:20 as const,ingressTimeoutMs:120000 as const}, expectedRunCount: 6, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000 };
-    const file = { ...actual, ...fileDescriptor };
+    const file = { ...actual, ...fileDescriptor,dispatchSlackOtherThread:undefined };
     await expect(loadChatCatalogImplementation(fileDescriptor, async () => ({ slackCases: [file] }))).rejects.toThrow("supported and unsupported transfer phases");
     const completeFile = { ...file, verifySlackSupportedTransfer: async () => ({ passed: true, checks: [{ id: "actual-transfer", passed: true, detail: "Independent phase-specific byte/egress evidence" }] }), dispatchSlackUnsupportedFile: async () => input().receipt };
     await expect(loadChatCatalogImplementation(fileDescriptor, async () => ({ slackCases: [completeFile] }))).resolves.toBe(completeFile);

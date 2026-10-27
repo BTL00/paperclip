@@ -29,7 +29,7 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "connection-setup.channel-prerequisites": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "registeredWebhookOrigin"] },
   "chat-channels.connect-slack": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "registeredWebhookOrigin"] },
   "chat-channels.link-sender": { provider: "slack", fields: ["workspaceId", "privateChannelId", "senderUserId", "registeredWebhookOrigin"] },
-  "chat-channels.reply-in-thread": { provider: "slack", fields: ["workspaceId", "channelId", "originalThreadId", "distractorThreadId", "senderUserId", "registeredWebhookOrigin"] },
+  "chat-channels.reply-in-thread": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.channel-file": { provider: "slack", fields: ["workspaceId", "channelId", "originalThreadId", "briefFileId", "senderUserId", "registeredWebhookOrigin"] },
   "chat-channels.repair-endpoint": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "expiredAuthorizationEnv", "registeredWebhookOrigin"] },
   "chat-channels.outbound-email": { provider: "agentmail", fields: ["inboxId", "recipient", "draftArtifactId"] },
