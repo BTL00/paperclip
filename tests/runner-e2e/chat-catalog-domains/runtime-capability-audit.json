@@ -231,8 +231,8 @@
     },
     {
       "scenarioId": "steering.stop-versus-pause",
-      "readinessClass": "local",
-      "needs": "Running task under parent; board tree pause, persisted pause versus turn stop and explicit later resume/schedule."
+      "readinessClass": "implemented",
+      "needs": "Real Launch parent, two concurrently native-running descendants and separately human-paused child with independent effective budget hold. Actual human Pause subtree yields retained parent/membership and both acknowledged native cancellations; actual later Resume with wake disabled releases only parent hold, preserving original child hold and budget. Already-held child is correctly retained as skipped/already_held in public preview/membership. No invented tomorrow schedule or live qualification."
     },
     {
       "scenarioId": "steering.preserve-draft",
@@ -266,8 +266,8 @@
     },
     {
       "scenarioId": "task-coordination.pause-tree",
-      "readinessClass": "local",
-      "needs": "Two genuinely running descendants and manual-paused child; board tree pause/resume with independent child pause and budget hold preserved."
+      "readinessClass": "implemented",
+      "needs": "Real Launch parent, two concurrently native-running descendants and separately human-paused child with independent effective budget hold. Actual human Pause subtree yields retained parent/membership and both acknowledged native cancellations; actual later Resume with wake disabled releases only parent hold, preserving original child hold and budget. Already-held child is correctly retained as skipped/already_held in public preview/membership. No invented tomorrow schedule or live qualification."
     },
     {
       "scenarioId": "workspaces.locate-files",
