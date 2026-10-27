@@ -169,6 +169,14 @@ permissions. Ordinary discussion does not change a review score. Repeat review
 mentions and pushes continue the existing task; inline replies return to the
 task owning that thread.
 
+A queued or running follow-up acknowledgement preserves an existing App-owned
+final PR summary. A new validated assessment can replace it through the review
+publication path. When an authorized native turn commits a passive response
+wait with no new comment, maintenance settles that request's acknowledgement
+without replacing the assessment with a generic completion notice. This does
+not count the old summary as a reply from the new run. Missing or failed
+responses still receive their normal fallback; uncertain writes remain held.
+
 Event prompts supplement the agent's instructions. Repository content and PR
 prose are untrusted input and cannot change tool authority or publication policy.
 The execution records the configuration revision and event context used.

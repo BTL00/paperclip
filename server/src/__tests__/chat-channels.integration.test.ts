@@ -2830,7 +2830,112 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       )))[0];
       return { ...f, service, head, assessment, provider, action, inline, checks, writes };
     }
-    it("reuses one main GitHub PR comment across review requests", async () => {
+    it("preserves the published GitHub assessment during passive-response maintenance", async () => {
+      const f = await publicationRetryFixture();
+      await f.service.execute(f.session, "submit_review", f.assessment, "published-before-passive-reply");
+      await db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.run.id));
+      const reviewBefore = await readChatGitHubReviewsByEndpointId(f.endpoint.id);
+      const originalId = [...f.responseComments.keys()][0];
+      const originalBody = f.responseComments.get(originalId)!.body;
+      const writesBefore = f.responseWrites.length;
+      const responses = githubResponseCommentService(db, f.providerFetch);
+      const thread = makeThread({ channelId: "paperclipai/paperclip", id: f.conversation.externalThreadId }).thread;
+      await deliverMessage({ callbacks: f.callbacks, endpointId: f.endpoint.id, provider: "github", thread,
+        trigger: "subscribed_message", message: makeMessage({ id: "41802", text: "No fix pushed; keep the existing review unchanged and wait for my reply.", userId: "42", userName: "octocat" }) });
+      await responses.processPending();
+      expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+      expect(f.responseWrites).toHaveLength(writesBefore);
+      const [next] = await db.insert(heartbeatRuns).values({ companyId: f.companyId, agentId: f.assignedAgentId,
+        status: "running", runtimeMode: "native", contextSnapshot: await chatWakeContext({
+          endpointId: f.endpoint.id, issueId: f.conversation.issueId, provider: "github", providerMessageId: "41802",
+        }), resultJson: { finalizationPhase: "committed", finalizationReasonCode: "external_chat_response_waiting",
+          nativeResult: { schema: "paperclip.run_result.v1", reportedWorkDisposition: "yielded",
+            continuation: { kind: "response_wake", idempotencyKey: "passive-author-reply" } },
+          presentationDecision: { schema: "paperclip.run_presentation_decision.v1", resolverVersion: "2",
+            activityDisposition: "collapse", chosenSource: "none", commentAction: "none", commentId: null,
+            reasonCodes: ["yielded_control_plane_wait"] } } }).returning();
+      await db.update(issues).set({ status: "in_review" }).where(eq(issues.id, f.conversation.issueId!));
+      await responses.processPending();
+      expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+      expect(f.responseWrites).toHaveLength(writesBefore);
+      await db.update(heartbeatRuns).set({ status: "succeeded", nativePhase: "committed" }).where(eq(heartbeatRuns.id, next.id));
+      await responses.processPending();
+      await responses.processPending();
+      expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+      expect(await readChatGitHubReviewsByEndpointId(f.endpoint.id)).toEqual(reviewBefore);
+      expect([...f.responseComments.keys()]).toEqual([originalId]);
+      expect(await githubRunReplyState(db, { ...f.session, runId: next.id, endpointId: f.endpoint.id })).toBe("none");
+      const [delivery] = await db.select().from(chatDeliveries).where(and(eq(chatDeliveries.endpointId, f.endpoint.id),
+        eq(chatDeliveries.providerEventId, `${thread.id}:41802`)));
+      const [response] = await db.select().from(chatActions).where(and(eq(chatActions.deliveryId, delivery.id),
+        eq(chatActions.kind, "github_response_comment")));
+      expect(response).toMatchObject({ status: "cancelled", result: { final: true, code: "passive_response_wait" } });
+      const writes = f.responseWrites.length;
+      const updatedAt = response.updatedAt;
+      await responses.processPending();
+      expect(f.responseWrites).toHaveLength(writes);
+      expect((await readChatActionsById(response.id))[0].updatedAt).toEqual(updatedAt);
+      await expect(responses.failRun({ ...f.session, runId: next.id, endpointId: f.endpoint.id,
+        body: "This turn ended without publishing a final response." })).rejects.toMatchObject({ status: 403 });
+      expect(f.responseWrites).toHaveLength(writes);
+    });
+    it.each(["completed", "failed", "missing_decision", "comment_requested", "missing_semantic", "legacy", "uncommitted_native", "pending_publication"] as const)(
+      "keeps GitHub response maintenance truthful for a new request: %s", async scenario => {
+      const f = await publicationRetryFixture();
+      await f.service.execute(f.session, "submit_review", f.assessment, "review-before-new-request");
+      await db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.run.id));
+      const originalId = [...f.responseComments.keys()][0];
+      const originalBody = f.responseComments.get(originalId)!.body;
+      const thread = makeThread({ channelId: "paperclipai/paperclip", id: f.conversation.externalThreadId }).thread;
+      await deliverMessage({ callbacks: f.callbacks, endpointId: f.endpoint.id, provider: "github", thread,
+        trigger: "subscribed_message", message: makeMessage({ id: "41802", text: "Please handle this new request", userId: "42", userName: "octocat" }) });
+      const [next] = await db.insert(heartbeatRuns).values({ companyId: f.companyId, agentId: f.assignedAgentId,
+        status: scenario === "failed" ? "failed" : "succeeded", runtimeMode: scenario === "legacy" ? "legacy" : "native",
+        nativePhase: scenario === "uncommitted_native" ? "observed" : "committed", contextSnapshot: await chatWakeContext({
+          endpointId: f.endpoint.id, issueId: f.conversation.issueId, provider: "github", providerMessageId: "41802",
+        }), resultJson: { finalizationPhase: "committed", finalizationReasonCode: "external_chat_response_waiting",
+          ...(scenario === "missing_semantic" ? {} : { nativeResult: { schema: "paperclip.run_result.v1",
+            reportedWorkDisposition: scenario === "completed" ? "completed" : "yielded",
+            continuation: { kind: "response_wake", idempotencyKey: "new-request-wait" } } }),
+          ...(scenario === "missing_decision" ? {} : { presentationDecision: {
+            schema: "paperclip.run_presentation_decision.v1", chosenSource: "none",
+            commentAction: scenario === "comment_requested" ? "create" : "none", reasonCodes: ["yielded_control_plane_wait"] } }) } }).returning();
+      if (scenario === "pending_publication") await db.insert(chatActions).values({ companyId: f.companyId,
+        endpointId: f.endpoint.id, conversationId: f.conversation.id, kind: "github_review_publication",
+        providerActionId: `github_publication:${randomUUID()}`, status: "processing",
+        payload: { operation: "comment", session: { ...f.session, runId: next.id } } });
+      const responses = githubResponseCommentService(db, f.providerFetch);
+      await responses.processPending();
+      const [delivery] = await db.select().from(chatDeliveries).where(and(eq(chatDeliveries.endpointId, f.endpoint.id),
+        eq(chatDeliveries.providerEventId, `${thread.id}:41802`)));
+      const [response] = await db.select().from(chatActions).where(and(eq(chatActions.deliveryId, delivery.id),
+        eq(chatActions.kind, "github_response_comment")));
+      if (scenario === "pending_publication") {
+        expect(f.responseComments.get(originalId)!.body).toBe(originalBody);
+        expect(response.result?.final).not.toBe(true);
+        expect(response).toMatchObject({ status: "failed", result: { retryable: true, code: "acknowledgement_unconfirmed" } });
+      } else {
+        expect(f.responseComments.get(originalId)!.body).toContain(scenario === "failed"
+          ? "This turn stopped before completing" : "This turn ended without publishing a final response");
+        expect(response).toMatchObject({ status: "processed", result: { final: true } });
+      }
+      const writes = f.responseWrites.length;
+      await responses.processPending();
+      expect(f.responseWrites).toHaveLength(writes);
+    });
+    it("keeps per-request fallback outside the main GitHub PR review wait", async () => {
+      const f = await toolReplyFixture();
+      await db.update(heartbeatRuns).set({ status: "succeeded", nativePhase: "committed", resultJson: {
+        finalizationPhase: "committed", finalizationReasonCode: "external_chat_response_waiting",
+        nativeResult: { schema: "paperclip.run_result.v1", reportedWorkDisposition: "yielded",
+          continuation: { kind: "response_wake", idempotencyKey: "not-a-main-pr-review" } },
+        presentationDecision: { schema: "paperclip.run_presentation_decision.v1", chosenSource: "none",
+          commentAction: "none", reasonCodes: ["yielded_control_plane_wait"] },
+      } }).where(eq(heartbeatRuns.id, f.run.id));
+      await githubResponseCommentService(db, f.providerFetch).processPending();
+      expect([...f.responseComments.values()][0].body).toContain("without publishing a final response");
+    });
+    it.each(["same_head", "new_head"] as const)("reuses one main GitHub PR comment across review requests: %s", async headCase => {
       const f = await publicationRetryFixture();
       await f.service.execute(f.session, "submit_review", f.assessment, "first-review");
       const originalId = [...f.responseComments.keys()][0];
@@ -2848,8 +2953,13 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           endpointId: f.endpoint.id, issueId: f.conversation.issueId, provider: "github", providerMessageId: "41802",
         }) }).returning();
       const session = { ...f.session, runId: next.id };
-      await f.service.execute(session, "begin_review", { reviewedCommit: f.head });
-      await f.service.execute(session, "submit_review", { ...f.assessment, summary: "Second assessment" }, "second-review");
+      const currentHead = headCase === "new_head" ? "c".repeat(40) : f.head;
+      f.setSupplementalProviderFetch(async (input, init) => String(input).endsWith("/pulls/418")
+        ? Response.json({ number: 418, state: "open", draft: false, head: { sha: currentHead },
+          base: { sha: "a".repeat(40), ref: "master" }, user: { id: 42, login: "octocat", type: "User" }, labels: [] })
+        : f.provider(input, init));
+      await f.service.execute(session, "begin_review", { reviewedCommit: currentHead });
+      await f.service.execute(session, "submit_review", { ...f.assessment, reviewedCommit: currentHead, summary: "Second assessment" }, "second-review");
       expect([...f.responseComments.keys()]).toEqual([originalId]);
       expect(f.responseComments.get(originalId)?.body).toContain("Second assessment");
       expect(f.responseWrites.filter(write => write.method === "POST")).toHaveLength(1);

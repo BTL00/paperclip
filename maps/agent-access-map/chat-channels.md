@@ -139,6 +139,11 @@ follow normal access checks. Provider-fixture coverage is not live GitHub proof.
 Native terminal reconciliation resolves the accepted run identity through the
 existing chat provenance resolver; an older run's reply cannot complete a newer
 request merely because both requests share the same PR comment.
+Maintenance projects the bounded server-committed native passive-wait decision
+only after current request ownership. It settles a no-comment acknowledgement
+without authorizing a new send or counting an old shared receipt as a current-run
+reply. Existing final App/marker-owned PR content survives progress acknowledgements;
+new canonical review publication remains the writer for replacement assessments.
 
 Speko browser sessions use `POST /api/companies/{companyId}/voice-sessions`,
 with GET inspection/notification and POST `/{sessionId}/end` operations below

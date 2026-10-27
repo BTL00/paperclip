@@ -1258,6 +1258,15 @@ apply. Stream closure without a turn terminal is not proof of success. Event
 replay uses the existing source receipts and never repeats provider work merely
 to recover recorded output.
 
+GitHub main-PR response maintenance honors a committed native passive response wait
+whose server presentation decision intentionally selects no comment. It settles
+the current source's acknowledgement without a provider write or a fabricated
+current-run reply receipt. Queued/running acknowledgements preserve an App-owned
+final shared PR summary; a new canonical assessment may replace it. A generic
+completion fallback must not overwrite that summary after an intentional wait.
+Failure, genuinely missing response, and uncertain-publication handling retain
+their existing independent checks.
+
 If runnerd synthesizes a result when the provider stops, it publishes that result
 before the provider-turn terminal and publishes the run terminal last. The
 adapter can therefore retain the result while the matching turn still has
