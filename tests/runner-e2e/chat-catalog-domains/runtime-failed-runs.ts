@@ -77,7 +77,7 @@ export const runtimeFailedRunCases = [runtimeDefinition("runs-adapters.inspect-f
   await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
   return { worker, task: done.task, ...failure, successfulRun, successArtifactVerified: true, failureLogAvailable };
 }, gradeFailedAttempt, {
-  sourceFiles: ["chat-catalog-domains/runtime-failed-runs.ts", "chat-catalog-domains/runtime-native-failure.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/runs-adapters.yaml"],
+  sourceFiles: ["chat-catalog-domains/runtime-failed-runs.ts", "chat-catalog-domains/runtime-native-failure.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/runs-adapters.yaml", "../../ui/src/components/TaskChatThread.tsx", "../../ui/src/components/task-chat/TaskChatMarker.tsx", "../../ui/src/components/task-chat/TaskChatThreadView.tsx", "../../ui/src/pages/AgentDetail.tsx"],
   expectedRunCount: 3, attemptTimeoutMs: 720_000,
   runPolicy: { kind: "terminal-counts", terminalStatusCounts: { failed: 1, succeeded: 2 } },
   async observe(ctx, state) {

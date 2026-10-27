@@ -41,7 +41,7 @@ export const runtimeSessionCases = [runtimeDefinition("runs-adapters.reset-sessi
   for (const doc of documents) revisions.push(...await ctx.input.api.get<Entity[]>(`/api/issues/${state.task.id}/documents/${encodeURIComponent(doc.key!)}/revisions`));
   return { ...state, priorComments: comments, priorDocuments: documents, priorRevisions: revisions };
 }, gradeSessionReset, {
-  sourceFiles: ["chat-catalog-domains/runtime-session.ts", "chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/runs-adapters.yaml"],
+  sourceFiles: ["chat-catalog-domains/runtime-session.ts", "chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/runs-adapters.yaml", "../../ui/src/components/AgentActionButtons.tsx", "../../ui/src/pages/AgentDetail.tsx"],
   expectedRunCount: 3, attemptTimeoutMs: 720_000,
   async act(ctx, state) {
     await pollUntil({ label: "Canonical session guidance settled", deadlineAt: Date.now() + 150_000,
