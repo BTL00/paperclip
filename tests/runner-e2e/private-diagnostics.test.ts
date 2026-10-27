@@ -9,11 +9,11 @@ function registry() { const root = realpathSync(mkdtempSync(path.join(os.tmpdir(
 describe("private diagnostic output boundary", () => {
   it("redacts secret and escaped variants across chunks, multiline PEM and UTF-8 without losing ordinary failure detail", () => {
     const password = 'synthetic-credential-<&"-12345678';
-    const pem = "-----BEGIN PRIVATE KEY-----\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUx\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUy\n-----END PRIVATE KEY-----";
-    const outputs: string[] = []; const stream = createPrivateDiagnosticStream(() => [password, pem], value => outputs.push(value));
-    const input = `HTTP503: π provider unavailable ${password}\n${pem}\nJSON ${JSON.stringify(password)}\nHTML ${password.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}\nURI ${encodeURIComponent(password)}\n`;
+    const pem = "-----BEGIN PRIVATE KEY-----\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUx\nU1lOVEhFVElDLVByaXZhdGUtS2V5LUxpbmUy\n-----END PRIVATE KEY-----"; const short = "Ax4\nBy5\nCz6";
+    const outputs: string[] = []; const stream = createPrivateDiagnosticStream(() => [password, pem, short], value => outputs.push(value));
+    const input = `HTTP503: π provider unavailable ${password}\n${pem}\n${short}\nJSON ${JSON.stringify(password)}\nHTML ${password.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")}\nURI ${encodeURIComponent(password)}\n`;
     const bytes = Buffer.from(input); for (let i = 0; i < bytes.length; i += 3) stream.write(bytes.subarray(i, i + 3)); stream.end();
-    const safe = outputs.join(""); for (const value of diagnosticSecrets([password, pem])) expect(safe).not.toContain(value);
+    const safe = outputs.join(""); for (const value of diagnosticSecrets([password, pem, short])) expect(safe).not.toContain(value);
     expect(safe).toContain("HTTP503: π provider unavailable"); expect(stream.redactedSecret()).toBe(true); expect(stream.failed()).toBe(false);
   });
   it("synchronously registers a generated cookie before first output and rereads at final flush", () => {
