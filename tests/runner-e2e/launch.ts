@@ -1,3 +1,4 @@
+import { DATABASE_LANE_ENV, DOCKER_DATABASE_ENV, dockerDatabaseLaunchState, publicDockerDatabaseIdentity, selectedDatabaseLane, startOwnedDockerDatabase } from "./docker-postgres.js";
 import { ARCHIVE_CONTROL_ENV, ARCHIVE_SCENARIO, startArchiveFaultControl } from "./chat-archive-fault-control.js";
 import { abnormalFinalizationResult } from "./abnormal-finalization.js";
 import { CHAT_ORACLE_KEY_ENV } from "./chat-private-oracle.js";
@@ -51,7 +52,7 @@ import {
   resolvePaperclipRemoteRunnerBinaryForHarness,
   resolvePaperclipRunnerBinaryForHarness,
 } from "./harness-env.js";
-import { assertEmbeddedDatabaseIsolation } from "./instance-isolation.js";
+import { assertRunnerDatabaseIsolation } from "./instance-isolation.js";
 import {
   assertSecretFree,
   findSecretLeakInDirectory,
@@ -501,6 +502,7 @@ async function runAttempt(input: {
   const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
   let sourceEnvironment = { ...process.env };
   delete sourceEnvironment[CHAT_ORACLE_KEY_ENV];
+  const databaseLane = selectedDatabaseLane(sourceEnvironment);
   const installedPlugin = await verifyInstalledDaytonaPlugin(process.env, executions);
   const startedAtMs = Date.now();
   const sharedMemoryBaseline = snapshotDarwinSharedMemory();
@@ -512,6 +514,7 @@ async function runAttempt(input: {
   let attemptSecrets: string[] = [];
   let processCleanupFailed = false;
   let startupReceiptPath: string | undefined;
+  let dockerDatabase: Awaited<ReturnType<typeof startOwnedDockerDatabase>> | undefined;
   let archiveControl: Awaited<ReturnType<typeof startArchiveFaultControl>> | undefined;
   let gateway: Awaited<ReturnType<EvalOperations["start"]>> | undefined;
   const rawCleanupResults: Array<{ cleanup: string; synthetic: boolean; status: string }> = [];
@@ -566,6 +569,7 @@ async function runAttempt(input: {
     await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
     const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir: selectedPrivateInputsDirectory, env: process.env, secrets: credentials }) : undefined;
     if (selectedDescriptor?.scenarioId === ARCHIVE_SCENARIO) archiveControl = await startArchiveFaultControl({ selected: executions.map(row => row.id), temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, privateSecrets: credentials });
+    if (databaseLane === "owned-docker-postgres") dockerDatabase = await startOwnedDockerDatabase({ temporaryRoot, privateSecrets: credentials });
     const diagnosticRegistry = stagePrivateDiagnostics(temporaryRoot, executions.map(row => row.id), credentials);
     if (installedCli) await writeFile(path.join(privateDir, "installed-cli-admission.json"), `${JSON.stringify(installedCli, null, 2)}\n`, { mode: 0o600 });
     if (installedPlugin) await writeFile(path.join(privateDir, "installed-daytona-plugin-admission.json"), `${JSON.stringify(installedPlugin, null, 2)}\n`, { mode: 0o600 });
@@ -577,6 +581,8 @@ async function runAttempt(input: {
       ...buildRunnerE2EProcessEnvironment(sourceEnvironment, executions),
       [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
       [ARCHIVE_CONTROL_ENV]: archiveControl?.filename,
+      [DATABASE_LANE_ENV]: dockerDatabase ? "owned-docker-postgres" : undefined,
+      [DOCKER_DATABASE_ENV]: dockerDatabase?.filename,
       [PRIVATE_DIAGNOSTICS_ENV]: diagnosticRegistry,
       PATH: providerPath,
       PAPERCLIP_RUNNER_E2E_EXECUTION_IDS: JSON.stringify(
@@ -662,7 +668,7 @@ async function runAttempt(input: {
       await cp(privateDir, path.join(proofDir, "private"), { recursive: true });
       const probe = JSON.parse(await readFile(path.join(privateDir, "installed-startup-only.json"), "utf8"));
       if (processResult.exitCode !== 0 || processResult.timedOut || processResult.spawnError || processCleanupFailed || probe.status !== "health_ui_zero_company_passed" || probe.providerCalls !== 0 || probe.qualified !== false) throw new Error("Installed startup-only actual launch chain failed");
-      await assertEmbeddedDatabaseIsolation(configPath, temporaryRoot);
+      await assertRunnerDatabaseIsolation(configPath, temporaryRoot, dockerDatabase?.filename);
       startupReceiptPath = path.join(proofDir, "receipt.json");
       await writeFile(startupReceiptPath, `${JSON.stringify({ status: "installed_launch_chain_pending_scratch_cleanup", qualified: false, providerCalls: 0, credentialsLoaded: false, installedCli, processResult, probe }, null, 2)}\n`, { mode: 0o600 });
       return [];
@@ -698,6 +704,7 @@ async function runAttempt(input: {
           processFailureClass,
         );
         const result = await readResult(resultPath, fallback);
+        if (databaseLane === "owned-docker-postgres") result.databaseIdentity = dockerDatabase ? publicDockerDatabaseIdentity(dockerDatabase.receipt) : (await dockerDatabaseLaunchState(databaseLane, temporaryRoot)).identity;
         if (!result.workerTiming) result.workerTiming = await recoverWorkerTiming(path.join(path.dirname(resultPath), "snapshots", "worker-timing.json"),
           { executionId: candidate.id, attempt, startedAt: result.startedAt, finishedAt: result.finishedAt });
         if (result === fallback) {
@@ -717,7 +724,7 @@ async function runAttempt(input: {
     );
     let isolationError: unknown;
     try {
-      await assertEmbeddedDatabaseIsolation(configPath, temporaryRoot);
+      await assertRunnerDatabaseIsolation(configPath, temporaryRoot, dockerDatabase?.filename);
     } catch (error) {
       isolationError = error;
     }
@@ -915,6 +922,7 @@ async function runAttempt(input: {
       const fallback = syntheticResult(candidate, attempt, startedAtMs, "Attempt terminated before a worker result was retained");
       const original = await readResult(path.join(casePrivateDir, "result.json"), fallback);
       const result = abnormalFinalizationResult(original, error);
+      if (databaseLane === "owned-docker-postgres") result.databaseIdentity = dockerDatabase ? publicDockerDatabaseIdentity(dockerDatabase.receipt) : (await dockerDatabaseLaunchState(databaseLane, temporaryRoot)).identity;
       const uploadDir = path.join(resultsRoot, campaignId, candidate.suite.id, candidate.profile.id, candidate.environment.id, candidate.task.id, `attempt-${attempt}`);
       await mkdir(uploadDir, { recursive: true });
       const resultPath = path.join(uploadDir, "result.json");
@@ -933,9 +941,14 @@ async function runAttempt(input: {
     // runProcess has completed its owned Playwright/server process shutdown.
     let archiveCleanupError: unknown;
     try { await archiveControl?.close(); } catch (error) { archiveCleanupError = error; processCleanupFailed = true; }
+    let dockerCleanupError: unknown;
+    try { await dockerDatabase?.close(); } catch (error) { dockerCleanupError = error; processCleanupFailed = true; }
+    const databaseFinalization = await dockerDatabaseLaunchState(databaseLane, temporaryRoot);
+    if (databaseFinalization.cleanupUnconfirmed) processCleanupFailed = true;
+    if (databaseFinalization.identity) for (const result of publishedResults) result.databaseIdentity = databaseFinalization.identity;
     let gatewayCleanupError: unknown;
     try { await gateway?.close(); } catch (error) { gatewayCleanupError = error; }
-    if (!processCleanupFailed) reapNewDetachedDarwinSharedMemory(sharedMemoryBaseline);
+    if (!processCleanupFailed && databaseFinalization.allowDarwinReap) reapNewDetachedDarwinSharedMemory(sharedMemoryBaseline);
     let cleanupError: unknown;
     // Raw selected keys are never diagnostic/archive artifacts, even when recovery state is retained.
     try { await rm(selectedPrivateInputsDirectory, { recursive: true, force: true }); }
@@ -979,7 +992,7 @@ async function runAttempt(input: {
         `Refusing to remove unexpected temporary path ${temporaryRoot}`,
       );
     }
-    if (gatewayCleanupError || archiveCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError, archiveCleanupError].filter(Boolean), "Eval owned gateway/transport cleanup failed");
+    if (gatewayCleanupError || archiveCleanupError || dockerCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError, archiveCleanupError, dockerCleanupError].filter(Boolean), "Eval owned gateway/transport cleanup failed");
     if (startupReceiptPath) {
       const receipt = JSON.parse(await readFile(startupReceiptPath, "utf8"));
       receipt.status = cleanupError ? "installed_launch_chain_cleanup_failed" : "installed_launch_chain_passed";
@@ -1011,6 +1024,11 @@ async function runAttempt(input: {
       // the same campaign. The result above carries the terminal failure.
       console.error(message);
       if (options.installedStartupOnly) throw new Error(message);
+    }
+    if (databaseLane === "owned-docker-postgres") for (const result of publishedResults) {
+      const filename = publishedResultPaths.get(result.executionId); if (!filename) continue;
+      const safe = `${JSON.stringify(sanitizeJson(result, attemptSecrets), null, 2)}\n`;
+      assertSecretFree(safe, attemptSecrets, filename); await writeFile(filename, safe, "utf8");
     }
     for (const result of publishedResults) {
       const resultPath = publishedResultPaths.get(result.executionId);

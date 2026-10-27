@@ -2970,3 +2970,35 @@ quality or survival after an abrupt worker kill.
 pnpm test:e2e:runner -- --list --suite feedback-persistence
 pnpm test:e2e:runner -- --id feedback-persistence.runner-acpx-claude.local.complaint-and-suggestion --max-automatic-retries 0 --max-parallel 1
 ```
+
+### Optional owned Docker PostgreSQL lane
+
+The default embedded PostgreSQL lane and portable CI behavior are unchanged.
+An explicit local alternative is available with
+`PAPERCLIP_RUNNER_E2E_DATABASE_LANE=owned-docker-postgres`. It requires an
+already running local Unix-socket Docker Linux/arm64 engine and the installed
+official `postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336`
+image (PostgreSQL `18.6-1.pgdg13+2`); the harness never pulls an image or starts
+an engine. Ambient database URLs remain scrubbed and cannot select a target.
+
+Each attempt owns one labeled container and labeled local data volume, a random
+loopback-only published port and private mode0600 credentials/config/receipt.
+No password is placed in argv or native/model environment. Context/engine,
+image, labels, mounts and port binding are verified; uncertain startup or
+cleanup retains its private receipt and fails closed. Cleanup never selects
+resources by a broad label sweep. Results and fingerprints explicitly bind
+this database lane and image/version; they do not claim embedded18.1 coverage.
+Historical embedded result interpretation remains unchanged.
+
+An infrastructure-only check uses normal source onboarding/migrations/API
+health, verifies zero companies/agents/native runs, then cleans up exact owned
+resources. Run only from an audited immutable source snapshot after the
+operator has authorized this infrastructure check:
+
+```sh
+PAPERCLIP_RUNNER_E2E_SOURCE_SHA=<snapshot-sha> node --import ./cli/node_modules/tsx/dist/loader.mjs tests/runner-e2e/docker-postgres-health.ts --run-owned-infrastructure-health
+```
+
+Its receipt is retained under `results/chat-catalog-campaign/`; it is never a
+scenario measurement or feature acceptance. Missing/changed ownership or an
+unknown inspection result is not proof that a resource is absent.

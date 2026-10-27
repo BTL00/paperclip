@@ -1,3 +1,4 @@
+import { POSTGRES_IMAGE, POSTGRES_IMAGE_ID } from "./docker-postgres.js";
 import { validateWorkerTiming } from "./worker-timing.js";
 import { connectionCheckpoints, connectionEvidencePasses, connectionRunSignals } from "./connection-evidence.js";
 import { githubJourneyCheckpoints, gradeGitHubReviewJourney } from "./github-review-evidence.js";
@@ -225,6 +226,12 @@ const matcher: Rule = (value, at) => {
   rule(value, at);
 };
 const fields = {
+  databaseIdentity: optional(closedShape({
+    lane: oneOf("owned-docker-postgres"), image: oneOf(POSTGRES_IMAGE), imageId: oneOf(POSTGRES_IMAGE_ID), imageVersion: oneOf("18.6-1.pgdg13+2"),
+    artifactVerified: boolean, contextSha256: nullable(matching(/^[a-f0-9]{64}$/)), engineSha256: nullable(matching(/^[a-f0-9]{64}$/)), containerId: nullable(matching(/^[a-f0-9]{64}$/)),
+    cluster: optional(closedShape({ version: matching(/^18\.6(?:\s|$)/), systemIdentifier: matching(/^[0-9]+$/) })),
+    status: oneOf("creating", "ready", "failed", "removed", "cleanup-failed", "startup-unconfirmed"),
+  })),
   accountingIdentity: optional(shape({ campaignId: string, attemptId: string })),
   publicMcp: optional(assistant),
   schema: oneOf(
@@ -403,6 +410,7 @@ export function validateRetainedRunnerResult(
 ): asserts value is RunnerE2EResult {
   result(value, "result");
   const checked = value as RunnerE2EResult;
+  if (checked.databaseIdentity && checked.status === "passed" && (!checked.databaseIdentity.artifactVerified || !checked.databaseIdentity.contextSha256 || !checked.databaseIdentity.engineSha256 || !checked.databaseIdentity.containerId || !checked.databaseIdentity.cluster || !["ready", "removed"].includes(checked.databaseIdentity.status))) invalid("result.databaseIdentity");
   const artifact = checked.productJourney?.artifact;
   if (artifact && (checked.suiteId !== "product-journeys" || checked.caseId !== "cloud-onboarding" ||
     checked.runIds && !checked.runIds.includes(artifact.originatingRunId))) invalid("result.productJourney.artifact");

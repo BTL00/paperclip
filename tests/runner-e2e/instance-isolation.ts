@@ -1,9 +1,12 @@
+import { readDockerDatabaseReceipt, type DockerRun } from "./docker-postgres.js";
 import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
-export async function assertEmbeddedDatabaseIsolation(
+export async function assertRunnerDatabaseIsolation(
   configPath: string,
   temporaryRoot: string,
+  dockerReceiptPath?: string,
+  dockerRun?: DockerRun,
 ) {
   const configText = await readFile(configPath, "utf8");
   const config = JSON.parse(configText) as {
@@ -24,13 +27,9 @@ export async function assertEmbeddedDatabaseIsolation(
       localEncrypted?: { keyFilePath?: string };
     };
   };
-  if (
-    config.database?.mode !== "embedded-postgres" ||
-    config.database.connectionString
-  ) {
-    throw new Error(
-      "Runner E2E Paperclip instance did not use its embedded database",
-    );
+  const docker = dockerReceiptPath ? await readDockerDatabaseReceipt(dockerReceiptPath, temporaryRoot, dockerRun) : undefined;
+  if (docker ? config.database?.mode !== "postgres" || config.database.connectionString !== docker.connectionString : config.database?.mode !== "embedded-postgres" || !!config.database.connectionString) {
+    throw new Error("Runner E2E Paperclip instance did not use its explicitly owned database lane");
   }
   if (
     config.storage?.provider !== "local_disk" ||
@@ -42,8 +41,8 @@ export async function assertEmbeddedDatabaseIsolation(
     );
   }
   const isolatedPaths = {
-    database: config.database.embeddedPostgresDataDir,
-    backup: config.database.backup?.dir,
+    ...(docker ? {} : { database: config.database!.embeddedPostgresDataDir }),
+    backup: config.database!.backup?.dir,
     logs: config.logging?.logDir,
     storage: config.storage.localDisk?.baseDir,
     secretsKey: config.secrets.localEncrypted?.keyFilePath,
@@ -59,11 +58,15 @@ export async function assertEmbeddedDatabaseIsolation(
       );
     }
   }
-  const databasePath = path.resolve(isolatedPaths.database!);
-  const databaseStat = await stat(databasePath);
-  if (!databaseStat.isDirectory())
-    throw new Error("Embedded database path is not a directory");
+  if (!docker) {
+    const databasePath = path.resolve(isolatedPaths.database!);
+    const databaseStat = await stat(databasePath);
+    if (!databaseStat.isDirectory()) throw new Error("Embedded database path is not a directory");
+  }
   const keyStat = await stat(path.resolve(isolatedPaths.secretsKey!));
   if (!keyStat.isFile())
     throw new Error("Encrypted-secrets master key path is not a file");
 }
+
+/** Compatibility entry point remains embedded-only, never ambient external DB. */
+export async function assertEmbeddedDatabaseIsolation(configPath: string, temporaryRoot: string) { return assertRunnerDatabaseIsolation(configPath, temporaryRoot); }

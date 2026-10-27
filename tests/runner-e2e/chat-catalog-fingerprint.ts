@@ -1,3 +1,4 @@
+import { databaseFingerprintIdentity } from "./docker-postgres.js";
 import { verifyRetainedChatOracleIdentity } from "./chat-private-inputs.js";
 import { installedChatFingerprintIdentity, installedChatScenarioIds } from "./chat-installed-lane.js";
 import { chatPrivateInputRequirements, chatPrivateInputNameIdentity } from "./chat-private-inputs.js";
@@ -76,7 +77,9 @@ export function fingerprintChatDependencyClosure(input: {
 }
 
 export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.ProcessEnv = process.env, args: readonly string[] = process.argv) {
-  const execution = selected as { suiteId?: string; flow?: string; environment?: string; executionId?: string; scenarioId?: string; installedSource?: string; profile?: { id?: string } };
+  const execution = selected as { suiteId?: string; flow?: string; environment?: string; executionId?: string; scenarioId?: string; installedSource?: string; databaseLane?: unknown; profile?: { id?: string } };
+  const database = databaseFingerprintIdentity(env);
+  if (execution.databaseLane !== undefined && JSON.stringify(execution.databaseLane) !== JSON.stringify(database)) throw new Error("Selected database lane differs from fingerprint environment");
   const installed = execution.installedSource === "published-global-npm" && (installedChatScenarioIds as readonly string[]).includes(String(execution.scenarioId));
   const installedKeys = ["PAPERCLIP_RUNNER_E2E_INSTALLED_CLI", "PAPERCLIP_RUNNER_E2E_INSTALLED_CLI_SHA256",
     "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_ROOT", "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_SHA256", "PAPERCLIP_RUNNER_E2E_INSTALLED_STARTUP_ONLY"];
@@ -85,7 +88,7 @@ export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.
     || !installed && installedKeys.some(key => env[key] && env[key] !== "0") || args.some(argument => forbiddenArguments.includes(argument)))
     throw new Error("Reviewed dynamic resolutions require source-local Agent Chat without external dispatch overrides");
   return { suiteId: execution.suiteId, flow: execution.flow, environment: execution.environment,
-    installedLane: installed, externalJourneyDispatch: false };
+    database, installedLane: installed, externalJourneyDispatch: false };
 }
 
 export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>, retainedInstalledIdentity?: Omit<ReturnType<typeof installedChatFingerprintIdentity>, "observedProcess">) {
@@ -119,13 +122,13 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,
       "tests/runner-e2e/chat-campaign-manifest.json": { id, capabilities, context, query, expected_outcome } },
   });
-  return { ...result, attachmentFormatter, privateInputNameIdentity, installedIdentity, installedSourceProcess: installedObservation?.observedProcess, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
+  return { ...result, databaseLaneIdentity: lane.database, attachmentFormatter, privateInputNameIdentity, installedIdentity, installedSourceProcess: installedObservation?.observedProcess, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
 }
 
 export function normalizedChatCatalogExecution(execution: MatrixExecution) {
   return { executionId: execution.id, suiteId: execution.suite.id, flow: execution.task.flow, journeyKind: "agent-chat",
     profile: { id: execution.profile.id, provider: execution.profile.provider, model: execution.profile.model, credential: execution.profile.credential },
-    environment: execution.environment.id, requiredCredentialNames: execution.requiredCredentials, task: { expectedRunCount: execution.task.expectedRunCount,
+    environment: execution.environment.id, databaseLane: databaseFingerprintIdentity(), requiredCredentialNames: execution.requiredCredentials, task: { expectedRunCount: execution.task.expectedRunCount,
       minimumExpectedRunCount: execution.task.minimumExpectedRunCount, turnTimeoutMs: execution.task.turnTimeoutMs,
       attemptTimeoutMs: execution.task.attemptTimeoutMs } };
 }

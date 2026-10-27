@@ -1,3 +1,4 @@
+import { databaseFingerprintIdentity, databaseIdentityMatches, type DatabaseFingerprintIdentity } from "./docker-postgres.js";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -55,6 +56,8 @@ export function campaignProductIdentityEligible(scenario: CampaignScenario, atte
   return !product.target && samePublishedIdentity(product.source, product.observed);
 }
 export interface CampaignAttempt {
+  /** Stable declared DB environment, excluding passwords/IDs. Missing only on historical embedded attempts. */
+  databaseLane?: DatabaseFingerprintIdentity;
   productIdentity?: CampaignProductIdentity;
   ordinal: 1 | 2;
   outcome: CampaignOutcome | "running";
@@ -157,6 +160,9 @@ export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: Camp
   if (attempt.ordinal === 2 && !attempt.correction?.trim()) throw new Error("Fix cycle requires a recorded correction");
   if (attempt.automaticRetries !== 0 || attempt.executionId !== scenario.executionId || attempt.outcome !== "running") throw new Error("Invalid attempt reservation");
   if ([attempt.sourceRevision, attempt.workingTreeDigest, attempt.definitionDigest, attempt.suiteDefinitionDigest, attempt.graderDigest, attempt.model, attempt.profile, attempt.environment].some(value => !value.trim())) throw new Error("Missing attempt provenance");
+  const selectedDatabase = databaseFingerprintIdentity();
+  if (attempt.databaseLane && JSON.stringify(attempt.databaseLane) !== JSON.stringify(selectedDatabase)) throw new Error("Attempt database lane differs from selected fingerprint environment");
+  attempt.databaseLane ??= selectedDatabase;
   scenario.attempts.push(attempt);
 }
 export function completeCampaignAttempt(scenario: CampaignScenario, completion: {
@@ -173,9 +179,20 @@ export function completeCampaignAttempt(scenario: CampaignScenario, completion: 
   if (completion.outcome === "passed" && (!completion.evidencePaths.length || completion.cleanup !== "passed")) throw new Error("Pass requires evidence and successful cleanup");
   if (completion.outcome === "passed" && !campaignProductIdentityEligible(scenario, { ...attempt, ...completion })) throw new Error("Pass requires eligible product identity");
   if (Date.parse(completion.finishedAt) < Date.parse(attempt.startedAt) || !Number.isFinite(Date.parse(completion.finishedAt))) throw new Error("Invalid completion timing");
+  if (completion.outcome === "passed" && !campaignDatabaseEvidenceEligible({ ...attempt, evidencePaths: completion.evidencePaths })) throw new Error("Passed outcome lacks matching database environment identity");
   Object.assign(attempt, completion);
 }
 /** A reservation or offline calibration alone never establishes actual processing. */
+export function campaignDatabaseEvidenceEligible(attempt: CampaignAttempt, root = process.cwd()) {
+  const expected = attempt.databaseLane ?? { lane: "embedded-postgres" as const };
+  const rows = attempt.evidencePaths.filter(relative => relative.startsWith("tests/runner-e2e/results/") && !relative.split("/").includes("..") && path.basename(relative) === "result.json").flatMap(relative => {
+    try { return [JSON.parse(readFileSync(path.join(root, relative), "utf8"))]; } catch { return []; }
+  });
+  // Historical embedded interpretation stays backward-compatible. A retained
+  // Docker identity can never masquerade as an undeclared/embedded result.
+  if (expected.lane === "embedded-postgres") return rows.every(row => row.databaseIdentity === undefined);
+  return rows.length > 0 && rows.every(row => row.executionId === attempt.executionId && row.source?.sha === attempt.sourceRevision && databaseIdentityMatches(expected, row.databaseIdentity));
+}
 export function campaignAttemptProcessed(attempt: CampaignAttempt, root = process.cwd()): boolean {
   if (attempt.outcome === "running" || !attempt.finishedAt) return false;
   return attempt.evidencePaths.some(relative => {
@@ -183,6 +200,7 @@ export function campaignAttemptProcessed(attempt: CampaignAttempt, root = proces
     try {
       const result = JSON.parse(readFileSync(path.join(root, relative), "utf8"));
       return result.executionId === attempt.executionId && result.source?.sha === attempt.sourceRevision
+        && (attempt.databaseLane?.lane !== "owned-docker-postgres" || result.databaseIdentity?.lane === "owned-docker-postgres")
         && ["passed", "failed"].includes(result.status) && (attempt.outcome !== "passed" || result.status === "passed")
         && Number.isFinite(Date.parse(result.startedAt)) && Number.isFinite(Date.parse(result.finishedAt))
         && Date.parse(result.finishedAt) >= Date.parse(result.startedAt);
@@ -190,8 +208,8 @@ export function campaignAttemptProcessed(attempt: CampaignAttempt, root = proces
   });
 }
 export function campaignSummary(campaign: ChatCampaign, root = process.cwd()) {
-  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision); }).length;
-  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision); }).length;
+  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision) && campaignDatabaseEvidenceEligible(first, root); }).length;
+  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision) && campaignDatabaseEvidenceEligible(final, root); }).length;
   const attempted = campaign.scenarios.filter(scenario => scenario.attempts.length).length;
   const implemented = campaign.scenarios.filter(scenario => scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete")).length;
   const concreteBlockers = campaign.scenarios.filter(s => s.authoringStatus === "concrete-blocker" && s.executionId && s.blockerProbeSources?.length).length;

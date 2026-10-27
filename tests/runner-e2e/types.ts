@@ -290,6 +290,8 @@ export interface RunnerE2EBillingSummary {
 }
 
 export interface RunnerE2EResult {
+  /** Explicit optional owned Linux/arm64 Docker PG18.6 environment identity. */
+  databaseIdentity?: ReturnType<typeof import("./docker-postgres.js").publicDockerDatabaseIdentity>;
   schema: "paperclip.runner-e2e.result/v1" | "paperclip.runner-e2e.result/v2";
   accountingIdentity?: { campaignId: string; attemptId: string };
   executionId: string;

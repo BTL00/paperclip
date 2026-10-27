@@ -1,3 +1,4 @@
+import { dockerDatabaseSupervisorEnvironment } from "./docker-postgres.js";
 import { archiveServerEnvironment } from "./chat-archive-fault-control.js";
 import { CHAT_INSTALL_PLAN, refreshInstalledChatPins, publishInstalledChatReceipt } from "./chat-installed-lane.js";
 import { parseFinalizationCrashBinding, readFinalizationCrashBoundary, type FinalizationCrashBinding } from "./finalization-crash-boundary.js";
@@ -52,7 +53,8 @@ const restartTimeoutMs = 180_000;
 const gracefulStopTimeoutMs = 30_000;
 const installedRelease = process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI
   ? installedReleaseLaunch(process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI) : null;
-const archiveEnvironment = await archiveServerEnvironment({ selected: executionIds, temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, env: process.env });
+const dockerEnvironment = await dockerDatabaseSupervisorEnvironment({ temporaryRoot, env: process.env });
+const archiveEnvironment = await archiveServerEnvironment({ selected: executionIds, temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, env: dockerEnvironment.source });
 const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
   ? installedReleaseEnvironment(archiveEnvironment.source, repositoryRoot, path.join(temporaryRoot, "provider-bin"))
   : archiveEnvironment.source, {
@@ -416,6 +418,7 @@ async function supervise() {
     temporaryRoot,
     configPath,
     serverPort: Number(port),
+    dockerReceiptPath: dockerEnvironment.filename,
   });
   // Postgres needs the socket itself; release immediately before child spawn.
   await databaseReservation?.close();
