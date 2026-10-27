@@ -13,7 +13,7 @@ import { createProcessTreeOwner, stopOwnedProcessTree } from "./process-tree-own
 import { runnerE2ETypeScriptProcessArgs } from "./web-server-command.js";
 import { assertRunnerDatabaseIsolation } from "./instance-isolation.js";
 import { resolveRunnerE2ESource } from "./source.js";
-import { sanitizeJson } from "./redaction.js";
+import { findSecretLeakInDirectory, sanitizeJson } from "./redaction.js";
 
 export async function runOwnedDockerInfrastructureHealth() {
   const source = resolveRunnerE2ESource();
@@ -25,6 +25,7 @@ export async function runOwnedDockerInfrastructureHealth() {
   const secrets: string[] = [], startedAt = new Date().toISOString();
   let database: Awaited<ReturnType<typeof startOwnedDockerDatabase>> | undefined;
   let child: ReturnType<typeof spawn> | undefined, owner: ReturnType<typeof createProcessTreeOwner> | undefined, observation: ReturnType<typeof setInterval> | undefined;
+  let persistedStateScanPassed = false;
   let phase = "owned-postgres-startup", failure: unknown; const cleanupFailures: string[] = [];
   let health: { status: string; deploymentMode?: string } | undefined, schema: Record<string, number> | undefined;
   try {
@@ -53,6 +54,10 @@ export async function runOwnedDockerInfrastructureHealth() {
     const ui = await fetch(origin, { signal: AbortSignal.timeout(5000) });
     if (!companies.ok || !Array.isArray(companyRows) || companyRows.length !== 0 || !ui.ok) throw new Error("Fresh source instance did not expose healthy empty-company API/UI");
     await assertRunnerDatabaseIsolation(configPath, root, database.filename);
+    phase = "same-final-persisted-state-secret-scan";
+    const leak = await findSecretLeakInDirectory(home, secrets, { includeShapes: false, privateDockerDatabaseConfig: { temporaryRoot: root, configPath, receiptPath: database.filename } });
+    if (leak) throw new Error("Owned infrastructure persisted-state scan detected a secret outside intended custody");
+    persistedStateScanPassed = true;
     await database.verify();
     // Only the exact already-owned CID can receive this read-only SQL command.
     const r = database.receipt;
@@ -74,7 +79,7 @@ export async function runOwnedDockerInfrastructureHealth() {
   const receipt = { schemaVersion: 1, kind: "owned-docker-postgres-infrastructure-only", source, productionBaseline: "8373d7867963674ff960d2345d0d28086f799bc7", startedAt, finishedAt: new Date().toISOString(),
     status: failure || cleanupFailures.length ? "failed" : "passed", phase, primaryFailure: failure ? "Actual infrastructure operation failed; primary private diagnostics retained" : null, cleanupFailures,
     database: database ? publicDockerDatabaseIdentity(database.receipt) : startupState.identity,
-    checks: { actualApiHealth: !!health, actualNormalMigrations: !!schema?.migrations, zeroCompanies: schema?.companies === 0, zeroNativeRuns: schema?.runs === 0, zeroAgents: schema?.agents === 0, zeroScenarios: true, zeroModels: true },
+    checks: { sameFinalPersistedStateSecretScan: persistedStateScanPassed, actualApiHealth: !!health, actualNormalMigrations: !!schema?.migrations, zeroCompanies: schema?.companies === 0, zeroNativeRuns: schema?.runs === 0, zeroAgents: schema?.agents === 0, zeroScenarios: true, zeroModels: true },
     canonicalAttempts: 0, privateRoot: failure || cleanupFailures.length ? root : undefined };
   const destination = path.join(repositoryRoot, "tests/runner-e2e/results/chat-catalog-campaign"); await mkdir(destination, { recursive: true });
   const filename = path.join(destination, `docker-infrastructure-health-${startedAt.replaceAll(/[:.]/g, "-")}.json`);

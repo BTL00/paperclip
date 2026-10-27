@@ -533,7 +533,7 @@ async function runAttempt(input: {
     );
     const port = await reserveRunnerE2EServerPort();
     await Promise.all([
-      mkdir(paperclipHome, { recursive: true }),
+      mkdir(paperclipHome, { recursive: true, mode: 0o700 }),
       mkdir(workspace, { recursive: true }),
       mkdir(privateDir, { recursive: true }),
     ]);
@@ -753,7 +753,9 @@ async function runAttempt(input: {
             const leak = await findSecretLeakInDirectory(directory, credentials, {
               includeShapes: false,
               sources: credentialSources,
-              ...(label === "Paperclip home" ? { privateCodexRuntimeIdentityRoot: paperclipHome } : {}),
+              ...(label === "Paperclip home" ? { privateCodexRuntimeIdentityRoot: paperclipHome,
+                ...(dockerDatabase ? { privateDockerDatabaseConfig: { temporaryRoot, configPath, receiptPath: dockerDatabase.filename } } : {}),
+              } : {}),
               ignoreFile: (file) => expectedEphemeralCredentials.has(file),
               allowDisappearedFile: (file) =>
                 label === "Paperclip home" &&

@@ -235,8 +235,6 @@ export function assertIsolatedServerEnvironment(
     temporaryRoot: string;
     paperclipHome: string;
     configPath: string;
-    /** Supplied only after exact owned Docker receipt validation by the supervisor. */
-    ownedDatabaseUrl?: string;
   },
 ) {
   const home = env.PAPERCLIP_HOME;
@@ -265,12 +263,11 @@ export function assertIsolatedServerEnvironment(
     ...AMBIENT_PAPERCLIP_CREDENTIAL_KEYS,
     ...AMBIENT_EXTERNAL_STATE_KEYS,
   ]) {
-    if (env[key] && !(key === "DATABASE_URL" && expected.ownedDatabaseUrl && env[key] === expected.ownedDatabaseUrl))
+    if (env[key])
       throw new Error(
         `Paperclip server environment unexpectedly contains ${key}`,
       );
   }
-  if (expected.ownedDatabaseUrl && env.DATABASE_URL !== expected.ownedDatabaseUrl) throw new Error("Paperclip server database URL differs from the validated owned receipt");
   for (const key of GENERATED_SERVER_SECRET_KEYS) {
     if (!env[key])
       throw new Error(`Paperclip server environment is missing ${key}`);

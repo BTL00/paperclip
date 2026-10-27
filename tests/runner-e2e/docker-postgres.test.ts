@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile, symlink, chmod } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
@@ -9,7 +9,8 @@ import { assertRunnerDatabaseIsolation, assertEmbeddedDatabaseIsolation } from "
 import { campaignDatabaseEvidenceEligible, type CampaignAttempt } from "./chat-campaign.js";
 import { assertChatCatalogFingerprintLane, fingerprintChatDependencyClosure } from "./chat-catalog-fingerprint.js";
 import { validateRetainedRunnerResult } from "./result-validation.js";
-import { assertIsolatedServerEnvironment, buildPaperclipServerEnvironment } from "./harness-env.js";
+import { buildPaperclipServerEnvironment } from "./harness-env.js";
+import { assertDockerCustodyMetadata } from "./docker-config-custody.js";
 import { findSecretLeakInDirectory } from "./redaction.js";
 import { createSanitizedCodexEnvironment } from "../../packages/paperclip-runner/src/drivers/codex/app-server-transport.js";
 const roots: string[] = [];
@@ -73,10 +74,7 @@ it("binds exact image/engine/resources, strips admission data and removes only o
   expect(supervisor.source[DOCKER_DATABASE_ENV]).toBeUndefined(); expect(supervisor.source[DATABASE_LANE_ENV]).toBeUndefined();
   const configPath = path.join(temp, "paperclip-home", "instances", "fixture", "config.json");
   expect(await prepareRunnerE2EServerConfig({ temporaryRoot: temp, configPath, serverPort: 3100, dockerReceiptPath: owned.filename, dockerRun: run })).toBeNull();
-  const config = JSON.parse(await readFile(configPath, "utf8")); expect(config.database.mode).toBe("postgres"); expect(config.database.connectionString).toBeUndefined();
-  expect(JSON.stringify(config)).not.toContain(secrets[0]);
-  expect(supervisor.serverOverrides.DATABASE_URL).toBe(owned.receipt.connectionString);
-  expect(supervisor.source.DATABASE_URL).toBeUndefined();
+  const config = JSON.parse(await readFile(configPath, "utf8")); expect(config.database.mode).toBe("postgres"); expect(config.database.connectionString).toBe(owned.receipt.connectionString);
   const key = config.secrets.localEncrypted.keyFilePath; await mkdir(path.dirname(key), { recursive: true }); await writeFile(key, "offline-key", { mode: 0o600 });
   await expect(assertRunnerDatabaseIsolation(configPath, temp, owned.filename, run)).resolves.toBeUndefined();
   const changed = structuredClone(config); changed.database.connectionString = "postgresql://foreign"; await writeFile(configPath, JSON.stringify(changed), { mode: 0o600 });
@@ -189,33 +187,49 @@ it("allows only exact Docker Desktop host translation with an owned canonical pr
   await owned.close(); expect(state.container).toBeNull(); expect(state.volume).toBeNull();
 });
 
-it("keeps owned DB credentials server-only without any persisted scan exemption", async () => {
+it("scans every raw config byte except one verified owned DSN field", async () => {
   const temp = await root(), { run } = daemon(), secrets: string[] = [];
   const owned = await startOwnedDockerDatabase({ temporaryRoot: temp, privateSecrets: secrets, run });
-  const admission = await dockerDatabaseSupervisorEnvironment({ temporaryRoot: temp, env: { [DATABASE_LANE_ENV]: "owned-docker-postgres", [DOCKER_DATABASE_ENV]: owned.filename, DATABASE_URL: "ambient-unrelated", DATABASE_MIGRATION_URL: "ambient-migration" }, run });
-  const home = path.join(temp, "paperclip-home"), configPath = path.join(home, "instances", "custody", "config.json");
+  const home = path.join(temp, "paperclip-home"), configPath = path.join(home, "instances", "runner-e2e-custody", "config.json");
   await prepareRunnerE2EServerConfig({ temporaryRoot: temp, configPath, serverPort: 3100, dockerReceiptPath: owned.filename, dockerRun: run });
-  const expected = { temporaryRoot: temp, paperclipHome: home, configPath, ownedDatabaseUrl: admission.serverOverrides.DATABASE_URL };
-  const env = buildPaperclipServerEnvironment(admission.source, { ...admission.serverOverrides, PAPERCLIP_HOME: home, PAPERCLIP_CONFIG: configPath, XDG_CACHE_HOME: path.join(temp, "xdg-cache"), PAPERCLIP_AGENT_JWT_SECRET: "jwt", PAPERCLIP_DECISION_SIGNING_SECRET: "decision", PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "tool", BETTER_AUTH_SECRET: "auth" });
-  expect(env.DATABASE_URL).toBe(owned.receipt.connectionString);
-  expect(env.DATABASE_MIGRATION_URL).toBeUndefined();
-  expect(() => assertIsolatedServerEnvironment(env, expected)).not.toThrow();
-  expect(() => assertIsolatedServerEnvironment({ ...env, DATABASE_URL: "ambient-unrelated" }, expected)).toThrow();
-  expect(() => assertIsolatedServerEnvironment(env, { ...expected, ownedDatabaseUrl: undefined })).toThrow();
-  expect(createSanitizedCodexEnvironment(env).DATABASE_URL).toBeUndefined();
-  expect(createSanitizedCodexEnvironment(env).DATABASE_MIGRATION_URL).toBeUndefined();
-  expect(await findSecretLeakInDirectory(home, secrets, { includeShapes: false })).toBeNull();
-  const config = JSON.parse(await readFile(configPath, "utf8"));
-  config.database.connectionString = owned.receipt.connectionString;
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+  const options = { includeShapes: false, privateDockerDatabaseConfig: { temporaryRoot: temp, configPath, receiptPath: owned.filename, run } };
+  const original = await readFile(configPath, "utf8");
+  expect(await findSecretLeakInDirectory(home, secrets, options)).toBeNull();
   expect(await findSecretLeakInDirectory(home, secrets, { includeShapes: false })).not.toBeNull();
-  await expect(prepareRunnerE2EServerConfig({ temporaryRoot: temp, configPath, serverPort: 3100, dockerReceiptPath: owned.filename, dockerRun: run })).rejects.toThrow("differs");
-  delete config.database.connectionString;
-  config.unrelatedField = secrets[0];
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-  expect(await findSecretLeakInDirectory(home, secrets, { includeShapes: false })).not.toBeNull();
-  config.unrelatedField = "provider-secret-canary";
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-  expect(await findSecretLeakInDirectory(home, [...secrets, "provider-secret-canary"], { includeShapes: false })).not.toBeNull();
+  for (const extra of [secrets[0], owned.receipt.connectionString, "provider-secret-canary"]) {
+    const config = JSON.parse(original); config.unrelated = extra;
+    await writeFile(configPath, JSON.stringify(config));
+    if (extra === "provider-secret-canary") expect(await findSecretLeakInDirectory(home, [...secrets, extra], options)).not.toBeNull();
+    else await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("custody");
+  }
+  await writeFile(configPath, original);
+  await writeFile(path.join(home, "copy.json"), original, { mode: 0o600 });
+  expect((await findSecretLeakInDirectory(home, secrets, options))?.file).toBe(path.join(home, "copy.json"));
+  await rm(path.join(home, "copy.json"));
+  const wrong = JSON.parse(original); wrong.database.connectionString = "postgresql://foreign";
+  await writeFile(configPath, JSON.stringify(wrong));
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("receipt");
+  // Duplicate keys and alternate raw occurrences never disappear through JSON parse.
+  await writeFile(configPath, original.replace('"connectionString":', '"connectionString":'+JSON.stringify(owned.receipt.connectionString)+',"connectionString":'));
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("one exact");
+  await writeFile(configPath, original); await chmod(configPath, 0o644);
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("metadata");
+  await chmod(configPath, 0o600); await chmod(home, 0o755);
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("metadata");
+  await chmod(home, 0o700);
+  await expect(findSecretLeakInDirectory(temp, secrets, options)).rejects.toThrow("isolated home");
+  const bytes = await readFile(configPath); await rm(configPath); await writeFile(configPath+"-target", bytes, { mode: 0o600 }); await symlink(configPath+"-target", configPath);
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("metadata");
+  await rm(configPath); await writeFile(configPath, bytes, { mode: 0o600 });
+  expect(createSanitizedCodexEnvironment({ DATABASE_URL: owned.receipt.connectionString, DATABASE_MIGRATION_URL: owned.receipt.connectionString }).DATABASE_URL).toBeUndefined();
   await owned.close();
+  await expect(findSecretLeakInDirectory(home, secrets, options)).rejects.toThrow("not ready");
+});
+it("requires exact current UID, type and private custody modes", () => {
+  const metadata = { uid: process.getuid!(), mode: 0o600, isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false };
+  expect(() => assertDockerCustodyMetadata(metadata, false)).not.toThrow();
+  expect(() => assertDockerCustodyMetadata({ ...metadata, uid: metadata.uid+1 }, false)).toThrow();
+  expect(() => assertDockerCustodyMetadata({ ...metadata, mode: 0o640 }, false)).toThrow();
+  expect(() => assertDockerCustodyMetadata({ ...metadata, isSymbolicLink: () => true }, false)).toThrow();
+  expect(() => assertDockerCustodyMetadata(metadata, true)).toThrow();
 });

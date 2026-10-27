@@ -23,7 +23,7 @@ export async function prepareRunnerE2EServerConfig(input: {
   const docker = input.dockerReceiptPath ? await readDockerDatabaseReceipt(input.dockerReceiptPath, input.temporaryRoot, input.dockerRun) : undefined;
   try {
     const existing = JSON.parse(await readFile(input.configPath, "utf8"));
-    if (docker ? existing.database?.mode !== "postgres" || !!existing.database.connectionString : existing.database?.mode !== "embedded-postgres" || existing.database.connectionString) throw new Error("Existing runner database config differs from its explicit owned lane");
+    if (docker ? existing.database?.mode !== "postgres" || existing.database.connectionString !== docker.connectionString : existing.database?.mode !== "embedded-postgres" || existing.database.connectionString) throw new Error("Existing runner database config differs from its explicit owned lane");
     return null;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -37,10 +37,9 @@ export async function prepareRunnerE2EServerConfig(input: {
         updatedAt: new Date().toISOString(),
         source: "onboard",
       },
-      // The owned Docker DSN belongs only to the validated server child env.
-      // Keep normal onboarding config private but entirely free of DB secrets.
       database: {
         mode: docker ? "postgres" : "embedded-postgres",
+        ...(docker ? { connectionString: docker.connectionString } : {}),
         embeddedPostgresDataDir: path.join(instanceRoot, "db"),
         embeddedPostgresPort: databaseReservation?.port ?? 54329,
         backup: {

@@ -108,13 +108,11 @@ const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
   // to Playwright in this harness, so never create a developer desktop tab.
   PAPERCLIP_OPEN_ON_LISTEN: "false",
   ...vaultEnvironment,
-  ...dockerEnvironment.serverOverrides,
 });
 assertIsolatedServerEnvironment(serverEnvironment, {
   temporaryRoot,
   paperclipHome,
   configPath,
-  ownedDatabaseUrl: dockerEnvironment.serverOverrides.DATABASE_URL,
 });
 const definedServerEnvironment = Object.fromEntries(
   Object.entries(serverEnvironment).filter(
