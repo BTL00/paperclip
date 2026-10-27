@@ -141,6 +141,17 @@ export function gradeVaultReference(value: unknown) {
   );
   const failed = o.state.importFailed === true;
   c.add(
+    "required-vault-reference-positive-path",
+    !failed &&
+      o.state.importUiCompleted === true &&
+      o.state.importedReferenceCount === 1 &&
+      o.state.savedBindingMatched === true &&
+      o.state.actualAccessEventBound === true &&
+      o.state.authorizedChecks === 1 &&
+      o.state.workerTaskDone === true,
+    "A provider-unavailable or denied-import diagnostic is a setup blocker, never substitute coverage for the required actual reference import, consumer binding and native consumption.",
+  );
+  c.add(
     "actual-source-and-worker-phase-attribution",
     o.runs.length === (failed ? 2 : 3) &&
       o.runs.every(
@@ -250,6 +261,19 @@ async function returnToSource(
   state: Record<string, unknown>,
   url: string,
 ) {
+  if (state.importFailed === true) {
+    state.providerUnavailableSetupBlocker =
+      "required-aws-vault-reference-positive-path-unavailable";
+    await ctx.input.evidence("chat-catalog-vault-provider-unavailable.json", {
+      positivePathEligible: false,
+      setupBlocker: state.providerUnavailableSetupBlocker,
+      vaultId: state.vaultId,
+      actualHttpStatus: state.providerFailureStatus,
+      independentHealthFailure: state.providerFailureVerified === true,
+      actualImportRowError: state.providerRowError === true,
+      visibleHumanFailure: state.providerFailureVisible === true,
+    });
+  }
   await ctx.input.page.goto(url, { waitUntil: "domcontentloaded" });
   state.repeatQuery = ctx.scenario.query;
   await sendChatMessage(ctx.input.page, ctx.scenario.query);
