@@ -1,3 +1,4 @@
+import { PUBLIC_ORIGIN_CONTROL_ENV, PUBLIC_ORIGIN_RECEIPT_ENV } from "./chat-public-origin.js";
 import { scrubChatPrivateEnvironment } from "./chat-private-inputs.js";
 import { PRIVATE_DIAGNOSTICS_ENV } from "./private-diagnostics.js";
 import { installedDaytonaPluginKeys } from "./installed-daytona-plugin.js";
@@ -34,6 +35,13 @@ const AMBIENT_EXTERNAL_STATE_KEYS = [
   "PAPERCLIP_STORAGE_S3_FORCE_PATH_STYLE",
 ] as const;
 const PROVIDER_SECRET_KEY = /^(?:OPENAI|ANTHROPIC|OPENROUTER|BRAINTRUST|DAYTONA|XAI|GROK|CURSOR|COPILOT|GITHUB|GH)(?:_|$)/;
+
+/** Vault SDK authority is never ambient chat input. An explicitly selected
+ * server-only vault handoff supplies its own finite overrides after scrubbing. */
+export function scrubAmbientVaultEnvironment(env: NodeJS.ProcessEnv) {
+  for (const name of Object.keys(env)) if (name.startsWith("AWS_") || name.startsWith("PAPERCLIP_SECRETS_AWS_")) delete env[name];
+  return env;
+}
 
 export function applyEvalGatewayEnvironment(env: NodeJS.ProcessEnv, credential: string, gateway: {
   token: string; baseUrl: string; phasePath: string; observability?: { token: string; baseUrl: string };
@@ -133,6 +141,8 @@ export function buildRunnerE2EProcessEnvironment(
   const installed = usesInstalledCli(source);
   if (installed) assertInstalledCliSelection(source, executions);
   const result = { ...source };
+  if (executions.some(execution => execution.suite.id === "chat-features")) scrubAmbientVaultEnvironment(result);
+  delete result[PUBLIC_ORIGIN_CONTROL_ENV]; delete result[PUBLIC_ORIGIN_RECEIPT_ENV];
   if (executions.some(execution => execution.suite.id === "chat-features")) scrubChatPrivateEnvironment(result, executions);
   else scrubChatPrivateEnvironment(result, []);
   delete result.PAPERCLIP_E2E_GATEWAY_PHASE_PATH;
@@ -199,6 +209,8 @@ export function buildPaperclipServerEnvironment(
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
   const result = scrubChatPrivateEnvironment({ ...source }, [], true);
+  scrubAmbientVaultEnvironment(result);
+  delete result[PUBLIC_ORIGIN_CONTROL_ENV]; delete result[PUBLIC_ORIGIN_RECEIPT_ENV];
   delete result[PRIVATE_DIAGNOSTICS_ENV];
   for (const key of Object.keys(result)) {
     if (PROVIDER_SECRET_KEY.test(key)) delete result[key];
