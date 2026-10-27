@@ -36,7 +36,9 @@ export function gradeIntegratorRoutineHistory(value: unknown) {
   c.add("failed-native-not-inferred-routine-completion", !!failedTask?.identifier && !!completedTask?.identifier
     && groundedStatement(o.reply, new RegExp(escaped(failedTask.identifier), "i"), /\b(?:failed|failure|unsuccessful)\b/i, new RegExp(`${escaped(failedTask.identifier)}[^\n.!?]{0,60}\\b(?:succeeded|successfully completed)\\b`, "i"))
     && groundedStatement(o.reply, new RegExp(escaped(completedTask.identifier), "i"), /\b(?:completed|succeeded|successful)\b/i, /\ball (?:runs|executions) (?:succeeded|completed successfully)\b/i)
-    && /\bmanual\b/i.test(o.reply) && /\b(?:scheduled|schedule)\b/i.test(o.reply) && /\b(?:no (?:recorded |confirmed )?scheduled|not (?:proof|evidence)|cannot confirm|can't confirm|missing)\b/i.test(o.reply), "The response preserves which actual native execution failed and which invocation completed, identifies the manual sources, and does not infer scheduled morning success from a saved schedule.");
+    && !o.reply.split(/(?<=[.!?])\s+|\n+/).some(sentence => /\b(?:scheduled|scheduler|automatically|automatic|on schedule)\b/i.test(sentence)
+      && /\b(?:ran|executed|succeeded|completed|delivered|successful)\b/i.test(sentence)
+      && !/\b(?:no|not|cannot|can't|unconfirmed|unverified|unknown|missing)\b/i.test(sentence)), "The response preserves which actual native execution failed and which invocation completed without inferring unsupported scheduled success. A truthful concise account of the actual manual runs needs no unprompted schedule-denial sentence.");
   return c.result();
 }
 export const integratorRoutineHistoryCases = [integratorDefinition("routines", "routines.read-history", async ctx => {

@@ -14,6 +14,7 @@ function valid() {
 describe("routine invocation and native failure distinction", () => {
   it("accepts distinct genuinely admitted failure and completed invocation, never absent evidence", () => {
     expect(gradeIntegratorRoutineHistory(valid()).passed).toBe(true);
+    expect(gradeIntegratorRoutineHistory({ ...valid(), reply: "Two manual runs this week: ACORN-1 failed; ACORN-2 completed successfully." }).passed).toBe(true);
     expect(gradeIntegratorRoutineHistory(undefined).passed).toBe(false);
     const missing = valid(); missing.state.failedEvents = [];
     expect(gradeIntegratorRoutineHistory(missing).passed).toBe(false);
