@@ -101,8 +101,8 @@
     },
     {
       "scenarioId": "agent-chat.multiple-handoffs",
-      "readinessClass": "local",
-      "needs": "Real active website and completed logo handoffs; source-bound update once; logo output immutable; queued vs consumed verified."
+      "readinessClass": "implemented",
+      "needs": "Real Riley Logo task/native SVG artifact completes first; genuine source setup human/native turn retains distinct completed Logo and active Morgan Website references. Canonical own-run reply and one source-attributed headline queue entry precede one normal consuming Website continuation. Exact native saved comment input/latest headline revision and retained original revision are checked; Logo task, SVG bytes, attachment identity and every document revision remain unchanged. No live qualification claimed."
     },
     {
       "scenarioId": "agent-chat.conference-room",
