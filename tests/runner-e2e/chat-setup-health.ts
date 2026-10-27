@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { constants, readFileSync } from "node:fs";
 import { open, realpath, stat, writeFile } from "node:fs/promises";
@@ -104,6 +105,30 @@ export async function runChatSetupHealth(input: { api: RunnerApi; fixtures: Live
     await input.evidence("chat-setup-health.json", { schema: "paperclip.chat-setup-health/v1", scope: "diagnostic-outside-244", companyId: f.company.id,
       agentId: f.agent.id, state, checks, canonicalQueries: state.humanComments,
       setupProbeUsage: "One ordinary automatic lifecycle hello is expected. Provider tokens and cost are unavailable outside heartbeat accounting; never reported as zero." });
+    await input.evidence("api-state.json", { scope: "diagnostic-outside-244", capturePhase: "after-public-pause",
+      companyId: f.company.id, agentId: f.agent.id, observed: state, checks });
     if (checks.some(check => !check.passed)) throw new Error("Setup health failed; inspect retained closed readiness diagnostics");
   }
+}
+
+/** Genuine readonly diagnostic UI evidence, never published as a task screenshot. */
+export async function captureSetupHealthProfile(input: {
+  executionId: string; api: RunnerApi; page: Page; companyId: string; agentId: string;
+  capturePrivate(id: string, filename: string): Promise<void>;
+}) {
+  if (input.executionId !== CHAT_SETUP_HEALTH_ID) throw new Error("Setup health evidence requires its exact diagnostic cell");
+  const [company, agent] = await Promise.all([
+    input.api.get<{ id: string; issuePrefix: string }>(`/api/companies/${input.companyId}`),
+    input.api.get<{ id: string; companyId: string; name: string; urlKey: string }>(`/api/agents/${input.agentId}`),
+  ]);
+  if (company.id !== input.companyId || agent.id !== input.agentId || agent.companyId !== company.id
+    || !company.issuePrefix || !agent.name || !agent.urlKey) throw new Error("Setup health evidence resource mismatch");
+  const origin = new URL(input.api.baseURL);
+  if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1" || origin.username || origin.password)
+    throw new Error("Setup health evidence requires the owned loopback app");
+  const url = new URL(`/${encodeURIComponent(company.issuePrefix)}/agents/${encodeURIComponent(agent.urlKey)}/overview`, origin).href;
+  await input.page.goto(url, { waitUntil: "domcontentloaded" });
+  await input.page.getByRole("main").getByRole("heading", { name: agent.name, exact: true }).waitFor({ state: "visible" });
+  if (input.page.url() !== url) throw new Error("Setup health evidence route mismatch");
+  await input.capturePrivate("setup-health-final-state", "final-state.png");
 }

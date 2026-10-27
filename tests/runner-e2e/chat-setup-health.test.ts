@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runnerMatrix, runnerSuites } from "./catalog.js";
 import { parseRunnerSelectors, selectRunnerExecutions } from "./selectors.js";
 import { CHAT_OPENCODE_MODEL } from "./chat-runtime-profile.js";
-import { CHAT_SETUP_HEALTH_ID, CHAT_SETUP_HEALTH_SUITE, gradeSetupHealth, runChatSetupHealth, requestSetupHealthStop, stopSetupHealthIfRequested, SetupHealthAbort } from "./chat-setup-health.js";
+import { CHAT_SETUP_HEALTH_ID, CHAT_SETUP_HEALTH_SUITE, gradeSetupHealth, runChatSetupHealth, requestSetupHealthStop, stopSetupHealthIfRequested, SetupHealthAbort, captureSetupHealthProfile } from "./chat-setup-health.js";
 const valid = (): Parameters<typeof gradeSetupHealth>[0] => ({ ready: true, agentCount: 1, configMatches: true, issues: 0, conversations: 0, comments: 0, humanComments: 0, runs: 0,
   probes: [{ schema: "paperclip.chat-readiness-probe/v1", companyId: "company", sequence: 1, status: "pass", thrown: false,
     checks: [{ code: "opencode_hello_probe_passed", level: "info", category: "unknown" as const }], errorCategory: "unknown" as const }] });
@@ -66,9 +66,11 @@ it.each([[false, false], [true, false], [false, true]])("uses only readiness GET
   if (failed || lateProbe) await expect(operation).rejects.toThrow("Setup health failed"); else await operation;
   expect(post).toHaveBeenCalledTimes(1);
   expect(get.mock.calls.every(([route]) => !route.includes("test-environment") && !route.includes("/chats/"))).toBe(true);
-  expect(evidence).toHaveBeenCalledTimes(2);
+  expect(evidence).toHaveBeenCalledTimes(3);
   expect((evidence.mock.calls[1]![1] as { state: { probes: unknown[] } }).state.probes).toHaveLength(lateProbe ? 2 : 1);
   expect(evidence.mock.calls[1]![1]).toMatchObject({ canonicalQueries: 0, state: { issues: 0, conversations: 0, runs: 0 } });
+  expect(evidence.mock.calls[2]).toEqual(["api-state.json", expect.objectContaining({ scope: "diagnostic-outside-244", capturePhase: "after-public-pause",
+    observed: expect.objectContaining({ issues: 0, conversations: 0, runs: 0, configMatches: true }) })]);
 });
 
 it("only an exact owned health stop request invokes the existing cleanup callback", async () => {
@@ -99,4 +101,25 @@ it("pause failure requests owned stop before extra oracle reads, even if initial
   const stop = vi.fn(async () => {});
   expect(await stopSetupHealthIfRequested({ executionIds: [CHAT_SETUP_HEALTH_ID], temporaryRoot, stop })).toBe(true);
   expect(stop).toHaveBeenCalledTimes(1);
+});
+
+it("captures the actual scoped readonly profile only after its visible identity loads", async () => {
+  let current = "", visible = false;
+  const waitFor = vi.fn(async () => { visible = true; });
+  const heading = vi.fn(() => ({ waitFor }));
+  const page = { goto: vi.fn(async (url: string) => { current = url; }), url: () => current,
+    getByRole: vi.fn(() => ({ getByRole: heading })) };
+  const get = vi.fn(async (route: string) => route.includes("/companies/") ? { id: "company", issuePrefix: "RUN" } : { id: "agent", companyId: "company", name: "CEO", urlKey: "ceo" });
+  const capturePrivate = vi.fn(async () => { expect(visible).toBe(true); });
+  const input = { executionId: CHAT_SETUP_HEALTH_ID, api: { baseURL: "http://127.0.0.1:3100", get } as unknown as RunnerApi,
+    page: page as unknown as import("@playwright/test").Page, companyId: "company", agentId: "agent", capturePrivate };
+  await captureSetupHealthProfile(input);
+  expect(page.goto).toHaveBeenCalledWith("http://127.0.0.1:3100/RUN/agents/ceo/overview", { waitUntil: "domcontentloaded" });
+  expect(heading).toHaveBeenCalledWith("heading", { name: "CEO", exact: true });
+  expect(capturePrivate).toHaveBeenCalledExactlyOnceWith("setup-health-final-state", "final-state.png");
+  capturePrivate.mockClear();
+  await expect(captureSetupHealthProfile({ ...input, executionId: "chat-features.runner-opencode.local.create-backlog" })).rejects.toThrow("exact diagnostic cell");
+  get.mockResolvedValue({ id: "foreign", issuePrefix: "OTHER" });
+  await expect(captureSetupHealthProfile(input)).rejects.toThrow("resource mismatch");
+  expect(capturePrivate).not.toHaveBeenCalled();
 });
