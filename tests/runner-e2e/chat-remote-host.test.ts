@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { MatrixExecution } from "./types.js";
 import { prepareChatRemoteHost, selectsRemoteChat } from "./chat-remote-host.js";
-import { POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, POSTGRES_VERSION } from "./docker-postgres.js";
+import { dockerCommandDiagnostic, DockerCommandError, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, POSTGRES_VERSION } from "./docker-postgres.js";
 import { CHAT_OPENCODE_MODEL } from "./chat-runtime-profile.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -55,6 +55,56 @@ describe("remote-only chat host qualification without native/provider calls", ()
     const f = await fixture(); const original = f.dependencies.docker;
     f.dependencies.docker = vi.fn(async args => args.includes("image") ? JSON.stringify([{ Id: "other", Os: "linux", Architecture: "arm64" }]) : original(args));
     await expect(prepareChatRemoteHost(f)).rejects.toThrow("owned-linux-amd64-postgres-image-unqualified"); expect((await f.receipt()).evaluationAdmitted).toBe(false);
+    expect(await f.receipt()).toMatchObject({ qualificationStage: "postgres-image-validate", imageChecks: { imageId: false, amd64: false, repositoryDigest: false }, observedImage: { imageId: null, architecture: "arm64" } });
+  });
+  it.each([
+    ["context", "docker-engine", "Cannot connect to the Docker daemon", "docker-engine-unavailable"],
+    ["pull", "postgres-image-pull", "toomanyrequests: registry rate limit", "registry-rate-limit"],
+    ["image", "postgres-image-inspect", "unclassified synthetic-private-canary", "unknown-docker-command-failure"],
+  ])("retains safe actual %s failure stage without raw Docker/private output", async (command, stage, stderr, category) => {
+    const f = await fixture(), original = f.dependencies.docker;
+    f.dependencies.docker = vi.fn(async args => {
+      if (args.includes(command)) throw new DockerCommandError({ args, stdout: "synthetic-imds-token", stderr: `${stderr} synthetic-private-canary`, exitCode: 1, signal: null });
+      return original(args);
+    });
+    await expect(prepareChatRemoteHost(f)).rejects.toThrow("owned-linux-amd64-postgres-image-unqualified");
+    const receipt = await f.receipt();
+    expect(receipt).toMatchObject({ evaluationAdmitted: false, qualificationStage: stage, failureDiagnostic: { category, exitCode: 1, signal: null } });
+    expect(JSON.stringify(receipt)).not.toMatch(/synthetic-private-canary|synthetic-imds-token|stderr|stdout/);
+  });
+  it("records pull timeout without relaxing or retrying image qualification", async () => {
+    const f = await fixture(), original = f.dependencies.docker;
+    f.dependencies.docker = vi.fn(async args => { if (args.includes("pull")) throw new DockerCommandError({ args, stdout: "", stderr: "", exitCode: null, signal: "SIGTERM" }); return original(args); });
+    await expect(prepareChatRemoteHost(f)).rejects.toThrow("owned-linux-amd64-postgres-image-unqualified");
+    expect(await f.receipt()).toMatchObject({ qualificationStage: "postgres-image-pull", failureDiagnostic: { category: "command-timeout-or-termination" } });
+    expect(f.dependencies.docker.mock.calls.filter(([args]) => args.includes("pull"))).toHaveLength(1);
+  });
+  it.each([
+    ["ENOENT", "", "docker-command-missing"],
+    [undefined, "denied: unauthorized", "registry-access-denied"],
+    [undefined, "dial tcp: lookup registry: no such host", "registry-network-or-tls-failure"],
+    [undefined, "manifest unknown", "image-manifest-unavailable"],
+    [undefined, "no matching manifest for linux/amd64", "image-platform-unavailable"],
+    [undefined, "permission denied while connecting to docker.sock", "docker-engine-unavailable"],
+  ])("projects only closed Docker diagnosis %s/%s", (spawnCode, stderr, category) => {
+    expect(dockerCommandDiagnostic(new DockerCommandError({ args: ["private-arg"], stdout: "", stderr, spawnCode, exitCode: null, signal: null }))).toEqual({ category, exitCode: null, signal: null });
+  });
+  it.each(["singleImage", "imageId", "linux", "amd64", "repositoryDigest", "postgresVersion"])("retains exact failed inspect predicate %s", async predicate => {
+    const f = await fixture(), original = f.dependencies.docker;
+    f.dependencies.docker = vi.fn(async args => {
+      const output = await original(args);
+      if (!args.includes("image")) return output;
+      const rows = JSON.parse(output), image = rows[0];
+      if (predicate === "singleImage") rows.push(image);
+      if (predicate === "imageId") image.Id = `sha256:${"b".repeat(64)}`;
+      if (predicate === "linux") image.Os = "windows";
+      if (predicate === "amd64") image.Architecture = "arm64";
+      if (predicate === "repositoryDigest") image.RepoDigests = [];
+      if (predicate === "postgresVersion") image.Config.Env = ["PG_VERSION=18.5"];
+      return JSON.stringify(rows);
+    });
+    await expect(prepareChatRemoteHost(f)).rejects.toThrow("owned-linux-amd64-postgres-image-unqualified");
+    expect(await f.receipt()).toMatchObject({ qualificationStage: "postgres-image-validate", evaluationAdmitted: false, imageChecks: { [predicate]: false } });
   });
   it("does not change historical/other profiles or require IMDS for their discovery", async () => {
     const f = await fixture(); f.executions[0]!.profile.id = "runner-codex-subscription";

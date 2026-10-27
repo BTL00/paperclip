@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { reviewedChatProfile } from "./chat-runtime-profile.js";
 import type { MatrixExecution } from "./types.js";
-import { currentDockerEngine, runDocker, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, POSTGRES_VERSION, type DockerRun } from "./docker-postgres.js";
+import { currentDockerEngine, dockerCommandDiagnostic, runDocker, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, POSTGRES_VERSION, type DockerRun } from "./docker-postgres.js";
 
 const workflow = "paperclipai/paperclip/.github/workflows/runner-full-stack-e2e.yml@refs/heads/master";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -55,15 +55,25 @@ export async function prepareChatRemoteHost(input: { executions: readonly Select
     reason = "on-demand-or-unknown-host-refused-before-evaluation";
     if (lifecycle !== "spot") throw new Error(reason);
     reason = "owned-linux-amd64-postgres-image-unqualified";
+    receipt.qualificationStage = "docker-engine";
     const engine = await currentDockerEngine(deps.docker, env);
+    receipt.qualificationStage = "postgres-image-pull";
     await deps.docker(["--context", engine.context, "pull", "--platform", "linux/amd64", POSTGRES_AMD64_IMAGE], 120000);
+    receipt.qualificationStage = "postgres-image-inspect";
     const images = JSON.parse(await deps.docker(["--context", engine.context, "image", "inspect", POSTGRES_AMD64_IMAGE]));
     const image = images[0], pgVersion = (image?.Config?.Env ?? []).find((entry: string) => entry.startsWith("PG_VERSION="))?.slice(11);
-    if (images.length !== 1 || !POSTGRES_AMD64_IMAGE_IDS.some(id => id === image?.Id) || image.Os !== "linux" || image.Architecture !== "amd64" || !image.RepoDigests?.includes(POSTGRES_AMD64_IMAGE) || pgVersion !== POSTGRES_VERSION) throw new Error(reason);
+    receipt.qualificationStage = "postgres-image-validate";
+    const checks = { singleImage: images.length === 1, imageId: POSTGRES_AMD64_IMAGE_IDS.some(id => id === image?.Id), linux: image?.Os === "linux", amd64: image?.Architecture === "amd64", repositoryDigest: image?.RepoDigests?.includes(POSTGRES_AMD64_IMAGE) === true, postgresVersion: pgVersion === POSTGRES_VERSION };
+    receipt.imageChecks = checks;
+    receipt.observedImage = { imageId: /^sha256:[a-f0-9]{64}$/.test(image?.Id ?? "") ? image.Id : null,
+      os: ["linux", "windows"].includes(image?.Os) ? image.Os : null, architecture: ["amd64", "arm64"].includes(image?.Architecture) ? image.Architecture : null,
+      version: typeof pgVersion === "string" && /^[0-9][a-zA-Z0-9.+~-]{0,79}$/.test(pgVersion) ? pgVersion : null };
+    if (Object.values(checks).some(value => !value)) throw new Error(reason);
     Object.assign(receipt, { status: "qualified-host-only", spotVerified: true, postgres: { image: POSTGRES_AMD64_IMAGE, imageId: image.Id, architecture: image.Architecture, version: pgVersion }, dockerEngineSha256: hash(engine.engineId) });
     await persist();
     return { receiptPath: filename, databaseLane: "owned-docker-postgres" as const, maxAutomaticRetries: 0, maxParallel: 2, postgresArtifact: "linux-amd64" as const, postgresImageId: image.Id as typeof POSTGRES_AMD64_IMAGE_IDS[number] };
-  } catch {
+  } catch (error) {
+    if (receipt.qualificationStage) receipt.failureDiagnostic = dockerCommandDiagnostic(error);
     receipt.reason = reason; await persist();
     throw new Error(`Remote chat preflight blocked: ${reason}; inspect chat-remote-host.json. No evaluation admitted.`);
   }

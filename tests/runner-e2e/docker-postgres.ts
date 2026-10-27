@@ -56,11 +56,27 @@ export function selectedDatabaseLane(env = process.env) {
 }
 /** Docker is only a test-host control client. No provider or DB credential is
  * inherited by it; all commands pin the verified local context explicitly. */
-interface CommandFailure { args: string[]; stdout: string; stderr: string; exitCode: number | null; signal: string | null }
+interface CommandFailure { args: string[]; stdout: string; stderr: string; exitCode: number | null; signal: string | null; spawnCode?: string }
 const commandFailures = new WeakMap<Error, CommandFailure>();
 /** Raw command diagnostics are non-enumerable process-private provenance. */
 export class DockerCommandError extends Error {
   constructor(details: CommandFailure) { super("Owned Docker command failed; raw diagnostics withheld"); commandFailures.set(this, details); }
+}
+/** Closed diagnostics only: Docker can print registry auth/config in raw stderr. */
+export function dockerCommandDiagnostic(error: unknown) {
+  const data = error instanceof Error ? commandFailures.get(error) : undefined;
+  if (!data) return { category: error instanceof SyntaxError ? "invalid-json" : "unclassified-error" };
+  const text = `${data.stdout}\n${data.stderr}`;
+  const category = data.spawnCode === "ENOENT" ? "docker-command-missing"
+    : /toomanyrequests|rate.limit|429/i.test(text) ? "registry-rate-limit"
+    : /unauthorized|authentication required|denied:|forbidden/i.test(text) ? "registry-access-denied"
+    : /cannot connect|is the docker daemon running|permission denied.*docker.sock|docker.sock.*permission denied/i.test(text) ? "docker-engine-unavailable"
+    : /no matching manifest|does not match the specified platform/i.test(text) ? "image-platform-unavailable"
+    : /manifest unknown|manifest.*not found/i.test(text) ? "image-manifest-unavailable"
+    : /timeout|timed out|deadline exceeded/i.test(text) || data.spawnCode === "ETIMEDOUT" || data.signal === "SIGTERM" ? "command-timeout-or-termination"
+    : /no such host|network is unreachable|connection refused|connection reset|TLS handshake|x509:|temporary failure in name resolution/i.test(text) ? "registry-network-or-tls-failure"
+    : /no space left/i.test(text) ? "host-storage-exhausted" : "unknown-docker-command-failure";
+  return { category, exitCode: data.exitCode, signal: data.signal === "SIGTERM" || data.signal === "SIGKILL" ? data.signal : null };
 }
 function verifiedNotFound(error: unknown, resource: string) {
   if (!(error instanceof Error)) return false;
@@ -75,8 +91,9 @@ export const runDocker: DockerRun = async (args, timeout = 15000) => {
       env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...(process.env.DOCKER_CONFIG ? { DOCKER_CONFIG: process.env.DOCKER_CONFIG } : {}) } });
     return (args.includes("logs") ? result.stdout + result.stderr : result.stdout).trim();
   } catch (cause) {
-    const raw = cause as { stdout?: string; stderr?: string; code?: number; signal?: string };
-    throw new DockerCommandError({ args, stdout: raw.stdout ?? "", stderr: raw.stderr ?? "", exitCode: typeof raw.code === "number" ? raw.code : null, signal: raw.signal ?? null });
+    const raw = cause as { stdout?: string; stderr?: string; code?: number | string; signal?: string };
+    throw new DockerCommandError({ args, stdout: raw.stdout ?? "", stderr: raw.stderr ?? "", exitCode: typeof raw.code === "number" ? raw.code : null, signal: raw.signal ?? null,
+      ...(raw.code === "ENOENT" || raw.code === "ETIMEDOUT" ? { spawnCode: raw.code } : {}) });
   }
 };
 export async function currentDockerEngine(run: DockerRun = runDocker, env = process.env): Promise<DockerEngineIdentity> {
