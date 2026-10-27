@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { startReviewProvider } from "../../fixtures/connection-review-provider.js";
-import { pendingStoryDecision } from "../everyday-decisions.js";
+import { pendingStoryDecision, type StoryInteraction } from "../everyday-decisions.js";
 import { pollUntil } from "../api.js";
 import { checks } from "./internal-support.js";
 import { identityDefinition, identityObservation, observeIdentity, openStandingChat, type Interaction } from "./identity-support.js";
@@ -13,6 +13,23 @@ import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 type Provider = Awaited<ReturnType<typeof startReviewProvider>>;
 const providers = new WeakMap<ChatCatalogContext, Provider>();
 const calls = (provider: Provider) => provider.captures.filter(row => row.method === "tools/call" && row.authorized === true);
+/** Open the real selected timeline request in its production composer takeover.
+ * A matching label elsewhere, clarification question, or foreign action cannot
+ * stand in for the pending review. This does not create or rescue a request.
+ */
+export function identityToolReviewSelector(card: StoryInteraction, connectionId: string): string {
+  pendingStoryDecision([card], { kind: "tool", connectionId });
+  return `[id=${JSON.stringify(`interaction-${card.id}`)}]`;
+}
+async function openIdentityToolReview(page: Page, card: StoryInteraction, connectionId: string) {
+  const timeline = page.locator(identityToolReviewSelector(card, connectionId));
+  await timeline.getByRole("button", { name: "Review request", exact: true }).click();
+  const review = page.getByTestId("task-chat-composer-takeover");
+  await expect(review).toBeVisible();
+  await expect(review.getByRole("img", { name: "Launch Notes Synthetic Service", exact: true })).toBeVisible();
+  await expect(review).toContainText("Read launch notes");
+  return review;
+}
 export function gradeToolReview(value: unknown) {
   const c = checks(); const o = identityObservation(value);
   c.add("complete-tool-review-evidence", !!o, "Persisted scoped review and independent provider-call receipts are required."); if (!o) return c.result();
@@ -86,11 +103,9 @@ export const toolReviewIdentityCases = ["approve-tool-once", "decline-tool"].map
     const provider = providers.get(ctx); if (!provider) throw new Error("Synthetic service fixture missing");
     const card = await pendingReview(ctx, state, provider); state.decisionId = card.id;
     state.beforeDecisionCalls = calls(provider).length;
-    await ctx.input.page.getByRole("button", { name: "Review request", exact: true }).click();
-    const dialog = ctx.input.page.getByRole("dialog");
-    await expect(dialog).toContainText(/Launch Notes Synthetic Service|Read launch notes/); state.reviewVisible = true;
+    const review = await openIdentityToolReview(ctx.input.page, card, String(state.connectionId)); state.reviewVisible = true;
     state.beforeDecisionCommentIds = (await comments(ctx)).map(row => row.id);
-    await ctx.input.page.getByRole("button", { name: id === "decline-tool" ? "Decline" : "Approve & run", exact: true }).click();
+    await review.getByRole("button", { name: id === "decline-tool" ? "Decline" : "Approve & run", exact: true }).click();
     if (id === "approve-tool-once") {
       await pollUntil({ label: "first approved synthetic read completed", deadlineAt: Date.now() + 150_000,
         load: async () => { await ctx.refreshIssue(); const rows = await ctx.input.api.get<Interaction[]>(`/api/issues/${ctx.issue()!.id}/interactions`);
@@ -101,10 +116,9 @@ export const toolReviewIdentityCases = ["approve-tool-once", "decline-tool"].map
       state.firstReply = (await comments(ctx)).filter(row => row.authorAgentId === ctx.input.fixtures.agent.id).map(row => row.body).join("\n");
       await sendChatMessage(ctx.input.page, "Read the launch notes again using the app's diagnostic query value fail, so we can check its unavailable-service response.");
       const second = await pendingReview(ctx, state, provider, 1); state.secondDecisionId = second.id; state.beforeSecondDecisionCalls = calls(provider).length;
-      await ctx.input.page.getByRole("button", { name: "Review request", exact: true }).click();
-      await expect(ctx.input.page.getByRole("dialog")).toContainText(/Launch Notes Synthetic Service|Read launch notes/); state.secondReviewVisible = true;
+      const secondReview = await openIdentityToolReview(ctx.input.page, second, String(state.connectionId)); state.secondReviewVisible = true;
       state.beforeDecisionCommentIds = (await comments(ctx)).map(row => row.id);
-      await ctx.input.page.getByRole("button", { name: "Approve & run", exact: true }).click();
+      await secondReview.getByRole("button", { name: "Approve & run", exact: true }).click();
     }
   },
   async observe(ctx, state) {
