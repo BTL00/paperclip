@@ -181,8 +181,8 @@
     },
     {
       "scenarioId": "recovery.retry-exhausted",
-      "readinessClass": "local",
-      "needs": "Genuine exhausted infrastructure attempts and human Retry; previous evidence retained and new admission gates independently read."
+      "readinessClass": "implemented",
+      "needs": "Same genuine three owned native-process faults/coordinator exhaustion fixture; initial ordinary human Retry guidance. Actual hard-stop budget prevents first Retry admission and retains visible failure; explicit follow-up gets its own actual gate report. Actual operator restores budget/clears recorded error only if needed, one eligible human Retry with server-owned original failed context admits one native result; exact retryOfRunId/createdAt/current gate/original failed row/latest output verified. Final explicit human query/native reply reports actual outcome. Both blocked and eligible phases authored; no live fault or Retry qualification claimed."
     },
     {
       "scenarioId": "recovery.workspace-repair",
