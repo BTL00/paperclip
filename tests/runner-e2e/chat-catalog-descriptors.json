@@ -526,7 +526,10 @@
         "botId",
         "endpoint",
         "challengeMethod",
-        "credentialEnvName"
+        "credentialEnvName",
+        "operatorRef",
+        "botAuthorizationRef",
+        "operatorMode"
       ]
     },
     "scenarioId": "agents.existing-grok-bot",
@@ -709,7 +712,9 @@
       "chat-scenarios/agents.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
-    "coverageGaps": [],
+    "coverageGaps": [
+      "supported-two-visible-instruction-history-versions"
+    ],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
@@ -1411,6 +1416,157 @@
     "exportName": "slackFileExternalCases"
   },
   {
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv",
+        "slackBrowserSessionEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.connect-slack",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-setup.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-slack-human.ts",
+      "chat-catalog-domains/external-slack-human-worker.ts",
+      "chat-catalog-domains/external-slack-human-contract.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-slack-setup-private-contract.ts",
+      "chat-catalog-domains/external-slack-identity-contract.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-slack-ingress.ts",
+      "../../ui/src/pages/apps/chat/ChatEndpointSetup.tsx",
+      "../../ui/src/pages/apps/chat/SlackIdentityStep.tsx",
+      "../../ui/src/pages/apps/chat/slack/OwnSlackAppSetup.tsx",
+      "../../server/src/services/chat-channels/setup-probes.ts",
+      "../../server/src/services/chat-channels/slack/commands.ts",
+      "../../server/src/services/chat-channels/slack/identity-links.ts",
+      "../../server/src/services/chat-channels/identity-links.ts",
+      "../../server/src/services/chat-channels.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-setup.js",
+    "exportName": "slackSetupExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.link-sender",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-identity.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-slack-identity-contract.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "../../server/src/routes/chat-channels.ts",
+      "../../server/src/services/chat-channels/setup-probes.ts",
+      "../../server/src/services/chat-channels/identity-links.ts",
+      "../../server/src/services/chat-channels/inbound/authorization.ts",
+      "../../server/src/services/chat-channels.ts",
+      "../../server/src/services/chat-channels/activity.ts",
+      "../../ui/src/pages/apps/chat/ChatEndpointDetail.tsx",
+      "../../ui/src/pages/apps/chat/ChatIdentityConfirm.tsx",
+      "chat-slack-ingress.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-identity.js",
+    "exportName": "slackIdentityExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "agentmail",
+      "fields": [
+        "inboxId",
+        "recipient",
+        "recipientAuthorization",
+        "apiTokenEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.outbound-email",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-email-outbound.ts",
+      "chat-catalog-domains/runtime-email.ts",
+      "chat-catalog-domains/runtime-email-private.ts",
+      "chat-catalog-domains/runtime-email-private-worker.ts",
+      "chat-catalog-domains/runtime-email-duplicate.ts",
+      "chat-catalog-domains/runtime-email-fault.ts",
+      "server-entry.ts",
+      "chat-query-bindings.ts",
+      "../../server/src/services/email-channels.ts",
+      "../../server/src/services/agentmail-api.ts",
+      "../../server/src/services/connectors/agentmail.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 5,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1020000,
+    "authentication": "human-session",
+    "queryBindings": [
+      {
+        "catalogToken": "reviewer@example.test",
+        "stateKey": "emailRecipient",
+        "resourceKind": "agentmail-recipient",
+        "valueField": "email"
+      }
+    ],
+    "modulePath": "./chat-catalog-domains/runtime-email-outbound.js",
+    "exportName": "runtimeOutboundEmailCases"
+  },
+  {
     "scenarioId": "chat-channels.provider-disabled",
     "sourceFiles": [
       "chat-catalog-domains/external-chat-channels.ts",
@@ -1425,6 +1581,63 @@
     "attemptTimeoutMs": 300000,
     "modulePath": "./chat-catalog-domains/external-chat-channels.js",
     "exportName": "chatChannelExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv",
+        "slackBrowserSessionEnv",
+        "botTokenExpiresAt",
+        "repairBotTokenEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.repair-endpoint",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-repair.ts",
+      "chat-catalog-domains/external-slack-authorization.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-slack-human.ts",
+      "chat-catalog-domains/external-slack-human-worker.ts",
+      "chat-catalog-domains/external-slack-human-contract.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-slack-setup-private-contract.ts",
+      "chat-catalog-domains/external-slack-identity-contract.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-slack-ingress.ts",
+      "../../ui/src/pages/apps/chat/ChatEndpointSetup.tsx",
+      "../../ui/src/pages/apps/chat/SlackIdentityStep.tsx",
+      "../../server/src/services/chat-channels/configuration.ts",
+      "../../server/src/services/chat-channels/slack/credentials.ts",
+      "../../server/src/services/chat-channels/slack/commands.ts",
+      "../../server/src/services/chat-channels.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-repair.js",
+    "exportName": "slackRepairExternalCases"
   },
   {
     "slackIngress": {
@@ -1479,6 +1692,46 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-slack-thread.js",
     "exportName": "slackThreadExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "agentmail",
+      "fields": [
+        "inboxId",
+        "recipient",
+        "recipientAuthorization",
+        "apiTokenEnv",
+        "reviewerAddress",
+        "reviewerAuthorization",
+        "senderCredentialEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.reply-to-email",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-email-reply.ts",
+      "chat-catalog-domains/runtime-email.ts",
+      "chat-catalog-domains/runtime-email-outbound.ts",
+      "chat-catalog-domains/runtime-email-private.ts",
+      "chat-catalog-domains/runtime-email-private-worker.ts",
+      "chat-catalog-domains/runtime-email-fault.ts",
+      "chat-catalog-domains/runtime-email-duplicate.ts",
+      "server-entry.ts",
+      "../../server/src/services/email-channels.ts",
+      "../../server/src/services/agentmail-api.ts",
+      "../../server/src/services/connectors/agentmail.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 9,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 4,
+    "minimumRunCount": 6,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/runtime-email-reply.js",
+    "exportName": "runtimeReplyEmailCases"
   },
   {
     "scenarioId": "cli-operations.choose-cli-context",
@@ -1776,6 +2029,62 @@
     "exportName": "companyLifecycleIdentityCases"
   },
   {
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv",
+        "slackBrowserSessionEnv"
+      ]
+    },
+    "scenarioId": "connection-setup.channel-prerequisites",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-setup.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-slack-human.ts",
+      "chat-catalog-domains/external-slack-human-worker.ts",
+      "chat-catalog-domains/external-slack-human-contract.ts",
+      "chat-catalog-domains/external-private-browser.ts",
+      "chat-catalog-domains/external-private-browser-worker.ts",
+      "chat-catalog-domains/external-slack-setup-private-contract.ts",
+      "chat-catalog-domains/external-slack-identity-contract.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-slack-ingress.ts",
+      "../../ui/src/pages/apps/chat/ChatEndpointSetup.tsx",
+      "../../ui/src/pages/apps/chat/SlackIdentityStep.tsx",
+      "../../ui/src/pages/apps/chat/slack/OwnSlackAppSetup.tsx",
+      "../../server/src/services/chat-channels/setup-probes.ts",
+      "../../server/src/services/chat-channels/slack/commands.ts",
+      "../../server/src/services/chat-channels/slack/identity-links.ts",
+      "../../server/src/services/chat-channels/identity-links.ts",
+      "../../server/src/services/chat-channels.ts",
+      "chat-scenarios/connection-setup.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-setup.js",
+    "exportName": "slackSetupExternalCases"
+  },
+  {
     "scenarioId": "connection-setup.choose-provider",
     "sourceFiles": [
       "chat-catalog-domains/external-provider-choice.ts",
@@ -1884,6 +2193,281 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-connection-setup.js",
     "exportName": "connectionSetupExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "workspaceName",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson",
+        "oauthBrowserSessionEnv",
+        "oauthHumanEmailEnv",
+        "expiredAuthorizationEnv",
+        "authorizationExpiresAt",
+        "authorizationFailureKind"
+      ]
+    },
+    "scenarioId": "connection-setup.notion-expired",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-setup.ts",
+      "chat-catalog-domains/external-notion-oauth.ts",
+      "chat-catalog-domains/external-notion-oauth-worker.ts",
+      "chat-catalog-domains/external-notion-oauth-contract.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/oauth/direct-callback.ts",
+      "../../scripts/smoke/notion-generic-live.mjs",
+      "chat-catalog-domains/external-notion-expired.ts",
+      "chat-catalog-domains/external-notion-expiry.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-flow.ts",
+      "../../server/src/services/tool-access.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 4,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-expired.js",
+    "exportName": "notionExpiredExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "workspaceName",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson",
+        "oauthBrowserSessionEnv",
+        "oauthHumanEmailEnv"
+      ]
+    },
+    "scenarioId": "connection-setup.notion-missing",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-setup.ts",
+      "chat-catalog-domains/external-notion-oauth.ts",
+      "chat-catalog-domains/external-notion-oauth-worker.ts",
+      "chat-catalog-domains/external-notion-oauth-contract.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/oauth/direct-callback.ts",
+      "../../scripts/smoke/notion-generic-live.mjs",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-setup.js",
+    "exportName": "notionSetupExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "workspaceName",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson",
+        "oauthBrowserSessionEnv",
+        "oauthHumanEmailEnv",
+        "sharedWorkspaceId",
+        "sharedApiTokenEnv",
+        "sharedMcpTokenEnv"
+      ]
+    },
+    "scenarioId": "connection-setup.notion-wrong-account",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-setup.ts",
+      "chat-catalog-domains/external-notion-oauth.ts",
+      "chat-catalog-domains/external-notion-oauth-worker.ts",
+      "chat-catalog-domains/external-notion-oauth-contract.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/oauth/direct-callback.ts",
+      "../../scripts/smoke/notion-generic-live.mjs",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-setup.js",
+    "exportName": "notionSetupExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "workspaceName",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson",
+        "oauthBrowserSessionEnv",
+        "oauthHumanEmailEnv"
+      ]
+    },
+    "scenarioId": "connection-setup.return-from-login",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-setup.ts",
+      "chat-catalog-domains/external-notion-oauth.ts",
+      "chat-catalog-domains/external-notion-oauth-worker.ts",
+      "chat-catalog-domains/external-notion-oauth-contract.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/oauth/direct-callback.ts",
+      "../../scripts/smoke/notion-generic-live.mjs",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-setup.js",
+    "exportName": "notionSetupExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "notion",
+      "fields": [
+        "workspaceId",
+        "workspaceName",
+        "recentPageId",
+        "olderPageId",
+        "mcpUrl",
+        "apiVersion",
+        "apiTokenEnv",
+        "recentMarker",
+        "olderMarker",
+        "recentFactJson",
+        "olderFactJson",
+        "oauthBrowserSessionEnv",
+        "oauthHumanEmailEnv"
+      ]
+    },
+    "scenarioId": "connection-setup.save-and-resume",
+    "sourceFiles": [
+      "chat-catalog-domains/external-notion-setup.ts",
+      "chat-catalog-domains/external-notion-oauth.ts",
+      "chat-catalog-domains/external-notion-oauth-worker.ts",
+      "chat-catalog-domains/external-notion-oauth-contract.ts",
+      "chat-catalog-domains/external-notion-provider.ts",
+      "chat-catalog-domains/external-notion-semantics.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-scenarios/connection-setup.yaml",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/oauth/direct-callback.ts",
+      "../../scripts/smoke/notion-generic-live.mjs",
+      "chat-catalog-domains/identity-support.ts"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-notion-setup.js",
+    "exportName": "notionSetupExternalCases"
   },
   {
     "scenarioId": "connection-setup.secure-api-key",
@@ -3747,6 +4331,86 @@
     "exportName": "runtimeInfrastructureCases"
   },
   {
+    "externalInput": {
+      "provider": "agentmail",
+      "fields": [
+        "inboxId",
+        "recipient",
+        "recipientAuthorization",
+        "apiTokenEnv"
+      ]
+    },
+    "scenarioId": "recovery.unknown-email-outcome",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-email.ts",
+      "chat-catalog-domains/runtime-email-fault.ts",
+      "chat-catalog-domains/runtime-email-private.ts",
+      "chat-catalog-domains/runtime-email-private-worker.ts",
+      "../../server/src/services/email-channels.ts",
+      "../../server/src/services/agentmail-api.ts",
+      "../../server/src/services/connectors/agentmail.ts",
+      "server-entry.ts",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 4,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 3,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 900000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "real-original-email-uncertain-with-no-public-provider-receipt"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-email.js",
+    "exportName": "runtimeEmailRecoveryCases"
+  },
+  {
+    "requiredCredentials": [
+      "DAYTONA_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "daytona",
+      "fields": [
+        "imageDigest",
+        "imageRef",
+        "region",
+        "disposableNamespace",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "recovery.workspace-repair",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-workspace-repair.ts",
+      "chat-catalog-domains/runtime-daytona-target.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "registered-artifact.ts",
+      "../../server/src/services/workspace-recovery.ts",
+      "../../server/src/services/native-runtime/native-workspace-sync.ts",
+      "../../ui/src/components/WorkspaceExportRecovery.tsx",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1500000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "actual-board-owned-failed-export-newer-destination-held"
+      ]
+    },
+    "modulePath": "./chat-catalog-domains/runtime-workspace-repair.js",
+    "exportName": "runtimeWorkspaceRepairCases"
+  },
+  {
     "browserTimezone": "America/Chicago",
     "scenarioId": "routines.create-daily-brief",
     "sourceFiles": [
@@ -4157,6 +4821,54 @@
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-secret-proposal.js",
     "exportName": "secretProposalExternalCases"
+  },
+  {
+    "externalInput": {
+      "provider": "vault",
+      "fields": [
+        "provider",
+        "region",
+        "deploymentId",
+        "kmsKeyId",
+        "secretReference",
+        "accessKeyIdEnv",
+        "secretAccessKeyEnv",
+        "sessionTokenEnv",
+        "expectedValueEnv"
+      ]
+    },
+    "scenarioId": "secrets.vault-reference",
+    "sourceFiles": [
+      "chat-catalog-domains/external-vault-reference.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-secret-endpoint.ts",
+      "chat-catalog-domains/external-secret-scan.ts",
+      "chat-catalog-domains/external-credential-language.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-vault-private-server.ts",
+      "harness-env.ts",
+      "server.ts",
+      "chat-private-inputs.ts",
+      "run-observations.ts",
+      "../../server/src/routes/secrets.ts",
+      "../../server/src/services/secrets.ts",
+      "../../server/src/secrets/aws-secrets-manager-provider.ts",
+      "../../server/src/services/native-runtime/native-session-executor.ts",
+      "../../ui/src/pages/Secrets.tsx",
+      "../../ui/src/pages/secrets/ImportFromVaultDialog.tsx",
+      "chat-scenarios/secrets.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 3,
+    "expectedHumanMessageCount": 2,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-vault-reference.js",
+    "exportName": "vaultReferenceExternalCases"
   },
   {
     "scenarioId": "skills.author-skill",
@@ -5018,6 +5730,11 @@
     "scenarioId": "teams.install-team",
     "sourceFiles": [
       "chat-catalog-domains/external-team-install.ts",
+      "chat-catalog-domains/external-team-conditional.ts",
+      "../../server/src/services/teams-catalog.ts",
+      "../../server/src/services/company-skills.ts",
+      "../../server/src/services/company-portability.ts",
+      "../../packages/teams-catalog/generated/catalog.json",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/identity-support.ts",
@@ -5025,13 +5742,11 @@
       "chat-scenarios/teams.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.external.v1",
-    "coverageGaps": [
-      "installer-conflict-and-partial-failure-branches"
-    ],
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 2,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 480000,
+    "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-team-install.js",
     "exportName": "teamInstallExternalCases"
   },
@@ -5206,5 +5921,56 @@
     ],
     "modulePath": "./chat-catalog-domains/runtime-workspace-repositories.js",
     "exportName": "runtimeWorkspaceRepositoryCases"
+  },
+  {
+    "requiredCredentials": [
+      "DAYTONA_API_KEY"
+    ],
+    "externalInput": {
+      "provider": "daytona",
+      "fields": [
+        "imageDigest",
+        "imageRef",
+        "region",
+        "disposableNamespace",
+        "qualifiedHarness"
+      ]
+    },
+    "scenarioId": "workspaces.recover-lost-sandbox",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-lost-sandbox.ts",
+      "chat-catalog-domains/runtime-workspace-repair.ts",
+      "chat-catalog-domains/runtime-daytona-target.ts",
+      "chat-catalog-domains/runtime-daytona-destroy.ts",
+      "chat-catalog-domains/runtime-daytona-destroy-worker.ts",
+      "remote-native-bootstrap.ts",
+      "registered-artifact.ts",
+      "../../server/src/services/native-runtime/native-workspace-reconstruction.ts",
+      "../../server/src/services/workspace-recovery.ts",
+      "../../ui/src/components/WorkspaceReconstructionRecovery.tsx",
+      "chat-scenarios/workspaces.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 1800000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "real-failed-destroyed-sandbox-and-attributed-surviving-attachment"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "failed": 1,
+        "succeeded": 3
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-lost-sandbox.js",
+    "exportName": "runtimeLostSandboxCases"
   }
 ]
