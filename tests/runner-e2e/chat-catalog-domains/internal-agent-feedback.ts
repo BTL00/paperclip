@@ -5,6 +5,7 @@ import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { mainPerson } from "./internal-privacy.js";
 import { checks, entity, observation, observeInternal, project, task, type Entity, type InternalObservation } from "./internal-support.js";
+import { installCommentaryReader } from "./internal-commentary-reader.js";
 interface Feedback { id: string; kind: string; preview: string; runId: string; agent: { id: string; name: string }; task: { id: string; title: string } | null; body?: string }
 interface FeedbackObservation extends InternalObservation { entries: Feedback[]; hiddenEntry?: Feedback; hiddenDetailStatus: number; agentReadStatus: number; privateTaskStatus: number }
 function commentaryHref(o: InternalObservation) {
@@ -38,8 +39,9 @@ export function gradeAgentFeedback(value: unknown) {
 }
 function agentFeedback(): ChatCatalogCase {
   let casey: Awaited<ReturnType<typeof createAuthenticatedPerson>> | undefined; let key: { id: string; token: string } | undefined;
+  let readerSession: Awaited<ReturnType<typeof installCommentaryReader>> | undefined;
   const base = makeDefinition("activity.agent-feedback", async ctx => {
-    await mainPerson(ctx); const browser = ctx.input.page.context().browser();
+    const ownerId = await mainPerson(ctx); const browser = ctx.input.page.context().browser();
     if (!browser || !ctx.input.privateSecrets) throw new Error("Feedback privacy needs a distinct real human and attempt-private redaction");
     casey = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Casey" });
     try {
@@ -50,20 +52,18 @@ function agentFeedback(): ChatCatalogCase {
       for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, ...[worker, privateWorker].map(agent => ({ scopeType: "agent", scopeId: agent.id }))])
         await ctx.input.api.post(`${root}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
       const p = await project(ctx); const privateMarker = `RESTRICTED-COMMENTARY-${ctx.input.nonce}`;
-      const response = await casey.request(`${root}/projects`, "POST", { name: "Casey's restricted launch", visibility: "private" });
-      if (!response.ok) { await response.body?.cancel(); throw new Error("Independent person's restricted project did not persist"); }
-      const privateProject = await response.json() as Entity;
-      const grant = await casey.request(`/api/projects/${privateProject.id}/access-members`, "POST", { subjectType: "agent", subjectId: privateWorker.id });
-      if (!grant.ok) { await grant.body?.cancel(); throw new Error("Private source worker did not receive actual project access"); } await grant.body?.cancel();
-      const hiddenResponse = await casey.request(`${root}/issues`, "POST", { title: "Restricted feedback prerequisite", projectId: privateProject.id, status: "todo", priority: "medium", assigneeAgentId: privateWorker.id,
+      // The bootstrap person owns the restricted source. Casey is the actual
+      // nonadmin canonical reader, never its owner or an inherited grant.
+      const privateProject = await ctx.input.api.post<Entity & { privacyOwnerUserId: string }>(`${root}/projects`, { name: "Restricted launch source", visibility: "private" });
+      if (privateProject.privacyOwnerUserId !== ownerId) throw new Error("Private feedback source does not retain its actual separate owner");
+      await ctx.input.api.post(`/api/projects/${privateProject.id}/access-members`, { subjectType: "agent", subjectId: privateWorker.id });
+      const hidden = await ctx.input.api.post<Entity>(`${root}/issues`, { title: "Restricted feedback prerequisite", projectId: privateProject.id, status: "todo", priority: "medium", assigneeAgentId: privateWorker.id,
         description: `Synthetic qualification prerequisite. Submit exactly one sanitized suggestion through the bound submit_suggestion tool, with body: 'Keep run context discoverable (${privateMarker}).' Use a stable idempotency key. Do not expose private task body or quote prompts in feedback. Finish this small prerequisite task after the real tool acknowledgement; no other work is requested.` });
-      if (!hiddenResponse.ok) { await hiddenResponse.body?.cancel(); throw new Error("Private feedback prerequisite task was not admitted"); } const hidden = await hiddenResponse.json() as Entity;
       const t = await task(ctx, "Synthetic agent feedback prerequisite", p.id, { status: "todo", assigneeAgentId: worker.id,
         description: "Synthetic qualification prerequisite. Submit one complaint through the bound submit_complaint tool: 'Tool discovery is hard to scan in a long run.' Submit a separate suggestion through submit_suggestion: 'Keep a compact index of available tools.' These are separate synthetic fixture incidents. Use separate stable idempotency keys; submit only once each. Finish this prerequisite task after the real acknowledgements; do not browse or summarize other agents' feedback." });
       const saved = await pollUntil({ label: "Genuine run-bound prior agent suggestions and complaints", deadlineAt: Date.now() + 240_000,
         load: async () => { const entries = await ctx.input.api.get<{ items: Feedback[] }>(`${root}/agent-commentary?limit=100`);
-          const privateRead = await casey!.request(`${root}/agent-commentary?limit=100`); if (!privateRead.ok) { await privateRead.body?.cancel(); throw new Error("Authorized private source owner cannot inspect fixture feedback"); }
-          return { entries: entries.items, privateEntries: (await privateRead.json() as { items: Feedback[] }).items, runs: await ctx.allRuns() }; },
+          return { entries: entries.items, privateEntries: entries.items, runs: await ctx.allRuns() }; },
         accept: value => value.runs.length === 2 && value.runs.every(row => row.status === "succeeded")
           && value.entries.filter(row => row.agent.id === worker.id && row.task?.id === t.id).length === 2
           && value.privateEntries.some(row => row.agent.id === privateWorker.id && row.task?.id === hidden.id && row.preview.includes(privateMarker)),
@@ -71,11 +71,26 @@ function agentFeedback(): ChatCatalogCase {
       const hiddenEntry = saved.privateEntries.find(row => row.agent.id === privateWorker.id && row.task?.id === hidden.id)!;
       key = await ctx.input.api.postSensitive(`/api/agents/${ctx.input.fixtures.agent.id}/keys`, { name: `commentary-read-control-${ctx.input.nonce}` }); ctx.input.privateSecrets.push(key!.token);
       await ctx.input.evidence("chat-catalog-genuine-feedback-prerequisites.json", { entries: saved.entries, hiddenEntry, runIds: saved.runs.map(row => row.id) });
-      return { project: p, task: t, worker, privateWorker, privateTask: hidden, privateMarker, initialEntries: saved.entries.filter(row => row.agent.id === worker.id), hiddenEntry };
-    } catch (error) { await casey.dispose(); casey = undefined; throw error; }
+      readerSession = await installCommentaryReader(ctx, casey, ownerId);
+      const visible = await ctx.input.api.get<{ items: Feedback[] }>(`${root}/agent-commentary?limit=100`);
+      const statuses = await Promise.all([`/api/issues/${hidden.id}`, `${root}/agent-commentary/${hiddenEntry.id}`].map(async path => {
+        const response = await casey!.request(path); await response.body?.cancel(); return response.status;
+      }));
+      const initialEntries = saved.entries.filter(row => row.agent.id === worker.id);
+      if (visible.items.length !== 2 || !initialEntries.every(row => visible.items.some(item => item.id === row.id))
+        || !statuses.every(status => [403, 404].includes(status))) throw new Error("Canonical nonadmin reader does not have the intended visible-feedback/private-source boundary");
+      await ctx.input.evidence("chat-catalog-commentary-reader-prerequisite.json", { ...readerSession.receipt,
+        visibleEntryIds: visible.items.map(row => row.id), privateTaskStatus: statuses[0], privateFeedbackStatus: statuses[1] });
+      return { project: p, task: t, worker, privateWorker, privateTask: hidden, privateMarker, initialEntries, hiddenEntry, readerIdentity: readerSession.receipt };
+    } catch (error) {
+      try { await readerSession?.restore(); readerSession = undefined;
+        if (key) { await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${key.id}`, { allowNotFound: true }); key = undefined; }
+      } finally { await casey.dispose(); casey = undefined; }
+      throw error;
+    }
   }, gradeAgentFeedback);
   return { ...base, authentication: "human-session", expectedRunCount: 3, minimumRunCount: 3, attemptTimeoutMs: 600_000,
-    sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-agent-feedback.ts", "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts"],
+    sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-agent-feedback.ts", "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/internal-commentary-reader.ts", "chat-run-evidence-observer.ts"],
     async observe(ctx, state): Promise<FeedbackObservation> {
       if (!key) throw new Error("Feedback read probe was not created during setup"); const o = await observeInternal(ctx, state); const root = `/api/companies/${o.companyId}`;
       const hiddenEntry = state.hiddenEntry as Feedback;
@@ -87,6 +102,12 @@ function agentFeedback(): ChatCatalogCase {
       const [entries, hiddenDetailStatus, privateTaskStatus, agentReadStatus] = await Promise.all([
         ctx.input.api.get<{ items: Feedback[] }>(`${root}/agent-commentary?limit=100`), status(`${root}/agent-commentary/${hiddenEntry.id}`), status(`/api/issues/${entity(state, "privateTask").id}`), status(`${root}/agent-commentary?limit=100`, true),
       ]);
+      const source = ctx.issue();
+      if (!source) throw new Error("Canonical commentary source is missing");
+      const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`);
+      const attribution = commentaryReaderAttribution({ readerId: (state.readerIdentity as { readerId: string }).readerId,
+        sourceId: source.id, leadId: o.leadId, comments, runs: o.runs });
+      await ctx.input.evidence("chat-catalog-commentary-canonical-attribution.json", attribution);
       return { ...o, entries: entries.items, hiddenEntry, hiddenDetailStatus, privateTaskStatus, agentReadStatus };
     },
     async verifyResult(ctx, _state, value) {
@@ -107,7 +128,22 @@ function agentFeedback(): ChatCatalogCase {
         await ctx.input.evidence("chat-catalog-authorized-human-commentary-opened.json", { url: ctx.input.page.url(), entryIds: (o.state.initialEntries as Feedback[]).map(row => row.id), hiddenExcluded: true });
       } finally { await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); }
     },
-    async cleanup(ctx) { try { if (key) { await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${key.id}`, { allowNotFound: true }); key = undefined; } } finally { await casey?.dispose(); casey = undefined; } },
+    async cleanup(ctx) { try {
+      await readerSession?.restore(); readerSession = undefined;
+      if (key) { await ctx.input.api.delete(`/api/agents/${ctx.input.fixtures.agent.id}/keys/${key.id}`, { allowNotFound: true }); key = undefined; }
+    } finally { await casey?.dispose(); casey = undefined; } },
   };
 }
 export const agentFeedbackCases: readonly ChatCatalogCase[] = [agentFeedback()];
+
+export function commentaryReaderAttribution(input: { readerId: string; sourceId: string; leadId: string;
+  comments: Array<{ id: string; authorUserId?: string | null; authorAgentId?: string | null }>;
+  runs: Array<{ id: string; agentId: string; responsibleUserId?: string | null; contextSnapshot?: Record<string, unknown> }> }) {
+  const human = input.comments.filter(row => !row.authorAgentId);
+  if (human.length !== 1 || human[0]!.authorUserId !== input.readerId) throw new Error("Canonical feedback comment is not attributed to the actual reader");
+  const sourceRuns = input.runs.filter(row => row.agentId === input.leadId);
+  if (sourceRuns.some(row => row.responsibleUserId !== input.readerId
+    || row.contextSnapshot?.issueId !== input.sourceId || row.contextSnapshot?.commentId !== human[0]!.id))
+    throw new Error("Canonical feedback execution does not retain its real reader/comment/source attribution");
+  return { readerId: input.readerId, sourceIssueId: input.sourceId, commentId: human[0]!.id, sourceRunIds: sourceRuns.map(row => row.id) };
+}

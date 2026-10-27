@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeAgentFeedback } from "./internal-agent-feedback.js";
+import { commentaryReaderAttribution, gradeAgentFeedback } from "./internal-agent-feedback.js";
 function valid() {
   const t = { id: "task", title: "Feedback prerequisite" }; const hidden = { id: "hidden", title: "Restricted source" };
   const entry = (id: string, kind: string) => ({ id, kind, preview: `${kind} about tools`, runId: "morgan-run", agent: { id: "morgan", name: "Morgan" }, task: t });
@@ -18,4 +18,17 @@ describe("human-only agent commentary calibration", () => {
   it("rejects a restricted preview or direct source leak", () => { const o = valid(); o.entries.push(o.hiddenEntry); expect(gradeAgentFeedback(o).passed).toBe(false); const leaked = valid(); leaked.reply += " PRIVATE-NIGHTJAR"; expect(gradeAgentFeedback(leaked).passed).toBe(false); });
   it("rejects foreign commentary links and changed submitted content", () => { const o = valid(); o.links = ["https://foreign.test/RUN/activity/commentary"]; expect(gradeAgentFeedback(o).passed).toBe(false); const changed = valid(); changed.entries[0]!.preview = "Replaced"; expect(gradeAgentFeedback(changed).passed).toBe(false); });
   it("rejects a new CEO submission instead of listing", () => { const o = valid(); o.activity.push({ action: "agent.commentary_submitted", agentId: "ceo" }); expect(gradeAgentFeedback(o).passed).toBe(false); });
+});
+describe("canonical feedback reader attribution", () => {
+  const actual = () => ({ readerId: "casey", sourceId: "source", leadId: "lead", comments: [{ id: "comment", authorUserId: "casey" }],
+    runs: [{ id: "source-run", agentId: "lead", responsibleUserId: "casey", contextSnapshot: { issueId: "source", commentId: "comment" } }] });
+  it("accepts exact real canonical human/comment/run attribution", () => expect(commentaryReaderAttribution(actual()).sourceRunIds).toEqual(["source-run"]));
+  it.each(["human", "responsible", "source", "comment"]) ("rejects wrong %s attribution", kind => {
+    const o = actual();
+    if (kind === "human") o.comments[0]!.authorUserId = "owner";
+    if (kind === "responsible") o.runs[0]!.responsibleUserId = "owner";
+    if (kind === "source") o.runs[0]!.contextSnapshot.issueId = "private-source";
+    if (kind === "comment") o.runs[0]!.contextSnapshot.commentId = "different-comment";
+    expect(() => commentaryReaderAttribution(o)).toThrow();
+  });
 });

@@ -26,6 +26,7 @@ import { runChatCompletionUpdate } from "./completion-update-flow.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { CHAT_FEATURE_SUITE } from "./chat-feature-cases.js";
 import { runChatFeatureFlow } from "./chat-feature-flow.js";
+import { chatRunEvidenceApi, readChatRuns, type OwnedChatRunEvidenceObserver } from "./chat-run-evidence-observer.js";
 
 /** Hiring alone admits bounded, verified lifecycle notifications. Other suites keep their count contract. */
 export function assertChatFlowRunCount(input: {
@@ -361,6 +362,8 @@ export function assertChatReassignment(input: {
 }
 
 export interface ChatFlowInput {
+  /** Exact commentary privacy case only: independent GET-only owned run evidence. Never model/product authority. */
+  ownedRunEvidenceObserver?: OwnedChatRunEvidenceObserver;
   /** Test-host-only owned transparent fault transport; never model state. */
   archiveFaultTransport?: ArchiveFaultTransport;
   page: Page;
@@ -396,14 +399,7 @@ export async function runChatFlow(input: ChatFlowInput) {
   const settings = await api.get<Record<string, unknown>>(
     "/api/instance/settings/experimental",
   );
-  const allRuns = async () => {
-    const rows = await api.getRunObservation<ChatRun[]>(
-      `/api/companies/${f.company.id}/heartbeat-runs?limit=100`,
-    );
-    return Promise.all(
-      rows.map((row) => api.getRunObservation<ChatRun>(`/api/heartbeat-runs/${row.id}`)),
-    );
-  };
+  const allRuns = () => readChatRuns(input);
   if (catalogDescriptor?.journeyKind === "native-slack-thread") {
     let sourceId: string | undefined;
     await runChatFeatureFlow({ input, issue: () => issue, allRuns,
@@ -1085,7 +1081,7 @@ export async function runChatFlow(input: ChatFlowInput) {
       comments: await comments(),
       activity: await api.get(`/api/issues/${issue!.id}/activity`),
       runEvidence: await Promise.all(
-        runs.map((run) => collectChatRunEvidence(api, run)),
+        runs.map((run) => collectChatRunEvidence(chatRunEvidenceApi(input), run)),
       ),
     });
     await input.capture(

@@ -11,6 +11,7 @@ import { chatCatalogHumanHistoryMatches, validateChatCatalogGrade, type ChatCata
 import { findChatCatalogCase, loadChatCatalogImplementation } from "./chat-catalog-registry.js";
 import { chatCatalogInventoryDigest } from "./chat-catalog-inventory.js";
 import { resolveChatCatalogQuery } from "./chat-query-bindings.js";
+import { chatRunEvidenceApi } from "./chat-run-evidence-observer.js";
 
 /** The case owns product semantics; this flow owns the actual chat entry point and evidence lifecycle. */
 export async function runChatCatalogFlow(context: ChatCatalogContext) {
@@ -171,7 +172,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       await conversation();
       if (state) await refresh();
       const runs = await context.allRuns();
-      await input.evidence("chat-catalog-runs.json", await Promise.all(runs.map(run => collectChatRunEvidence(input.api, run))));
+      await input.evidence("chat-catalog-runs.json", await Promise.all(runs.map(run => collectChatRunEvidence(chatRunEvidenceApi(input), run))));
     } catch {
       await input.evidence("chat-catalog-evidence-error.json", { incomplete: true, scenarioId: scenario.id });
       if (!failed) throw new Error("Scenario evidence collection failed");
