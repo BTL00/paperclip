@@ -1,3 +1,5 @@
+import { bindInvitationEnrollmentPrerequisite } from "./chat-catalog-domains/identity-invite-prerequisite.js";
+import { verifyInvitationSourceProof } from "./chat-catalog-domains/identity-invite-source-proof.js";
 import { readChatPrivateInputs, chatPrivateSetupBlockers, chatPrivateInputRequirements } from "./chat-private-inputs.js";
 import { trackedPrivateSecrets } from "./private-diagnostics.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
@@ -929,6 +931,12 @@ for (const execution of executions) {
       await saveTrace();
       const catalogDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
       if (catalogDescriptor) {
+        bindInvitationEnrollmentPrerequisite(api, {
+          verifyRuntime: () => verifyInvitationSourceProof({ temporaryRoot, sourceRoot: path.resolve(import.meta.dirname, "../.."),
+            apiOrigin: api.baseURL, attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", executionId: execution.id,
+            health: () => api.get("/api/health") }),
+          evidence: completionEvidence,
+        });
         const blockers = chatPrivateSetupBlockers(privateInputs, catalogDescriptor);
         if (blockers.length) {
           failureClassOverride = "permanent_infrastructure";

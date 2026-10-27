@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { requireSafeInvitationEnrollment } from "./identity-invite-prerequisite.js";
 import { privateIdentityBrowser } from "./identity-private-browser.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
@@ -84,6 +85,7 @@ export async function createAuthenticatedPerson(input: {
 export async function enrollAuthenticatedPerson(api: RunnerApi, companyId: string, person: Awaited<ReturnType<typeof createAuthenticatedPerson>>, secrets: string[], role: "operator" | "viewer" = "operator") {
   const invite = await api.postSensitive<{ id: string; token: string }>(`/api/companies/${companyId}/invites`, { allowedJoinTypes: "human", humanRole: role });
   secrets.push(invite.token);
+  await requireSafeInvitationEnrollment(api, companyId, invite.id, role, () => person.dispose());
   const response = await person.request(`/api/invites/${encodeURIComponent(invite.token)}/accept`, "POST", { requestType: "human" });
   if (!response.ok) { await response.body?.cancel(); throw new Error(`Public join request returned HTTP ${response.status}; details withheld`); }
   await response.body?.cancel();

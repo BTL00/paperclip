@@ -1,3 +1,4 @@
+import { publishInvitationSourceProof, invitationSourceProofPath } from "./chat-catalog-domains/identity-invite-source-proof.js";
 import { readSelectedVaultServerEnvironment } from "./chat-vault-private-server.js";
 import { readValidatedPublicOriginReceipt, publicOriginServerOverrides, PUBLIC_ORIGIN_RECEIPT_ENV, PUBLIC_ORIGIN_CONTROL_ENV } from "./chat-public-origin.js";
 import { dockerDatabaseSupervisorEnvironment } from "./docker-postgres.js";
@@ -17,7 +18,7 @@ import { qualifyLegacyClaudeCli } from "./legacy-claude-cli.js";
 import { prepareSourceServerDependencies } from "./source-startup.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prepareRunnerE2EServerConfig } from "./server-config.js";
 import { installedReleaseEnvironment, installedReleaseLaunch } from "./installed-release.js";
@@ -194,6 +195,7 @@ function describeChildExit(candidate: ChildProcess) {
   return `server exited code=${String(candidate.exitCode)} signal=${String(candidate.signalCode)}`;
 }
 
+let invitationSourceGeneration: string | undefined;
 async function startServer() {
   if (shutdownRequested()) {
     throw new Error("Refusing to start Paperclip after wrapper shutdown");
@@ -201,9 +203,13 @@ async function startServer() {
   if (process.env[CHAT_INSTALL_PLAN]) refreshInstalledChatPins(process.env, selectedExecutions[0]!.id);
   // Recheck bytes and dependency resolution on every controller restart.
   const installed = await verifyInstalledCli(process.env, selectedExecutions);
+  invitationSourceGeneration = undefined;
+  await rm(invitationSourceProofPath(temporaryRoot), { force: true });
+  const sourceArgs = runnerE2ETypeScriptProcessArgs(repositoryRoot, paperclipCli, ["onboard", "--yes", "--run"]);
+  const sourceSpawnedAt = new Date().toISOString();
   const candidate = spawn(
     process.execPath,
-    installed ? [installed.entry, "onboard", "--yes", "--run"] : runnerE2ETypeScriptProcessArgs(repositoryRoot, paperclipCli, ["onboard", "--yes", "--run"]),
+    installed ? [installed.entry, "onboard", "--yes", "--run"] : sourceArgs,
     {
       cwd: installedRelease?.cwd ?? repositoryRoot,
       env: definedServerEnvironment,
@@ -248,6 +254,11 @@ async function startServer() {
     void stopWithFeedback(candidate, shutdownSignal).catch(() => {});
   }
   await stopServer.watch(candidate);
+  const invitationAttemptId = process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID;
+  if (!installed && candidate.pid && invitationAttemptId) {
+    invitationSourceGeneration = await publishInvitationSourceProof({ temporaryRoot, sourceRoot: repositoryRoot, apiOrigin: `http://127.0.0.1:${port}`,
+      attemptId: invitationAttemptId, executionIds, pid: candidate.pid, argv: sourceArgs, spawnedAt: sourceSpawnedAt });
+  }
   return candidate;
 }
 
@@ -365,6 +376,7 @@ async function writeRestartAck(
       requestId,
       status,
       completedAt: new Date().toISOString(),
+      ...(invitationSourceGeneration ? { invitationSourceGeneration } : {}),
       ...(message ? { message } : {}),
       ...(crashBoundary ? { crashBoundary } : {}),
     })}\n`,
