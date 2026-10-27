@@ -298,3 +298,26 @@ connection route prevents reusing the organization account; no shared audience,
 delegation, or install is broadened. Account refusal alone cannot satisfy this
 case: its actual personal setup, callback and source-bound launch read must all
 complete.
+
+`notion-expired` additionally requires `expiredAuthorizationEnv`,
+`authorizationExpiresAt`, and `authorizationFailureKind=natural-expiry`. The
+selected real official MCP OAuth access credential must initially work for the
+designated workspace and expire in two to eight minutes. The historical fixture
+uses supported public encrypted-secret and typed connection APIs, with the fixed
+Notion/mcp-oauth descriptor and real credential reference. Actual health,
+catalog discovery, assignment and get-self must succeed before expiry. It does
+not invent an OAuth response, refresh token, healthy receipt or failed row.
+After the declared time, at most three fixed read-only MCP probes must observe
+actual HTTP401; failure to qualify this condition is a setup blocker. No token
+revocation, rotation, provider write or arbitrary metadata discovery is used.
+
+The unchanged canonical request must then produce its own failed native read and
+exact existing-account reconnect handoff. A real addressed Not now decision and
+truthful cancellation continuation are saved before an explicit second unchanged
+human query. Only actual normal Notion OAuth reconnection of that same shared
+connection, preserved audience/agent authority, and a new source-bound native
+page read can pass. The private reconnect receipt explicitly records that it
+operated on an existing credential-bearing shared account, rather than claiming
+a new credential-free personal draft. The finite case declares four native runs,
+two actual human queries and a 25-minute attempt ceiling. Missing qualified
+credential/session/origin stays separate from authored callback completeness.

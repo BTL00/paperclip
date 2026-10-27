@@ -9,6 +9,7 @@ export interface NotionOAuthInput {
   intentId?: string;
   issueId?: string;
   draftId?: string;
+  reconnectId?: string;
   newPersonal?: true;
   workspaceId: string;
   workspaceName: string;
@@ -20,9 +21,9 @@ export interface NotionOAuthReceipt {
   connectionId: string;
   humanId: string;
   intentId: string | null;
-  personalDraft: true;
+  personalDraft: boolean;
   providerHandoff: true;
-  credentialAbsentAtHandoff: true;
+  credentialAbsentAtHandoff: boolean;
   resumedSameDraft: boolean;
   draftSurvivedReload: boolean;
   consentCompleted: boolean;
@@ -99,6 +100,12 @@ export function validNotionOAuthInput(input: NotionOAuthInput) {
       !!input.intentId === !!input.issueId &&
       (!input.issueId || id(input.issueId)) &&
       (!input.draftId || id(input.draftId)) &&
+      (!input.reconnectId ||
+        (id(input.reconnectId) &&
+          !input.draftId &&
+          !input.newPersonal &&
+          !!input.intentId &&
+          input.operation === "authorize")) &&
       (!input.newPersonal ||
         (input.newPersonal === true &&
           !input.draftId &&
@@ -172,11 +179,12 @@ export function validNotionOAuthReceipt(
     Object.keys(value).sort().join(",") === keys &&
     id(value.connectionId) &&
     (!input.draftId || input.draftId === value.connectionId) &&
+    (!input.reconnectId || input.reconnectId === value.connectionId) &&
     value.humanId === input.humanId &&
     value.intentId === (input.intentId ?? null) &&
-    value.personalDraft === true &&
+    value.personalDraft === !input.reconnectId &&
     value.providerHandoff === true &&
-    value.credentialAbsentAtHandoff === true &&
+    value.credentialAbsentAtHandoff === !input.reconnectId &&
     value.resumedSameDraft === !!input.draftId &&
     value.processIsolation === true &&
     value.testRunnerAttached === false &&

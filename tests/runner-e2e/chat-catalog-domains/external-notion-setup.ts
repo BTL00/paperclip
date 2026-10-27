@@ -51,7 +51,10 @@ export function personalNotionGuidance(text: string) {
         ),
     );
 }
-async function sharedNotionAuthority(ctx: ChatCatalogContext, id: string) {
+export async function sharedNotionAuthority(
+  ctx: ChatCatalogContext,
+  id: string,
+) {
   const connection = await ctx.input.api.get<ToolConnection>(
     `/api/tool-connections/${id}`,
   );
@@ -242,7 +245,7 @@ export function gradeNotionSetup(value: unknown) {
   }
   return c.result();
 }
-const sourceFiles = [
+export const notionSetupSourceFiles = [
   "chat-catalog-domains/external-notion-setup.ts",
   "chat-catalog-domains/external-notion-oauth.ts",
   "chat-catalog-domains/external-notion-oauth-worker.ts",
@@ -380,7 +383,7 @@ export const notionSetupExternalCases = [
       expectedHumanMessageCount: 1,
       turnTimeoutMs: 120000,
       attemptTimeoutMs: 900000,
-      sourceFiles,
+      sourceFiles: notionSetupSourceFiles,
       async act(ctx, state) {
         const rows = await pollUntil({
           label: "actual addressed pending Notion request",

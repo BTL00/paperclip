@@ -25,7 +25,10 @@ import {
  * credential injection into the instrumented Test browser. */
 export async function privateNotionOAuth(
   ctx: ChatCatalogContext,
-  options: Pick<NotionOAuthInput, "operation" | "intentId" | "draftId">,
+  options: Pick<
+    NotionOAuthInput,
+    "operation" | "intentId" | "draftId" | "reconnectId"
+  >,
 ) {
   const binding = selectedExternalBinding(ctx),
     p = binding.prerequisites;

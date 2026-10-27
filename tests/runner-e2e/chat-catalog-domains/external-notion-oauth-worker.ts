@@ -93,6 +93,7 @@ async function main(): Promise<NotionOAuthReceipt> {
     const params = new URLSearchParams({ source: "notion", stage: "setup" });
     if (input.intentId) params.set("intent", input.intentId);
     if (input.draftId) params.set("resume", input.draftId);
+    if (input.reconnectId) params.set("reconnect", input.reconnectId);
     if (input.newPersonal) params.set("new", "1");
     const setupURL = `${input.publicOrigin}/${input.prefix}/apps/connect?${params}`;
     await page.goto(setupURL, { waitUntil: "domcontentloaded" });
@@ -104,7 +105,7 @@ async function main(): Promise<NotionOAuthReceipt> {
         exact: true,
       })
       .waitFor();
-    if (!input.draftId) {
+    if (!input.draftId && !input.reconnectId) {
       await page.getByRole("button", { name: "Change", exact: true }).click();
       await page.getByRole("radio", { name: "Just me", exact: true }).click();
     }
@@ -117,14 +118,14 @@ async function main(): Promise<NotionOAuthReceipt> {
       timeout: 90000,
     });
     // Source UI starts OAuth directly from a durable resume without connectApp.
-    if (input.draftId) void started.catch(() => undefined);
+    if (input.draftId || input.reconnectId) void started.catch(() => undefined);
     await page
       .getByRole("button", {
         name: input.draftId ? "Finish with Notion" : "Continue to Notion",
         exact: true,
       })
       .click();
-    let connectionId = input.draftId;
+    let connectionId = input.draftId ?? input.reconnectId;
     if (!connectionId) {
       const response = await started;
       if (!response.ok())
@@ -149,7 +150,19 @@ async function main(): Promise<NotionOAuthReceipt> {
     const personal = grantState.grants.filter(
       (g) => g.kind === "user" && g.subjectUserId === input.humanId,
     );
-    if (
+    if (input.reconnectId) {
+      if (
+        draft.id !== input.reconnectId ||
+        draft.companyId !== input.companyId ||
+        draft.authKind !== "oauth" ||
+        draft.credentialPolicy !== "shared" ||
+        !before.some((c) => c.id === draft.id) ||
+        !grantState.grants.some((g) => g.kind === "organization")
+      )
+        throw new Error(
+          "Actual Notion reconnect changed the existing shared OAuth identity",
+        );
+    } else if (
       draft.companyId !== input.companyId ||
       draft.credentialPolicy !== "per_user" ||
       draft.authKind !== "oauth" ||
@@ -166,9 +179,9 @@ async function main(): Promise<NotionOAuthReceipt> {
       connectionId,
       humanId: input.humanId,
       intentId: input.intentId ?? null,
-      personalDraft: true,
+      personalDraft: !input.reconnectId,
       providerHandoff: true,
-      credentialAbsentAtHandoff: true,
+      credentialAbsentAtHandoff: !input.reconnectId,
       resumedSameDraft: !!input.draftId,
       draftSurvivedReload: false,
       consentCompleted: false,
@@ -300,7 +313,7 @@ async function main(): Promise<NotionOAuthReceipt> {
       connected.companyId !== input.companyId ||
       connected.status !== "active" ||
       connected.healthStatus !== "ok" ||
-      connected.credentialPolicy !== "per_user"
+      connected.credentialPolicy !== (input.reconnectId ? "shared" : "per_user")
     )
       throw new Error(
         "Real Notion callback did not activate the same personal draft",
