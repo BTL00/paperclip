@@ -29,7 +29,7 @@ export function gradeDisabledChat(value: unknown) {
 export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
   scenarioId: "agent-chat.chat-disabled", journeyKind: "browser-boundary", boundaryTarget: "authenticated-harness", authentication: "human-session",
   oracleVersion: "paperclip.chat-catalog.runtime.v2", expectedRunCount: 0, expectedHumanMessageCount: 0, turnTimeoutMs: 120_000, attemptTimeoutMs: 300_000,
-  sourceFiles: ["chat-catalog-domains/runtime-chat-disabled.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-boundary-contract.ts", "live-fixtures.ts", "chat-scenarios/agent-chat.yaml"],
+  sourceFiles: ["chat-catalog-domains/runtime-chat-disabled.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-boundary-contract.ts", "live-fixtures.ts", "chat-scenarios/agent-chat.yaml"],
   grade: gradeDisabledChat,
   async run(ctx) {
     const browser = ctx.page.context().browser(); if (!browser) throw new Error("Unavailable Agent Chat boundary requires the real human browser");
@@ -48,7 +48,7 @@ export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
     // The boundary capture callback is bound to ctx.page. Authenticate that
     // actual page with the same genuine human session rather than inspecting
     // a second page while retaining an unrelated screenshot.
-    await ctx.page.context().addCookies(await person.context.cookies());
+    await person.installSessionOn(ctx.page.context());
     const page = ctx.page;
     await page.goto(`/${fixtures.company.issuePrefix}/chats/${fixtures.agent.id}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByText(/Agent Chat is disabled\. Enable it in Experimental settings/)).toBeVisible();
