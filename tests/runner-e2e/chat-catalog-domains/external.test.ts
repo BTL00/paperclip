@@ -45,7 +45,7 @@ function valid(id: string) {
       phaseBoundary: "operator-chat-to-viewer-browser-consent", chatCallerId: "operator", viewerSessionBefore: "viewer", viewerSessionAtConsent: "viewer", viewerSessionAfter: "viewer" });
     o.activity = [{ id: "authorization", action: "mcp.connection_authorized", entityId: "grant", actorType: "user", actorId: "viewer" }];
   } else if (id === "connection-setup.unreachable-mcp") {
-    Object.assign(o.state, { serverUrl: "http://127.0.0.1:8848/", fixtureServerClosed: true, setupStatus: 400, visibleConnectivityError: true, checkAgainAvailable: true, displayedServerPreserved: true, editableUrlPreserved: true, abandonedDraft: true, noUnexpectedConnection: true });
+    Object.assign(o.state, { serverUrl: "http://127.0.0.1:8848/", fixtureServerClosed: true, genericEntryThroughVisibleCatalog:true, setupStatus: 400, visibleConnectivityError: true, checkAgainAvailable: true, displayedServerPreserved: true, editableUrlPreserved: true, abandonedDraft: true, noUnexpectedConnection: true });
     o.reply = "Open the supported MCP server connection setup and check its address.";
   } else if (id === "plugins.install-plugin") {
     Object.assign(o.state, { pluginId: "plugin", pluginKey: "synthetic.preview", syntheticPackage: true, pluginAfter: { id: "plugin", pluginKey: "synthetic.preview", status: "ready", manifestJson: { displayName: "Website Preview Eval" } }, operatorChannel: "board-api-local-path", agentInstallStatus: 403, absentBeforeHuman: true, humanInstallStatus: 200, previewReadback: true, humanSawActivation: true });
