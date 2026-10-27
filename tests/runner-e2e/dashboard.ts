@@ -44,6 +44,8 @@ export interface RunnerDashboardInput {
   catalog: readonly ReportExecution[];
   entries: readonly RunnerDashboardEntry[];
   campaign?: RunnerE2ECampaign;
+  /** The bundle contains its existing relative summary.md document. */
+  summaryAvailable?: boolean;
   history?: RunnerE2EHistoryIndex;
 }
 
@@ -835,7 +837,7 @@ export function renderRunnerE2EDashboard(input: RunnerDashboardInput) {
         <p class="eyebrow">Full-stack acceptance campaign</p>
         <h1 tabindex="-1">${html(input.title)}</h1>
         <p class="lede">Results across runner profiles and execution environments. Declared PNG screenshots and normalized results are retained with every published campaign; additional diagnostic evidence remains in the access-controlled workflow artifact.</p>
-        ${input.campaign ? `<p class="report-source"><span>${html(input.generatedAt)}</span>${input.campaign.source.sha ? `<code>${html(input.campaign.source.sha.slice(0,8))}</code>` : ""}${input.campaign.source.workflowRunUrl ? `<a href="${html(input.campaign.source.workflowRunUrl)}">Source run ↗</a>` : ""}</p>` : ""}
+        ${input.campaign ? `<p class="report-source"><span>${html(input.generatedAt)}</span>${input.campaign.source.sha ? `<code>${html(input.campaign.source.sha.slice(0,8))}</code>` : ""}${input.campaign.source.workflowRunUrl ? `<a href="${html(input.campaign.source.workflowRunUrl)}">Source run ↗</a>` : ""}${input.summaryAvailable ? `<a href="summary.md">Campaign summary ↗</a>` : ""}</p>` : ""}
       </div>
       <div class="report-actions">
         <div class="summary" aria-label="Campaign summary">
