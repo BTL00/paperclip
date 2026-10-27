@@ -28,6 +28,13 @@ function valid(id: string) {
     result.summaries.card.push({ id: "new-summary", body: result.cards[0]!.summaryBody });
     result.runs.push({ id: "new-worker-run", agentId: "morgan", status: "succeeded" });
     result.reply = `${first.reply}\nThe refreshed summary identifies mobile Safari checkout as the remaining blocker.`;
+    const successful = structuredClone(result);
+    Object.assign(result.state, { successfulRefreshResult: successful, failedGenerationRunId: "failed-native", failedGenerationIssueId: "failure-task" });
+    Object.assign(result.cards[0]!, { state: "error", failureReason: "The generation failed", generatingIssueId: null });
+    result.updates.card.push(Object.assign({ ...update, id: "failed-update", status: "failed", runId: "failed-native", generationIssueId: "failure-task" }, { error: "Unavailable model" }));
+    result.runs.push(Object.assign({ id: "failed-native", agentId: "morgan", status: "failed" }, { runtimeMode: "native", contextSnapshot: { issueId: "failure-task" } }));
+    result.reply += "\nThe latest generation failed; the prior successful summary was retained.";
+
   }
   return result;
 }
@@ -76,5 +83,19 @@ describe("saved card state and truthful generation controls", () => {
     expect(gradeIntegratorCards({ ...o, reply: first.reply }).passed).toBe(false);
     const duplicate = structuredClone(o); duplicate.updates.card.push({ ...duplicate.updates.card[1]!, id: "duplicate" });
     expect(gradeIntegratorCards(duplicate).passed).toBe(false);
+  });
+  it("requires failure of the actual card generation, retained last-good output and truthful subsequent reporting", () => {
+    const o = valid("status-cards.refresh-card");
+    const missingError = structuredClone(o); Object.assign(missingError.cards[0]!, { state: "active", failureReason: null });
+    expect(gradeIntegratorCards(missingError).passed).toBe(false);
+    const unrelated = structuredClone(o); Object.assign(unrelated.runs.at(-1)!, { contextSnapshot: { issueId: "unrelated-task" } });
+    expect(gradeIntegratorCards(unrelated).passed).toBe(false);
+    const rewritten = structuredClone(o); rewritten.cards[0]!.summaryBody = "Replacement after failure";
+    expect(gradeIntegratorCards(rewritten).passed).toBe(false);
+    const lostHistory = structuredClone(o); lostHistory.summaries.card.pop();
+    expect(gradeIntegratorCards(lostHistory).passed).toBe(false);
+    expect(gradeIntegratorCards({ ...o, reply: o.reply + " A new summary is ready; refresh succeeded." }).passed).toBe(false);
+    const checkpoint = (o.state as Record<string, unknown>).successfulRefreshResult as ReturnType<typeof valid>;
+    expect(gradeIntegratorCards({ ...o, reply: checkpoint.reply + " The refresh could not finish. The last good output was kept unchanged." }).passed).toBe(true);
   });
 });

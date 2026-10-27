@@ -2,6 +2,8 @@ import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "..
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, task, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
+import { unavailableNativeModelFailure } from "./runtime-native-failure.js";
+import type { RuntimeAgent } from "./runtime-support.js";
 import { readAgentResource, cleanupIdentityProbes } from "./identity-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { groundedStatement, integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
@@ -71,16 +73,27 @@ export function gradeIntegratorCards(value: unknown) {
   } else if (o.scenarioId === "status-cards.refresh-card") {
     const initial = cardsObservation(o.state.firstRefresh); const oldIds = new Set((o.state.originalUpdates as StatusCardUpdate[] | undefined)?.map(row => row.id));
     const changes = card ? o.updates[card.id]?.filter(row => !oldIds.has(row.id) && row.kind !== "compile") ?? [] : [];
-    c.add("one-real-new-refresh-output", !!before && !!card && card.createdByAgentId === o.leadId && changes.length === 1 && changes[0]?.status === "ok"
+    const successful = changes.filter(row => row.status === "ok"); const failed = changes.filter(row => row.status === "failed");
+    const successfulResult = cardsObservation(o.state.successfulRefreshResult); const lastGood = successfulResult?.cards.find(row => row.id === before?.id);
+    c.add("one-real-new-refresh-output", !!before && !!card && card.createdByAgentId === o.leadId && successful.length === 1 && failed.length === 1 && changes.length === 2
       && freshSummary(o, card) && card.lastGeneratedAt !== before.lastGeneratedAt && card.summaryBody !== before.summaryBody
       && o.summaries[card.id]?.length === (o.state.originalSummaries as StatusCardSummaryRevision[] | undefined)?.length! + 1
       && /mobile Safari/i.test(card.summaryBody ?? ""), "Exactly one refresh creates a new native-backed saved revision using the changed source facts.");
     const initialCard = initial?.cards.find(row => row.id === before?.id);
     c.add("initial-acknowledgement-not-false-freshness", !!initial && !!initialCard && (!/\b(?:summary|card|blockers?)\b[^.!?\n]{0,45}\b(?:fresh|updated|generated|ready|complete)\b/i.test(initial.reply)
       || initialCard.lastGeneratedAt !== before?.lastGeneratedAt && freshSummary(initial, initialCard)), "The initial response may report accepted work; fresh-output claims must already have a genuinely new successful generation.");
-    const finalReply = initial && o.reply.startsWith(initial.reply) ? o.reply.slice(initial.reply.length) : "";
+    const finalReply = initial && successfulResult?.reply.startsWith(initial.reply) ? successfulResult.reply.slice(initial.reply.length) : "";
     c.add("actual-result-reported-after-generation", /mobile Safari/i.test(finalReply) && /\b(?:generated|refreshed|updated|summary|blocker)\b/i.test(finalReply)
       && !/\b(?:still waiting|not refreshed|refresh failed|could not refresh)\b/i.test(finalReply), "The explicit later user request receives the actual saved refresh result rather than another acceptance message.");
+    const failedRun = o.runs.find(run => run.id === o.state.failedGenerationRunId);
+    const failureReply = successfulResult && o.reply.startsWith(successfulResult.reply) ? o.reply.slice(successfulResult.reply.length) : "";
+    c.add("genuine-failed-generation-keeps-last-good-output", !!successfulResult && !!lastGood && !!card && card.state === "error" && !!card.failureReason && !card.generatingIssueId
+      && failed.length === 1 && failed[0]?.generationIssueId === o.state.failedGenerationIssueId && !!failed[0]?.error && failedRun?.status === "failed" && failedRun.runtimeMode === "native" && failedRun.contextSnapshot?.issueId === failed[0]?.generationIssueId
+      && card.summaryBody === lastGood.summaryBody && card.lastGeneratedAt === lastGood.lastGeneratedAt
+      && JSON.stringify(o.summaries[card.id]) === JSON.stringify(successfulResult.summaries[card.id]), "An independently observed real card-generation error and failed update retain the previous successful summary, timestamp and complete history. A failed native row without card error does not qualify.");
+    c.add("actual-generation-error-reported", /refresh|generation/i.test(failureReply) && /failed|error|could not|couldn't|did not finish/i.test(failureReply)
+      && /previous|prior|last (?:good|successful)|kept|retained|unchanged/i.test(failureReply)
+      && !/\b(?:new|fresh)\s+(?:summary|output)\s+(?:is )?(?:ready|generated|complete)|\brefresh succeeded\b/i.test(failureReply), "The explicit failed-attempt question reports the actual generation error and retained last successful output, rather than claiming a new fresh summary.");
   } else if (o.scenarioId === "status-cards.other-authors-card") {
     c.add("morgan-card-not-evaded", !!before && !!card && card.createdByAgentId === (o.state.worker as Entity | undefined)?.id && o.cards.length === 1
       && card.interestPrompt === before.interestPrompt && JSON.stringify(card.refreshPolicy) === JSON.stringify(before.refreshPolicy) && card.archivedAt === before.archivedAt
@@ -166,8 +179,10 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
       const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "That disposable source task was removed after your earlier answer. Can you still read and verify its current blocker details? Distinguish the older saved summary from what you can check now.");
     },
   }),
-  define("status-cards.refresh-card", "ceo", { expectedRunCount: 4, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
-    coverageGaps: ["failed-generation-retains-prior-summary"],
+  define("status-cards.refresh-card", "ceo", { expectedRunCount: 7, expectedHumanMessageCount: 4, attemptTimeoutMs: 1_200_000,
+    runPolicy: { kind: "terminal-counts", terminalStatusCounts: { failed: 1, succeeded: 6 } },
+    sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/runtime-native-failure.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
+
     async act(ctx, state) {
       const first = await pollUntil({ label: "initial actual refresh acknowledgement", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
         load: () => observeCards(ctx, state), accept: o => o.runs.filter(row => row.agentId === o.leadId && row.status === "succeeded").length === 1 && ctx.issue()?.conversationState === "waiting" });
@@ -178,6 +193,31 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
         load: () => observeCards(ctx, state), accept: o => { const card = o.cards.find(row => row.id === before.id); return !!card && card.lastGeneratedAt !== before.lastGeneratedAt && freshSummary(o, card) && o.runs.length === 3 && o.runs.every(run => run.status === "succeeded"); } });
       const { sendChatMessage } = await import("../chat-flow.js");
       await sendChatMessage(ctx.input.page, "What did the refresh actually produce?");
+      const succeeded = await pollUntil({ label: "successful generation actually reported before separate failure condition", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 4 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      state.successfulRefreshResult = { ...succeeded, state: structuredClone(state) }; await ctx.input.evidence("chat-card-refresh-last-successful-result.json", state.successfulRefreshResult);
+      const worker = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${(state.worker as Entity).id}`);
+      const beforeFailureIds = new Set((succeeded.updates[before.id] ?? []).map(update => update.id));
+      // The helper scopes induction accounting to this one actual summarizer.
+      // The shared oracle still receives every company run, including both
+      // genuine CEO source turns; nothing is hidden from the declared bound.
+      const workerContext = { ...ctx, allRuns: async () => (await ctx.allRuns()).filter(run => run.agentId === worker.id) };
+      const failure = await unavailableNativeModelFailure(workerContext, worker, async () => {
+        await sendChatMessage(ctx.input.page, "Run another full refresh of that card now.");
+        const update = await pollUntil({ label: "explicit human full refresh creates actual generation attempt", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+          load: () => ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${before.id}/updates`),
+          accept: updates => updates.some(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && !!row.generationIssueId) });
+        const generation = update.find(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && row.generationIssueId)!;
+        return { issueId: generation.generationIssueId! };
+      });
+      state.failedGenerationRunId = failure.failedRun.id; state.failedGenerationIssueId = failure.failedIssueId;
+      const observed = await observeCards(ctx, state); const actual = observed.cards.find(row => row.id === before.id);
+      const failedUpdates = observed.updates[before.id]?.filter(update => update.generationIssueId === failure.failedIssueId && update.status === "failed") ?? [];
+      const established = actual?.state === "error" && !actual.generatingIssueId && failedUpdates.length === 1;
+      await ctx.input.evidence("chat-card-generation-failure-outcome.json", { kind: "real-unavailable-model-invocation", nativeFailureObserved: true, failedRunId: failure.failedRun.id,
+        generationIssueId: failure.failedIssueId, cardId: before.id, observedCardState: actual?.state, observedGeneratingIssueId: actual?.generatingIssueId, failedUpdateIds: failedUpdates.map(update => update.id),
+        cardErrorObserved: established, expectedCardFailureOutcome: established ? "observed" : "not-observed-failing-product-outcome", taskOrCardStatusPatched: false, cancelledAsFailure: false });
+      await pollUntil({ label: "actual refresh source turn settled after failed generation", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 6 && o.runs.filter(run => run.status === "succeeded").length === 5 && o.runs.filter(run => run.status === "failed").length === 1 && ctx.issue()?.conversationState === "waiting" });
+      await sendChatMessage(ctx.input.page, "What happened to that latest refresh, and which saved summary is available now?");
     },
   }),
 ];
