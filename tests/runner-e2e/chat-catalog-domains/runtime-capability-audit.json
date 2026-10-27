@@ -226,8 +226,8 @@
     },
     {
       "scenarioId": "steering.interrupt-with-direction",
-      "readinessClass": "local",
-      "needs": "Real active task with saved human direction; explicit interruption; old cancelled run, no concurrent owners, delivery once after cleanup."
+      "readinessClass": "implemented",
+      "needs": "Actual native busy owner plus truthful human-authored saved simpler plan and actual human plan-confirmation acceptance before canonical query. Accepted plan response independently requiresFreshSession=true, source-qualified native production Interrupt control (no legacy substitute) enabled but no setup interruption/admission. Canonical guidance precedes actual human Interrupt; exact native cancellation ACK/retained full event history, original finishedAt before one successor startedAt, observed no concurrent owners, exact accepted revision/context forceFreshSession and real registered simpler HTML/latest delivery revision. Accepted original plan revision remains in public revision history. No live qualification claimed."
     },
     {
       "scenarioId": "steering.stop-versus-pause",
