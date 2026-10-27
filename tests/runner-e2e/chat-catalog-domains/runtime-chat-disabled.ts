@@ -45,7 +45,11 @@ export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
     const settings = await api.get<{ enableAgentChat: boolean }>("/api/instance/settings/experimental");
     const root = `/api/companies/${fixtures.company.id}`;
     const beforeTaskIds = (await api.get<Array<{ id: string }>>(`${root}/issues?includeAgentCreatedTasks=true&limit=1000`)).map(row => row.id).sort();
-    const page = await person.context.newPage();
+    // The boundary capture callback is bound to ctx.page. Authenticate that
+    // actual page with the same genuine human session rather than inspecting
+    // a second page while retaining an unrelated screenshot.
+    await ctx.page.context().addCookies(await person.context.cookies());
+    const page = ctx.page;
     await page.goto(`/${fixtures.company.issuePrefix}/chats/${fixtures.agent.id}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByText(/Agent Chat is disabled\. Enable it in Experimental settings/)).toBeVisible();
     await expect(page.getByTestId("task-chat-composer-input")).toHaveCount(0);
