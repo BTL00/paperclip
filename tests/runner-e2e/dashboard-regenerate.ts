@@ -175,6 +175,7 @@ export async function regenerateRunnerDashboard(input: {
     entries,
     campaign,
     summaryAvailable: summary !== undefined,
+    summaryText: summary,
     history,
   });
   const upgraded = {

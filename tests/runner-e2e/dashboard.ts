@@ -46,6 +46,8 @@ export interface RunnerDashboardInput {
   campaign?: RunnerE2ECampaign;
   /** The bundle contains its existing relative summary.md document. */
   summaryAvailable?: boolean;
+  /** Existing public summary.md content, rendered only as escaped readable text. */
+  summaryText?: string;
   history?: RunnerE2EHistoryIndex;
 }
 
@@ -532,6 +534,9 @@ export function renderRunnerE2EDashboard(input: RunnerDashboardInput) {
     h1 { max-width: 760px; margin: 0; font-size: clamp(32px, 4vw, 56px); font-weight: 650; line-height: 1.03; letter-spacing: -.04em; }
     .lede { max-width: 720px; margin: 16px 0 0; color: var(--muted-foreground); font-size: 16px; }
     .report-actions { display: flex; align-items: stretch; gap: 8px; }
+    .campaign-notes { margin: 0 0 24px; }
+    .campaign-notes > summary { cursor: pointer; font-weight: 600; }
+    .campaign-notes pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
     .summary { display: flex; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
     .metric { min-width: 108px; padding: 13px 16px; border-right: 1px solid var(--border); }
     .metric:last-child { border-right: 0; }
@@ -849,6 +854,7 @@ export function renderRunnerE2EDashboard(input: RunnerDashboardInput) {
         <button class="gallery-launch" type="button" data-gallery-open ${screenshotCount === 0 ? "disabled" : ""}>${screenshotCount === 0 ? "Visual evidence · workflow artifact only" : `View gallery · ${screenshotCount}`}</button>
       </div>
     </header>
+    ${input.campaign && input.summaryText?.trim() ? `<details class="campaign-notes" open><summary>Campaign notes and coverage</summary><pre>${html(input.summaryText)}</pre></details>` : ""}
     ${renderCampaignSuiteSummary(input.campaign?.suites ?? [], catalog, "", false)}
     <details class="campaign-billing-details"><summary>Campaign usage and spend</summary>
     <section class="billing-overview" aria-label="Campaign billing summary">
