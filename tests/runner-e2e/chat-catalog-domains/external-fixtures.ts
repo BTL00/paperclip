@@ -28,7 +28,7 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "connection-setup.save-and-resume": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.channel-prerequisites": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "registeredWebhookOrigin"] },
   "chat-channels.connect-slack": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "registeredWebhookOrigin"] },
-  "chat-channels.link-sender": { provider: "slack", fields: ["workspaceId", "privateChannelId", "senderUserId", "registeredWebhookOrigin"] },
+  "chat-channels.link-sender": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.reply-in-thread": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.channel-file": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.repair-endpoint": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "expiredAuthorizationEnv", "registeredWebhookOrigin"] },

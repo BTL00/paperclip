@@ -2,14 +2,15 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
 import { validGrokRoutinePrivateInput, matchesConfiguredGrokRoutine, type GrokRoutinePrivateInput } from "./external-grok-private-contract.js";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure"; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+import { validSlackIdentityInput, matchingSlackIdentityPreview, type SlackIdentityPrivateInput } from "./external-slack-identity-contract.js";
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create" | "grok-routine-configure" | "slack-identity-confirm"; slackIdentity?:SlackIdentityPrivateInput; grok?:GrokRoutinePrivateInput; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > (input.mode === "grok-routine-configure" ? 16384 : 8192) || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create", "grok-routine-configure", "slack-identity-confirm"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
@@ -21,6 +22,46 @@ async function main() {
       const field = page.getByLabel("App key"); await field.fill(input.credential);
       if (await field.inputValue() !== input.credential) throw new Error("Canary entry failed");
       return { processIsolation: true, testRunnerAttached: false, credentialEntered: true, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false };
+    }
+    if (input.mode === "slack-identity-confirm") {
+      const identity = input.slackIdentity;
+      if (!validSlackIdentityInput(input.companyId, identity, input.setupURL) || !identity || !input.companyId) throw new Error("Invalid finite Slack confirmation operation");
+      const session = await context.request.get("/api/auth/get-session");
+      if (!session.ok() || (await session.json()).user?.id !== identity.userId) throw new Error("Slack confirmation must use the same actual signed-in fixture human");
+      const principalsPath = `/api/chat-endpoints/${identity.endpointId}/principals`;
+      async function principal() {
+        const response = await context.request.get(principalsPath);
+        if (!response.ok()) throw new Error("Slack principal cannot be independently read");
+        const rows = await response.json() as Array<{ principalId:string; status:string; paperclipUserId?:string; externalDetail?:string }>;
+        const matches = rows.filter(row => row.principalId === identity!.principalId && row.externalDetail === identity!.externalDetail);
+        if (matches.length !== 1) throw new Error("Slack principal identity is ambiguous");
+        return matches[0]!;
+      }
+      if ((await principal()).status === "linked") throw new Error("Slack identity was already linked before human confirmation");
+      await page.goto(input.setupURL, {waitUntil:"domcontentloaded"});
+      const row = page.getByRole("list", {name:"People",exact:true}).getByRole("listitem").filter({has:page.getByText(identity.externalLabel,{exact:true})});
+      if(await row.count()!==1) throw new Error("Exact unlinked Slack identity is not uniquely visible in Access");
+      const issued=page.waitForResponse(response=>new URL(response.url()).pathname===`${principalsPath}/${identity.principalId}/link-intent`&&response.request().method()==="POST"&&response.status()===201);
+      await row.getByRole("button", {name:"Create confirmation link",exact:true}).click();
+      const intent=await(await issued).json() as {confirmationUrl?:string};
+      const confirmation=new URL(intent.confirmationUrl??"",base.origin),token=confirmation.searchParams.get("token");
+      if(confirmation.origin!==base.origin||confirmation.pathname!=="/chat-identity/confirm"||!token||token.length<32||token.length>8192||confirmation.hash||confirmation.searchParams.size!==1) throw new Error("Visible identity form returned another confirmation surface");
+      const previewResponse = await context.request.get(`/api/chat-identity-links/preview?token=${encodeURIComponent(token)}`);
+      if (!previewResponse.ok() || !matchingSlackIdentityPreview(await previewResponse.json(), input.companyId, identity)) throw new Error("Slack link preview targets another company, endpoint or external human");
+      await page.goto(confirmation.href, {waitUntil:"domcontentloaded"});
+      await page.getByRole("heading", {name:"Link your external identity",exact:true}).waitFor();
+      await page.getByText(identity.externalDetail, {exact:false}).waitFor();
+      const confirmed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/chat-identity-links/confirm" && response.request().method() === "POST" && response.ok());
+      await page.getByRole("button", {name:"Confirm identity",exact:true}).click();
+      const response = await confirmed;
+      if (response.request().postDataJSON()?.token !== token) throw new Error("Slack confirmation submitted a different one-use token");
+      const result = await response.json() as {ok?:boolean;endpointId?:string};
+      if (result.ok !== true || result.endpointId !== identity.endpointId) throw new Error("Slack confirmation returned another endpoint");
+      await page.getByRole("heading", {name:"Identity linked",exact:true}).waitFor();
+      const after = await principal();
+      const afterSession = await context.request.get("/api/auth/get-session");
+      if (after.status !== "linked" || after.paperclipUserId !== identity.userId || !afterSession.ok() || (await afterSession.json()).user?.id !== identity.userId) throw new Error("Confirmed Slack authority does not bind the same current signed-in person");
+      return {processIsolation:true,testRunnerAttached:false,tracingEnabled:false,videoEnabled:false,apiStepRecorder:false,identityConfirmed:true,identityUiVisible:true,principalId:identity.principalId,paperclipUserId:identity.userId,humanSubmittedSecurely:true};
     }
     if (input.mode === "grok-routine-configure") {
       const grok = input.grok;
