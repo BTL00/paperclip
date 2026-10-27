@@ -32,8 +32,8 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "chat-channels.reply-in-thread": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.channel-file": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "botUserId", "appId", "registeredWebhookOrigin", "webhookRelayPort", "botTokenEnv", "senderTokenEnv", "signingSecretEnv", "configurationTokenEnv"] },
   "chat-channels.repair-endpoint": { provider: "slack", fields: ["workspaceId", "channelId", "senderUserId", "expiredAuthorizationEnv", "registeredWebhookOrigin"] },
-  "chat-channels.outbound-email": { provider: "agentmail", fields: ["inboxId", "recipient", "draftArtifactId"] },
-  "chat-channels.reply-to-email": { provider: "agentmail", fields: ["inboxId", "threadId", "latestMessageId", "earlierMessageId", "recipient"] },
+  "chat-channels.outbound-email": { provider: "agentmail", fields: ["inboxId", "recipient", "recipientAuthorization", "apiTokenEnv"] },
+  "chat-channels.reply-to-email": { provider: "agentmail", fields: ["inboxId", "recipient", "recipientAuthorization", "apiTokenEnv", "reviewerAddress", "reviewerAuthorization", "senderCredentialEnv"] },
   "secrets.vault-reference": { provider: "vault", fields: ["provider", "region", "deploymentId", "kmsKeyId", "secretReference", "accessKeyIdEnv", "secretAccessKeyEnv", "sessionTokenEnv", "expectedValueEnv"] },
   "recovery.unknown-email-outcome": { provider: "agentmail", fields: ["inboxId", "recipient", "recipientAuthorization", "apiTokenEnv"] },
 };
