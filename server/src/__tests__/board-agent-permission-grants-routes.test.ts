@@ -70,6 +70,8 @@ describe("board administration of agent principal grants", () => {
   });
   it("denies an unauthorized board and cross-company actor", async () => {
     mocks.canUser.mockResolvedValue(false);
+    expect((await request(app()).get(`/api/companies/${companyId}/members?principalType=agent`)).status).toBe(403);
+    expect(mocks.listAgentMembers).not.toHaveBeenCalled();
     expect((await request(app()).patch(`/api/companies/${companyId}/members/${memberId}/permissions`).send({ grants: [] })).status).toBe(403);
     mocks.canUser.mockResolvedValue(true);
     expect((await request(app({ type: "board", source: "session", userId: "stranger", companyIds: [] } as Express.Request["actor"]))
