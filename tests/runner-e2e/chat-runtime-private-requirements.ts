@@ -9,6 +9,7 @@ export const runtimePrivateRequirements = {
   "execution-environments.add-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.test-computer": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
   "execution-environments.choose-capable-target": { provider: "ssh", fields: ["hostname", "port", "login", "hostKeySha256", "knownHosts", "allowedRemoteRoot", "privateKeyEnv", "qualifiedHarness"], credentials: [] },
+  "assistant-connections.connect-external-assistant": { provider: "chatgpt", fields: ["operatorRef", "chatgptAuthorizationRef", "operatorMode"], credentials: [] },
   "agents.existing-grok-bot": { provider: "grok", fields: ["botId", "endpoint", "challengeMethod", "credentialEnvName", "operatorRef", "botAuthorizationRef", "operatorMode"], credentials: [] },
   "agents.hire-claude-code": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },
   "agents.hire-needs-account": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef"], credentials: ["ANTHROPIC_API_KEY"] },
@@ -16,7 +17,7 @@ export const runtimePrivateRequirements = {
   "runs-adapters.upgrade-runner": { provider: "claude", fields: ["targetRef", "harnessExecutable", "model", "accountBindingRef", "legacySettingsRef"], credentials: ["ANTHROPIC_API_KEY"] },
 } as const;
 export type RuntimePrivateProvider = typeof runtimePrivateRequirements[keyof typeof runtimePrivateRequirements]["provider"];
-export const runtimePrivateProviders: readonly string[] = ["daytona", "ssh", "grok", "claude"];
+export const runtimePrivateProviders: readonly string[] = ["daytona", "ssh", "grok", "claude", "chatgpt"];
 export function validateRuntimePrivateRequirement(scenarioId: string | undefined, provider: string, fields: readonly string[], credentials: readonly string[]) {
   if (!runtimePrivateProviders.includes(provider)) return false;
   const spec = runtimePrivateRequirements[scenarioId as keyof typeof runtimePrivateRequirements];
