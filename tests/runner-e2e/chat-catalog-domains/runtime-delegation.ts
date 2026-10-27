@@ -18,18 +18,32 @@ export function hasLaunchHeadline(html: string) {
   const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
   return heading?.replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;|&#x0*a0;/gi, " ").replace(/\s+/g, " ").trim().toLowerCase() === "research without the busywork";
 }
+export function completeLaunchBrief(context: string, marker: string) {
+  return context.includes(marker) && /Research without the busywork/i.test(context) && /\bsemantic\b.{0,30}\b(?:html|markup|structure)\b/i.test(context)
+    && /\b(?:accessible|labelled|labeled)\b.{0,30}\b(?:label|input|control|form)|\blabel.{0,30}accessib/i.test(context)
+    && /\b(?:primary|one|single)\b.{0,35}\b(?:sign.?up|signup|join|subscribe)\b.{0,30}\b(?:action|cta|button|link)\b/i.test(context);
+}
+export function launchPageReflectsBrief(html: string) {
+  if (!hasLaunchHeadline(html) || !/<(?:main|section|header)\b/i.test(html)
+    || !/<(?:a|button)\b[^>]*>[\s\S]{0,400}?(?:sign.?up|join|subscribe|early access)[\s\S]{0,100}?<\/(?:a|button)>/i.test(html)) return false;
+  return [...html.matchAll(/<input\b[^>]*>/gi)].every(([input]) => /type\s*=\s*["']?hidden\b|aria-label(?:ledby)?\s*=\s*["'][^"']+/i.test(input)
+    || !!input.match(/\bid\s*=\s*["']([^"']+)["']/)?.[1] && [...html.matchAll(/<label\b[^>]*\bfor\s*=\s*["']([^"']+)["']/gi)].some(label => label[1] === input.match(/\bid\s*=\s*["']([^"']+)["']/)?.[1]));
+}
 export function gradeDelegation(value: unknown) {
   const c = checks(), o = runtimeObservation(value);
   c.add("actual-launch-brief-and-native-handoff-evidence", !!o, "A real human-attached Launch brief, exactly one CEO-created Morgan child, native result and source completion are required."); if (!o) return c.result();
   const s = o.state, parent = s.parent as Entity, task = s.task as Entity, receipt = s.briefAttachment as ChatQueryAttachmentReceipt;
+  const availableBrief = ["copied-attachment", "direct-attachment-reference"].includes(String(s.briefContextKind)) ? s.workerBriefReadStatus === 200 && s.workerBriefHash === s.briefHash
+    : s.briefContextKind === "readable-parent-reference" ? s.workerParentReadStatus === 200 && s.parentLinkInspectable === true && s.workerBriefReadStatus === 200 && s.workerBriefHash === s.briefHash
+    : s.briefContextKind === "faithful-durable-copy" && s.durableBriefComplete === true && s.actualWebsiteArtifact === true;
   c.add("real-parent-owner-and-human-brief", s.parentOwnedByCeo === true && !!receipt && receipt.issueId === parent.id && receipt.companyId === o.companyId
     && receipt.createdByAgentId == null && receipt.createdByUserId === s.humanId && receipt.issueCommentId === s.briefCommentId && receipt.sha256 === s.briefHash
     && s.briefDownloadedHash === s.briefHash && s.parentContextRetained === true,
   "The real Launch task remains owned by the CEO and its human comment retains the exact uploaded design brief.");
   c.add("one-authorized-child-with-durable-context", !!task && (task.parentId === parent.id || s.linkedToLaunch === true) && task.companyId === o.companyId && task.assigneeAgentId === (s.worker as Entity).id
-    && s.createdFromSource === true && o.tasks.length === 2 && s.childHasBrief === true && s.workerBriefReadStatus === 200 && s.workerBriefHash === s.briefHash
+    && s.createdFromSource === true && o.tasks.length === 2 && s.childHasBrief === true && availableBrief && s.workerTaskReadStatus === 200
     && o.activity.some(row => row.action === "issue.created" && row.entityId === task.id && row.agentId === o.leadId)
-    && /report|return|complete|finish|deliver/i.test(task.description ?? ""),
+    && /report|return|complete|finish|deliver|notify.{0,60}(?:CEO|here|conversation|ready)|let (?:me|us|the CEO) know.{0,60}(?:done|ready|page|result)/i.test(task.description ?? ""),
   "The canonical request creates one real Morgan child linked to Launch, with accessible durable brief bytes and an explicit completion request.");
   const delivery = s.delivery as ReturnType<typeof completionDelivery> | undefined;
   c.add("actual-morgan-result-incorporated-back-here", s.workerWasReallyWaiting === true && task.status === "done" && s.actualWebsiteArtifact === true
@@ -91,9 +105,37 @@ export const runtimeDelegationCases = [runtimeDefinition("task-coordination.dele
         return url.origin === ctx.input.api.baseURL && i >= 0 && [(state.parent as Entity).id, (state.parent as Entity).identifier].includes(parts[i + 1]); }
       catch { return false; }
     });
-    const copied = attachments.find(row => row.sha256 === state.briefHash), path = copied?.contentPath ?? (context.includes(original.contentPath) ? original.contentPath : undefined);
-    state.childHasBrief = !!path;
+    const copied = attachments.find(row => row.sha256 === state.briefHash);
+    let path = copied?.contentPath ?? (context.includes(original.contentPath) ? original.contentPath : undefined);
+    state.parentLinkInspectable = task.parentId === (state.parent as Entity).id || state.linkedToLaunch === true;
     const key = keys.get(ctx); if (!key || key.workerId !== (state.worker as Entity).id) throw new Error("Actual Morgan brief probe identity is missing");
+    async function workerRead(path: string) {
+      const target = new URL(path, ctx.input.api.baseURL);
+      if (target.origin !== ctx.input.api.baseURL || !/^\/api\/(?:issues|attachments)\//.test(target.pathname)) throw new Error("Worker brief read escaped fixture resources");
+      return fetch(target, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key!.token}` } });
+    }
+    const ownRead = await workerRead(`/api/issues/${task.id}`); state.workerTaskReadStatus = ownRead.status;
+    let workerContext = "";
+    if (ownRead.ok) { const own = await ownRead.json() as Entity;
+      if (own.id !== task.id || own.companyId !== ctx.input.fixtures.company.id || own.assigneeAgentId !== key.workerId) throw new Error("Worker task read returned a foreign owner or scope");
+      workerContext = own.description ?? "";
+      for (const doc of documents) { const response = await workerRead(`/api/issues/${task.id}/documents/${encodeURIComponent(doc.key!)}`);
+        if (response.ok) workerContext += `\n${(await response.json() as Entity).body ?? ""}`; else await response.body?.cancel(); }
+    } else await ownRead.body?.cancel();
+    state.durableBriefComplete = completeLaunchBrief(workerContext, String(state.marker));
+    if (path) state.briefContextKind = copied ? "copied-attachment" : "direct-attachment-reference";
+    else if (state.parentLinkInspectable) {
+      const parent = await workerRead(`/api/issues/${(state.parent as Entity).id}`); state.workerParentReadStatus = parent.status;
+      if (parent.ok) { const row = await parent.json() as Entity;
+        if (row.id !== (state.parent as Entity).id || row.companyId !== ctx.input.fixtures.company.id) throw new Error("Worker parent reference escaped its actual Launch scope");
+        const receipts = await workerRead(`/api/issues/${row.id}/attachments`);
+        if (receipts.ok && (await receipts.json() as ChatQueryAttachmentReceipt[]).some(item => item.id === original.id && item.sha256 === original.sha256 && item.issueCommentId === state.briefCommentId)) {
+          path = original.contentPath; state.briefContextKind = "readable-parent-reference";
+        } else if (!receipts.ok) await receipts.body?.cancel();
+      } else await parent.body?.cancel();
+    }
+    if (!path && state.durableBriefComplete) state.briefContextKind = "faithful-durable-copy";
+    state.childHasBrief = !!path || state.durableBriefComplete === true;
     if (path) {
       const target = new URL(path, ctx.input.api.baseURL); if (target.origin !== ctx.input.api.baseURL || !target.pathname.startsWith("/api/attachments/")) throw new Error("Delegated brief escaped the fixture API");
       const response = await fetch(target, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } });
@@ -116,7 +158,7 @@ export const runtimeDelegationCases = [runtimeDefinition("task-coordination.dele
       state.task = await ctx.input.api.get<Entity>(`/api/issues/${task.id}`);
       const workerRun = o.runs.find(row => row.agentId === (state.worker as Entity).id);
       if (workerRun) { const [artifact] = await readRegisteredArtifacts(ctx.input.api, task.id, workerRun.id, ["website.html"]);
-        state.actualWebsiteArtifact = artifact?.contentVerified === true && hasLaunchHeadline(artifact.content)
+        state.actualWebsiteArtifact = artifact?.contentVerified === true && launchPageReflectsBrief(artifact.content)
           && o.revisions.some(row => row.createdByRunId === workerRun.id && row.createdByAgentId === (state.worker as Entity).id && (row.body ?? "").includes(String(state.marker))
             && o.documents.some(doc => doc.id === row.documentId && doc.latestRevisionId === row.id)); }
     }
