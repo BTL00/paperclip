@@ -18,3 +18,5 @@ export { notionReadExternalCases } from "./external-notion-read.js";
 export { secureKeyExternalCases } from "./external-secure-key.js";
 export { teamInstallExternalCases } from "./external-team-install.js";
 export { teamConfigureExternalCases } from "./external-team-configure.js";
+export { gatewayRotationExternalCases } from "./external-gateway-rotation.js";
+export { notionAssignmentExternalCases } from "./external-notion-assignment.js";

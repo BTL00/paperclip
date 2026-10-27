@@ -185,7 +185,7 @@ describe("external domain independent oracles", () => {
 });
 describe("private disposable provider prerequisite contract", () => {
   it("owning runtime callbacks read only selected private references and never ambient env", () => {
-    const binding = { disposable: true as const, resourceIds: ["workspace"], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_AUTH"], prerequisites: { workspaceId: "workspace", recentPageId: "recent", olderPageId: "old", mcpUrl: "https://fixture.invalid" } };
+    const binding = { disposable: true as const, resourceIds: ["workspace"], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_AUTH"], prerequisites: { workspaceId: "workspace", recentPageId: "recent", olderPageId: "old", mcpUrl: "https://fixture.invalid", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", recentMarker: "Recent", olderMarker: "Older", recentFactJson: "{}", olderFactJson: "{}" } };
     const redactions: string[] = [];
     const ctx = { scenario: { id: "connection-setup.notion-agent-unassigned" }, input: { privateSecrets: redactions, privateInputs: {
       configuration: () => ({ schemaVersion: 1, providers: { notion: binding } }), read: (name: string) => name === "PAPERCLIP_CHAT_EVAL_NOTION_AUTH" ? "private-fixture-token" : undefined,

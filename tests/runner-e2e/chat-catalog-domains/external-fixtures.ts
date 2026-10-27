@@ -19,7 +19,7 @@ export const externalRequirements: Record<string, { provider: ExternalProvider; 
   "connection-setup.notion-connected": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv", "recentMarker", "olderMarker", "recentFactJson", "olderFactJson"] },
   "connection-setup.notion-missing": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
   "connection-setup.notion-wrong-account": { provider: "notion", fields: ["sharedWorkspaceId", "personalWorkspaceId", "personalPageId", "oauthBrowserSession"] },
-  "connection-setup.notion-agent-unassigned": { provider: "notion", fields: ["workspaceId", "recentPageId", "mcpUrl"] },
+  "connection-setup.notion-agent-unassigned": { provider: "notion", fields: ["workspaceId", "recentPageId", "olderPageId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv", "recentMarker", "olderMarker", "recentFactJson", "olderFactJson"] },
   "connection-setup.notion-expired": { provider: "notion", fields: ["workspaceId", "recentPageId", "expiredAuthorizationEnv", "oauthBrowserSession"] },
   "connection-setup.return-from-login": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession", "registeredCallbackOrigin"] },
   "connection-setup.save-and-resume": { provider: "notion", fields: ["workspaceId", "recentPageId", "oauthBrowserSession"] },
