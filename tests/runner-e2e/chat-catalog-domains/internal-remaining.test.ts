@@ -58,3 +58,26 @@ it("rejects a forwarded fake failure or a drop before both successes", () => { c
 it("rejects clearing all items in the first reply or repeating successful writes on retry", () => { const o = partial(); (o.state.firstPartial as any).reply += " Your inbox is clear."; expect(gradeArchivePartial(o).passed).toBe(false); const wrong = partial(); wrong.transport.push({ ...wrong.transport[3]!, taskId: "one" }); expect(gradeArchivePartial(wrong).passed).toBe(false); });
 it("rejects wrong-person audit, edited completion, or refreshed first archive timestamps", () => { const o = partial(); o.activity[0].details.userId = "another"; expect(gradeArchivePartial(o).passed).toBe(false); const wrong = partial(); wrong.tasks[0].status = "cancelled"; expect(gradeArchivePartial(wrong).passed).toBe(false); const repeated = partial(); repeated.ownerItems[0]!.archivedAt = "2026-10-26T02:00:00Z"; expect(gradeArchivePartial(repeated).passed).toBe(false); });
 it("never passes missing evidence", () => { for (const grade of [gradeProjectDefaults, gradeRoutineAudit, gradeWorkTimeline, gradeArchivePartial]) expect(grade(undefined).passed).toBe(false); });
+
+it("rejects reversed or contradictory partial counts even when the failed item is named", () => {
+  for (const reply of ["One archived; two failed, including Delivery three.", "Two archived, but only one was archived; Delivery three failed.", "Two archived; I could not archive two items, including Delivery three."]) {
+    const o = partial(); (o.state.firstPartial as any).reply = reply; expect(gradeArchivePartial(o).passed, reply).toBe(false);
+  }
+});
+it("accepts grounded natural two-success wording and locally negated inbox-clear claims", () => {
+  for (const reply of ["Two are archived; Delivery three failed, so I cannot say the inbox is clear.", "Archived Delivery one and Delivery two. Delivery three failed and remains outstanding.", "Two of the three tasks were successfully archived; Delivery three could not be archived.", "Two archive calls succeeded; Delivery three failed. Not all three tasks were archived."]) {
+    const o = partial(); (o.state.firstPartial as any).reply = reply; expect(gradeArchivePartial(o).passed, reply).toBe(true);
+  }
+  const o = partial(), first = o.state.firstPartial as any;
+  for (const row of [o.state.originalTasks, o.tasks, first.state.originalTasks, first.tasks]) (row as any[])[2].title = "Delivered launch checklist";
+  first.reply = "Two are archived; the checklist failed, so I cannot say the inbox is clear.";
+  expect(gradeArchivePartial(o).passed).toBe(true);
+});
+it("rejects invented additional retry counts while accepting truthful total-three states", () => {
+  for (const reply of ["I archived two more items on retry.", "Three additional items were archived now.", "I newly archived all three items now.", "I archived three remaining items now.", "I archived two items in total; the remaining task is archived now."]) {
+    const o = partial(); o.phaseReply = reply; expect(gradeArchivePartial(o).passed, reply).toBe(false);
+  }
+  for (const reply of ["The remaining item is now archived. All three are now archived.", "Three tasks are archived in total; the previously failed item was archived on retry.", "I archived one remaining item; two were already archived.", "I archived all three in total; the retry added only the remaining one."]) {
+    const o = partial(); o.phaseReply = reply; expect(gradeArchivePartial(o).passed, reply).toBe(true);
+  }
+});

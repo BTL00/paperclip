@@ -1,6 +1,6 @@
 # Chat catalog eval campaign progress
 
-Updated: 2026-10-26. This is the single progress record for [the saved goal](2026-10-26-chat-catalog-eval-goal.md). Exact frozen requests, ownership, readiness, attempt histories and provenance live in [the campaign manifest](../../tests/runner-e2e/chat-campaign-manifest.json). This record distinguishes authored code from live acceptance.
+Updated: 2026-10-27. This is the single progress record for [the saved goal](2026-10-26-chat-catalog-eval-goal.md). Exact frozen requests, ownership, readiness, attempt histories and provenance live in [the campaign manifest](../../tests/runner-e2e/chat-campaign-manifest.json). This record distinguishes authored code from live acceptance.
 
 ## Current state
 
@@ -190,3 +190,10 @@ The archive partial-failure case now has its required pre-server lifecycle and a
 Fifty offline controls in six files passed from the pinned archive, including a real separate Node control client, HTTP/upgrade byte preservation, malformed/oversized passthrough, exact actor/person/run restrictions, duplicate fault/retry behavior, private product-environment exclusion, cleanup and fingerprint/accounting checks. Archived E2E typecheck passed, all 208 runtime descriptors matched, and actual `--list` returned 210 cells. Generated CLI/SDK artifacts were adopted only from the previously audited immutable candidate after exact owning-source/lock equality and byte hashes; no mutable worktree dist was imported. Production source diff from 8373 remains empty. Receipt: `results/chat-catalog-campaign/metadata-4043cf8984.json`.
 
 All original four-scenario/five-measurement records remain byte-for-byte unchanged. Zero live/DB/provider/browser/native runs, reservations, second bootstraps or IPC removals occurred during this closure. The eight-set recovery proposal still awaits user approval. Original sign-in stderr was not captured: the later same-binary one-shot diagnostic directly proves current semaphore exhaustion and strongly explains the earlier startup failure, but does not replace missing original stderr or unknown original details. Original cleanup uncertainty remains preserved.
+
+
+### Archive reporting oracle follow-up
+
+Manager review identified a count-binding defect in the first-phase prose check: any occurrence of two plus a failure word could admit reversed counts. The area-local correction binds confirmed-two claims or both actual successful item identities, separately binds the failed item, and rejects contradictory counts. Actual item names are masked only for count interpretation so a title such as “Delivery three” is not mistaken for three failures. Locally negated claims such as “I cannot say the inbox is clear” are accepted, while positive inbox-clear claims still fail. Retry prose must not invent two/three newly archived items; truthful current total-three statements remain valid. Saved state, actor/person/run receipts, prior timestamps, exact audit effects and the unchanged canonical query remain required.
+
+Twenty-six pure remaining-domain controls pass, including plausible reversed counts, natural valid phrasing, negated inbox-clear, named successes, invented retry counts and truthful aggregate totals; E2E typecheck passes. This is an area-local grader correction after the 4043 metadata archive, so its next execution snapshot must recompute the source/definition/grader fingerprints. Authored counts stay 210/202/eight/34 and eligible passes stay zero. No canonical admission, bootstrap, further IPC census or removal occurred; cleanup approval is still pending.
