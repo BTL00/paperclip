@@ -48,6 +48,8 @@ export interface ChatCampaign {
   denominator: number; areas: number; capabilities: number;
   requiredPasses: number;
   corePrs: string[]; evalPr: string | null;
+  /** Authored metadata only; never passing execution evidence. */
+  implementationCheckpoint?: { sourceRevision: string; descriptorSha256: string; authored: number; complete: number; partial: number; unimplemented: number };
   scenarios: CampaignScenario[];
 }
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
