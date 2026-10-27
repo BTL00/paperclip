@@ -4,8 +4,10 @@ import { ServerResponse } from "node:http";
 import { PaperclipRunnerToolAuthority } from "../../server/src/services/native-runtime/paperclip-runner-tool-authority.js";
 import { canonicalDocumentIssueId, contextCommentGateSelected, holdCommittedDocumentResponse, isArmed } from "./context-comment-gate.js";
 import { holdInteractionResponse } from "./interaction-response-gate.js";
+import { installOwnedEmailResponseLoss } from "./chat-catalog-domains/runtime-email-fault.js";
 
 const ids: string[] = JSON.parse(process.env.PAPERCLIP_RUNNER_E2E_EXECUTION_IDS ?? "[]");
+await installOwnedEmailResponseLoss({ executionIds: ids, attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", temporaryRoot: process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "" });
 const contextCommentGate = contextCommentGateSelected(ids);
 const completionBusyGate = ids.some(id => id.startsWith("completion-updates.") && id.endsWith(".handoff-completion-busy"));
 if (ids.some((id) => id.endsWith(".accept-while-running"))) {
