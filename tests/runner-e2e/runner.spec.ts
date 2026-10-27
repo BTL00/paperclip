@@ -1,3 +1,4 @@
+import { SetupHealthAbort, runChatSetupHealth } from "./chat-setup-health.js";
 import { bindInvitationEnrollmentPrerequisite } from "./chat-catalog-domains/identity-invite-prerequisite.js";
 import { verifyInvitationSourceProof } from "./chat-catalog-domains/identity-invite-source-proof.js";
 import { readChatPrivateInputs, chatPrivateSetupBlockers, chatPrivateInputRequirements } from "./chat-private-inputs.js";
@@ -1335,6 +1336,10 @@ for (const execution of executions) {
         });
         issue = contextIntegrity.issue as unknown as IssueRecord;
         selectedRuns = contextIntegrity.runs as unknown as RunRecord[];
+      } else if (execution.task.flow === "setup_health") {
+        await runChatSetupHealth({ api, fixtures, temporaryRoot: temporaryRoot!, evidence: completionEvidence });
+        matcherResults = [{ matcher: { kind: "json_path", path: "setupHealth.closed-checks", expected: true }, passed: true,
+          detail: "One genuine ordinary setup hello, exact saved configuration, zero chat/task work." }];
       } else if (execution.task.flow === "agent_chat") {
         const chat = await runChatFlow({
           privateSecrets: secrets, privateInputs,
@@ -3146,7 +3151,7 @@ for (const execution of executions) {
         failureClassOverride = "permanent_infrastructure";
       }
       try {
-        await captureFailureApiState();
+        if (!(error instanceof SetupHealthAbort)) await captureFailureApiState();
       } catch (captureError) {
         const failureClass = classifyFailure(captureError);
         if (failureClass === "secret_leak") {
@@ -3164,7 +3169,7 @@ for (const execution of executions) {
           });
         }
       }
-      if (!page.isClosed()) {
+      if (!(error instanceof SetupHealthAbort) && !page.isClosed()) {
         if (isReviewedFixtureScreenshotRoute()) {
           await captureScreenshot(
             "failure",
@@ -3178,6 +3183,7 @@ for (const execution of executions) {
         }
       }
     } finally {
+      const healthAbort = primaryError instanceof SetupHealthAbort;
       await workerTiming.enter("cleanup");
       trace?.phase("cleanup", Boolean(primaryError));
       await responseTiming?.stop();
@@ -3202,7 +3208,8 @@ for (const execution of executions) {
         failureClassOverride = "secret_leak";
       }
       browserBootstrap.dispose();
-      if (fixtures) {
+      if (healthAbort) { cleanup = "failed"; failureClassOverride = "cleanup_failure"; }
+      if (fixtures && !healthAbort) {
         await captureRuntimeLeases().catch((error) => {
           networkDiagnostics.push({
             runtimeBillingCaptureError:

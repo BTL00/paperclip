@@ -14,15 +14,16 @@ const codes = new Set([
   "opencode_model_configured", "opencode_hello_probe_timed_out", "opencode_hello_probe_passed",
   "opencode_hello_probe_unexpected_output", "opencode_hello_probe_model_unavailable",
   "opencode_hello_probe_auth_required", "opencode_hello_probe_failed",
-  "paperclip_runner_provider_unsupported",
+  "paperclip_runner_provider_unsupported", "agent_runner_config_incompatible", "paperclip_runner_mode_invalid", "paperclip_runner_opencode_model_invalid",
 ]);
-const categories = ["authentication", "rate-limit", "network", "permission", "command-missing", "module-missing", "timeout", "unknown"] as const;
+const categories = ["authentication", "rate-limit", "network", "permission", "command-missing", "module-missing", "model-unavailable", "timeout", "unknown"] as const;
 type Category = typeof categories[number];
 const uuid = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9-]{36}$/i.test(v);
-const selected = (ids: readonly string[]) => ids.length > 0 && ids.every(id => /^chat-features\.runner-opencode\.local\.[a-z0-9.-]+$/.test(id));
+const selected = (ids: readonly string[]) => ids.length > 0 && ids.every(id => id === "chat-setup-health.runner-opencode.local.setup-only" || /^chat-features\.runner-opencode\.local\.[a-z0-9.-]+$/.test(id));
 const filename = (root: string) => path.join(root, "artifacts-private", "chat-readiness-probes.jsonl");
 export function readinessErrorCategory(value: unknown): Category {
   const text = typeof value === "string" ? value.slice(0, 8192) : "";
+  if (/ProviderModelNotFoundError|model.{0,40}not found/i.test(text)) return "model-unavailable";
   if (/\b(?:401|403|unauthorized|authentication|invalid.api.key)\b/i.test(text)) return "authentication";
   if (/\b429\b|rate.?limit/i.test(text)) return "rate-limit";
   if (/EACCES|EPERM|permission denied/i.test(text)) return "permission";
@@ -76,7 +77,11 @@ export async function installChatReadinessObserver(input: {
   };
 }
 /** Re-project even the private file. No arbitrary file keys/strings enter evidence. */
-export async function readChatReadinessReceipts(temporaryRoot: string, companyId: string) {
+export interface ClosedReadinessReceipt {
+  schema: "paperclip.chat-readiness-probe/v1"; companyId: string; sequence: number; status: string; thrown: boolean;
+  checks: Array<{ code: string; level: string; category: Category }>; errorCategory: Category;
+}
+export async function readChatReadinessReceipts(temporaryRoot: string, companyId: string): Promise<ClosedReadinessReceipt[]> {
   if (!temporaryRoot || !uuid(companyId)) return [];
   let bytes: string;
   try { bytes = await readFile(filename(temporaryRoot), "utf8"); }

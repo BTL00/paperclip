@@ -1,3 +1,4 @@
+import { CHAT_SETUP_HEALTH_SUITE, chatSetupHealthTask, chatSetupHealthDigest } from "./chat-setup-health.js";
 import { CHAT_OPENCODE_MODEL, CHAT_OPENCODE_PROFILE } from "./chat-runtime-profile.js";
 import { FEEDBACK_PERSISTENCE_SUITE, feedbackPersistenceTask, feedbackPersistenceDigest } from "./feedback-persistence.js";
 import { followupStopTask, followupStopDigest } from "./followup-stop-resume.js";
@@ -1157,6 +1158,12 @@ const repositoryModelProfiles = [
   },
 ];
 
+const chatFeatureExecutionProfile = chatFeatureProfile(nativeProfile({
+  id: CHAT_OPENCODE_PROFILE, label: "Native OpenCode OpenRouter DeepSeek V4.1 Flash 1017",
+  provider: "opencode", model: CHAT_OPENCODE_MODEL, credential: "OPENROUTER_API_KEY", supportedEnvironments: ["local"],
+  modelQualification: { source: "candidate_runner_profile", qualificationId: "chat-catalog:opencode-1.18.34:deepseek-v4.1-flash-1017:remote-initial" },
+}));
+
 export const runnerSuites: readonly RunnerSuiteFixture[] = [
   {
     id: "daytona-restart-continuity", label: "Daytona controller outage continuity", manualOnly: true,
@@ -1606,12 +1613,18 @@ export const runnerSuites: readonly RunnerSuiteFixture[] = [
     definitionMetadata: { version: 8, runGrading: "evidenced-nonexecution-and-refusal", credentialPersistenceCheck: false, questionChoiceMinimum: 2, nativeSetup: "qualified-platform-wizard-saved-default", claudeDefaultTargets: ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"], legacySetup: "explicit-advanced-runner-choice", productionInstructions: true, qualityGrading: "informational" },
   },
   {
+    id: CHAT_SETUP_HEALTH_SUITE, label: "Chat provider setup health", manualOnly: true,
+    description: "Diagnostic only: one normal lifecycle hello, zero chat/task work; excluded from the 244 catalog scenarios.",
+    groups: [], profiles: [chatFeatureExecutionProfile], environments: [localEnvironment], tasks: [chatSetupHealthTask], expectedMatrixSize: 1,
+    definitionMetadata: { version: 1, sourceDigest: chatSetupHealthDigest, scheduling: "explicit-only", catalogScenario: false,
+      maximumAttemptsPerCell: 1, maximumAutomaticSetupHellos: 1, expectedHeartbeatRuns: 0, canonicalQueries: 0,
+      setupProbeUsage: "unavailable-outside-heartbeat-accounting" },
+  },
+  {
     id: CHAT_FEATURE_SUITE, label: "Chat feature journeys", manualOnly: true,
     description: "Executable catalog requests through Agent Chat, with independently graded persisted state.",
     groups: ["chat", "native"],
-    profiles: [chatFeatureProfile(nativeProfile({ id: CHAT_OPENCODE_PROFILE, label: "Native OpenCode OpenRouter DeepSeek V4.1 Flash 1017",
-      provider: "opencode", model: CHAT_OPENCODE_MODEL, credential: "OPENROUTER_API_KEY", supportedEnvironments: ["local"],
-      modelQualification: { source: "candidate_runner_profile", qualificationId: "chat-catalog:opencode-1.18.34:deepseek-v4.1-flash-1017:remote-initial" } }))],
+    profiles: [chatFeatureExecutionProfile],
     environments: [localEnvironment], tasks: [...chatFeatureTasks, ...chatCatalogTasks], expectedMatrixSize: 2 + chatCatalogTasks.length,
     definitionMetadata: { version: 2, definitionDigest: chatFeatureDefinitionDigest, inventoryDigest: chatCatalogInventoryDigest, frozenScenarioCount: 244, scheduling: "explicit-only",
       instructions: "production-role-defaults", companyAndAgentBudgetCents: CHAT_FEATURE_BUDGET_CENTS,

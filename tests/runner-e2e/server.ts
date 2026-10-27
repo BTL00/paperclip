@@ -1,3 +1,4 @@
+import { stopSetupHealthIfRequested } from "./chat-setup-health.js";
 import { publishInvitationSourceProof, invitationSourceProofPath } from "./chat-catalog-domains/identity-invite-source-proof.js";
 import { readSelectedVaultServerEnvironment } from "./chat-vault-private-server.js";
 import { readValidatedPublicOriginReceipt, publicOriginServerOverrides, PUBLIC_ORIGIN_RECEIPT_ENV, PUBLIC_ORIGIN_CONTROL_ENV } from "./chat-public-origin.js";
@@ -447,6 +448,10 @@ async function supervise() {
   await startServer();
   let lastRestartRequestId: string | null = null;
   while (!shutdownRequested()) {
+    if (await stopSetupHealthIfRequested({ executionIds, temporaryRoot, stop: () => stopServer.stopAll("SIGTERM") })) {
+      shutdownSignal = "SIGTERM";
+      break;
+    }
     if (unexpectedChildFailure) throw unexpectedChildFailure;
     const request = await readRestartRequest();
     if (request && request.requestId !== lastRestartRequestId) {

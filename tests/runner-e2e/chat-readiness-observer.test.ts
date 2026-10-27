@@ -77,6 +77,31 @@ describe("transparent same-call readiness retention", () => {
     expect(adapter.testEnvironment).toBe(original);
   });
   it.each([
+    ["agent_runner_config_incompatible", "unknown"], ["paperclip_runner_mode_invalid", "unknown"], ["paperclip_runner_opencode_model_invalid", "unknown"],
+  ])("preserves source profile-validation code %s without its message", async (code, category) => {
+    const f = await fixture(); f.testEnvironment.mockResolvedValue({ ...result(), checks: [{ code, level: "error", message: "private-profile-canary", detail: "private-canary", hint: "private-canary" }] });
+    await f.adapter.testEnvironment(context);
+    expect((await f.receipts())[0]!.checks).toEqual([{ code, level: "error", category }]);
+    expect(JSON.stringify(await f.receipts())).not.toContain("private-");
+  });
+  // Actual check.message/detail layouts emitted by opencode-local/server/test.ts:
+  // summarizeProbeDetail selects parsed error, first stderr or first stdout line.
+  it.each([
+    ["opencode_command_unresolvable", "Command is not executable: ENOENT", "opencode", "command-missing"],
+    ["opencode_openai_api_key_missing", "OPENAI_API_KEY override is empty.", "", "unknown"],
+    ["opencode_hello_probe_auth_required", "OpenCode is installed, but provider authentication is not ready.", "HTTP 401 Unauthorized private-canary", "authentication"],
+    ["opencode_hello_probe_model_unavailable", "The configured model was not found by the provider.", "ProviderModelNotFoundError private-canary", "model-unavailable"],
+    ["opencode_hello_probe_failed", "OpenCode hello probe failed.", '{"name":"APIError","data":{"statusCode":429,"message":"private-canary"}}', "rate-limit"],
+    ["opencode_hello_probe_failed", "OpenCode hello probe failed.", "fetch failed ECONNREFUSED private-canary", "network"],
+    ["opencode_hello_probe_timed_out", "OpenCode hello probe timed out.", "", "timeout"],
+    ["opencode_hello_probe_failed", "OpenCode hello probe failed.", "private-unknown-canary", "unknown"],
+  ])("retains closed actual-source diagnostic shape %s/%s", async (code, message, detail, category) => {
+    const f = await fixture(); f.testEnvironment.mockResolvedValue({ ...result(), checks: [{ code, level: "error", message, detail, hint: "private-hint-canary" }] });
+    await f.adapter.testEnvironment(context);
+    expect((await f.receipts())[0]!.checks).toEqual([{ code, level: "error", category }]);
+    expect(JSON.stringify(await f.receipts())).not.toMatch(/private-|APIError|statusCode|detail|message|hint/);
+  });
+  it.each([
     ["HTTP 401 private", "authentication"], ["ECONNREFUSED private", "network"], ["EPERM private", "permission"],
     ["ENOENT private", "command-missing"], ["timed out private", "timeout"], ["unrecognized private", "unknown"],
   ])("classifies only a closed category for %s", (value, category) => expect(readinessErrorCategory(value)).toBe(category));

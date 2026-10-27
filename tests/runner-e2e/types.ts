@@ -37,6 +37,7 @@ export type RunnerTaskFlow =
   | "continuation"
   | "first_task"
   | "agent_chat"
+  | "setup_health"
   | "governed_tool_review"
   | "single_turn"
   | "plan_revision_acceptance"

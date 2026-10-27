@@ -1,3 +1,4 @@
+import { CHAT_SETUP_HEALTH_ID, CHAT_SETUP_HEALTH_SUITE } from "./chat-setup-health.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -110,6 +111,14 @@ describe("remote-only chat host qualification without native/provider calls", ()
     });
     await expect(prepareChatRemoteHost(f)).rejects.toThrow("owned-linux-amd64-postgres-image-unqualified");
     expect(await f.receipt()).toMatchObject({ qualificationStage: "postgres-image-validate", evaluationAdmitted: false, imageChecks: { [predicate]: false } });
+  });
+  it("keeps the one exact health cell on the same AWS/Docker policy", async () => {
+    const f = await fixture("on-demand"); f.executions[0]!.id = CHAT_SETUP_HEALTH_ID; f.executions[0]!.suite.id = CHAT_SETUP_HEALTH_SUITE;
+    expect(selectsRemoteChat(f.executions)).toBe(true);
+    expect(await prepareChatRemoteHost(f)).toMatchObject({ databaseLane: "owned-docker-postgres", maxAutomaticRetries: 0, maxParallel: 2 });
+    expect(f.docker).toHaveBeenCalled();
+    f.executions[0]!.id = "chat-setup-health.runner-opencode.local.wrong";
+    expect(selectsRemoteChat(f.executions)).toBe(false);
   });
   it("does not change historical/other profiles or require IMDS for their discovery", async () => {
     const f = await fixture(); f.executions[0]!.profile.id = "runner-codex-subscription";

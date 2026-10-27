@@ -3021,3 +3021,20 @@ a preflight rejection does not establish that prerequisite. Provider/account
 qualification, paid-job approval, and owned AWS Spot capacity must be established
 before remote admission. Discovery and credential-free controls establish none
 of those live outcomes.
+
+
+### Explicit chat provider setup health
+
+`chat-setup-health.runner-opencode.local.setup-only` is a diagnostic cell, outside
+all 244 chat catalog scenarios and excluded from `--all`. It reuses the exact
+chat OpenCode/OpenRouter/DeepSeek profile, ordinary trusted fixture setup, owned
+Docker PostgreSQL and normal teardown. One agent's ordinary automatic hello is
+expected; it makes no explicit environment-test call and sends no chat/task
+request. No heartbeat runs, issues, conversations or comments may exist.
+
+Select this cell explicitly with retries zero through the existing Product E2E
+workflow. A failed readiness check fails health and retains only closed check
+codes/categories. Public pause fences automatic setup retries; failed pause
+requests the existing owned supervisor's shutdown before further API observations.
+Multiple probe receipts fail health. Setup-probe usage/cost is unavailable, never
+zero. This diagnostic cannot qualify a catalog scenario or rewrite prior results.

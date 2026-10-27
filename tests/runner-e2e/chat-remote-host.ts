@@ -1,3 +1,4 @@
+import { CHAT_SETUP_HEALTH_ID, CHAT_SETUP_HEALTH_SUITE } from "./chat-setup-health.js";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -19,7 +20,7 @@ const defaults: RemoteHostDependencies = { fetch: globalThis.fetch, docker: runD
   sourceRevision: async root => (await promisify(execFile)("git", ["rev-parse", "HEAD"], { cwd: root, timeout: 5000 })).stdout.trim() };
 /** This new campaign lane is remote-only. Existing profiles/local defaults remain unchanged. */
 export function selectsRemoteChat(executions: readonly Selection[]) {
-  return executions.some(e => e.suite.id === "chat-features" && e.profile.id === "runner-opencode");
+  return executions.some(e => (e.suite.id === "chat-features" || e.id === CHAT_SETUP_HEALTH_ID) && e.profile.id === "runner-opencode");
 }
 /** No native runner, model, or database workload is started here. IMDS and image acquisition
  * run only after the actual trusted GitHub AWS host identity has been checked. */
@@ -36,7 +37,7 @@ export async function prepareChatRemoteHost(input: { executions: readonly Select
   try {
     if (env.GITHUB_ACTIONS !== "true" || env.GITHUB_REPOSITORY !== "paperclipai/paperclip" || env.GITHUB_REF !== "refs/heads/master" || env.GITHUB_WORKFLOW_REF !== workflow
       || !/^\d+$/.test(env.GITHUB_RUN_ID ?? "") || !/^\d+$/.test(env.GITHUB_RUN_ATTEMPT ?? "") || deps.platform !== "linux" || deps.arch !== "x64") throw new Error(reason);
-    if (input.executions.some(e => e.suite.id !== "chat-features" || e.profile.id !== "runner-opencode" || !reviewedChatProfile(e.profile) || e.environment.id !== "local" || e.task.automaticRetryPolicy !== "single_attempt")) throw new Error(reason);
+    if (input.executions.some(e => (e.suite.id !== "chat-features" && (e.suite.id !== CHAT_SETUP_HEALTH_SUITE || e.id !== CHAT_SETUP_HEALTH_ID)) || e.profile.id !== "runner-opencode" || !reviewedChatProfile(e.profile) || e.environment.id !== "local" || e.task.automaticRetryPolicy !== "single_attempt")) throw new Error(reason);
     const source = await deps.sourceRevision(input.repositoryRoot);
     if (!/^[a-f0-9]{40}$/.test(source) || env.PAPERCLIP_RUNNER_E2E_SOURCE_SHA !== source) throw new Error(reason);
     Object.assign(receipt, { workflowRef: workflow, workflowRunId: env.GITHUB_RUN_ID, workflowAttempt: Number(env.GITHUB_RUN_ATTEMPT), sourceRevision: source });
