@@ -24,6 +24,12 @@ export function gradeReopenConversation(value: unknown) {
 }
 export const runtimeAgentChatCases = [runtimeDefinition("agent-chat.reopen-conversation", async ctx => {
   await ctx.input.api.patch(`/api/agents/${ctx.input.fixtures.agent.id}`, { name: "Morgan" });
+  // Genuine history runs before shared pre-canonical funding. Subscription
+  // usage is unpriced, so fund both actual scopes before that setup turn.
+  for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id },
+    { scopeType: "agent", scopeId: ctx.input.fixtures.agent.id }])
+    await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, {
+      ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
   const source = await openStandingChat(ctx);
   const lead = await ctx.input.api.get<Entity>(`/api/agents/${ctx.input.fixtures.agent.id}`);
   const historyMarker = `Retained launch context ${ctx.input.nonce}`;

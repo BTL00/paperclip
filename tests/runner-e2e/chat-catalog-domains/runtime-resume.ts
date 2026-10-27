@@ -17,7 +17,9 @@ export function gradeResumeAgent(value: unknown) {
     && !/started (?:a |the )?(?:run|task|work)|already (?:working|running)/i.test(o.state.firstReply),
     "The unheld phase describes availability without inventing a new worker execution.");
   c.add("real-budget-gate-preserved", current?.lifecycleHolds?.includes("budget") === true && current.status === "paused"
-    && o.state.secondBudgetHardStop === true && o.state.secondBudgetAmount === 0,
+    && o.state.secondBudgetHardStop === true && o.state.secondBudgetAmount === 100
+    && o.state.secondBudgetPolicyActive === true && o.state.syntheticReceiptOrigin === "public-imported-synthetic-fixture"
+    && typeof o.state.syntheticReceiptId === "string" && !!o.state.syntheticReceiptId && o.state.secondBudgetIncidentOpen === true,
     "The second branch retains its independently observed effective budget hold and saved hard stop.");
   c.add("held-reply-bound-to-second-request", typeof o.state.secondReply === "string" && /budget|spend|cap|limit/i.test(o.state.secondReply)
     && /hold|block|cannot|can't|remain|before|needs|not.*resum/i.test(o.state.secondReply)
@@ -64,7 +66,17 @@ export const runtimeResumeCases = [runtimeDefinition("agents.resume-agent", asyn
     state.firstRunIds = first.runs.map(run => run.id); state.firstCommentIds = first.comments.map(row => row.id);
     await ctx.input.api.post(`/api/agents/${worker.id}/pause`, {});
     await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { scopeType: "agent", scopeId: worker.id,
-      amount: 0, isActive: true, hardStopEnabled: true, unpricedUsagePolicy: "block" });
+      amount: 100, isActive: true, hardStopEnabled: true, unpricedUsagePolicy: "allow" });
+    // Zero disables enforcement. Import a truthful accounting fixture through
+    // the supported public path; this is not native/model-provider spending.
+    const receipt = await ctx.input.api.post<{ id: string }>(`/api/companies/${ctx.input.fixtures.company.id}/cost-events`, {
+      agentId: worker.id, provider: "synthetic-eval-import", biller: "synthetic-eval-import", model: "imported-fixture-receipt",
+      billingType: "metered_api", costStatus: "reported", costCents: 125, inputTokens: 0, outputTokens: 0,
+      occurredAt: new Date().toISOString(), idempotencyKey: `resume-held-prerequisite:${ctx.input.nonce}` });
+    state.syntheticReceiptId = receipt.id; state.syntheticReceiptOrigin = "public-imported-synthetic-fixture";
+    await ctx.input.evidence("runtime-resume-imported-budget-context.json", { agentId: worker.id, receiptId: receipt.id,
+      origin: state.syntheticReceiptOrigin, importedFixtureCostCents: 125, hardCapCents: 100,
+      modelProviderUsage: "Not model/provider usage; explicit public synthetic accounting fixture" });
     await pollUntil({ label: "Independent effective budget hold before the second explicit request", deadlineAt: Date.now() + 45_000,
       load: () => ctx.input.api.get<RuntimeAgent>(`/api/agents/${worker.id}`), accept: row => row.lifecycleHolds?.includes("budget") === true });
     await sendChatMessage(ctx.input.page, ctx.scenario.query);
@@ -78,9 +90,12 @@ export const runtimeResumeCases = [runtimeDefinition("agents.resume-agent", asyn
         && !oldComments.includes(row.id) && phase.runs.some(run => run.id === row.createdByRunId && !(state.firstRunIds as string[]).includes(run.id))
         && Date.parse(row.createdAt ?? "") >= Date.parse(secondHuman.createdAt ?? "")).map(row => row.body ?? "").join("\n") : "";
     }
-    const budget = await ctx.input.api.get<{ policies: Array<{ scopeId: string; scopeType: string; amount: number; hardStopEnabled: boolean }> }>(`/api/companies/${ctx.input.fixtures.company.id}/budgets/overview`);
+    const budget = await ctx.input.api.get<{ policies: Array<{ scopeId: string; scopeType: string; amount: number; hardStopEnabled: boolean; isActive: boolean }>; activeIncidents: Array<{ scopeId: string; scopeType: string; thresholdType: string; status: string }> }>(`/api/companies/${ctx.input.fixtures.company.id}/budgets/overview`);
     const policy = budget.policies.find(row => row.scopeId === (state.worker as RuntimeAgent).id && row.scopeType === "agent");
     state.secondBudgetAmount = policy?.amount; state.secondBudgetHardStop = policy?.hardStopEnabled;
+    state.secondBudgetPolicyActive = policy?.isActive;
+    state.secondBudgetIncidentOpen = budget.activeIncidents.some(row => row.scopeId === (state.worker as RuntimeAgent).id
+      && row.scopeType === "agent" && row.thresholdType === "hard" && row.status === "open");
     return observeRuntime(ctx, state);
   },
 })];

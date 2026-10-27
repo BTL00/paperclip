@@ -18,3 +18,7 @@ it("rejects navigation to another company", () => {
 it("rejects invented standing-chat history parity", () => {
   const o = valid(); o.reply += " It uses the same Agent Chat history."; expect(gradeConference(o).passed).toBe(false);
 });
+
+it("preserves failure when the actual model only asks launch questions and supplies no board navigation or scope", () => {
+  const o = valid(); o.reply = ""; expect(gradeConference(o).passed).toBe(false);
+});

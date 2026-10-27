@@ -1,7 +1,6 @@
 import { expect } from "@playwright/test";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
-import { resolveDefaultAgentWorkspaceDir } from "../../../server/src/home-paths.js";
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
@@ -15,12 +14,20 @@ async function settled(ctx: ChatCatalogContext, count: number) {
     accept: ({ issue, runs }) => issue?.conversationState === "waiting" && runs.length === count && runs.every(run => run.status === "succeeded"),
     reject: ({ runs }) => runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status)) ? "A continuity provider turn failed" : undefined });
 }
-async function currentFile(ctx: ChatCatalogContext, name: string) {
+export async function currentControllerFile(ctx: ChatCatalogContext, name: string) {
   const root = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT; if (!root) throw new Error("Continuity inspection requires the isolated attempt root");
-  const home = await realpath(resolveDefaultAgentWorkspaceDir(ctx.input.fixtures.agent.id));
+  await ctx.refreshIssue(); const source = ctx.issue();
+  if (!source) throw new Error("Continuity file inspection requires its actual source");
+  const issue = await ctx.input.api.get<{ companyId: string; executionWorkspaceId: string | null }>(`/api/issues/${source.id}`);
+  const { workspace } = await ctx.input.api.get<{ workspace: { id: string; companyId: string; cwd: string } }>(`/api/issues/${source.id}/workspace`);
+  if (issue.companyId !== ctx.input.fixtures.company.id || workspace.companyId !== issue.companyId
+    || workspace.id !== issue.executionWorkspaceId) throw new Error("Continuity workspace is not the actual same-company source binding");
+  const home = await realpath(workspace.cwd);
   const isolated = await realpath(root);
   if (!home.startsWith(`${isolated}${path.sep}`) || path.basename(name) !== name) throw new Error("Continuity file escapes its owned fixture directory");
-  return readFile(path.join(home, name), "utf8");
+  const filename = await realpath(path.join(home, name));
+  if (path.dirname(filename) !== home) throw new Error("Continuity file escapes its actual source binding");
+  return readFile(filename, "utf8");
 }
 export function gradeControllerRestart(value: unknown) {
   const c = checks(); const o = runtimeObservation(value);
@@ -50,7 +57,7 @@ export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-rest
     `Start a small website draft in ${filename} in your current working directory, with a single header containing exactly ${JSON.stringify(headerMarker)}. Register that real file as a downloadable artifact work product titled ${filename}. This is a draft: do not add the contact section yet. Remember this instruction for when I ask to continue: keep the existing header and file, then add a contact section containing hello@acorn.example and register the final file as a new artifact from that continuation. Do this within our current conversation; no project, delegated task or external action is needed.`);
   const first = await settled(ctx, 1); const source = ctx.issue()!;
   const [initialArtifact] = await readRegisteredArtifacts(ctx.input.api, source.id, first.runs[0]!.id, [filename]);
-  const fileBeforeRestart = await currentFile(ctx, filename);
+  const fileBeforeRestart = await currentControllerFile(ctx, filename);
   if (fileBeforeRestart !== initialArtifact!.content) throw new Error("Initial downloadable artifact does not match the actual saved draft file");
   const priorHistory = await ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`);
   const url = ctx.input.page.url();
@@ -60,7 +67,7 @@ export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-rest
   await ctx.refreshIssue();
   const afterHistory = await ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`);
   return { headerMarker, filename, initialArtifact, initialRunId: first.runs[0]!.id, fileBeforeRestart,
-    fileAfterRestart: await currentFile(ctx, filename), restarted: true, sourceIssueBefore: source.id, sourceIssueAfter: ctx.issue()?.id,
+    fileAfterRestart: await currentControllerFile(ctx, filename), restarted: true, sourceIssueBefore: source.id, sourceIssueAfter: ctx.issue()?.id,
     priorHistoryRetained: priorHistory.every(prior => afterHistory.some(row => row.id === prior.id && row.body === prior.body && row.createdByRunId === prior.createdByRunId)) };
 }, gradeControllerRestart, {
   setupHumanMessageCount: 1, expectedHumanMessageCount: 2, expectedRunCount: 2, attemptTimeoutMs: 600_000,
@@ -69,7 +76,7 @@ export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-rest
     const final = runs.find(run => run.id !== state.initialRunId && run.status === "succeeded");
     if (source && final) {
       const [artifact] = await readRegisteredArtifacts(ctx.input.api, source.id, final.id, [String(state.filename)]);
-      state.finalArtifact = artifact; state.finalFile = await currentFile(ctx, String(state.filename));
+      state.finalArtifact = artifact; state.finalFile = await currentControllerFile(ctx, String(state.filename));
     }
     return observeRuntime(ctx, state);
   },

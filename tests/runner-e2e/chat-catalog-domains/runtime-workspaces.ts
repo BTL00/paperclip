@@ -44,18 +44,32 @@ export function gradeLocateFiles(value: unknown) {
   c.add("actual-saved-files-retained", o.state.fileAfter === o.state.fileBefore && typeof o.state.fileBefore === "string"
     && o.state.fileBefore.trim() === o.state.marker && o.runs.some(run => run.id === o.state.fixtureRunId && run.agentId === (o.state.worker as Entity).id
       && run.status === "succeeded"), "A genuine worker created the prerequisite file and it remains unchanged.");
+  const resultLinks = workspaceResultLinks(o.reply, o.links);
   c.add("supported-workspace-view-guidance", (/workspace|files? (?:view|tab|panel)/i.test(o.reply)
-    || !!after && o.links.some(href => workspaceLink(o.origin, href, after.workspace.id)))
-    && !!after && o.links.filter(href => { try { return new URL(href, o.origin).pathname.includes("/execution-workspaces/"); } catch { return false; } })
-      .every(href => workspaceLink(o.origin, href, after.workspace.id)),
+    || !!after && resultLinks.some(href => workspaceLink(o.origin, href, after.workspace.id, String(o.state.companyPrefix))))
+    && !!after && resultLinks.filter(href => { try { return new URL(href, o.origin).pathname.includes("/execution-workspaces/"); } catch { return false; } })
+      .every(href => workspaceLink(o.origin, href, after.workspace.id, String(o.state.companyPrefix))),
     "The response points to the supported workspace view; any workspace link it does give must identify the actual bound workspace.");
   return c.result();
 }
-function workspaceLink(origin: string, href: string, id: string) {
-  try { const url = new URL(href, origin); const parts = url.pathname.split("/").map(decodeURIComponent); const at = parts.indexOf("execution-workspaces");
-    return url.origin === new URL(origin).origin && at >= 0 && parts[at + 1] === id; } catch { return false; }
+export function workspaceResultLinks(reply: string, rendered: string[]) {
+  return [...new Set([...rendered, ...Array.from(reply.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g), match => match[1]!)])];
 }
-export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-files", ctx => savedTaskWorkspace(ctx), gradeLocateFiles, {
+export function workspaceLink(origin: string, href: string, id: string, prefix: string) {
+  try { const url = new URL(href, origin); const parts = url.pathname.split("/").map(decodeURIComponent); const at = parts.indexOf("execution-workspaces");
+    return url.origin === new URL(origin).origin && at === 2 && parts[1] === prefix && parts[at + 1] === id
+      && (parts.length === 4 || parts.length === 5 && ["services", "configuration", "runtime-logs", "issues", "routines"].includes(parts[4]!)); } catch { return false; }
+}
+export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-files", async ctx => {
+  // The actual detail route is gated, independently of workspace realization.
+  // Enable its supported UI fixture before the query, never after a bad link.
+  if (!ctx.input.fixtures.company.issuePrefix) throw new Error("Workspace fixture has no public company prefix");
+  await ctx.input.api.patch("/api/instance/settings/experimental", { enableIsolatedWorkspaces: true });
+  const settings = await ctx.input.api.get<{ enableIsolatedWorkspaces: boolean }>("/api/instance/settings/experimental");
+  if (!settings.enableIsolatedWorkspaces) throw new Error("The supported workspace view is not enabled");
+  return { ...await savedTaskWorkspace(ctx), companyPrefix: ctx.input.fixtures.company.issuePrefix };
+}, gradeLocateFiles, {
+  sourceFiles: ["chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/workspaces.yaml", "../../ui/src/components/IsolatedWorkspacesRouteGate.tsx", "../../ui/src/pages/ExecutionWorkspaceDetail.tsx"],
   expectedRunCount: 2, attemptTimeoutMs: 540_000,
   async observe(ctx, state) {
     const id = (state.task as Entity).id;
@@ -67,10 +81,17 @@ export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-file
   async verifyResult(ctx, state, value) {
     const o = runtimeObservation(value); if (!o) throw new Error("Workspace result missing");
     const view = state.workspaceAfter as WorkspaceView;
-    const href = o.links.find(link => workspaceLink(o.origin, link, view.workspace.id));
+    const prefix = state.companyPrefix;
+    if (typeof prefix !== "string" || !prefix) throw new Error("Workspace view lost its actual company prefix");
+    const links = workspaceResultLinks(o.reply, o.links);
+    if (links.some(link => { try { return new URL(link, o.origin).pathname.includes("/execution-workspaces/")
+      && !workspaceLink(o.origin, link, view.workspace.id, prefix); } catch { return false; } }))
+      throw new Error("The actual reply supplied an incorrect workspace link");
+    const href = links.find(link => workspaceLink(o.origin, link, view.workspace.id, prefix));
     const source = ctx.input.page.url();
     if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
-    else await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/execution-workspaces/${view.workspace.id}`, { waitUntil: "domcontentloaded" });
+    else await ctx.input.page.goto(`/${prefix}/execution-workspaces/${view.workspace.id}`, { waitUntil: "domcontentloaded" });
+    await expect(ctx.input.page).toHaveURL(new RegExp(`/${prefix}/execution-workspaces/${view.workspace.id}(?:[/?#]|$)`));
     await expect(ctx.input.page.getByRole("heading", { name: view.workspace.name, exact: true }).first()).toBeVisible();
     await ctx.input.evidence("runtime-task-workspace-opened.json", { taskId: (state.task as Entity).id, workspaceId: view.workspace.id, url: ctx.input.page.url() });
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });

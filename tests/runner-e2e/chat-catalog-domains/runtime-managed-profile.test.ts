@@ -25,3 +25,8 @@ it("rejects declaring an unqualified profile ready", () => { const o = valid(); 
 it("rejects substituting another runtime configuration", () => { const o = valid(); o.agents[0]!.adapterConfig.provider = "acpx"; expect(gradeManagedProfile(o).passed).toBe(false); });
 it("rejects a fabricated supported management path", () => { const o = valid(); o.state.operatorContractAvailable = false; expect(gradeManagedProfile(o).passed).toBe(false); });
 it("rejects claiming required qualification without an actual validation guard", () => { const o = valid(); o.state.qualificationProbeStatus = 201; expect(gradeManagedProfile(o).passed).toBe(false); });
+
+it("preserves the actual permission-only answer as incomplete without locked environment and retention guidance", () => {
+  const o = valid(); o.reply = "Setup is blocked by a platform permission boundary: the managed-agent profile API returned 403 — Board access required. A Board actor must create or attest the Claude Managed Agent profile using the Anthropic agent, environment, and API-key secret IDs. Once completed, resume RUN-1 and I can continue.";
+  expect(gradeManagedProfile(o).passed).toBe(false);
+});

@@ -1,3 +1,4 @@
+import { pollUntil } from "../api.js";
 import { checks, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime, type RuntimeAgent, type InstructionFile } from "./runtime-support.js";
 interface BuiltInState { definition: { key: string }; agentId: string | null; agent: RuntimeAgent | null; status: string }
@@ -34,7 +35,13 @@ export const runtimeBuiltInCases = [runtimeDefinition("agents.configure-required
   sourceFiles: ["chat-catalog-domains/runtime-built-in.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agents.yaml"],
   setupPolicy: { readiness: "preserve-scenario", invariantCheckIds: ["lead-ready", "protected-summarizer-identity", "historical-task-unrun"] },
   async verifySetup(ctx, state) {
-    const c = checks(); const lead = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${ctx.input.fixtures.agent.id}`);
+    const c = checks();
+    // Preserve the protected summarizer's real pause; only the ordinary source
+    // agent must complete its asynchronous public readiness verification.
+    const lead = await pollUntil({ label: "Required-agent configuration source readiness", deadlineAt: Date.now() + 45_000,
+      load: () => ctx.input.api.get<RuntimeAgent & { lifecycleError?: string | null }>(`/api/agents/${ctx.input.fixtures.agent.id}`),
+      accept: row => row.lifecycleState === "ready" && ["idle", "active"].includes(row.status ?? ""),
+      reject: row => row.lifecycleError ? "Source runtime verification failed" : undefined });
     const builtIn = await ctx.input.api.get<BuiltInState>(`/api/companies/${ctx.input.fixtures.company.id}/built-in-agents/summarizer/status`);
     const history = await ctx.input.api.get<Entity>(`/api/issues/${(state.historicalTask as Entity).id}`);
     c.add("lead-ready", lead.lifecycleState === "ready" && ["idle", "active"].includes(lead.status ?? ""), "The actual chat agent is runnable.");

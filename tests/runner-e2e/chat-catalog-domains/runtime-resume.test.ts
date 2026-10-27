@@ -4,7 +4,7 @@ function valid() {
   const worker = { id: "morgan", companyId: "company" };
   return { scenarioId: "agents.resume-agent", origin: "http://fixture.invalid", companyId: "company", leadId: "ceo",
     state: { worker, firstResumedWorker: { ...worker, lifecycleState: "ready", status: "idle", lifecycleHolds: [] },
-      firstReply: "Morgan is resumed and available for future work.", secondBudgetHardStop: true, secondBudgetAmount: 0,
+      firstReply: "Morgan is resumed and available for future work.", secondBudgetHardStop: true, secondBudgetAmount: 100, secondBudgetPolicyActive: true, syntheticReceiptId: "imported-receipt", syntheticReceiptOrigin: "public-imported-synthetic-fixture", secondBudgetIncidentOpen: true,
       secondReply: "The budget cap remains a hold; Morgan cannot pick up work before it is resolved." },
     agents: [{ ...worker, status: "paused", lifecycleHolds: ["budget"] }], tasks: [], links: ["/ACORN/agents/morgan"], reply: "",
     activity: [{ id: "resume", action: "agent.resumed", entityId: "morgan", agentId: "ceo" }],
@@ -24,4 +24,12 @@ it("rejects silently clearing the remaining budget gate", () => {
 });
 it("rejects pretending a new worker execution already started", () => {
   const o = valid(); o.runs.push({ id: "worker", agentId: "morgan", status: "succeeded" }); expect(gradeResumeAgent(o).passed).toBe(false);
+});
+
+it("rejects the unenforced zero-cap fixture and missing real incident", () => {
+  const o = valid(); o.state.secondBudgetAmount = 0; expect(gradeResumeAgent(o).passed).toBe(false);
+  o.state.secondBudgetAmount = 100; o.state.secondBudgetIncidentOpen = false; expect(gradeResumeAgent(o).passed).toBe(false);
+});
+it("rejects a synthetic receipt misrepresented as provider spending", () => {
+  const o = valid(); o.state.syntheticReceiptOrigin = "actual-provider-usage"; expect(gradeResumeAgent(o).passed).toBe(false);
 });
