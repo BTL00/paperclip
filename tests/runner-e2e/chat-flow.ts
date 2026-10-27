@@ -399,6 +399,19 @@ export async function runChatFlow(input: ChatFlowInput) {
       rows.map((row) => api.get<ChatRun>(`/api/heartbeat-runs/${row.id}`)),
     );
   };
+  if (catalogDescriptor?.journeyKind === "native-slack-thread") {
+    let sourceId: string | undefined;
+    await runChatFeatureFlow({ input, issue: () => issue, allRuns,
+      refreshIssue: async () => { if (sourceId) issue = await api.get<ChatIssue>(`/api/issues/${sourceId}`); },
+      selectSlackSource: async id => {
+        if (sourceId && sourceId !== id) throw new Error("Native Slack source cannot change after canonical ingress");
+        const selected = await api.get<ChatIssue>(`/api/issues/${id}`);
+        if (selected.companyId !== f.company.id) throw new Error("Native Slack source escaped the owned company");
+        sourceId = id; issue = selected; input.observe(issue, await allRuns());
+      } });
+    if (!sourceId) throw new Error("Native Slack ingress did not establish its real source");
+    return { issue: await api.get<ChatIssue>(`/api/issues/${sourceId}`), runs: await allRuns() };
+  }
   if (catalogDescriptor?.journeyKind === "scoped-external-assistant") {
     await runChatFeatureFlow({ input, issue: () => issue, allRuns,
       refreshIssue: async () => { issue = await api.get<ChatIssue>(chatPath); } });

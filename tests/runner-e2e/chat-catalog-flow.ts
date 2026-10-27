@@ -1,3 +1,4 @@
+import { dispatchNativeSlackIngress, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
 import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
@@ -18,6 +19,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   const fingerprint = chatCatalogCaseFingerprint(descriptor, normalizedChatCatalogExecution(input.execution));
   const implementation = await loadChatCatalogImplementation(descriptor);
   if (implementation.companionSurface) return runScopedCompanionSurface(context, implementation, fingerprint);
+  const slack = implementation.journeyKind === "native-slack-thread";
   const deadlineAt = Date.now() + implementation.attemptTimeoutMs - 30_000;
   let state: Record<string, unknown> | undefined;
   let observation: unknown;
@@ -60,6 +62,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
         detail: "The persisted request preserves the catalog query with only audited public-fixture identity bindings; all human turns were declared." },
       { id: "catalog-query-attachment-receipts", passed: attachmentsValid,
         detail: "Only declared production attachment suffixes are allowed, backed by same-source human receipts and independently retrieved matching bytes." },
+      ...(slack ? [slackNativeRunCheck(context, evidence.runs)] : []),
       ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
         leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
     ];
@@ -70,7 +73,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   }
   try {
     await input.evidence("chat-catalog-definition.json", { scenarioId: scenario.id, ...fingerprint,
-      suiteDefinitionHash: input.execution.suiteDefinitionHash, journeyKind: "agent-chat" });
+      suiteDefinitionHash: input.execution.suiteDefinitionHash, journeyKind: implementation.journeyKind ?? "agent-chat" });
     state = await implementation.setup(context);
     const query = await resolveChatCatalogQuery(context, implementation.queryBindings, state);
     renderedQuery = query.renderedQuery;
@@ -113,8 +116,12 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     setupBoundary = { humanCommentIds: setupHuman.map(comment => comment.id), runIds: setupConversation.runs.map(run => run.id) };
     await input.evidence("chat-catalog-setup-boundary.json", { ...setupBoundary, setupHumanMessageCount: implementation.setupHumanMessageCount ?? 0,
       expectedHumanMessageCount: implementation.expectedHumanMessageCount ?? 1, expectedRunCount: implementation.expectedRunCount });
-    await input.evidence("chat-catalog-query.json", { query: scenario.query, expectedOutcome: implementation.queryOutcome ?? "persisted", journeyKind: "agent-chat" });
-    await sendChatMessage(input.page, renderedQuery);
+    await input.evidence("chat-catalog-query.json", { query: scenario.query, expectedOutcome: implementation.queryOutcome ?? "persisted", journeyKind: implementation.journeyKind ?? "agent-chat" });
+    if (slack) {
+      if (setupBoundary.runIds.length || setupBoundary.humanCommentIds.length) throw new Error("Native Slack setup cannot admit canonical or unrelated work");
+      state.slackIngressReceipt = await dispatchNativeSlackIngress(context, implementation, state, deadlineAt);
+      await input.page.goto(new URL(`/${input.fixtures.company.issuePrefix}/issues/${context.issue()!.id}`, input.api.baseURL).href);
+    } else await sendChatMessage(input.page, renderedQuery);
     if (implementation.queryOutcome === "rejected") {
       const rejection = validateChatCatalogGrade(await implementation.verifyQueryRejection!(context, state));
       await input.evidence("chat-catalog-query-rejection.json", rejection);
@@ -140,7 +147,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     });
     const originalIssueId = context.issue()?.id;
     await input.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    if (!slack) await expect(input.page.getByTestId("task-chat-composer-input")).toBeVisible();
     const persisted = await refresh();
     expect(context.issue()?.id, "Source chat survives browser reload").toBe(originalIssueId);
     expect(persisted.grade.passed, "Independent oracle survives browser reload").toBe(true);

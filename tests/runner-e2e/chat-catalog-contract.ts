@@ -11,6 +11,8 @@ export interface ChatCatalogContext {
   issue(): ChatIssue | undefined;
   allRuns(): Promise<ChatRun[]>;
   refreshIssue(): Promise<void>;
+  /** Available only to the two allowlisted native Slack ingress cases. */
+  selectSlackSource?(issueId: string): Promise<void>;
 }
 export type ChatCatalogTerminalRunStatus = "succeeded" | "cancelled" | "failed" | "timed_out";
 export type ChatCatalogRunPolicy =
@@ -37,6 +39,11 @@ export interface ChatCompanionResult {
   messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
   providerResponseIds: string[]; toolCalls: Array<{ name: string; arguments: unknown; result: unknown }>; links: string[];
 }
+export interface ChatSlackIngress { kind: "native-slack-thread"; maximumProviderCalls: 20; ingressTimeoutMs: 120000 }
+export interface ChatSlackIngressReceipt {
+  query: string; endpointId: string; conversationId: string; issueId: string; humanCommentId: string; linkedPaperclipUserId: string; providerCalls: number;
+  provider: { workspaceId: string; channelId: string; threadId: string; canonicalMessageId: string; senderUserId: string };
+}
 /** One concrete scenario, with production API setup and a case-specific independent oracle. */
 export interface ChatCatalogCase {
   scenarioId: string;
@@ -46,7 +53,9 @@ export interface ChatCatalogCase {
   requiredCredentials?: readonly CredentialName[];
   externalInput?: ChatExternalInputRequirement;
   installedSource?: "published-global-npm";
-  journeyKind?: "agent-chat" | "scoped-external-assistant";
+  journeyKind?: "agent-chat" | "scoped-external-assistant" | "native-slack-thread";
+  slackIngress?: ChatSlackIngress;
+  dispatchSlackQuery?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatSlackIngressReceipt>;
   companionSurface?: ChatCompanionSurface;
   runCompanionSurface?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatCompanionResult>;
   authentication?: "local-trusted" | "human-session";

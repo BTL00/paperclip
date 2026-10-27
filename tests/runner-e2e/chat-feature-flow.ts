@@ -10,7 +10,7 @@ import { CHAT_FEATURE_BUDGET_CENTS, CHAT_FEATURE_GRADER, chatFeatureScenarios, t
 import { gradeChatFeature, linksFeatureTask, type ChatFeatureObservation, type FeatureDocument, type FeatureTask } from "./chat-feature-scoring.js";
 
 export async function runChatFeatureFlow(context: {
-  input: ChatFlowInput; issue(): ChatIssue | undefined; allRuns(): Promise<ChatRun[]>; refreshIssue(): Promise<void>;
+  input: ChatFlowInput; issue(): ChatIssue | undefined; allRuns(): Promise<ChatRun[]>; refreshIssue(): Promise<void>; selectSlackSource?(issueId: string): Promise<void>;
 }) {
   const { input } = context;
   const { api, page, fixtures: f, execution, nonce } = input;

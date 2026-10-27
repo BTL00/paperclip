@@ -1,3 +1,4 @@
+import { validSlackIngressDeclaration } from "./chat-slack-ingress.js";
 import { validCompanionDeclaration } from "./chat-companion-surface.js";
 import { installedChatScenarioIds } from "./chat-installed-lane.js";
 import { existsSync, readFileSync } from "node:fs";
@@ -7,8 +8,8 @@ import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
 import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
-export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
-  journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant";
+export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
+  journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant" | "native-slack-thread";
   boundaryTarget?: "authenticated-harness" | "empty-installed-target";
   modulePath: string;
   exportName: string;
@@ -24,6 +25,7 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   const descriptor = matches[0];
   if (!descriptor) return;
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && !validCompanionDeclaration(descriptor)) throw new Error("Only the declared scoped-client catalog case may select an external assistant");
+  if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && !validSlackIngressDeclaration(descriptor)) throw new Error("Only two declared Slack thread cases may use native ingress");
   if (descriptor.browserTimezone && (scenarioId !== "routines.create-daily-brief" || descriptor.browserTimezone !== "America/Chicago"))
     throw new Error("Browser timezone is declared only for the canonical Chicago weekday routine");
   if (descriptor.respondingAgent && (scenarioId !== "cases.handoff-same-task" || Object.keys(descriptor.respondingAgent).length !== 4
@@ -55,10 +57,12 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource", "browserTimezone", "respondingAgent", "companionSurface", "slackIngress"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && (!validCompanionDeclaration(implementation) || typeof implementation.runCompanionSurface !== "function" || implementation.act)) throw new Error("Missing actual finite scoped assistant driver");
+  if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && (!validSlackIngressDeclaration(implementation) || typeof implementation.dispatchSlackQuery !== "function" || implementation.act)) throw new Error("Missing finite actual Slack ingress driver");
+  if (!descriptor.slackIngress && implementation.dispatchSlackQuery) throw new Error("Undeclared Slack ingress driver");
   if (!descriptor.companionSurface && implementation.runCompanionSurface) throw new Error("Undeclared external assistant driver");
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")
     && (!descriptor.setupPolicy.invariantCheckIds.length || typeof implementation.verifySetup !== "function"))
