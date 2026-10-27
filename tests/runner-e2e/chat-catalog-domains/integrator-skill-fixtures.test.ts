@@ -4,6 +4,8 @@ import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { openVettedSkillSource, closeVettedSkillSource, recordVettedSourceImport, skillSourceRequests, sourceSkillMarkdown, importReadOnlySkill } from "./integrator-skill-source.js";
 import { saveSkillConversationContext } from "./integrator-skill-context.js";
 import { accessibilityUpdatePins as pins } from "./integrator-skill-pins.js";
+import { uploadFactualQueryAttachment } from "../chat-query-attachments.js";
+vi.mock("../chat-query-attachments.js", async importOriginal => ({ ...await importOriginal<typeof import("../chat-query-attachments.js")>(), uploadFactualQueryAttachment: vi.fn(async () => ({ id: "factual-upload" })) }));
 afterEach(() => vi.unstubAllGlobals());
 it("creates only one bounded uninstalled synthetic source and records no imported result during setup", async () => {
   const ctx = {} as ChatCatalogContext;
@@ -26,9 +28,11 @@ it("uses the actual canonical source document and factual selection without addi
     post: async (path: string) => { calls.push({ path }); }, patch: async (path: string, body: unknown) => { calls.push({ path, body }); },
     putSensitive: async (path: string, body: object) => { document = { ...body, issueId: source.id }; calls.push({ path, body }); }, get: async () => document,
   } } } as unknown as ChatCatalogContext;
-  await saveSkillConversationContext(ctx, { description: "Selected existing skill: skill-id", document: { key: "sample", title: "Sample page", body: "Synthetic actual input" } });
+  const selected = await saveSkillConversationContext(ctx, { description: "Selected existing skill: skill-id", document: { key: "sample", title: "Sample page", body: "Synthetic actual input" } });
   expect(calls.map(call => call.path)).toEqual(["/api/companies/company/chats/ceo", "/api/issues/source", "/api/issues/source/documents/sample"]);
   expect(calls.some(call => call.path.includes("/comments"))).toBe(false);
+  expect(uploadFactualQueryAttachment).toHaveBeenLastCalledWith(ctx, { filename: "skill-context.md", body: "Selected existing skill: skill-id\n\n# Sample page\n\nSynthetic actual input" });
+  expect(selected.factualContextAttachment.id).toBe("factual-upload");
 });
 it("qualifies the genuine immutable GitHub upstream without treating a local file as read-only", async () => {
   const markdown = await readFile(new URL("../fixtures/accessibility-source/0.4.SKILL.md", import.meta.url), "utf8");

@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { uploadFactualQueryAttachment } from "../chat-query-attachments.js";
+vi.mock("../chat-query-attachments.js", async importOriginal => ({ ...await importOriginal<typeof import("../chat-query-attachments.js")>(), uploadFactualQueryAttachment: vi.fn(async () => ({ id: "customer-brief-upload" })) }));
 import { customerBugFacts, preservesCustomerBugFacts, gradeIntegratorCaseCreation, integratorCaseCreationCases } from "./integrator-case-create.js";
 function valid() {
   const brief = { id: "brief", issueId: "primary", companyId: "company", key: "brief", body: Object.values(customerBugFacts).join("\n") };
@@ -50,6 +52,8 @@ it("places the genuine customer brief on the canonical conversation's normal doc
   const state = await integratorCaseCreationCases[0]!.setup(ctx);
   expect((state.task as { id: string }).id).toBe(source.id);
   expect(saved?.body).toContain(customerBugFacts.customer);
+  expect(uploadFactualQueryAttachment).toHaveBeenLastCalledWith(ctx, { filename: "customer-bug-brief.md", body: saved?.body });
+  expect((state.factualContextAttachment as { id: string }).id).toBe("customer-brief-upload");
   expect(created.some(path => path.endsWith("/issues"))).toBe(false);
   expect(patches).toContainEqual({ path: "/api/issues/standing-chat", body: { projectId: "project" } });
   await integratorCaseCreationCases[0]!.cleanup!(ctx, state);

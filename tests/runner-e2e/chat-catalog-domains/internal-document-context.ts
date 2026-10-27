@@ -1,9 +1,10 @@
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { IssueDocument, IssueAttachment } from "../../../packages/shared/src/types/issue.js";
 import type { Entity } from "./internal-support.js";
+import { uploadFactualQueryAttachment } from "../chat-query-attachments.js";
 
-/** Ordinary, visible source selection on the real standing conversation. Only
- * existing identities are supplied: no requested edit, answer or tool recipe. */
+/** Visible source metadata plus an actual human query attachment: conversation
+ * descriptions alone are intentionally omitted from native wake context. */
 export async function selectDocumentSource(ctx: ChatCatalogContext, input: {
   task: Entity;
   document?: { id: string; key: string; latestRevisionId: string | null };
@@ -47,9 +48,10 @@ export async function selectDocumentSource(ctx: ChatCatalogContext, input: {
   if (saved.id !== source.id || saved.companyId !== fixtures.company.id || saved.projectId !== target.projectId || saved.description !== description)
     throw new Error("Visible source selection did not persist on the canonical conversation");
   await ctx.refreshIssue();
+  const factualContextAttachment = await uploadFactualQueryAttachment(ctx, { filename: "selected-source.md", body: description });
   const receipt = { sourceIssueId: saved.id, targetIssueId: target.id, projectId: target.projectId, description,
     documentId: input.document?.id, revisionId: input.document?.latestRevisionId, annotationId: input.annotationId,
-    attachmentId: input.attachment?.id, attachmentSha256: input.attachment?.sha256, workspaceFilename: input.workspaceFilename };
+    attachmentId: input.attachment?.id, attachmentSha256: input.attachment?.sha256, workspaceFilename: input.workspaceFilename, factualContextAttachment };
   await ctx.input.evidence("chat-catalog-selected-document-source.json", receipt);
   return receipt;
 }

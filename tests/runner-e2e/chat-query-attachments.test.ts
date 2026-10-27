@@ -43,6 +43,21 @@ it("independently resolves declared receipt IDs and rejects undeclared, duplicat
   await expect(resolveChatQueryAttachments(ctx, [spec], {})).rejects.toThrow("persisted UI upload");
 });
 
+it.each([
+  ["documents-artifacts.resolve-feedback", "selected-source.md"], ["documents-artifacts.restore-document", "selected-source.md"],
+  ["documents-artifacts.produce-download", "selected-source.md"], ["documents-artifacts.revise-delivery", "selected-source.md"],
+  ["skills.author-skill", "skill-context.md"], ["skills.studio-test", "skill-context.md"], ["skills.review-update", "skill-context.md"],
+  ["skills.find-and-install", "skill-context.md"], ["skills.fork-read-only", "skill-context.md"],
+  ["cases.create-case", "customer-bug-brief.md"], ["app-permissions.ask-before-action", "launch-update.md"],
+])("binds only the exact factual file for %s", async (scenarioId, filename) => {
+  const actual = { ...receipt, originalFilename: filename };
+  const ctx = { scenario: { id: scenarioId }, refreshIssue: async () => {}, issue: () => ({ id: "source" }), input: {
+    fixtures: { company: { id: "company" } }, api: { get: async () => [actual], getAttachmentContent: async () => bytes },
+  } } as unknown as ChatCatalogContext;
+  expect(await resolveChatQueryAttachments(ctx, [{ stateKey: "factualContextAttachment", filename }], { factualContextAttachment: actual })).toEqual([actual]);
+  await expect(resolveChatQueryAttachments(ctx, [{ stateKey: "factualContextAttachment", filename: "wrong-context.md" }], { factualContextAttachment: actual })).rejects.toThrow("exact scenario filename");
+});
+
 it("matches the actual production submittedBody formatter without loading its UI module", () => {
   const source = readFileSync(new URL("../../ui/src/components/IssueChatThread.tsx", import.meta.url), "utf8");
   const expression = source.match(/const submittedBody = \[\s*trimmed,\s*\.\.\.attachedFiles\.map\(\s*\(item\) =>\s*(`[^`]+`),/);

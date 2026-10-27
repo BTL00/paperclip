@@ -1,7 +1,8 @@
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { IssueDocument } from "../../../packages/shared/src/types/issue.js";
-/** Factual user-visible selection/antecedent on the actual conversation. This
- * never supplies an expected answer, an API recipe or an additional prompt. */
+import { uploadFactualQueryAttachment } from "../chat-query-attachments.js";
+/** Actual selected-source facts, also delivered as a genuine human query file.
+ * Conversation description persistence alone is not native wake delivery. */
 export async function saveSkillConversationContext(ctx: ChatCatalogContext, input: { projectId?: string; description: string; document?: { key: string; title: string; body: string } }) {
   await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/chats/${ctx.input.fixtures.agent.id}`);
   await ctx.refreshIssue(); const source = ctx.issue();
@@ -14,5 +15,7 @@ export async function saveSkillConversationContext(ctx: ChatCatalogContext, inpu
     const saved = await ctx.input.api.get<IssueDocument>(endpoint);
     if (saved.issueId !== source.id || saved.body !== body) throw new Error("Skill input document did not persist on the canonical conversation");
   }
-  return source;
+  const factualContextAttachment = await uploadFactualQueryAttachment(ctx, { filename: "skill-context.md",
+    body: [input.description, ...(input.document ? [`# ${input.document.title}\n\n${input.document.body}`] : [])].join("\n\n") });
+  return { ...source, factualContextAttachment };
 }

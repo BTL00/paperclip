@@ -6,6 +6,7 @@ import { project, task, goal, putDocument, entity, observation, checks, hasLink,
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
 import { selectDocumentSource } from "./internal-document-context.js";
 import type { IssueDocument } from "../../../packages/shared/src/types/issue.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 
 export function grade_documents_artifacts(value: unknown) {
   const c = checks(); const o = observation(value);
@@ -63,7 +64,11 @@ export function grade_documents_artifacts(value: unknown) {
   return c.result();
 }
 
-const define = (id: string, setup: ChatCatalogCase["setup"]) => makeDefinition(id, setup, grade_documents_artifacts);
+const define = (id: string, setup: ChatCatalogCase["setup"]): ChatCatalogCase => {
+  const base = makeDefinition(id, setup, grade_documents_artifacts);
+  return id === "documents-artifacts.restore-document" || id === "documents-artifacts.resolve-feedback"
+    ? { ...base, authentication: "human-session", queryAttachments: factualContextQueryAttachment("selected-source.md") } : base;
+};
 export const documents_artifactsCases: readonly ChatCatalogCase[] = [
   ...privateDownloadCases,
   resolveFeedback(),
@@ -82,7 +87,7 @@ export const documents_artifactsCases: readonly ChatCatalogCase[] = [
     }
     const document = await ctx.input.api.get<IssueDocument>(`/api/issues/${t.id}/documents/plan`);
     const selectedSource = await selectDocumentSource(ctx, { task: t, document });
-    return { project: p, task: t, originalRevisions: revisions, selectedSource };
+    return { project: p, task: t, originalRevisions: revisions, selectedSource, factualContextAttachment: selectedSource.factualContextAttachment };
   })),
 
 ];
@@ -109,7 +114,7 @@ function resolveFeedback(): ChatCatalogCase {
     const siblingThread = await createAnnotation(supportText, "Please add a support contact later; leave this unrelated comment open for now.");
     const selectedSource = await selectDocumentSource(ctx, { task: t,
       document: { id: doc.id, key: "plan", latestRevisionId: doc.latestRevisionId! }, annotationId: pricingThread.id });
-    return { project: p, task: t, pricingThread, siblingThread, supportText, originalRevisionId: doc.latestRevisionId, selectedSource };
+    return { project: p, task: t, pricingThread, siblingThread, supportText, originalRevisionId: doc.latestRevisionId, selectedSource, factualContextAttachment: selectedSource.factualContextAttachment };
   });
   return { ...base, sourceFiles: [...base.sourceFiles, "../../packages/shared/src/document-anchors.ts"], async observe(ctx, state) {
     const o = await observeInternal(ctx, state);

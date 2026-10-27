@@ -10,6 +10,7 @@ import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { checks, entity, hasLink, observation, observeInternal, project, task, type Entity, type InternalObservation } from "./internal-support.js";
 import { selectDocumentSource } from "./internal-document-context.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 interface Downloaded { id: string; sha256: string; body: string }
 interface DeliveryObservation extends InternalObservation { attachments: IssueAttachment[]; products: IssueWorkProduct[]; downloaded: Downloaded[] }
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -83,10 +84,10 @@ function websiteDelivery(revising: boolean): ChatCatalogCase {
     const handedOff = revising ? await ctx.input.api.patch<typeof t>(`/api/issues/${t.id}`, { assigneeAgentId: ctx.input.fixtures.agent.id }) : ready.task;
     const selectedSource = await selectDocumentSource(ctx, { task: handedOff,
       ...(revising ? { attachment: originalAttachment } : { workspaceFilename: filename }) });
-    const state = { project: p, task: handedOff, worker, priorRunId, filename, producedBody: actual, producedHash: hash(actual), marker, bodyFact, signupHref, originalAttachment, originalProductId, selectedSource };
+    const state = { project: p, task: handedOff, worker, priorRunId, filename, producedBody: actual, producedHash: hash(actual), marker, bodyFact, signupHref, originalAttachment, originalProductId, selectedSource, factualContextAttachment: selectedSource.factualContextAttachment };
     await ctx.input.evidence("chat-catalog-actual-prior-website.json", state); return state;
   }, gradeWebsiteDelivery);
-  return { ...base, expectedRunCount: 2, minimumRunCount: 2, attemptTimeoutMs: 600_000,
+  return { ...base, authentication: "human-session", queryAttachments: factualContextQueryAttachment("selected-source.md"), expectedRunCount: 2, minimumRunCount: 2, attemptTimeoutMs: 600_000,
     sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-website-delivery.ts", "registered-artifact.ts"],
     async observe(ctx, state): Promise<DeliveryObservation> {
       const o = await observeInternal(ctx, state); const ids = [entity(state, "task").id, ...(ctx.issue() ? [ctx.issue()!.id] : [])];

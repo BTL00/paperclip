@@ -1,4 +1,5 @@
 import { saveSkillConversationContext } from "./integrator-skill-context.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 import { createHash } from "node:crypto";
 import type { CompanySkillDetail, CompanySkillVersion, CompanySkillUpdateStatus } from "../../../packages/shared/src/types/company-skill.js";
 import type { SkillSource, SkillSourceRefreshResult } from "../../../packages/shared/src/types/skill-source.js";
@@ -64,10 +65,10 @@ export const integratorSkillUpdateCases = [integratorDefinition("skills", "skill
   const localFork = await editableLocalNotes(ctx, upstream);
   const source = await ctx.input.api.patch<SkillSource>(`${root(ctx)}/skill-sources/${imported.source.id}/settings`, { revision: imported.source.revision, automaticUpdates: false, importNewSkills: false, trackingRef: accessibilityUpdatePins.newCommit });
   if (source.lastScanCommit !== accessibilityUpdatePins.oldCommit || source.trackingRef !== accessibilityUpdatePins.newCommit || source.automaticUpdates !== false) throw new Error("Normal source settings applied an update prematurely");
-  await saveSkillConversationContext(ctx, { description: `Selected upstream accessibility skill: ${upstream.name} (${upstream.id}), tracked source ${source.id}. Installed source revision ${upstream.sourceRef}; tracking reference ${source.trackingRef}. Separate editable local copy: ${localFork.name} (${localFork.id}).` });
-  return { upstream, localFork, source, localVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/skills/${localFork.id}/versions`) };
+  const selected = await saveSkillConversationContext(ctx, { description: `Selected upstream accessibility skill: ${upstream.name} (${upstream.id}), tracked source ${source.id}. Installed source revision ${upstream.sourceRef}; tracking reference ${source.trackingRef}. Separate editable local copy: ${localFork.name} (${localFork.id}).` });
+  return { upstream, localFork, source, factualContextAttachment: selected.factualContextAttachment, localVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/skills/${localFork.id}/versions`) };
 }, observeUpdate, gradeIntegratorSkillUpdate, async (ctx, state) => { const skill = state.upstream as CompanySkillDetail; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name); },
-{ expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 540_000,
+{ authentication: "human-session", queryAttachments: factualContextQueryAttachment("skill-context.md"), expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 540_000,
   sourceFiles: ["chat-catalog-domains/integrator-skill-update.ts", "chat-catalog-domains/integrator-skill-source.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/skills.yaml"],
   async act(ctx, state) {
     const first = await pollUntil({ label: "actual upstream diff presented before installation", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeUpdate(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });

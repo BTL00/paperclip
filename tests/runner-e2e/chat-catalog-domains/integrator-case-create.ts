@@ -2,6 +2,7 @@ import type { cases } from "../../../packages/db/src/schema/cases.js";
 import type { CaseHandoff } from "../../../packages/shared/src/case-handoffs.js";
 import type { IssueDocument, DocumentRevision } from "../../../packages/shared/src/types/issue.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import { uploadFactualQueryAttachment, factualContextQueryAttachment } from "../chat-query-attachments.js";
 import { checks, hasLink, observation, project, type Entity, type InternalObservation } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
@@ -81,7 +82,8 @@ export const integratorCaseCreationCases = [integratorDefinition("cases", "cases
     await ctx.input.api.putSensitive(`/api/issues/${t.id}/documents/brief`, { title: "Customer bug brief", format: "markdown", body, baseRevisionId: null });
     const brief = await ctx.input.api.get<IssueDocument>(`/api/issues/${t.id}/documents/brief`);
     if (brief.body !== body || brief.issueId !== t.id) throw new Error("Customer brief did not persist on the actual canonical conversation");
-    return { project: p, task: t, worker };
+    const factualContextAttachment = await uploadFactualQueryAttachment(ctx, { filename: "customer-bug-brief.md", body: brief.body });
+    return { project: p, task: t, worker, factualContextAttachment };
   } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: settings.enableCases }); previous.delete(ctx); throw error; }
 }, observeCreation, gradeIntegratorCaseCreation, async (ctx, _state, value) => {
   const o = creationObservation(value); const row = o?.cases[0]; if (!o || !row) throw new Error("Missing created case result");
@@ -90,7 +92,7 @@ export const integratorCaseCreationCases = [integratorDefinition("cases", "cases
   const primary = o.tasks.find(task => task.id === row.workIssueId); if (!primary) throw new Error("Missing primary case task");
   const taskHref = o.links.find(link => hasLink({ ...o, links: [link] }, "issues", primary)); if (!taskHref) throw new Error("Missing primary task link");
   await inspectResult(ctx, new URL(taskHref, o.origin).pathname, primary.title!, taskHref);
-}, { sourceFiles: ["chat-catalog-domains/integrator-case-create.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"],
+}, { authentication: "human-session", queryAttachments: factualContextQueryAttachment("customer-bug-brief.md"), sourceFiles: ["chat-catalog-domains/integrator-case-create.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"],
   expectedRunCount: 2, minimumRunCount: 2, runPolicy: { kind: "source-settled-with-active-work", maximumActiveWorkerRuns: 1 }, attemptTimeoutMs: 420_000,
   async cleanup(ctx) { const value = previous.get(ctx); if (value !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: value }); previous.delete(ctx); } },
 })];

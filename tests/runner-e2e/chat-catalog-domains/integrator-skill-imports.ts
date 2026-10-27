@@ -1,4 +1,5 @@
 import { saveSkillConversationContext } from "./integrator-skill-context.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 import type { CompanySkillDetail, CompanySkillFileDetail, CompanySkillListItem, CompanySkillVersion } from "../../../packages/shared/src/types/company-skill.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { checks, observation, project, type InternalObservation } from "./internal-support.js";
@@ -80,18 +81,18 @@ function define(id: "skills.find-and-install" | "skills.fork-read-only") {
         await ctx.input.api.post(`/api/projects/${p.id}/workspaces`, { name: "Vetted synthetic source", cwd: source.workspaceRoot, isPrimary: true });
         const existing = await ctx.input.api.get<CompanySkillListItem[]>(root(ctx));
         if (existing.some(row => row.sourceLocator === source.url)) throw new Error("Source registration imported the evaluated skill before canonical admission");
-        await saveSkillConversationContext(ctx, { projectId: p.id, description: `Our vetted synthetic accessibility-review source is the one owned directory ${source.url}. It contains Markdown-only SKILL.md, and has not been imported into the company.` });
-        return { project: p, sourceURL: source.url, importAllowed: true };
+        const selected = await saveSkillConversationContext(ctx, { projectId: p.id, description: `Our vetted synthetic accessibility-review source is the one owned directory ${source.url}. It contains Markdown-only SKILL.md, and has not been imported into the company.` });
+        return { project: p, sourceURL: source.url, importAllowed: true, factualContextAttachment: selected.factualContextAttachment };
       }
       const upstream = await importReadOnlySkill(ctx); const localFork = await editableLocalNotes(ctx, upstream);
-      await saveSkillConversationContext(ctx, { projectId: p.id, description: `Selected read-only checklist skill: ${upstream.name} (${upstream.id}), source ${upstream.sourceLocator}, revision ${upstream.sourceRef}. Existing editable local notes: ${localFork.name} (${localFork.id}). Our mobile checks: ${mobileChecks.join(" ")}` });
-      return { project: p, sourceURL: upstream.sourceLocator, importAllowed: true, upstreamQualified: true, upstream, localFork, upstreamVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/${upstream.id}/versions`) };
+      const selected = await saveSkillConversationContext(ctx, { projectId: p.id, description: `Selected read-only checklist skill: ${upstream.name} (${upstream.id}), source ${upstream.sourceLocator}, revision ${upstream.sourceRef}. Existing editable local notes: ${localFork.name} (${localFork.id}). Our mobile checks: ${mobileChecks.join(" ")}` });
+      return { project: p, sourceURL: upstream.sourceLocator, importAllowed: true, upstreamQualified: true, upstream, localFork, factualContextAttachment: selected.factualContextAttachment, upstreamVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/${upstream.id}/versions`) };
     } catch (error) { await closeVettedSkillSource(ctx); throw error; }
   }, observeImports, gradeIntegratorSkillImports, async (ctx, _state, value) => {
     const o = importObservation(value); const skill = o && (id === "skills.find-and-install" ? o.skills.find(row => row.sourceLocator === o.state.sourceURL) : changedFork(o));
     if (!o || !skill) throw new Error("No actual saved skill copy for browser inspection");
     await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name, resultHref(o, skill.id, "studio"));
-  }, { sourceFiles: ["chat-catalog-domains/integrator-skill-imports.ts", "chat-catalog-domains/integrator-skill-source.ts", "chat-catalog-domains/integrator-skills.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/skills.yaml"],
+  }, { authentication: "human-session", queryAttachments: factualContextQueryAttachment("skill-context.md"), sourceFiles: ["chat-catalog-domains/integrator-skill-imports.ts", "chat-catalog-domains/integrator-skill-source.ts", "chat-catalog-domains/integrator-skills.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/skills.yaml"],
     async cleanup(ctx) { await closeVettedSkillSource(ctx); } });
 }
 export const integratorSkillImportCases = [define("skills.find-and-install"), define("skills.fork-read-only")];

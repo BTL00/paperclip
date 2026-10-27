@@ -1,4 +1,5 @@
 import { saveSkillConversationContext } from "./integrator-skill-context.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 import { expect } from "@playwright/test";
 import type { CompanySkillDetail, CompanySkillTestInput, CompanySkillTestRun, CompanySkillTestRunDetail } from "../../../packages/shared/src/types/company-skill.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -53,8 +54,8 @@ export const integratorSkillStudioCases = [integratorDefinition("skills", "skill
   const skill = await ctx.input.api.post<CompanySkillDetail>(`/api/companies/${ctx.input.fixtures.company.id}/skills`, { name: "Accessibility review", slug: "accessibility-review", markdown: studioMarkdown });
   const input = await ctx.input.api.post<CompanySkillTestInput>(`${root(ctx, skill.id)}/test-inputs`, { name: "Sample landing page", content: studioPageInput });
   const p = await project(ctx, "Launch", { description: `Our writable accessibility skill ${skill.id} has saved Studio input "Sample landing page" (${input.id}), containing synthetic HTML only. Morgan (${worker.id}) is the eligible test runner. Test the existing saved input without browsing unrelated pages.` });
-  await saveSkillConversationContext(ctx, { projectId: p.id, description: `Selected writable skill: ${skill.name} (${skill.id}). Selected saved Studio input: ${input.name} (${input.id}), containing the synthetic landing-page HTML. Morgan (${worker.id}) is the eligible test runner.` });
-  return { skill: await ctx.input.api.get<CompanySkillDetail>(root(ctx, skill.id)), input, worker: { id: worker.id }, project: p };
+  const selected = await saveSkillConversationContext(ctx, { projectId: p.id, description: `Selected writable skill: ${skill.name} (${skill.id}). Selected saved Studio input: ${input.name} (${input.id}), containing the synthetic landing-page HTML. Morgan (${worker.id}) is the eligible test runner.` });
+  return { skill: await ctx.input.api.get<CompanySkillDetail>(root(ctx, skill.id)), input, worker: { id: worker.id }, project: p, factualContextAttachment: selected.factualContextAttachment };
 }, observeStudio, gradeIntegratorSkillStudio, async (ctx, state, value) => {
   const o = studioObservation(value); const run = o?.studioRuns[0]; if (!o || !run) throw new Error("No actual Studio test to inspect");
   const source = ctx.input.page.url();
@@ -63,7 +64,7 @@ export const integratorSkillStudioCases = [integratorDefinition("skills", "skill
   await expect(ctx.input.page.getByText(/trial-email|email (?:input|field)/i).first()).toBeVisible();
   await ctx.input.evidence("chat-skill-studio-visible-result.json", { skillId: o.skill.id, testRunId: run.id, status: run.status, issueId: run.issueId, interactions: run.interactions, url: ctx.input.page.url() });
   await ctx.input.page.goto(source); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
-}, { sourceFiles: ["chat-catalog-domains/integrator-skill-studio.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/skills.yaml"],
+}, { authentication: "human-session", queryAttachments: factualContextQueryAttachment("skill-context.md"), sourceFiles: ["chat-catalog-domains/integrator-skill-studio.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/skills.yaml"],
   expectedRunCount: 2, attemptTimeoutMs: 540_000,
   async act(ctx, state) {
     await pollUntil({ label: "actual bounded skill Studio output", deadlineAt: Date.now() + 240_000, intervalMs: 1000,

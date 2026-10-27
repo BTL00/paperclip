@@ -1,4 +1,5 @@
 import { saveSkillConversationContext } from "./integrator-skill-context.js";
+import { factualContextQueryAttachment } from "../chat-query-attachments.js";
 import type { CompanySkill, CompanySkillDetail, CompanySkillListItem, CompanySkillVersion } from "../../../packages/shared/src/types/company-skill.js";
 import type { EffectiveSkillPolicy, SkillPolicyDecision } from "../../../packages/shared/src/validators/skill-policy.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -71,13 +72,16 @@ async function verifySkill(ctx: ChatCatalogContext, state: Record<string, unknow
   const href = resultHref(o, skill.id, "studio");
   await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name, href);
 }
-const define = (id: string, setup: ChatCatalogCase["setup"]) => integratorDefinition("skills", id, setup, observeSkills, gradeIntegratorSkills, verifySkill);
+const define = (id: string, setup: ChatCatalogCase["setup"]): ChatCatalogCase => {
+  const base = integratorDefinition("skills", id, setup, observeSkills, gradeIntegratorSkills, verifySkill);
+  return id === "skills.author-skill" ? { ...base, authentication: "human-session", queryAttachments: factualContextQueryAttachment("skill-context.md") } : base;
+};
 export const integratorSkillsCases: readonly ChatCatalogCase[] = [
   define("skills.author-skill", async ctx => {
     const p = await project(ctx, "Launch");
     const t = await saveSkillConversationContext(ctx, { projectId: p.id, description: "The website review checklist for this conversation is saved in its Website review checklist document.",
       document: { key: "website-review-checklist", title: "Website review checklist", body: `# Website review checklist\n\n${websiteChecklist.map(item => `- ${item}`).join("\n")}\n\nUse these checks when reviewing a website; record evidence and failures.` } });
-    return { project: p, task: t, checklist: websiteChecklist };
+    return { project: p, task: t, checklist: websiteChecklist, factualContextAttachment: t.factualContextAttachment };
   }),
   define("skills.explicit-restriction", async ctx => {
     const api = ctx.input.api; const skill = await api.post<CompanySkill>(`${root(ctx)}/skills`, { name: "Accessibility review", slug: "accessibility-review", markdown: `---\nname: accessibility-review\ndescription: Review a website for accessibility.\n---\n\n${websiteChecklist.join("\n")}` });

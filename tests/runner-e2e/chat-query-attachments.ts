@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ChatCatalogContext, ChatCatalogQueryAttachment } from "./chat-catalog-contract.js";
+import { expect } from "@playwright/test";
+import { pollUntil } from "./api.js";
 
 export interface ChatQueryAttachmentReceipt {
   id: string; companyId: string; issueId: string; issueCommentId: string | null;
@@ -10,7 +12,53 @@ export interface ChatQueryHumanComment {
   id: string; body: string; authorAgentId?: string | null; authorUserId?: string | null;
   issueId?: string; companyId?: string; createdByRunId?: string | null;
 }
-const permitted = new Set(["steering.preserve-draft", "tasks.attachment-brief"]);
+const factualFiles: Readonly<Record<string, string>> = {
+  "documents-artifacts.resolve-feedback": "selected-source.md",
+  "documents-artifacts.restore-document": "selected-source.md",
+  "documents-artifacts.produce-download": "selected-source.md",
+  "documents-artifacts.revise-delivery": "selected-source.md",
+  "skills.author-skill": "skill-context.md", "skills.studio-test": "skill-context.md",
+  "skills.review-update": "skill-context.md", "skills.find-and-install": "skill-context.md", "skills.fork-read-only": "skill-context.md",
+  "cases.create-case": "customer-bug-brief.md", "app-permissions.ask-before-action": "launch-update.md",
+};
+const permitted = new Set(["steering.preserve-draft", "tasks.attachment-brief", ...Object.keys(factualFiles)]);
+export const factualContextQueryAttachment = (filename: string): readonly ChatCatalogQueryAttachment[] => [{ stateKey: "factualContextAttachment", filename }];
+
+/** Upload factual user input through the real composer. This creates neither a
+ * comment nor a run; the unchanged canonical query submits the production file
+ * reference and attachmentId together. Contents are owned by the exact case. */
+export async function uploadFactualQueryAttachment(ctx: ChatCatalogContext, input: { filename: string; body: string }): Promise<ChatQueryAttachmentReceipt> {
+  if (factualFiles[ctx.scenario.id] !== input.filename) throw new Error("Undeclared factual query attachment filename/scenario");
+  const bytes = Buffer.from(input.body, "utf8");
+  if (!bytes.length || bytes.length > 65_536) throw new Error("Factual context must be a bounded nonempty UTF-8 document");
+  const { api, page, fixtures } = ctx.input;
+  const health = await api.get<{ deploymentMode: string }>("/api/health");
+  const session = await api.get<{ user?: { id: string } }>("/api/auth/get-session");
+  if (health.deploymentMode !== "authenticated" || !session.user?.id || session.user.id === "local-board")
+    throw new Error("Factual query input requires its real authenticated human uploader");
+  await api.post(`/api/companies/${fixtures.company.id}/chats/${fixtures.agent.id}`);
+  await ctx.refreshIssue(); const source = ctx.issue();
+  if (!source) throw new Error("Factual upload requires the actual canonical standing conversation");
+  await page.goto(new URL(`/${fixtures.company.issuePrefix}/chats/${fixtures.agent.id}`, api.baseURL).href, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("task-chat-composer-input")).toBeVisible();
+  const endpoint = `/api/issues/${source.id}/attachments`;
+  if ((await api.get<ChatQueryAttachmentReceipt[]>(endpoint)).some(row => row.originalFilename === input.filename))
+    throw new Error("Factual input already exists; do not silently replace or duplicate source context");
+  await page.locator('input[type="file"]').first().setInputFiles({ name: input.filename, mimeType: "text/markdown", buffer: bytes });
+  const rows = await pollUntil({ label: "Actual human factual context upload", deadlineAt: Date.now() + 30_000,
+    load: () => api.get<ChatQueryAttachmentReceipt[]>(endpoint), accept: rows => rows.filter(row => row.originalFilename === input.filename).length === 1 });
+  const saved = rows.find(row => row.originalFilename === input.filename)!;
+  const expected = { ...saved, companyId: fixtures.company.id, issueId: source.id, createdByUserId: session.user.id, sha256: digest(bytes), byteSize: bytes.length };
+  const downloaded = await api.getAttachmentContent(saved.id);
+  if (!attachmentReceiptMatches({ expected, saved, bytes: downloaded, companyId: fixtures.company.id, issueId: source.id }) || !Buffer.from(downloaded).equals(bytes))
+    throw new Error("Factual upload bytes/source/human attribution do not match the original input");
+  const tray = page.getByTestId("task-chat-composer-attachments");
+  await expect(tray).toContainText(input.filename); await expect(tray).not.toContainText("Uploading");
+  const receipt = receiptProjection(saved);
+  await ctx.input.evidence("chat-catalog-factual-query-input.json", { scenarioId: ctx.scenario.id, receipt, body: input.body,
+    delivery: "pending canonical human comment attachment; description readback is not model delivery" });
+  return receipt;
+}
 function receiptProjection(row: ChatQueryAttachmentReceipt): ChatQueryAttachmentReceipt {
   return { id: row.id, companyId: row.companyId, issueId: row.issueId, issueCommentId: row.issueCommentId,
     originalFilename: row.originalFilename, contentPath: row.contentPath, byteSize: row.byteSize, sha256: row.sha256,
@@ -42,6 +90,7 @@ export function attachmentReceiptMatches(input: {
 export async function resolveChatQueryAttachments(ctx: ChatCatalogContext, specs: readonly ChatCatalogQueryAttachment[] = [], state: Record<string, unknown>) {
   if (!specs.length) return [];
   if (!permitted.has(ctx.scenario.id) || specs.length !== 1 || new Set(specs.map(row => row.stateKey)).size !== specs.length) throw new Error("Undeclared or duplicate catalog query attachment");
+  if (factualFiles[ctx.scenario.id] && specs[0]?.filename !== factualFiles[ctx.scenario.id]) throw new Error("Factual query attachment does not match its exact scenario filename");
   await ctx.refreshIssue(); const issue = ctx.issue(); if (!issue) throw new Error("UI upload has no persisted source issue");
   const saved = await ctx.input.api.get<ChatQueryAttachmentReceipt[]>(`/api/issues/${issue.id}/attachments`);
   const receipts: ChatQueryAttachmentReceipt[] = [];

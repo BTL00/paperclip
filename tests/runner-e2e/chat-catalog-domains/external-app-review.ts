@@ -1,3 +1,4 @@
+import { chatQueryWithAttachments, uploadFactualQueryAttachment, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt, type ChatQueryHumanComment } from "../chat-query-attachments.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { RequestConfirmationInteraction } from "../../../packages/shared/src/types/issue.js";
@@ -129,6 +130,21 @@ export function exactReviewedTrust(
     rule.config.trustRule.argumentFilters?.allowAny === true
   );
 }
+/** This is the disposable human draft, not an instruction to use a tool or
+ * approval policy. Its actual upload supplies the canonical query's “this”. */
+export function appReviewDraft(connectionId: string) {
+  return `# Launch update\n\nDestination: Synthetic Launch Notes, launch page (connection ${connectionId}).\n\nThe public launch is November 8, 2030.\n`;
+}
+
+export function reviewQueriesMatch(queries: string[], original: unknown, receipt: unknown) {
+  if (typeof original !== "string" || !receipt || typeof receipt !== "object") return false;
+  const file = receipt as ChatQueryAttachmentReceipt;
+  return file.originalFilename === "launch-update.md" && typeof file.id === "string"
+    && file.contentPath === `/api/attachments/${file.id}/content`
+    && queries.length === 3 && queries[0] === chatQueryWithAttachments(original, [file])
+    && queries[1] === original && queries[2] === original;
+}
+
 export function gradeAppReview(value: unknown) {
   const c = checks(),
     o = externalObservation(value);
@@ -151,8 +167,8 @@ export function gradeAppReview(value: unknown) {
       new Set(phases?.map((row) => row.requestRunId)).size === 3 &&
       new Set(phases?.map((row) => row.replyRunId)).size === 3 &&
       o.state.agentApproveStatus === 403 &&
-      o.humanQueries.length === 3 &&
-      o.humanQueries.every((query) => query === o.state.originalQuery),
+      reviewQueriesMatch(o.humanQueries, o.state.originalQuery, o.state.factualContextAttachment) &&
+      o.state.factualContextVerified === true,
     "Each unchanged explicit human request gets one distinct actual action review; the agent cannot approve its own request.",
   );
   if (!Array.isArray(phases) || phases.length !== 3) return c.result();
@@ -294,7 +310,6 @@ export const appReviewExternalCases = [
           );
         await ctx.input.api.patch(`/api/issues/${source.id}`, {
           projectId: project.id,
-          description: `The selected notes app is Synthetic Launch Notes (${connection.connectionId}). This launch update is: The public launch is November 8, 2030. Update launch page (launch_update) is Ask first. The app's read action is Allowed. This source belongs to the Launch notes review project.`,
         });
         if (
           (
@@ -308,7 +323,12 @@ export const appReviewExternalCases = [
           );
         if (!session.user?.id || session.user.id === "local-board")
           throw new Error("Tool review needs an actual signed-in human");
+        const factualContextAttachment = await uploadFactualQueryAttachment(ctx, {
+          filename: "launch-update.md", body: appReviewDraft(connection.connectionId),
+        });
+        if (factualContextAttachment.issueId !== source.id) throw new Error("Launch draft was uploaded to another conversation");
         return {
+          factualContextAttachment,
           connectionId: connection.connectionId,
           writeEntryId: connection.write[0],
           projectId: project.id,
@@ -328,6 +348,7 @@ export const appReviewExternalCases = [
     gradeAppReview,
     {
       authentication: "human-session",
+      queryAttachments: [{ stateKey: "factualContextAttachment", filename: "launch-update.md" }],
       expectedRunCount: 6,
       minimumRunCount: 6,
       expectedHumanMessageCount: 3,
@@ -340,6 +361,7 @@ export const appReviewExternalCases = [
         "chat-catalog-domains/external-support.ts",
         "chat-catalog-domains/internal-support.ts",
         "chat-flow.ts",
+        "chat-query-attachments.ts",
         "run-observations.ts",
         "../../server/src/routes/issues.ts",
         "../../server/src/routes/tool-access.ts",
@@ -568,6 +590,9 @@ export const appReviewExternalCases = [
         } finally {
           await page.close();
         }
+        const humanComments = await ctx.input.api.get<ChatQueryHumanComment[]>(`/api/issues/${state.sourceId}/comments?order=asc`);
+        const firstHuman = humanComments.find(comment => comment.authorUserId === state.personId && !comment.authorAgentId);
+        state.factualContextVerified = !!firstHuman && await verifyChatQueryAttachments(ctx, [state.factualContextAttachment as ChatQueryAttachmentReceipt], firstHuman);
         const o = await observeExternal(ctx, state),
           provider = providers.get(ctx)!,
           ids = new Set([String(state.sourceId)]);

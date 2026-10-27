@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { IssueAttachment } from "../../../packages/shared/src/types/issue.js";
 import { selectDocumentSource } from "./internal-document-context.js";
+import { uploadFactualQueryAttachment } from "../chat-query-attachments.js";
+vi.mock("../chat-query-attachments.js", () => ({ uploadFactualQueryAttachment: vi.fn(async () => ({ id: "factual-upload" })) }));
 
 function fixture() {
   const target = { id: "target", companyId: "company", projectId: "project", identifier: "RUN-1", title: "Website task" };
@@ -33,6 +35,8 @@ describe("factual visible document source selection", () => {
     const receipt = await selectDocumentSource(f.ctx, { task: f.target, document: f.document, annotationId: f.annotation.id });
     expect(f.source.description).toBe("Selected source: [Website task](/RUN/issues/RUN-1).\n\nSelected document: [Implementation plan](/RUN/issues/RUN-1#document-plan).\n\nSelected review comment: comment on this document.");
     expect(receipt.targetIssueId).toBe("target");
+    expect(uploadFactualQueryAttachment).toHaveBeenLastCalledWith(f.ctx, { filename: "selected-source.md", body: f.source.description });
+    expect(receipt.factualContextAttachment.id).toBe("factual-upload");
     expect({ document: f.document, annotation: f.annotation }).toEqual(original);
     expect(f.api.patch).toHaveBeenCalledExactlyOnceWith("/api/issues/chat", { projectId: "project", description: f.source.description });
     expect(f.api.post).toHaveBeenCalledExactlyOnceWith("/api/companies/company/chats/ceo");
@@ -43,7 +47,7 @@ describe("factual visible document source selection", () => {
     expect(f.source.description).toContain("#document-plan");
     expect(f.source.description).not.toMatch(/pricing|revision|restore|previous|Original/);
   });
-  it("selects the actual original delivery without uploading or revising any bytes", async () => {
+  it("selects the actual original delivery and preserves its original bytes", async () => {
     const f = fixture(); await selectDocumentSource(f.ctx, { task: f.target, attachment: f.attachment });
     expect(f.source.description).toContain("[website-v1.html](/api/attachments/file/content)");
     expect(f.source.description).not.toMatch(/headline|shorten|new version/);
