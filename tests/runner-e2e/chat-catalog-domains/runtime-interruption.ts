@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import type { HeartbeatRun } from "../../../packages/shared/src/types/heartbeat.js";
 import type { IssueQueuedCommentQueue, IssueThreadInteraction } from "../../../packages/shared/src/types/issue.js";
 import { pollUntil } from "../api.js";
+import { renderRuntimeArtifact, hasSimplerWebsite } from "./runtime-rendered-artifact.js";
 import { collectRunEvents } from "../run-observations.js";
 import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
@@ -61,7 +62,7 @@ export const runtimeInterruptionCases = [runtimeDefinition("steering.interrupt-w
   authentication: "human-session", expectedRunCount: 3, attemptTimeoutMs: 900_000,
   setupPolicy: runtimeQueueCases[0]!.setupPolicy, verifySetup: runtimeQueueCases[0]!.verifySetup,
   runPolicy: { kind: "terminal-counts", terminalStatusCounts: { cancelled: 1, succeeded: 2 } },
-  sourceFiles: ["chat-catalog-domains/runtime-interruption.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "registered-artifact.ts", "chat-scenarios/steering.yaml"],
+  sourceFiles: ["chat-catalog-domains/runtime-interruption.ts", "chat-catalog-domains/runtime-rendered-artifact.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "registered-artifact.ts", "chat-scenarios/steering.yaml"],
   async act(ctx, state) {
     await pollUntil({ label: "Canonical interruption guidance before the actual human action", deadlineAt: Date.now() + 150_000,
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
@@ -79,7 +80,7 @@ export const runtimeInterruptionCases = [runtimeDefinition("steering.interrupt-w
     state.nativeStopAcknowledged = cancellation?.runId === stopped.id && cancellation.issueId === task.id && cancellation.companyId === ctx.input.fixtures.company.id && cancellation.dispatched === true && cancellation.dispatchState === "acknowledged";
     // No gate value injects the simpler direction: it exists only in the
     // independently approved persisted plan and its actual queued response.
-    await writeFile((state.gate as { gate: string }).gate, "The human ended the original pending-brief tool. Keep any saved history; the supported fresh continuation must read its own actually accepted plan revision and implement that direction. Do not create tasks or external effects.", "utf8");
+    await writeFile((state.gate as { gate: string }).gate, "The pending fixture tool has been released.", "utf8");
     let neverConcurrent = true;
     const delivered = await pollUntil({ label: "One fresh native continuation after old-owner cleanup delivers simpler Website", deadlineAt: Date.now() + 240_000,
       load: async () => { const runs = await ctx.allRuns(); neverConcurrent &&= runs.filter(row => row.agentId === (state.worker as Entity).id && ["running", "queued"].includes(row.status)).length <= 1;
@@ -100,7 +101,7 @@ export const runtimeInterruptionCases = [runtimeDefinition("steering.interrupt-w
   async observe(ctx, state) { const o = await observeRuntime(ctx, state), task = state.task as Entity, plan = state.plan as Entity;
     const revisions = await ctx.input.api.get<Entity[]>(`/api/issues/${task.id}/documents/plan/revisions`); state.planRevisionRetained = revisions.some(row => row.id === plan.latestRevisionId && row.body === state.planBody);
     if (state.successorRunId) { const [artifact] = await readRegisteredArtifacts(ctx.input.api, task.id, String(state.successorRunId), ["website.html"]);
-      state.actualSimplePage = artifact?.contentVerified === true && /<h1\b[^>]*>[\s\S]*?Acorn Notes[\s\S]*?<\/h1>/i.test(artifact.content) && /<main\b/i.test(artifact.content) && /sign.?up|subscribe|join/i.test(artifact.content) && !/role=["']tab|<iframe\b/i.test(artifact.content);
+      state.actualSimplePage = artifact?.contentVerified === true && hasSimplerWebsite(await renderRuntimeArtifact(ctx, artifact.content));
       state.deliveryRevisionBound = o.revisions.some(row => row.createdByRunId === state.successorRunId && row.createdByAgentId === (state.worker as Entity).id && (row.body ?? "").includes(String(state.marker)) && o.documents.some(doc => doc.id === row.documentId && doc.latestRevisionId === row.id)); }
     return o; },
   async verifyResult(ctx, state) { const source = ctx.input.page.url(), task = state.task as Entity;

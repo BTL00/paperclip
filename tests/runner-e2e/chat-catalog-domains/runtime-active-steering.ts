@@ -7,6 +7,7 @@ import { readRegisteredArtifacts } from "../registered-artifact.js";
 import { checks, type Entity } from "./internal-support.js";
 import { probeAgentPermission, cleanupIdentityProbes } from "./identity-support.js";
 import { busyRuntimeWorker, releaseRuntimeWorker } from "./runtime-busy-worker.js";
+import { renderRuntimeArtifact } from "./runtime-rendered-artifact.js";
 import { runtimeQueueCases } from "./runtime-queue.js";
 import { runtimeDefinition, observeRuntime, runtimeObservation } from "./runtime-support.js";
 export function isBlueColor(color: string) {
@@ -60,7 +61,7 @@ export const runtimeActiveSteeringCases = [runtimeDefinition("steering.steer-act
 }, gradeActiveSteering, {
   authentication: "human-session", expectedRunCount: 3, minimumRunCount: 2, attemptTimeoutMs: 720_000,
   setupPolicy: runtimeQueueCases[0]!.setupPolicy, verifySetup: runtimeQueueCases[0]!.verifySetup,
-  sourceFiles: ["chat-catalog-domains/runtime-active-steering.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "registered-artifact.ts", "chat-scenarios/steering.yaml"],
+  sourceFiles: ["chat-catalog-domains/runtime-active-steering.ts", "chat-catalog-domains/runtime-rendered-artifact.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "registered-artifact.ts", "chat-scenarios/steering.yaml"],
   async act(ctx, state) {
     await pollUntil({ label: "Canonical steering guidance while the original native owner remains active", deadlineAt: Date.now() + 150_000,
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
@@ -117,17 +118,7 @@ export const runtimeActiveSteeringCases = [runtimeDefinition("steering.steer-act
     if (state.outputRunId) {
       const [artifact] = await readRegisteredArtifacts(ctx.input.api, task.id, String(state.outputRunId), ["website.html"]);
       if (artifact?.contentVerified) {
-        const browser = ctx.input.page.context().browser(); if (!browser) throw new Error("Actual delivered color inspection requires the existing browser");
-        const preview = await browser.newContext({ javaScriptEnabled: false });
-        try {
-          const page = await preview.newPage(); await page.route("**/*", route => route.abort());
-          await page.setContent(artifact.content, { waitUntil: "domcontentloaded" });
-          const colors = await page.locator("body, main, section, header, h1, h2, h3, button, [role=button]").evaluateAll(nodes => nodes.filter(node => {
-            const box = node.getBoundingClientRect(), style = getComputedStyle(node);
-            return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-          }).map(node => { const style = getComputedStyle(node); return { tag: node.tagName, role: node.getAttribute("role"), color: style.color, background: style.backgroundColor }; }));
-          state.actualBlueArtifact = hasVisibleBlueDesign(colors);
-        } finally { await preview.close(); }
+        state.actualBlueArtifact = hasVisibleBlueDesign(await renderRuntimeArtifact(ctx, artifact.content));
       }
       state.blueRevisionBound = o.revisions.some(row => row.createdByRunId === state.outputRunId && row.createdByAgentId === (state.worker as Entity).id && /blue/i.test(row.body ?? "")
         && o.documents.some(doc => doc.id === row.documentId && doc.latestRevisionId === row.id));
