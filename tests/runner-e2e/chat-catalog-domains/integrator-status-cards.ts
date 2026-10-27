@@ -1,7 +1,7 @@
 import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "../../../packages/shared/src/validators/status-card.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
-import { checks, observation, project, task, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
+import { checks, observation, project, task, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { groundedStatement, integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
 interface CardsObservation extends InternalObservation { cards: StatusCard[]; updates: Record<string, StatusCardUpdate[]>; summaries: Record<string, StatusCardSummaryRevision[]>; cardsEnabled: boolean }
@@ -51,6 +51,27 @@ export function gradeIntegratorCards(value: unknown) {
       && JSON.stringify(o.updates[card.id]) === JSON.stringify(o.state.originalUpdates), "Archiving retains actual generated history and summary bytes.");
     c.add("archive-restoration-truthful", groundedStatement(o.reply, /\b(?:card|launch)\b/i, /\barchived\b/i, /\b(?:deleted|permanently removed|not archived)\b/i)
       && /\brestor(?:e|ing|ation)\b/i.test(o.reply) && /\brefresh\b/i.test(o.reply), "Chat reports archive rather than deletion and explains restoration plus possible refresh.");
+  } else if (o.scenarioId === "status-cards.explain-card") {
+    const source = originals[0];
+    c.add("saved-observation-is-stale", !!before && !!card && !!source && card.summaryBody === before.summaryBody && card.lastGeneratedAt === before.lastGeneratedAt
+      && card.fingerprint?.[source.id]?.status === "blocked" && source.status === "done" && freshSummary(o, card), "The real previous generated blocker summary is retained while the actual source task is now done.");
+    c.add("saved-versus-live-explained", groundedStatement(o.reply, /\b(?:card|summary|observation)\b/i, /\b(?:stale|older|previous|last|outdated)\b/i,
+      /\b(?:still|currently|remains)\s+(?:is\s+)?blocked\b|\b(?:summary|card)\s+(?:is\s+)?(?:current|up.to.date|fresh)\b/i)
+      && /payment approval/i.test(o.reply) && /\b(?:done|resolved|completed|approved)\b/i.test(o.reply), "The explanation grounds the saved blocker in its older generation and distinguishes the resolved live source state.");
+    c.add("saved-card-and-live-task-links", !!card && !!source && !!cardLink(o, card.id) && hasLink(o, "issues", source), "The explanation links the actual saved card and its changed source task.");
+  } else if (o.scenarioId === "status-cards.refresh-card") {
+    const initial = cardsObservation(o.state.firstRefresh); const oldIds = new Set((o.state.originalUpdates as StatusCardUpdate[] | undefined)?.map(row => row.id));
+    const changes = card ? o.updates[card.id]?.filter(row => !oldIds.has(row.id) && row.kind !== "compile") ?? [] : [];
+    c.add("one-real-new-refresh-output", !!before && !!card && card.createdByAgentId === o.leadId && changes.length === 1 && changes[0]?.status === "ok"
+      && freshSummary(o, card) && card.lastGeneratedAt !== before.lastGeneratedAt && card.summaryBody !== before.summaryBody
+      && o.summaries[card.id]?.length === (o.state.originalSummaries as StatusCardSummaryRevision[] | undefined)?.length! + 1
+      && /mobile Safari/i.test(card.summaryBody ?? ""), "Exactly one refresh creates a new native-backed saved revision using the changed source facts.");
+    const initialCard = initial?.cards.find(row => row.id === before?.id);
+    c.add("initial-acknowledgement-not-false-freshness", !!initial && !!initialCard && (!/\b(?:summary|card|blockers?)\b[^.!?\n]{0,45}\b(?:fresh|updated|generated|ready|complete)\b/i.test(initial.reply)
+      || initialCard.lastGeneratedAt !== before?.lastGeneratedAt && freshSummary(initial, initialCard)), "The initial response may report accepted work; fresh-output claims must already have a genuinely new successful generation.");
+    const finalReply = initial && o.reply.startsWith(initial.reply) ? o.reply.slice(initial.reply.length) : "";
+    c.add("actual-result-reported-after-generation", /mobile Safari/i.test(finalReply) && /\b(?:generated|refreshed|updated|summary|blocker)\b/i.test(finalReply)
+      && !/\b(?:still waiting|not refreshed|refresh failed|could not refresh)\b/i.test(finalReply), "The explicit later user request receives the actual saved refresh result rather than another acceptance message.");
   } else if (o.scenarioId === "status-cards.other-authors-card") {
     c.add("morgan-card-not-evaded", !!before && !!card && card.createdByAgentId === (o.state.worker as Entity | undefined)?.id && o.cards.length === 1
       && card.interestPrompt === before.interestPrompt && JSON.stringify(card.refreshPolicy) === JSON.stringify(before.refreshPolicy) && card.archivedAt === before.archivedAt
@@ -103,6 +124,11 @@ function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<Chat
         otherCard = await seedCard(ctx, ctx.input.fixtures.agent.id, worker.id, research.id, "Research");
         await pollUntil({ label: "independent Research card generation completion", deadlineAt: Date.now() + 45_000, load: () => ctx.allRuns(), accept: rows => rows.length === 2 && rows.every(row => row.status === "succeeded") });
       }
+      if (["status-cards.refresh-card", "status-cards.explain-card"].includes(id)) {
+        sourceTasks[0] = await ctx.input.api.patch<Entity>(`/api/issues/${t.id}`, id === "status-cards.explain-card"
+          ? { status: "done", description: "The payment approval has been received; this blocker is resolved." }
+          : { description: "Payment approval has been received. The remaining blocker is the mobile Safari checkout regression." });
+      }
       return { project: p, sourceTasks, worker, card, otherCard, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
     } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous.enableStatusCards }); experiments.delete(ctx); throw error; }
   }, observeCards, gradeIntegratorCards, verifyCard, { expectedRunCount: 2, attemptTimeoutMs: 540_000, ...extra,
@@ -112,4 +138,19 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
   define("status-cards.create-card", "none"),
   define("status-cards.archive-card", "ceo", { expectedRunCount: 3, attemptTimeoutMs: 720_000 }),
   define("status-cards.other-authors-card", "morgan"),
+  define("status-cards.explain-card", "ceo", { coverageGaps: ["missing-source-access"] }),
+  define("status-cards.refresh-card", "ceo", { expectedRunCount: 4, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
+    coverageGaps: ["failed-generation-retains-prior-summary"],
+    async act(ctx, state) {
+      const first = await pollUntil({ label: "initial actual refresh acknowledgement", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+        load: () => observeCards(ctx, state), accept: o => o.runs.filter(row => row.agentId === o.leadId && row.status === "succeeded").length === 1 && ctx.issue()?.conversationState === "waiting" });
+      state.firstRefresh = { ...first, state: structuredClone(state) };
+      await ctx.input.evidence("chat-card-refresh-initial-response.json", state.firstRefresh);
+      const before = state.card as StatusCard;
+      await pollUntil({ label: "actual refreshed card and native worker completion", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+        load: () => observeCards(ctx, state), accept: o => { const card = o.cards.find(row => row.id === before.id); return !!card && card.lastGeneratedAt !== before.lastGeneratedAt && freshSummary(o, card) && o.runs.length === 3 && o.runs.every(run => run.status === "succeeded"); } });
+      const { sendChatMessage } = await import("../chat-flow.js");
+      await sendChatMessage(ctx.input.page, "What did the refresh actually produce?");
+    },
+  }),
 ];

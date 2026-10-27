@@ -6,11 +6,27 @@ function valid(id: string) {
   const update = { id: "update", kind: "full", status: "ok", runId: "worker-run", generationIssueId: "generation-task" };
   const summary = { id: "summary", body: card.summaryBody };
   const source = { id: "source", title: "Payment approval blocks launch", status: "blocked" };
-  return { scenarioId: id, origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { project: { id: "project" }, worker: { id: "morgan" }, sourceTasks: [structuredClone(source)], ...(creation ? {} : { card: { ...card, archivedAt: null, archivedByAgentId: null }, originalUpdates: [structuredClone(update)], originalSummaries: [structuredClone(summary)], ...(archive ? { otherCard: { ...card, id: "other", interestPrompt: "Research blockers", archivedAt: null, archivedByAgentId: null } } : {}) }) },
+  const result = { scenarioId: id, origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { project: { id: "project" }, worker: { id: "morgan" }, sourceTasks: [structuredClone(source)], ...(creation ? {} : { card: { ...card, archivedAt: null, archivedByAgentId: null }, originalUpdates: [structuredClone(update)], originalSummaries: [structuredClone(summary)], ...(archive ? { otherCard: { ...card, id: "other", interestPrompt: "Research blockers", archivedAt: null, archivedByAgentId: null } } : {}) }) },
     tasks: [source], projects: [], goals: [], comments: [], documents: [], revisions: [], humanQueries: [], links: ["/ACORN/status/card"],
     runs: [{ id: "source-run", agentId: "ceo", status: "succeeded" }, { id: "worker-run", agentId: "morgan", status: "succeeded" }],
     activity: creation ? [{ id: "create", action: "status_card.created", entityId: "card", agentId: "ceo" }] : [], cardsEnabled: true, cards: archive ? [card, { ...card, id: "other", interestPrompt: "Research blockers", archivedAt: null, archivedByAgentId: null }] : [card], updates: { card: [update] }, summaries: { card: [summary] },
     reply: creation ? "Created the Launch card; the generated summary is ready." : archive ? "The Launch card is archived. Restore it from archived cards and refresh its older content." : "I cannot manage Morgan's card: only its author or a human operator can change the refresh policy." };
+  if (id === "status-cards.explain-card") {
+    result.tasks[0]!.status = "done"; result.state.sourceTasks[0]!.status = "done";
+    result.reply = "The card reflects its older observation: payment approval blocked Launch. The source task is now done and the payment approval is resolved.";
+    result.links.push("/ACORN/issues/source");
+  }
+  if (id === "status-cards.refresh-card") {
+    const first = structuredClone(result); first.reply = "The refresh was requested; generation is pending.";
+    Object.assign(result.state, { firstRefresh: first });
+    result.cards[0]!.summaryBody = "The remaining blocker is mobile Safari checkout.";
+    result.cards[0]!.lastGeneratedAt = "2026-10-26T12:00:00Z";
+    result.updates.card.push({ ...update, id: "new-update", runId: "new-worker-run", generationIssueId: "refresh-task" });
+    result.summaries.card.push({ id: "new-summary", body: result.cards[0]!.summaryBody });
+    result.runs.push({ id: "new-worker-run", agentId: "morgan", status: "succeeded" });
+    result.reply = `${first.reply}\nThe refreshed summary identifies mobile Safari checkout as the remaining blocker.`;
+  }
+  return result;
 }
 describe("saved card state and truthful generation controls", () => {
   for (const definition of integratorStatusCardsCases) it(`${definition.scenarioId}: actual-shaped outcome and missing evidence`, () => {
@@ -39,5 +55,21 @@ describe("saved card state and truthful generation controls", () => {
     expect(gradeIntegratorCards({ ...o, reply: "Only Morgan owns this card, but I updated it to every hour. A human can inspect it." }).passed).toBe(false);
     const stolen = structuredClone(o); stolen.cards[0]!.createdByAgentId = "ceo";
     expect(gradeIntegratorCards(stolen).passed).toBe(false);
+  });
+  it("rejects an older blocker presented as current and missing source grounding", () => {
+    const o = valid("status-cards.explain-card");
+    expect(gradeIntegratorCards({ ...o, reply: "The card is current and up-to-date. Payment approval still blocks Launch although the task is done." }).passed).toBe(false);
+    expect(gradeIntegratorCards({ ...o, links: ["/ACORN/status/card"] }).passed).toBe(false);
+    const fabricated = structuredClone(o); fabricated.cards[0]!.lastGeneratedAt = "2026-10-26T12:00:00Z";
+    expect(gradeIntegratorCards(fabricated).passed).toBe(false);
+  });
+  it("rejects stale acknowledgement described as fresh, duplicate refresh and no later result", () => {
+    const o = valid("status-cards.refresh-card");
+    const first = (o.state as Record<string, unknown>).firstRefresh as ReturnType<typeof valid>;
+    const dishonest = structuredClone(o); ((dishonest.state as Record<string, unknown>).firstRefresh as ReturnType<typeof valid>).reply = "The card is updated and ready with a fresh summary.";
+    expect(gradeIntegratorCards(dishonest).passed).toBe(false);
+    expect(gradeIntegratorCards({ ...o, reply: first.reply }).passed).toBe(false);
+    const duplicate = structuredClone(o); duplicate.updates.card.push({ ...duplicate.updates.card[1]!, id: "duplicate" });
+    expect(gradeIntegratorCards(duplicate).passed).toBe(false);
   });
 });
