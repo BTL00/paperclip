@@ -818,7 +818,10 @@ rules and hooks apply. Native Codex tools can read and modify the execution home
 (read-only for planning); credentials in that home are not isolated from tools.
 Native Codex separately denies Runner-owned protocol state; ACPX Claude retains
 its existing provider trust boundary. Execution is unattended: native Codex uses `never`, and
-ACPX rejects requests for approval. The initial ACPX mode requires the Runner
+ACPX rejects requests for approval. When Claude starts in its home directory,
+its native user settings retain user trust even if the SDK also reports that
+same file as project settings. Other project settings keep the native trust filter.
+The initial ACPX mode requires the Runner
 setting `acpxPermissionMode: "approve-all"` (its default); other Runner modes are
 unqualified here and fail before launch. Local permission rules still apply.
 Preconfigured ACPX read-only/planning tasks also fail before provider launch
