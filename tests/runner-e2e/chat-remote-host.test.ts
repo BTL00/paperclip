@@ -37,9 +37,14 @@ describe("remote-only chat host qualification without native/provider calls", ()
     expect(f.fetch.mock.calls.every(([url]) => String(url).startsWith("http://169.254.169.254/latest/"))).toBe(true);
     expect(f.fetch.mock.invocationCallOrder.at(-1)!).toBeLessThan(f.docker.mock.invocationCallOrder[0]!);
   });
-  it("refuses On-Demand fallback before any Docker/native/provider/DB action", async () => {
-    const f = await fixture("on-demand"); await expect(prepareChatRemoteHost(f)).rejects.toThrow("on-demand-or-unknown-host-refused");
-    expect(f.docker).not.toHaveBeenCalled(); expect(await f.receipt()).toMatchObject({ lifecycle: "on-demand", status: "blocked", evaluationAdmitted: false });
+  it("accepts the user-authorized fleet fallback while truthfully recording On-Demand", async () => {
+    const f = await fixture("on-demand"); await prepareChatRemoteHost(f);
+    expect(await f.receipt()).toMatchObject({ lifecycle: "on-demand", status: "qualified-host-only", spotVerified: false, hostPolicy: "aws-fleet-spot-or-on-demand", evaluationAdmitted: false });
+    expect(f.docker).toHaveBeenCalled();
+  });
+  it.each(["", "unknown", "preemptible"])("refuses unproven host lifecycle %s before Docker", async lifecycle => {
+    const f = await fixture(lifecycle); await expect(prepareChatRemoteHost(f)).rejects.toThrow("unknown-host-lifecycle-refused");
+    expect(f.docker).not.toHaveBeenCalled(); expect(await f.receipt()).toMatchObject({ lifecycle, status: "blocked", evaluationAdmitted: false });
   });
   it.each(["local", "branch-workflow", "wrong-source", "wrong-model", "automatic-retry", "foreign-repository"])("fails closed on %s before metadata or Docker", async kind => {
     const f = await fixture();

@@ -27,7 +27,7 @@ export async function prepareChatRemoteHost(input: { executions: readonly Select
   if (!selectsRemoteChat(input.executions)) return undefined;
   const deps = { ...defaults, ...input.dependencies }, env = input.env;
   const receipt: Record<string, unknown> = { schema: "paperclip.chat-remote-host/v1", status: "blocked", scope: "before-evaluation", evaluationAdmitted: false,
-    allocationSpotOnlyClaimed: false, databaseLane: "owned-docker-postgres", automaticRetries: 0, maximumParallel: 2,
+    allocationSpotOnlyClaimed: false, hostPolicy: "aws-fleet-spot-or-on-demand", databaseLane: "owned-docker-postgres", automaticRetries: 0, maximumParallel: 2,
     executionIds: input.executions.map(e => e.id) };
   const filename = path.join(input.outputDirectory, "chat-remote-host.json");
   await mkdir(input.outputDirectory, { recursive: true });
@@ -52,8 +52,8 @@ export async function prepareChatRemoteHost(input: { executions: readonly Select
     const identity = JSON.parse(await metadata("http://169.254.169.254/latest/dynamic/instance-identity/document"));
     if (!/^i-[a-f0-9]{8,17}$/.test(identity.instanceId ?? "") || !/^ami-[a-f0-9]{8,17}$/.test(identity.imageId ?? "") || identity.region !== "us-east-1" || identity.architecture !== "x86_64") throw new Error(reason);
     Object.assign(receipt, { instanceId: identity.instanceId, imageId: identity.imageId, region: identity.region, architecture: identity.architecture, lifecycle });
-    reason = "on-demand-or-unknown-host-refused-before-evaluation";
-    if (lifecycle !== "spot") throw new Error(reason);
+    reason = "unknown-host-lifecycle-refused-before-evaluation";
+    if (lifecycle !== "spot" && lifecycle !== "on-demand") throw new Error(reason);
     reason = "owned-linux-amd64-postgres-image-unqualified";
     receipt.qualificationStage = "docker-engine";
     const engine = await currentDockerEngine(deps.docker, env);
@@ -69,7 +69,7 @@ export async function prepareChatRemoteHost(input: { executions: readonly Select
       os: ["linux", "windows"].includes(image?.Os) ? image.Os : null, architecture: ["amd64", "arm64"].includes(image?.Architecture) ? image.Architecture : null,
       version: typeof pgVersion === "string" && /^[0-9][a-zA-Z0-9.+~-]{0,79}$/.test(pgVersion) ? pgVersion : null };
     if (Object.values(checks).some(value => !value)) throw new Error(reason);
-    Object.assign(receipt, { status: "qualified-host-only", spotVerified: true, postgres: { image: POSTGRES_AMD64_IMAGE, imageId: image.Id, architecture: image.Architecture, version: pgVersion }, dockerEngineSha256: hash(engine.engineId) });
+    Object.assign(receipt, { status: "qualified-host-only", spotVerified: lifecycle === "spot", postgres: { image: POSTGRES_AMD64_IMAGE, imageId: image.Id, architecture: image.Architecture, version: pgVersion }, dockerEngineSha256: hash(engine.engineId) });
     await persist();
     return { receiptPath: filename, databaseLane: "owned-docker-postgres" as const, maxAutomaticRetries: 0, maxParallel: 2, postgresArtifact: "linux-amd64" as const, postgresImageId: image.Id as typeof POSTGRES_AMD64_IMAGE_IDS[number] };
   } catch (error) {
