@@ -1,3 +1,4 @@
+import { saveSkillConversationContext } from "./integrator-skill-context.js";
 import { createHash } from "node:crypto";
 import type { CompanySkillDetail, CompanySkillVersion, CompanySkillUpdateStatus } from "../../../packages/shared/src/types/company-skill.js";
 import type { SkillSource, SkillSourceRefreshResult } from "../../../packages/shared/src/types/skill-source.js";
@@ -8,11 +9,8 @@ import { editableLocalNotes } from "./integrator-skill-source.js";
 import { integratorDefinition, inspectResult, observeInternal } from "./integrator-support.js";
 // Genuine public history, read-only qualified 2026-10-26. Never substitute a URL
 // snapshot, fabricated GitHub server, local fork, or mutable default-branch head.
-export const accessibilityUpdatePins = {
-  repositoryURL: "https://github.com/KreerC/ACCESSIBILITY.md", path: "accessibility/SKILL.md",
-  oldCommit: "1339489069836b8188ec67eab14829b989a3a1a1", newCommit: "4cffe22e837afa89f81466300cfbd8fee9f004f6",
-  oldSha256: "0095c5c7bad5a518459b5b57cec74dd78672e601c24be42837860613f66258b6", newSha256: "a3f7d8bc4c91ee81f5a20b9fbab7d059d245815ce953d49ec5559ad5ec094976",
-} as const;
+import { accessibilityUpdatePins } from "./integrator-skill-pins.js";
+export { accessibilityUpdatePins } from "./integrator-skill-pins.js";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const root = (ctx: ChatCatalogContext) => `/api/companies/${ctx.input.fixtures.company.id}`;
 interface UpdateObservation extends InternalObservation { upstream: CompanySkillDetail; localFork: CompanySkillDetail; upstreamVersions: CompanySkillVersion[]; forkVersions: CompanySkillVersion[]; source: SkillSource; updateStatus: Pick<CompanySkillUpdateStatus, "supported" | "currentRef" | "latestRef" | "hasUpdate"> }
@@ -66,6 +64,7 @@ export const integratorSkillUpdateCases = [integratorDefinition("skills", "skill
   const localFork = await editableLocalNotes(ctx, upstream);
   const source = await ctx.input.api.patch<SkillSource>(`${root(ctx)}/skill-sources/${imported.source.id}/settings`, { revision: imported.source.revision, automaticUpdates: false, importNewSkills: false, trackingRef: accessibilityUpdatePins.newCommit });
   if (source.lastScanCommit !== accessibilityUpdatePins.oldCommit || source.trackingRef !== accessibilityUpdatePins.newCommit || source.automaticUpdates !== false) throw new Error("Normal source settings applied an update prematurely");
+  await saveSkillConversationContext(ctx, { description: `Selected upstream accessibility skill: ${upstream.name} (${upstream.id}), tracked source ${source.id}. Installed source revision ${upstream.sourceRef}; tracking reference ${source.trackingRef}. Separate editable local copy: ${localFork.name} (${localFork.id}).` });
   return { upstream, localFork, source, localVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/skills/${localFork.id}/versions`) };
 }, observeUpdate, gradeIntegratorSkillUpdate, async (ctx, state) => { const skill = state.upstream as CompanySkillDetail; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name); },
 { expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 540_000,

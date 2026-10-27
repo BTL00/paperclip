@@ -1,20 +1,27 @@
-import type { CompanySkillDetail, CompanySkillListItem, CompanySkillVersion } from "../../../packages/shared/src/types/company-skill.js";
+import { saveSkillConversationContext } from "./integrator-skill-context.js";
+import type { CompanySkillDetail, CompanySkillFileDetail, CompanySkillListItem, CompanySkillVersion } from "../../../packages/shared/src/types/company-skill.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
-import { checks, observation, project, type Entity, type InternalObservation } from "./internal-support.js";
+import { checks, observation, project, type InternalObservation } from "./internal-support.js";
 import { groundedStatement, integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
-import { preservesWebsiteChecklist } from "./integrator-skills.js";
-import { sourceSkillMarkdown, mobileChecks, openVettedSkillSource, skillSourceRequests, closeVettedSkillSource, importReadOnlySkill, editableLocalNotes } from "./integrator-skill-source.js";
+import { sourceSkillMarkdown, mobileChecks, openVettedSkillSource, skillSourceRequests, recordVettedSourceImport, closeVettedSkillSource, importReadOnlySkill, editableLocalNotes } from "./integrator-skill-source.js";
 interface ImportObservation extends InternalObservation {
   skills: CompanySkillDetail[]; skillVersions: Record<string, CompanySkillVersion[]>;
-  sourceRequests: ReturnType<typeof skillSourceRequests>;
+  sourceRequests: ReturnType<typeof skillSourceRequests>; importedFile?: CompanySkillFileDetail;
 }
 const root = (ctx: ChatCatalogContext) => `/api/companies/${ctx.input.fixtures.company.id}/skills`;
 async function observeImports(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<ImportObservation> {
   const base = await observeInternal(ctx, state); const api = ctx.input.api;
   const rows = await api.get<CompanySkillListItem[]>(root(ctx));
   const skills = await Promise.all(rows.map(row => api.get<CompanySkillDetail>(`${root(ctx)}/${row.id}`)));
-  const skillVersions = Object.fromEntries(await Promise.all(rows.map(async row => [row.id, await api.get<CompanySkillVersion[]>(`${root(ctx)}/${row.id}/versions`)])));
-  return { ...base, skills, skillVersions, sourceRequests: skillSourceRequests(ctx) };
+  const skillVersions: Record<string, CompanySkillVersion[]> = Object.fromEntries(await Promise.all(rows.map(async row => [row.id, await api.get<CompanySkillVersion[]>(`${root(ctx)}/${row.id}/versions`)])));
+  let importedFile: CompanySkillFileDetail | undefined;
+  if (ctx.scenario.id === "skills.find-and-install") {
+    const imported = skills.find(row => row.sourceLocator === state.sourceURL);
+    if (imported) importedFile = await api.get<CompanySkillFileDetail>(`${root(ctx)}/${imported.id}/files?path=SKILL.md`);
+    if (imported && importedFile?.skillId === imported.id && importedFile.path === "SKILL.md" && importedFile.encoding !== "base64" && importedFile.content === imported.markdown
+      && base.activity.some(event => event.action === "company.skills_imported" && event.agentId === base.leadId && event.details?.source === state.sourceURL && event.details?.importedCount === 1)) await recordVettedSourceImport(ctx, String(state.sourceURL), importedFile.content);
+  }
+  return { ...base, skills, skillVersions, importedFile, sourceRequests: skillSourceRequests(ctx) };
 }
 function importObservation(value: unknown): ImportObservation | undefined {
   const o = value as ImportObservation;
@@ -33,13 +40,14 @@ function changedFork(o: ImportObservation) {
 }
 export function gradeIntegratorSkillImports(value: unknown) {
   const c = checks(); const o = importObservation(value);
-  c.add("actual-source-library-and-version-evidence", !!o, "Requires the real vetted source request log, public company library detail and revision history.");
+  c.add("actual-source-library-and-version-evidence", !!o, "Requires the actual public source-import receipt, company library detail, independently retrieved imported bytes and available revision history.");
   if (!o) return c.result();
-  c.add("permitted-source-prerequisite", o.state.importAllowed === true && o.sourceRequests.length >= 1, "Effective skill policy permits ordinary import, and the owned synthetic source was genuinely read.");
+  c.add("permitted-source-prerequisite", o.state.importAllowed === true && (o.scenarioId === "skills.fork-read-only" ? o.state.upstreamQualified === true : o.sourceRequests.length >= 1), "Effective policy permits import; actual synthetic-source read or pinned immutable public upstream qualification is required for the selected fixture.");
   if (o.scenarioId === "skills.find-and-install") {
     const installed = o.skills.filter(row => row.sourceLocator === o.state.sourceURL); const skill = installed[0];
-    c.add("one-intended-source-installation", installed.length === 1 && !!skill && skill.companyId === o.companyId && skill.sourceType === "url" && skill.markdown === sourceSkillMarkdown
-      && !!skill.currentVersionId && o.skillVersions[skill.id]?.some(row => row.id === skill.currentVersionId && row.fileInventory.some(file => file.path === "SKILL.md" && file.content === sourceSkillMarkdown)), "One intended skill retains the genuine source URL and exact fetched original revision bytes.");
+    c.add("one-intended-source-installation", installed.length === 1 && !!skill && skill.companyId === o.companyId && skill.sourceType === "local_path" && skill.markdown === sourceSkillMarkdown
+      && o.importedFile?.skillId === skill.id && o.importedFile.path === "SKILL.md" && o.importedFile.encoding !== "base64" && o.importedFile.content === sourceSkillMarkdown
+      && (!skill.currentVersionId || o.skillVersions[skill.id]?.some(row => row.id === skill.currentVersionId && row.fileInventory.some(file => file.path === "SKILL.md" && file.content === sourceSkillMarkdown))), "One intended skill retains the approved local source locator and exact independently read SKILL.md bytes. A current immutable version, when present, must agree; ordinary local import does not promise one.");
     c.add("agent-imported-approved-source", o.activity.some(event => event.action === "company.skills_imported" && event.agentId === o.leadId && event.details?.source === o.state.sourceURL
       && event.details?.importedCount === 1), "The responding agent imports the actual authorized source through the supported company route.");
     c.add("truthful-installation-and-usage", !!skill && o.reply.includes(skill.name) && skill.usedByAgents.length === 0
@@ -47,11 +55,11 @@ export function gradeIntegratorSkillImports(value: unknown) {
       && !/\b(?:enabled|assigned|activated)\b[^.!?\n]{0,30}\b(?:all|every)\s+agents?\b/i.test(o.reply), "The response identifies the saved skill without a fictional approval gate or global usage assignment.");
   } else if (o.scenarioId === "skills.fork-read-only") {
     const before = o.state.upstream as CompanySkillDetail | undefined; const original = o.skills.find(row => row.id === before?.id); const fork = changedFork(o);
-    c.add("upstream-remains-read-only-and-identical", !!before && !!original && original.editable === false && original.sourceType === "url" && original.sourceLocator === before.sourceLocator
+    c.add("upstream-remains-read-only-and-identical", !!before && !!original && original.editable === false && original.sourceType === "github" && original.sourceRef === before.sourceRef && original.sourceLocator === before.sourceLocator
       && original.currentVersionId === before.currentVersionId && original.markdown === before.markdown
       && JSON.stringify(o.skillVersions[original.id]) === JSON.stringify(o.state.upstreamVersions), "The real protected upstream package and full revision history remain unchanged.");
     c.add("editable-provenance-preserving-mobile-fork", !!fork && !!before && fork.id !== before.id && fork.forkedFromSkillId === before.id && fork.forkedFromCompanyId === o.companyId
-      && preservesWebsiteChecklist(fork.markdown) && preservesMobileChecks(fork.markdown)
+      && fork.markdown.includes(before.markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")) && preservesMobileChecks(fork.markdown)
       && o.skillVersions[fork.id]?.some(version => version.id === fork.currentVersionId && version.authorAgentId === o.leadId && version.fileInventory.some(file => file.path === "SKILL.md" && file.content === fork.markdown)), "A saved editable fork retains upstream provenance, the original substantive checklist and all actual mobile additions.");
     const localBefore = o.state.localFork as CompanySkillDetail | undefined; const localNow = o.skills.find(row => row.id === localBefore?.id);
     c.add("unrelated-local-notes-preserved", !!localBefore && !!localNow && localNow.markdown.includes("ORCHID customer escalation notes unchanged")
@@ -63,14 +71,21 @@ export function gradeIntegratorSkillImports(value: unknown) {
 }
 function define(id: "skills.find-and-install" | "skills.fork-read-only") {
   return integratorDefinition("skills", id, async ctx => {
-    const source = await openVettedSkillSource(ctx);
+    const source = id === "skills.find-and-install" ? await openVettedSkillSource(ctx) : undefined;
     try {
-      const decision = await ctx.input.api.post<{ allowed: boolean }>(`/api/companies/${ctx.input.fixtures.company.id}/skill-policy/evaluate`, { principal: { agentId: ctx.input.fixtures.agent.id }, action: "skills.import", resource: { sourceType: "external_package", sourceLocator: source.url } });
-      if (!decision.allowed) throw new Error("Synthetic source fixture does not have the canonical permitted skill policy");
-      const p = await project(ctx, "Launch", { description: `Our vetted accessibility review source is ${source.url}. It is a synthetic Markdown-only fixture. Our mobile review checklist is: ${mobileChecks.join(" ")}` });
-      if (id === "skills.find-and-install") return { project: p, sourceURL: source.url, importAllowed: true };
-      const upstream = await importReadOnlySkill(ctx, source.url); const localFork = await editableLocalNotes(ctx, upstream);
-      return { project: p, sourceURL: source.url, importAllowed: true, upstream, localFork, upstreamVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/${upstream.id}/versions`) };
+      const decision = await ctx.input.api.post<{ allowed: boolean }>(`/api/companies/${ctx.input.fixtures.company.id}/skill-policy/evaluate`, { principal: { agentId: ctx.input.fixtures.agent.id }, action: "skills.import", resource: { sourceType: source ? "workspace" : "git", ...(source ? { sourceLocator: source.url } : {}) } });
+      if (!decision.allowed) throw new Error("Source fixture does not have the canonical permitted skill policy");
+      const p = await project(ctx, "Launch");
+      if (source) {
+        await ctx.input.api.post(`/api/projects/${p.id}/workspaces`, { name: "Vetted synthetic source", cwd: source.workspaceRoot, isPrimary: true });
+        const existing = await ctx.input.api.get<CompanySkillListItem[]>(root(ctx));
+        if (existing.some(row => row.sourceLocator === source.url)) throw new Error("Source registration imported the evaluated skill before canonical admission");
+        await saveSkillConversationContext(ctx, { projectId: p.id, description: `Our vetted synthetic accessibility-review source is the one owned directory ${source.url}. It contains Markdown-only SKILL.md, and has not been imported into the company.` });
+        return { project: p, sourceURL: source.url, importAllowed: true };
+      }
+      const upstream = await importReadOnlySkill(ctx); const localFork = await editableLocalNotes(ctx, upstream);
+      await saveSkillConversationContext(ctx, { projectId: p.id, description: `Selected read-only checklist skill: ${upstream.name} (${upstream.id}), source ${upstream.sourceLocator}, revision ${upstream.sourceRef}. Existing editable local notes: ${localFork.name} (${localFork.id}). Our mobile checks: ${mobileChecks.join(" ")}` });
+      return { project: p, sourceURL: upstream.sourceLocator, importAllowed: true, upstreamQualified: true, upstream, localFork, upstreamVersions: await ctx.input.api.get<CompanySkillVersion[]>(`${root(ctx)}/${upstream.id}/versions`) };
     } catch (error) { await closeVettedSkillSource(ctx); throw error; }
   }, observeImports, gradeIntegratorSkillImports, async (ctx, _state, value) => {
     const o = importObservation(value); const skill = o && (id === "skills.find-and-install" ? o.skills.find(row => row.sourceLocator === o.state.sourceURL) : changedFork(o));

@@ -48,3 +48,17 @@ describe("authored skill outcomes", () => {
     }
   });
 });
+
+it("ignores mounted read-only runtime entries without accepting an unauthorized writable workaround", () => {
+  for (const id of ["skills.author-skill", "skills.explicit-restriction"]) {
+    const o = valid(id); const mounted = { ...o.skills[0]!, id: "mounted-runtime", editable: false };
+    expect(gradeIntegratorSkills({ ...o, skills: [mounted, ...o.skills] }).passed).toBe(true);
+    expect(gradeIntegratorSkills({ ...o, skills: [...o.skills, { ...mounted, editable: true }] }).passed).toBe(false);
+  }
+});
+it("preserves a numbered viewport check and its actual multiline inspection detail", () => {
+  const markdown = websiteChecklist.slice(0, 3).join("\n") + "\n4. Test the landing page at a 375 pixel viewport width.\n   - Confirm whether the page introduces horizontal scrolling.\n   - Record the element causing overflow.";
+  expect(preservesWebsiteChecklist(markdown)).toBe(true);
+  expect(preservesWebsiteChecklist(markdown.replace("375 pixel", "768 pixel"))).toBe(false);
+  expect(preservesWebsiteChecklist(markdown.replace("Confirm whether", "Ignore whether"))).toBe(false);
+});
