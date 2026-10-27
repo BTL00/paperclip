@@ -33,7 +33,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.access.cli-authorization",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.access.cli-authorization",
+          "startedAt": "2026-10-27T10:58:18.148Z",
+          "finishedAt": "2026-10-27T11:01:28.247Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "754452365eeb3d34751bf5e517e5e00adecf401d0066df1fb4c49dd078337034",
+          "definitionDigest": "aae4b599ad3495df8ff510aa2d4c4cd62b2545c5087f3a4c46888d9805ee3aaf",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "aae4b599ad3495df8ff510aa2d4c4cd62b2545c5087f3a4c46888d9805ee3aaf",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for initial identity response: Initial response failed",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/remaining-initial-selection-68e8534e31.json",
+            "tests/runner-e2e/results/remaining-initials-68e8534e3127-c370c2cdf522008df388/chat-features/runner-codex-subscription/local/access.cli-authorization/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-access.cli-authorization.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 352032,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "aae4b599ad3495df8ff510aa2d4c4cd62b2545c5087f3a4c46888d9805ee3aaf",
       "qualifyingGraderDigest": "aae4b599ad3495df8ff510aa2d4c4cd62b2545c5087f3a4c46888d9805ee3aaf",
       "productPolicy": {
@@ -114,7 +165,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.access.other-company",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.access.other-company",
+          "startedAt": "2026-10-27T10:58:18.174Z",
+          "finishedAt": "2026-10-27T11:01:03.910Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "525a573ac211d857d9c31bb960e5cdc02ac7836dbd66963441201e1345b80b19",
+          "definitionDigest": "533ef36460e067566a66b8ca4a5346fc5fe50e0a11d68452b1ed0ba8b93060b4",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "533ef36460e067566a66b8ca4a5346fc5fe50e0a11d68452b1ed0ba8b93060b4",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for access.other-company: Settled scenario failed: company-handoff-explained",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/remaining-initial-selection-68e8534e31.json",
+            "tests/runner-e2e/results/remaining-initials-68e8534e3127-290a2b6675de1a6e634a/chat-features/runner-codex-subscription/local/access.other-company/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-access.other-company.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 686922,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "533ef36460e067566a66b8ca4a5346fc5fe50e0a11d68452b1ed0ba8b93060b4",
       "qualifyingGraderDigest": "533ef36460e067566a66b8ca4a5346fc5fe50e0a11d68452b1ed0ba8b93060b4",
       "productPolicy": {
@@ -140,7 +242,59 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.access.private-resource",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "passed",
+          "executionId": "chat-features.runner-codex-subscription.local.access.private-resource",
+          "startedAt": "2026-10-27T11:01:28.320Z",
+          "finishedAt": "2026-10-27T11:03:37.016Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "525a573ac211d857d9c31bb960e5cdc02ac7836dbd66963441201e1345b80b19",
+          "definitionDigest": "245b058a701bc4b9f170d9c26adc250bc7c0966c1c2ba0cab8dcae84bf2ef7d5",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "245b058a701bc4b9f170d9c26adc250bc7c0966c1c2ba0cab8dcae84bf2ef7d5",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "provisional_initial_pass_pending_final_closure",
+          "observedFailure": null,
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/remaining-initial-selection-68e8534e31.json",
+            "tests/runner-e2e/results/remaining-initials-68e8534e3127-3afc8be20ef17cd9f2f8/chat-features/runner-codex-subscription/local/access.private-resource/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-access.private-resource.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-pass-identity-review-access.private-resource.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 512947,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "245b058a701bc4b9f170d9c26adc250bc7c0966c1c2ba0cab8dcae84bf2ef7d5",
       "qualifyingGraderDigest": "245b058a701bc4b9f170d9c26adc250bc7c0966c1c2ba0cab8dcae84bf2ef7d5",
       "productPolicy": {
@@ -239,7 +393,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.activity.agent-feedback",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.activity.agent-feedback",
+          "startedAt": "2026-10-27T11:01:28.354Z",
+          "finishedAt": "2026-10-27T11:04:20.852Z",
+          "sourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+          "workingTreeDigest": "60cd2ffe47e413eb03002b2bc5923622b8b705e8b9ffaa58609fe58135be4e02",
+          "definitionDigest": "48d16a67df9a6d74e736d866d02f90a4345d36d8a39bcdcf4fda3e96dd53f6bb",
+          "suiteDefinitionDigest": "1fd1f2832bff5abb06c8a4bb47975a336fafb12f7220fdc91c932bdc80cba8f0",
+          "graderDigest": "48d16a67df9a6d74e736d866d02f90a4345d36d8a39bcdcf4fda3e96dd53f6bb",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Stopped waiting for activity.agent-feedback: Settled scenario failed: agent-submission-is-not-board-read, restricted-source-and-preview-excluded; Reporter privacy violation: redacted server.log, omitted blob-report/report.zip, redacted playwright process stdout/stderr",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/remaining-initial-selection-68e8534e31.json",
+            "tests/runner-e2e/results/remaining-initials-68e8534e3127-a3ab32a71cb3ead68f80/chat-features/runner-codex-subscription/local/activity.agent-feedback/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-activity.agent-feedback.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 493644,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "68e8534e3127dec27ae979bbf9f33d8a26422e4b",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-remaining-68e8534e31.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "48d16a67df9a6d74e736d866d02f90a4345d36d8a39bcdcf4fda3e96dd53f6bb",
       "qualifyingGraderDigest": "48d16a67df9a6d74e736d866d02f90a4345d36d8a39bcdcf4fda3e96dd53f6bb",
       "productPolicy": {
@@ -6781,7 +6986,7 @@
           "automaticRetries": 0,
           "correction": null,
           "classification": "candidate_failure",
-          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\nExpected pattern: \u001b[32m/Declined|Superseded/i\u001b[39m\nReceived string:  \u001b[31m\"Publish research launch introductionPublish the proposed introduction page?\"\u001b[39m\nTimeout: 30000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\u001b[22m\n\u001b[2m    64 \u00d7 locator resolved to <button type=\"button\" data-testid=\"task-chat-pending-request\" id=\"interaction-a3b1e4e9-9189-42cc-8b09-529442efca67\" aria-label=\"Open request: Publish research launch introduction\" class=\"group flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring\">\u2026</button>\u001b[22m\n\u001b[2m       - unexpected value \"Publish research launch introductionPublish the proposed introduction page?\"\u001b[22m\n",
+          "observedFailure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\nExpected pattern: \u001b[32m/Declined|Superseded/i\u001b[39m\nReceived string:  \u001b[31m\"Publish research launch introductionPublish the proposed introduction page?\"\u001b[39m\nTimeout: 30000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#interaction-a3b1e4e9-9189-42cc-8b09-529442efca67')\u001b[22m\n\u001b[2m    64 × locator resolved to <button type=\"button\" data-testid=\"task-chat-pending-request\" id=\"interaction-a3b1e4e9-9189-42cc-8b09-529442efca67\" aria-label=\"Open request: Publish research launch introduction\" class=\"group flex w-full items-center gap-2 rounded-sm px-1 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring\">…</button>\u001b[22m\n\u001b[2m       - unexpected value \"Publish research launch introductionPublish the proposed introduction page?\"\u001b[22m\n",
           "evidencePaths": [
             "tests/runner-e2e/results/chat-catalog-campaign/admitted-initials-6beacfe0a9.json",
             "tests/runner-e2e/results/catalog-initial-2026-10-27T08-52-51-704Z-questions-and-approvals-reject-and-revise/chat-features/runner-codex-subscription/local/questions-and-approvals.reject-and-revise/attempt-1/result.json",
