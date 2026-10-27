@@ -149,3 +149,12 @@ it("rejects an unrelated API route offered as an instruction revision result", (
   const o = valid("agents.edit-instructions"); o.links = ["/api/agents/morgan/keys"];
   expect(gradeRuntimeAgents(o).passed).toBe(false);
 });
+
+ it("restoration accepts content-addressed identity and ordinary source labels with real visible restoration history", () => {
+  const o = valid("agents.restore-instructions");
+  const restored = { ...o.instruction!.revision, id: "previous", source: "api" };
+  o.instruction!.revision = restored;
+  o.instructionHistory!.revisions[2] = restored;
+  expect(gradeRuntimeAgents(o).passed).toBe(true);
+  o.instructionHistory!.revisions.pop(); expect(gradeRuntimeAgents(o).passed).toBe(false);
+ });

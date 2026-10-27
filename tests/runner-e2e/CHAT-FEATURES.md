@@ -182,6 +182,25 @@ Domain descriptors declare real setup/actions/independent grading and exact boun
 
 Only `steering.preserve-draft` and `tasks.attachment-brief` may currently declare one `queryAttachments` receipt. The canonical typed query remains unchanged; the production composer appends its exact attachment reference. Before and after send, the harness independently reads the public same-source receipt and actual bytes, verifies SHA-256 and human attribution, and binds it to the real canonical comment. Extra markdown, text changes, foreign receipts and hidden followups fail. Attachment fingerprints pin both production composer source hashes as data, without importing the UI graph.
 
+### Six prerequisite probes are not completed journeys
+
+The following six definitions retain explicit coverage gaps and must not be
+reported as full intended behavior coverage or passing refusal tests. Authored
+callbacks and calibrated hypothetical observations do not prove a live journey.
+
+| Scenario | Implemented evidence/action | Remaining prerequisite or implementation boundary |
+| --- | --- | --- |
+| `access.invite-teammate` | Separate real active-invite creation and accepted-state checkpoints; consequential role-question branch; exact join-link hash binding; source-qualified guard before acceptance; actual intended-person membership and different-identity reuse rejection. | Supported agent invitation grant is unavailable through the current public membership mutation. Known unsafe invitation acceptance remains blocked by the shared source guard. |
+| `access.manage-membership` | Actual initial project permission, unrelated company membership and instance-user baselines, with independent post-query readback and preservation of unrelated grants. | Public grant provisioning rejects agent principals; actual membership mutation is board-only and currently records a human actor. |
+| `activity.routine-audit` | Real routine/revision/run/task reads and independent audit oracle. | Historical prerequisite construction is unfinished. No rule requires a real 24-hour wait; a deterministic historical input fixture requires a separately reviewed narrow fixture-policy decision. No historical seeding exception is implemented here. |
+| `agents.restore-instructions` | Exact prior bytes and visible historical/agent-attributed restoration evidence, without demanding a new UUID or literal `restore` source label. | Current file storage does not create the two visible revisions or retained restoration history required by the catalog. |
+| `budgets-costs.subscription-fees` | Public report/editability/ownership/current-price audit state capture and existing human-link UI; editable shared ownership is supported. | No admitted genuine same-account duplicate fixture/provenance or public archived-price readback exists. Candidate rows are never promoted to verified duplicates by matching labels/owners. Canonical setup remains explicitly blocked. |
+| `skills.enable-for-agent` | Saved assignment, unchanged skill/policy, future native selected-version snapshot independently matched to exact public version bytes; natural assignment wording accepted. | Public configuration-grant provisioning remains blocked. Lifecycle policy does not implement runtime `skills.use` denial; no denial is fabricated from install/edit restrictions. |
+
+Queries, intended contexts/outcomes, declared run/human counts and deadlines stay
+unchanged. These source improvements do not rewrite earlier measurements or
+qualify any blocked conditional as a pass.
+
 ### Selected private inputs and published operator sources
 
 A case declares `requiredCredentials` by standard credential name and, where

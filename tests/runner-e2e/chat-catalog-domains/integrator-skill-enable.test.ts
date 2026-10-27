@@ -5,8 +5,8 @@ function valid() {
   const skill = { id: "skill", key: "company/accessibility-review", currentVersionId: "revision", markdown: "Check form labels" };
   return { scenarioId: "skills.enable-for-agent", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { skill: structuredClone(skill), worker: { id: "morgan" }, futureTask: { id: "future" }, agentConfigurationStatus: 200, beforeActivityIds: ["setup-probe"], effectivePolicy: { revision: 1, rules: [] } },
     tasks: [], projects: [], goals: [], comments: [], documents: [], revisions: [], humanQueries: [], links: [],
-    runs: [{ id: "source", agentId: "ceo", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "chat" } }, { id: "future-run", agentId: "morgan", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "future", skillVersions: { [skill.key]: "revision" } } }],
-    skill, assignment: { supported: true, desiredSkills: [skill.key], desiredSkillEntries: [{ key: skill.key, versionId: "revision" }] }, effectivePolicy: { revision: 1, rules: [] },
+    runs: [{ id: "source", agentId: "ceo", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "chat" } }, { id: "future-run", agentId: "morgan", companyId: "company", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "future", skillVersions: { [skill.key]: "revision" } } }],
+    skill, versions: [{ id: "revision", companyId: "company", companySkillId: "skill", fileInventory: [{ path: "SKILL.md", kind: "skill", content: skill.markdown }] }], assignment: { supported: true, desiredSkills: [skill.key], desiredSkillEntries: [{ key: skill.key, versionId: "revision" }] }, effectivePolicy: { revision: 1, rules: [] },
     activity: [{ id: "actual-assignment", action: "agent.skills_synced", agentId: "ceo", entityId: "morgan", runId: "source" }],
     reply: "Assigned the existing skill from our company library to Morgan. Installation was already complete; usage remains subject to the existing policy." };
 }
@@ -40,4 +40,19 @@ describe("actual permitted skill assignment and future immutable delivery", () =
     expect(gradeIntegratorSkillEnable({ ...o, reply: "Morgan is not enabled, even though the installed skill has a permissive policy." }).passed).toBe(false);
     expect(gradeIntegratorSkillEnable({ ...o, reply: "Assigned the installed skill to Morgan and all agents. I changed the policy." }).passed).toBe(false);
   });
+});
+
+it("accepts natural assignment wording without prescribed installation/policy nouns", () => {
+ const o = valid(); o.reply = "Morgan can now use accessibility review on future work.";
+ expect(gradeIntegratorSkillEnable(o).passed).toBe(true);
+});
+it("accepts a genuine execution snapshot of unchanged initially unversioned local bytes", () => {
+ const o = valid(); (o.state.skill as {currentVersionId: string | null}).currentVersionId = null;
+ expect(gradeIntegratorSkillEnable(o).passed).toBe(true);
+ o.versions[0]!.fileInventory[0]!.content = "Different instructions";
+ expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+});
+it.each(["companyId", "companySkillId", "id"])("rejects a foreign or unselected version %s", field => {
+ const o = valid(); (o.versions[0] as Record<string, unknown>)[field] = "wrong";
+ expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
 });

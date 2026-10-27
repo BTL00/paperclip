@@ -33,7 +33,7 @@ describe("separate real invitation checkpoints", () => {
     (o.state.invitationCreated as any).state = "pending"; expect(invitation.grade(o).passed).toBe(false);
   });
   it("accepts a real consequential role clarification without claiming an invitation", () => {
-    const o = intended(invitation.scenarioId); delete o.state.invitationCreated; o.state.invitations = [];
+    const o = intended(invitation.scenarioId); delete o.state.invitationCreated; o.state.invitations = []; o.state.alexMembershipAfter = null;
     o.runs = [{ id: "run", agentId: "ceo" }] as any;
     o.interactions = [{ id: "role", companyId: "acorn", createdByAgentId: "ceo", sourceRunId: "run", kind: "ask_user_questions", status: "pending", payload: { questionSet: { questions: [{ id: "role", prompt: "What company role should Alex receive?", answerMode: "text" }] } } }];
     expect(invitation.grade(o).passed).toBe(true);

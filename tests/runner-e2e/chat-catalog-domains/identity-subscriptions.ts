@@ -11,9 +11,9 @@ export function gradeSubscriptions(value: unknown) {
   const c = checks(); const o = identityObservation(value); c.add("complete-subscription-evidence", !!o, "Actual owned account records, provenance and saved human linking are required."); if (!o) return c.result();
   const before = o.state.beforeReport as SubscriptionCostReport | undefined; const after = o.state.afterReport as SubscriptionCostReport | undefined;
   const pair = o.state.duplicateAccounts as SubscriptionAccountReport[] | undefined;
-  c.add("one-actual-account-not-two-similar-records", pair?.length === 2 && pair[0]?.id !== pair[1]?.id && pair.every(row => row.canEdit && row.ownerUserId === o.state.personId)
+  c.add("one-actual-account-not-two-similar-records", pair?.length === 2 && pair[0]?.id !== pair[1]?.id && pair.every(row => row.canEdit) && (pair.every(row => row.shared) || !!pair[0]?.ownerUserId && pair[0].ownerUserId === pair[1]?.ownerUserId)
     && pair[0]?.provider === pair[1]?.provider && o.state.sameAccountProvenanceVerified === true && o.state.provenanceOrigin === "genuine-owned-provider-history",
-    "Both editable records must be owned by the actual human AND independently proven to describe one real provider account. Matching labels, two different accounts or fabricated fingerprints cannot qualify.");
+    "Both records must expose matching personal ownership or shared ownership, be editable by the actual human AND be independently proven to describe one real provider account. Matching labels, two different accounts or fabricated fingerprints cannot qualify.");
   c.add("board-only-subscription-actions", o.state.agentReadStatus === 403 && o.state.agentLinkStatus === 403 && o.state.noPreHumanMutation === true,
     "The chat cannot read board subscription details or silently merge them, and the records remain distinct until the real human decision.");
   c.add("human-link-persisted-with-target-price", !!pair && !!before && !!after && o.state.humanLinkStatus === 200 && o.state.ownershipVisible === true && o.state.linkDisclosureVisible === true
@@ -32,6 +32,12 @@ export function gradeSubscriptions(value: unknown) {
     "The response routes the person to actual subscription controls, explains ownership and duplicate checks, and never fabricates a fee from token usage or claims an agent merge.");
   return c.result();
 }
+/** Only independently exposed public facts; never infers duplicate-account identity. */
+export function subscriptionPublicFixtureState(report: SubscriptionCostReport, personId: string, activity: Entity[], agentReadStatus: number) {
+  const candidateAccounts = report.accounts.filter(row => row.canEdit && (row.shared || !!row.ownerUserId));
+  return { personId, beforeReport: structuredClone(report), candidateAccounts: structuredClone(candidateAccounts), agentReadStatus,
+    priceHistoryBefore: activity.filter(row => row.action === "subscription.price_updated" && candidateAccounts.some(account => account.id === row.entityId)).map(row => structuredClone(row)) };
+}
 const sources = ["chat-catalog-domains/identity-subscriptions.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/budgets-costs.yaml",
   "../../packages/shared/src/subscriptions.ts", "../../server/src/routes/costs.ts", "../../server/src/routes/ai-connections.ts", "../../server/src/services/subscriptions.ts", "../../ui/src/components/SubscriptionCostCard.tsx"];
 export const subscriptionIdentityCases: readonly ChatCatalogCase[] = [identityDefinition("budgets-costs.subscription-fees", async ctx => {
@@ -39,14 +45,17 @@ export const subscriptionIdentityCases: readonly ChatCatalogCase[] = [identityDe
   const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
   const report = await ctx.input.api.get<SubscriptionCostReport>(`${root}/costs/subscriptions`);
   const agentReadStatus = await probeAgentPermission(ctx, `${root}/costs/subscriptions`, "GET");
-  await ctx.input.evidence("identity-subscription-context-blocker.json", { actualHumanId: session.user.id, visibleRecordIds: report.accounts.map(row => row.id),
-    ownedRecordIds: report.accounts.filter(row => row.ownerUserId === session.user.id && row.canEdit).map(row => row.id), agentReadStatus,
-    originalQuery: ctx.scenario.query, originalQuerySent: false, sameAccountProvenanceAvailable: false, setupBlocked: true,
-    unsupportedContext: "Public reports omit provider account identity. Local connection creation requires genuine browser login per session; no existing authentic duplicate-account backup/provenance was supplied. Current report also cannot read archived price revisions." });
-  // Explicit setup blocker, not a successful refusal or arbitrary two-account
-  // substitute. A future admitted authentic owned backup needs public import,
-  // provenance verification and archived-price readback before removing gaps.
-  throw new Error("Setup blocker: two authentic records for ONE actual subscription and inspectable historical prices are not available through the current admitted public fixture path");
+  const activity = await ctx.input.api.get<Entity[]>(`${root}/activity?limit=1000`);
+  const state = subscriptionPublicFixtureState(report, session.user.id, activity, agentReadStatus);
+  await ctx.input.evidence("identity-subscription-context-blocker.json", { actualHumanId: state.personId,
+    visibleRecordIds: report.accounts.map(row => row.id), editableRecordIds: state.candidateAccounts.map(row => row.id),
+    priceAuditIds: state.priceHistoryBefore.map(row => row.id), agentReadStatus, originalQuery: ctx.scenario.query, originalQuerySent: false,
+    sameAccountProvenanceAvailable: false, archivedPriceReadbackAvailable: false, setupBlocked: true,
+    unsupportedContext: "Public reports establish editability, ownership and current price only, not same-account provider identity or archived price revisions. No genuine selected duplicate-account fixture/provenance was supplied." });
+  // Candidates are not promoted to a verified duplicate pair. Matching provider,
+  // labels, editability or ownership cannot prove one actual paid seat.
+  throw new Error("Setup blocker: actual public subscription facts were retained, but same-account provider provenance and archived-price readback remain unavailable; no canonical request was sent");
+
 }, gradeSubscriptions, {
   authentication: "human-session", sourceFiles: sources,
   coverageGaps: ["No supported admitted fixture establishes two subscription records with independently verified provenance for ONE actual account. Public current-price reports also omit archived price revisions; complete historical-price preservation cannot yet be independently verified. The original context remains blocked, never replaced by different accounts or a nonexistent-resource refusal."],
@@ -63,7 +72,7 @@ export const subscriptionIdentityCases: readonly ChatCatalogCase[] = [identityDe
     await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
     await ctx.input.page.getByRole("button", { name: "View details", exact: true }).click();
     const dialog = ctx.input.page.getByRole("dialog"); await expect(dialog.getByRole("heading", { name: "Subscriptions", exact: true })).toBeVisible();
-    for (const account of pair) { if (!account.ownerName || account.ownerUserId !== state.personId || !account.canEdit) throw new Error("Actual matching account ownership is required"); await expect(dialog.getByText(account.ownerName, { exact: false }).first()).toBeVisible(); }
+    for (const account of pair) { if (!account.canEdit || !(account.shared || account.ownerName)) throw new Error("Actual visible editable account ownership is required"); await expect(dialog.getByText(account.shared ? "Shared" : account.ownerName!, { exact: false }).first()).toBeVisible(); }
     state.ownershipVisible = true;
     const accountRow = dialog.locator("div.space-y-2.border-b").filter({ has: dialog.getByText(sourceAccount.name, { exact: true }) });
     await accountRow.getByRole("button", { name: "Edit price", exact: true }).click();

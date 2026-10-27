@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SubscriptionAccountReport, SubscriptionCostReport, SubscriptionUsage } from "../../../packages/shared/src/subscriptions.js";
 import type { IdentityObservation } from "./identity-support.js";
-import { subscriptionIdentityCases } from "./identity-subscriptions.js";
+import { subscriptionIdentityCases, subscriptionPublicFixtureState } from "./identity-subscriptions.js";
 const usage: SubscriptionUsage = { inputTokens: 10, cachedInputTokens: 0, outputTokens: 1, costCents: "0", eventCount: 1, estimatedEventCount: 0, unpricedEventCount: 0 };
 function account(id: string): SubscriptionAccountReport { return { id, provider: "openai", name: id, ownerUserId: "person", ownerName: "Actual owner", shared: false, identityVerified: false, detectedPlan: null, observedAt: null, lastCheckedAt: null, refreshStatus: null, canEdit: true,
   price: { revision: 1, plan: "User recorded plan", amountCents: "2000", monthlyCents: "2000", currency: "USD", cadence: "month", status: "active", source: "user", sourceUrl: null, effectiveAt: "2026-10-01T00:00:00Z" }, usage, agents: [] }; }
@@ -19,4 +19,19 @@ describe("subscription duplicate contract is explicitly partial", () => {
   it("deleting historical receipts cannot masquerade as deduplication", () => { const o = valid(); o.activity = o.activity.filter(row => row.id !== "price"); expect(d.grade(o).passed).toBe(false); });
   it("current target price alone cannot establish archived price preservation", () => { const o = valid(); o.state.archivedPriceHistoryVerified = false; expect(d.grade(o).passed).toBe(false); });
   it("ordinary agent merge or false fee calculation fails", () => { const o = valid(); o.state.agentLinkStatus = 200; o.reply += " I have merged them."; expect(d.grade(o).passed).toBe(false); });
+});
+
+it("accepts genuine editable shared ownership without inventing personal ownership", () => {
+ const o = valid(); const pair = o.state.duplicateAccounts as SubscriptionAccountReport[];
+ for (const row of pair) { row.shared = true; row.ownerUserId = null; row.ownerName = null; }
+ expect(subscriptionIdentityCases[0]!.grade(o).passed).toBe(true);
+ pair[1]!.canEdit = false; expect(subscriptionIdentityCases[0]!.grade(o).passed).toBe(false);
+});
+it("wires only public fixture facts, never inferring same-account proof from two similar records", () => {
+ const pair = [account("source"), account("target")];
+ const state = subscriptionPublicFixtureState(report(pair), "person", [{ id: "price", action: "subscription.price_updated", entityId: "source", details: { revision: 1 } }, { id: "other", action: "subscription.price_updated", entityId: "foreign" }], 403);
+ expect(state.candidateAccounts).toHaveLength(2); expect(state.beforeReport.accounts).toHaveLength(2);
+ expect(state.priceHistoryBefore.map(row => row.id)).toEqual(["price"]);
+ expect(state).not.toHaveProperty("sameAccountProvenanceVerified"); expect(state).not.toHaveProperty("duplicateAccounts");
+ pair[0]!.name = "changed"; expect(state.beforeReport.accounts[0]!.name).toBe("source");
 });

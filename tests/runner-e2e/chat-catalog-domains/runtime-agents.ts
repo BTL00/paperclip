@@ -65,11 +65,11 @@ export function gradeRuntimeAgents(value: unknown) {
     case "agents.restore-instructions": {
       const previous = o.state.previousInstruction as InstructionFile; const unwanted = o.state.unwantedInstruction as InstructionFile;
       const current = o.instruction;
-      c.add("restored-exact-previous-content", !!current && current.content === previous.content && current.revision.id !== previous.revision.id
-        && current.revision.id !== unwanted.revision.id && current.revision.source === "restore",
-        "Restoration creates a new version with the exact prior contents.");
-      c.add("history-and-attribution-retained", !!current && current.revision.actorAgentId === o.leadId && o.runs.some(run => run.id === current.revision.sourceRunId)
-        && [previous.revision.id, unwanted.revision.id, current.revision.id].every(id => o.instructionHistory?.revisions.some(row => row.id === id)),
+      c.add("restored-exact-previous-content", !!current && current.content === previous.content && previous.content !== unwanted.content,
+        "The exact prior contents are restored; content tokens and source labels do not define the outcome.");
+      c.add("history-and-attribution-retained", !!current && [previous.revision.id, unwanted.revision.id].every(id => o.instructionHistory?.revisions.some(row => row.id === id))
+        && !!o.instructionHistory?.revisions.some(row => row.id === current.revision.id && row.companyId === o.companyId
+          && row.agentId === worker?.id && row.actorAgentId === o.leadId && o.runs.some(run => run.id === row.sourceRunId && run.agentId === o.leadId)),
         "Both historical revisions and the agent-authored restoration remain inspectable.");
       c.add("other-file-preserved", o.instructionSideFile?.content === o.state.sideContent, "Unrelated guidance remains unchanged.");
       c.add("honest-restoration", !!worker && /restor|revert|undo|previous/i.test(o.reply)
