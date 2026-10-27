@@ -10,7 +10,17 @@ type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
 const owned = new WeakMap<IdentityBoundaryContext, { person: Person; api: RunnerApi; companyId?: string; fixtures?: LiveFixtureValues; keyId?: string }>();
 interface DisabledObservation { companyId: string; agentId: string; personId: string; canonicalIntent: string; agentChatEnabled: boolean;
   unavailableVisible: boolean; composerAbsent: boolean; supportedOperatorStepVisible: boolean; profileAccessible: boolean;
-  agentSettingsStatus: number; createChatStatus: number; gateAfterProbe: boolean; beforeTaskIds: string[]; afterTaskIds: string[]; chatIds: string[]; runIds: string[] }
+  agentSettingsStatus: number; createChatStatus: number; createChatErrorCategory: string; createChatProbePersonId: string; gateAfterProbe: boolean; beforeTaskIds: string[]; afterTaskIds: string[]; chatIds: string[]; runIds: string[] }
+/** Use the same genuine person's existing private same-origin session wrapper.
+ * Return only a closed error category, never the raw response or credential. */
+export async function probeDisabledChatAsPerson(person: Pick<Person, "id" | "request">, companyId: string, agentId: string) {
+  const response = await person.request(`/api/companies/${encodeURIComponent(companyId)}/chats/${encodeURIComponent(agentId)}`, "POST", {});
+  const status = response.status;
+  const body = await response.json().catch(() => undefined) as { error?: unknown } | undefined;
+  const errorCategory = body?.error === "Agent Chat is disabled" ? "agent-chat-disabled"
+    : body?.error === "Board mutation requires trusted browser origin" ? "trusted-origin-required" : "unrecognized-response";
+  return { createChatStatus: status, createChatErrorCategory: errorCategory, createChatProbePersonId: person.id };
+}
 export function gradeDisabledChat(value: unknown) {
   const c = checks(); const o = value as DisabledObservation | undefined;
   c.add("actual-disabled-canonical-context", !!o && !!o.companyId && !!o.agentId && !!o.personId && o.personId !== "local-board"
@@ -19,7 +29,7 @@ export function gradeDisabledChat(value: unknown) {
   c.add("clear-supported-human-path", !!o && o.supportedOperatorStepVisible && o.profileAccessible,
   "The unavailable surface identifies Experimental settings as the human management step, and the actual Morgan profile remains usable.");
   c.add("ordinary-agent-cannot-change-instance-gate", !!o && o.agentSettingsStatus === 403 && o.gateAfterProbe === false
-    && o.createChatStatus === 404, "The real ordinary agent cannot enable instance Chat, and the public create-chat path enforces the same disabled gate.");
+    && o.createChatStatus === 404 && o.createChatErrorCategory === "agent-chat-disabled" && o.createChatProbePersonId === o.personId, "The real ordinary agent cannot enable instance Chat, and the public create-chat path enforces the same disabled gate.");
   c.add("no-disguised-task-or-admission", !!o && Array.isArray(o.beforeTaskIds) && Array.isArray(o.afterTaskIds)
     && JSON.stringify(o.beforeTaskIds) === JSON.stringify(o.afterTaskIds) && Array.isArray(o.chatIds) && !o.chatIds.length
     && Array.isArray(o.runIds) && !o.runIds.length,
@@ -63,7 +73,7 @@ export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
     const denied = await fetch(new URL("/api/instance/settings/experimental", api.baseURL), { method: "PATCH", redirect: "error", signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify({ enableAgentChat: true }) });
     const agentSettingsStatus = denied.status; await denied.body?.cancel();
-    const rejected = await api.request.post(`${root}/chats/${fixtures.agent.id}`, { data: {} }); const createChatStatus = rejected.status(); await rejected.dispose();
+    const createChatProbe = await probeDisabledChatAsPerson(person, fixtures.company.id, fixtures.agent.id);
     const gateAfterProbe = (await api.get<{ enableAgentChat: boolean }>("/api/instance/settings/experimental")).enableAgentChat;
     await page.goto(`/${fixtures.company.issuePrefix}/agents/${fixtures.agent.id}`, { waitUntil: "domcontentloaded" });
     await page.reload({ waitUntil: "domcontentloaded" }); await expect(page.getByRole("heading", { name: "Morgan", exact: true }).first()).toBeVisible();
@@ -72,7 +82,7 @@ export const runtimeDisabledChatCases: readonly IdentityBoundaryCase[] = [{
     ctx.observeResources({ companyId: fixtures.company.id, agentId: fixtures.agent.id, runIds });
     const observation: DisabledObservation = { companyId: fixtures.company.id, agentId: fixtures.agent.id, personId: person.id, canonicalIntent: ctx.scenario.query,
       agentChatEnabled: settings.enableAgentChat, unavailableVisible, composerAbsent: true, supportedOperatorStepVisible, profileAccessible: true,
-      agentSettingsStatus, createChatStatus, gateAfterProbe, beforeTaskIds, afterTaskIds: tasks.map(row => row.id).sort(),
+      agentSettingsStatus, ...createChatProbe, gateAfterProbe, beforeTaskIds, afterTaskIds: tasks.map(row => row.id).sort(),
       chatIds: tasks.filter(row => row.conversationAgentId).map(row => row.id), runIds };
     await ctx.evidence("runtime-disabled-chat-boundary.json", observation); return observation;
   },
