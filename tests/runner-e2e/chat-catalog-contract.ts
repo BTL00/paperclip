@@ -27,6 +27,7 @@ export interface ChatCatalogSetupPolicy {
 export type ChatCatalogQueryBinding = { catalogToken: string; stateKey: string } & (
   | { resourceKind: "issue"; valueField: "identifier" }
   | { resourceKind: "project-repository"; valueField: "fullName" }
+  | { resourceKind: "agentmail-recipient"; valueField: "email" }
 );
 export interface ChatCatalogQueryAttachment {
   /** A genuine UI upload receipt returned by setup; never arbitrary body text. */

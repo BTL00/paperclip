@@ -18,6 +18,12 @@ it("commits every audited actual semantic expectation while excluding credential
   expect(publicValue).not.toContain(createHash("sha256").update(values.recentFactJson).digest("hex"));
   expect(() => verifyRetainedPrivateOracle(original, "notion", fields, values, f.env)).not.toThrow();
 });
+it("commits the actual AgentMail recipient without retaining its address or a low-entropy digest",()=>{
+ const f=fixture(),recipient="synthetic-owner@agentmail.to",identity=privateOracleIdentity("agentmail",["recipient","inboxId","apiTokenEnv"],{recipient,inboxId:recipient,apiTokenEnv:"PAPERCLIP_CHAT_EVAL_AGENTMAIL"},f.env)!;
+ expect(identity.fields).toEqual(["recipient"]);expect(privateOracleIdentity("agentmail",["recipient"],{recipient:"different@agentmail.to"},f.env)?.commitment).not.toBe(identity.commitment);
+ const publicValue=JSON.stringify(identity);expect(publicValue).not.toContain(recipient);expect(publicValue).not.toContain(createHash("sha256").update(recipient).digest("hex"));
+ expect(()=>verifyRetainedPrivateOracle(identity,"agentmail",["recipient"],{recipient:"different@agentmail.to"},f.env)).toThrow("mismatch");
+});
 it("refuses lost, replaced or absent campaign keys and changed retained expectations without creating a replacement", () => {
   const f = fixture(); const original = privateOracleIdentity("notion", fields, values, f.env)!;
   expect(() => privateOracleIdentity("notion", fields, values, {})).toThrow("key unavailable");

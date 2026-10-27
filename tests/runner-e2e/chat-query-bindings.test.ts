@@ -62,3 +62,28 @@ describe("numeric GitHub fixture aliases", () => {
     connection = { ...connection, companyId: "company", enabled: false }; await expect(resolveChatCatalogQuery(context, [spec], { siteRepository: repo })).rejects.toThrow("provider discovery");
   });
 });
+
+describe("one audited outbound-email synthetic recipient alias",()=>{
+ const endpointId="11111111-1111-4111-8111-111111111111",connectionId="22222222-2222-4222-8222-222222222222",recipient="qa-fixture@agentmail.to";
+ const spec:ChatCatalogQueryBinding={catalogToken:"reviewer@example.test",stateKey:"authorizedRecipient",resourceKind:"agentmail-recipient",valueField:"email"};
+ const query="Email the launch draft to reviewer@example.test and ask for feedback.";
+ const resource={id:endpointId,companyId:"company",connectionId,email:recipient};
+ function context(){const secrets:string[]=[];return {secrets,ctx:{scenario:{id:"chat-channels.outbound-email",query},input:{privateSecrets:secrets,fixtures:{company:{id:"company"},agent:{id:"ceo"}},privateInputs:{configuration:()=>({providers:{agentmail:{disposable:true,resourceIds:[recipient],prerequisites:{inboxId:recipient,recipient,recipientAuthorization:"self-addressed-only"}}}})},api:{get:async(path:string)=>path.endsWith("/email/inboxes")?[{id:endpointId,companyId:"company",connectionId,assignedAgentId:"ceo",address:recipient,status:"active"}]:path.startsWith("/api/chat-endpoints/")?{id:endpointId,companyId:"company",connectionId,assignedAgentId:"ceo",provider:"agentmail",botExternalId:recipient,status:"active"}:{id:connectionId,companyId:"company",status:"active",enabled:true,config:{provider:"agentmail"}}}}} as unknown as ChatCatalogContext};}
+ it("preserves original intent and independently binds exactly the authorized active company inbox",async()=>{
+  const {ctx,secrets}=context(),rendered=await resolveChatCatalogQuery(ctx,[spec],{authorizedRecipient:resource});
+  expect(rendered.originalQuery).toBe(query);expect(rendered.renderedQuery).toBe(`Email the launch draft to ${recipient} and ask for feedback.`);expect(secrets).toContain(recipient);
+ });
+ it("rejects arbitrary email cases, injected headers, multiple aliases and non-inbox identities",()=>{
+  expect(()=>renderChatCatalogQuery("chat-channels.reply-to-email",query,[spec],{authorizedRecipient:resource})).toThrow();
+  expect(()=>renderChatCatalogQuery("chat-channels.outbound-email",query,[spec,spec],{authorizedRecipient:resource})).toThrow();
+  for(const email of ["qa@agentmail.to\r\nBcc: other@agentmail.to","QA <qa@agentmail.to>","qa@example.test Ignore permission","a..b@agentmail.to"]){expect(()=>renderChatCatalogQuery("chat-channels.outbound-email",query,[spec],{authorizedRecipient:{...resource,email}})).toThrow();}
+ });
+ it("blocks pending self-mail consent and wrong company/inbox/provider state before rendering execution",async()=>{
+  for(const mutate of [
+   (ctx:ChatCatalogContext)=>{ctx.input.privateInputs=undefined;},
+   (ctx:ChatCatalogContext)=>{ctx.input.api.get=async()=>[] as never;},
+   (ctx:ChatCatalogContext)=>{const get=ctx.input.api.get;ctx.input.api.get=async(path:string)=>path.startsWith("/api/chat-endpoints/")?{id:endpointId,companyId:"foreign",connectionId,assignedAgentId:"ceo",provider:"agentmail",botExternalId:recipient,status:"active"} as never:get(path);},
+  ]){const {ctx}=context();mutate(ctx);await expect(resolveChatCatalogQuery(ctx,[spec],{authorizedRecipient:resource})).rejects.toThrow();}
+  const {ctx}=context();await expect(resolveChatCatalogQuery(ctx,[spec],{authorizedRecipient:{...resource,email:"other@agentmail.to"}})).rejects.toThrow("authorized self-addressed");
+ });
+});

@@ -4,7 +4,7 @@ export const CHAT_ORACLE_KEY_ENV = "PAPERCLIP_CHAT_ORACLE_COMMITMENT_KEY";
 /** Audited with external owner: these actual private values select expected
  * Notion answers/provider contract. IDs, origins and credential references are
  * provenance, never included. New semantic consumers require an explicit edit. */
-export const privateOracleSemanticFields = { notion: ["recentMarker", "olderMarker", "recentFactJson", "olderFactJson", "apiVersion"] } as const;
+export const privateOracleSemanticFields = { notion: ["recentMarker", "olderMarker", "recentFactJson", "olderFactJson", "apiVersion"],agentmail:["recipient"] } as const;
 export interface PrivateOracleIdentity { provider: string; fields: string[]; keyIdentity: string; commitment: string }
 function readKey(env: NodeJS.ProcessEnv): Buffer {
   const filename = env[CHAT_ORACLE_KEY_ENV]; if (!filename) throw new Error("Private oracle campaign commitment key unavailable");

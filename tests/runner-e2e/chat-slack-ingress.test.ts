@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadChatCatalogImplementation, type ChatCatalogDescriptor } from "./chat-catalog-registry.js";
-import { sameSlackThreadNewMessage, slackIngressReceiptMatches, validSlackIngressDeclaration, slackNativeRunCheck } from "./chat-slack-ingress.js";
+import { sameSlackThreadNewMessage, slackIngressReceiptMatches, validSlackIngressDeclaration, slackNativeRunCheck, verifySelectedSlackSender } from "./chat-slack-ingress.js";
 import type { ChatCatalogContext, ChatSlackIngressReceipt } from "./chat-catalog-contract.js";
-import type { ChatConversation, ChatEndpoint, ChatIdentityLink, ExternalChannelBindingSummary } from "../../packages/shared/src/types/chat-channels.js";
+import type { ChatConversation, ChatEndpoint, ExternalChannelBindingSummary } from "../../packages/shared/src/types/chat-channels.js";
 import type { IssueComment } from "../../packages/shared/src/types/issue.js";
 const query = "What happened in this thread?";
 const metadata = { scenarioId: "chat-channels.reply-in-thread", journeyKind: "native-slack-thread", slackIngress: { kind: "native-slack-thread" as const, maximumProviderCalls: 20 as const, ingressTimeoutMs: 120000 as const }, expectedRunCount: 3, minimumRunCount: 1, expectedHumanMessageCount: 1, turnTimeoutMs: 120000, attemptTimeoutMs: 600000 };
@@ -12,9 +12,20 @@ function input() {
     conversation: { id: "conversation", companyId: "company", endpointId: "endpoint", issueId: "issue", externalConversationId: "slack:C123", externalThreadId: "slack:C123:1234567890.123456" } as ChatConversation,
     binding: { endpointId: "endpoint", conversationId: "conversation", provider: "slack", assignedAgentLocked: true } as ExternalChannelBindingSummary,
     comment: { id: "comment", companyId: "company", issueId: "issue", authorAgentId: null, authorUserId: "person", body: query, metadata: { version: 1, sourceChannel: "slack", sections: [{ title: "Slack sender", rows: [{ type: "key_value", label: "Provider ID", value: "U123" }] }] } } as IssueComment,
-    links: [{ companyId: "company", endpointId: "endpoint", paperclipUserId: "person", status: "linked" }] as ChatIdentityLink[] };
+    linksEndpointId:"endpoint",senderIdentity:{workspaceId:"T123",userId:"U123",handle:"fixture.sender"},links: [{ principalId:"principal",externalDetail:"@fixture.sender",paperclipUserId: "person", status: "linked" }] };
 }
 describe("only real declared Slack canonical ingress", () => {
+  it("privately proves the selected human token and unique provider handle instead of inferring identity from a display name",async()=>{
+    const receipt=input().receipt,secrets:string[]=[],calls:string[]=[];
+    const ctx={input:{privateSecrets:secrets,privateInputs:{configuration:()=>({providers:{slack:{disposable:true,resourceIds:["T123","C123","U123"],prerequisites:{workspaceId:"T123",channelId:"C123",senderUserId:"U123",senderTokenEnv:"PAPERCLIP_CHAT_EVAL_SLACK_SENDER"}}}}),read:()=>"synthetic-private-token"}}} as unknown as ChatCatalogContext;
+    let actualUser="U123";
+    const fetcher=(async(url,options)=>{calls.push(String(url));expect((options?.headers as Record<string,string>).authorization).toBe("Bearer synthetic-private-token");return new Response(JSON.stringify(String(url).endsWith("auth.test")?{ok:true,user_id:actualUser,team_id:"T123"}:{ok:true,user:{id:actualUser,team_id:"T123",name:"fixture.sender",is_bot:false}}));}) as typeof fetch;
+    await expect(verifySelectedSlackSender(ctx,receipt,AbortSignal.timeout(1000),fetcher)).resolves.toEqual({userId:"U123",workspaceId:"T123",handle:"fixture.sender"});
+    expect(calls).toEqual(["https://slack.com/api/auth.test","https://slack.com/api/users.info"]);expect(secrets).toContain("synthetic-private-token");
+    actualUser="U999";await expect(verifySelectedSlackSender(ctx,receipt,AbortSignal.timeout(1000),fetcher)).rejects.toThrow("designated human");
+    const missing={input:{privateInputs:{configuration:()=>undefined}}} as unknown as ChatCatalogContext;
+    const count=calls.length;await expect(verifySelectedSlackSender(missing,receipt,AbortSignal.timeout(1000),fetcher)).rejects.toThrow("references");expect(calls).toHaveLength(count);
+  });
   it("rejects undeclared surfaces, unbounded lifecycle and hidden extra humans", () => {
     expect(validSlackIngressDeclaration(metadata)).toBe(true);
     expect(validSlackIngressDeclaration({ ...metadata, scenarioId: "tasks.create-backlog" })).toBe(false);
@@ -30,6 +41,11 @@ describe("only real declared Slack canonical ingress", () => {
       (v: ReturnType<typeof input>) => { v.comment.authorAgentId = "agent"; },
       (v: ReturnType<typeof input>) => { v.receipt.provider.senderUserId = "U999"; },
       (v: ReturnType<typeof input>) => { v.links[0]!.status = "revoked"; },
+      (v: ReturnType<typeof input>) => { v.linksEndpointId="another-endpoint"; },
+      (v: ReturnType<typeof input>) => { v.links[0]!.externalDetail="@another.principal"; },
+      (v: ReturnType<typeof input>) => { v.links[0]!.principalId=""; },
+      (v: ReturnType<typeof input>) => { v.senderIdentity.userId="U999"; },
+      (v: ReturnType<typeof input>) => { v.senderIdentity.workspaceId="T999"; },
       (v: ReturnType<typeof input>) => { v.conversation.externalThreadId = "slack:C123:9999999999.123456"; },
       (v: ReturnType<typeof input>) => { v.conversation.externalConversationId = "C123"; },
       (v: ReturnType<typeof input>) => { v.endpoint.companyId = "foreign"; },
