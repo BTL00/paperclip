@@ -1,3 +1,4 @@
+import type { AgentDetail } from "../../../packages/shared/src/types/agent.js";
 import { describe, it, expect } from "vitest";
 import { gradeRuntimeAgents, hiringDeniedPermissions, runtimeAgentsCases } from "./runtime-agents.js";
 import { updateAgentPermissionsSchema } from "../../../packages/shared/src/validators/agent.js";
@@ -51,11 +52,15 @@ function valid(id: string): RuntimeObservation {
 describe("runtime agent oracles", () => {
   it("disables hiring with the public permission contract while preserving existing task authority", () => {
     for (const canAssignTasks of [true, false]) {
-      const payload = hiringDeniedPermissions({ canCreateAgents: true, canAssignTasks, canCreateSkills: true });
+      const payload = hiringDeniedPermissions({ permissions: { canCreateAgents: true, canCreateSkills: true }, access: { canAssignTasks, taskAssignSource: canAssignTasks ? "explicit_grant" : "none", membership: null, grants: [] } });
       expect(updateAgentPermissionsSchema.safeParse(payload).success).toBe(true);
       expect(payload).toMatchObject({ canCreateAgents: false, canAssignTasks, canCreateSkills: true });
     }
-    expect(() => hiringDeniedPermissions({ canCreateAgents: true })).toThrow();
+    for (const access of [undefined, {}, { canAssignTasks: "true" }, { canAssignTasks: null }]) {
+      const malformed = { permissions: { canCreateAgents: true, canAssignTasks: true }, access } as unknown as Pick<AgentDetail, "permissions" | "access">;
+      expect(() => hiringDeniedPermissions(malformed)).toThrow("Public agent access");
+    }
+    expect(hiringDeniedPermissions({ permissions: { canCreateAgents: true, canAssignTasks: true }, access: { canAssignTasks: false, taskAssignSource: "none", membership: null, grants: [] } }).canAssignTasks).toBe(false);
   });
   it("accepts substantive paraphrases for each authored agent outcome", () => {
     const replies: Record<string, string> = {
