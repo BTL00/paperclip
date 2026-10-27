@@ -8,3 +8,4 @@ export { connectionSetupExternalCases } from "./external-connection-setup.js";
 export { assistantConnectionExternalCases } from "./external-assistant-connections.js";
 export { chatChannelExternalCases } from "./external-chat-channels.js";
 export { appCatalogExternalCases } from "./external-app-catalog.js";
+export { pluginExternalCases } from "./external-plugins.js";
