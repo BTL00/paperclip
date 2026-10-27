@@ -1,14 +1,14 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation"; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create"; companyId?:string; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > 8192 || !["secure-key", "canary", "gateway-token-rotation"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > 8192 || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
@@ -20,6 +20,19 @@ async function main() {
       const field = page.getByLabel("App key"); await field.fill(input.credential);
       if (await field.inputValue() !== input.credential) throw new Error("Canary entry failed");
       return { processIsolation: true, testRunnerAttached: false, credentialEntered: true, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false };
+    }
+    if(input.mode === "company-secret-create"){
+      if(!input.companyId||!/^[a-f0-9-]{36}$/i.test(input.companyId)||!new URL(input.setupURL).pathname.endsWith("/company/settings/secrets"))throw new Error("Invalid finite company secret operation");
+      await page.goto(input.setupURL,{waitUntil:"domcontentloaded"});await page.getByRole("button",{name:"New secret",exact:true}).click();
+      const dialog=page.getByRole("dialog");await dialog.getByLabel("Name",{exact:true}).fill("Deployment API key");
+      await dialog.getByLabel("Provider",{exact:true}).selectOption("local_encrypted");
+      await dialog.getByLabel("Value",{exact:true}).fill(input.credential);
+      const created=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/companies/${input.companyId}/secrets`&&response.request().method()==="POST"&&response.status()===201);
+      await dialog.getByRole("button",{name:"Create secret",exact:true}).click();const secret=await(await created).json() as {id:string};
+      if(!/^[a-f0-9-]{36}$/i.test(secret.id))throw new Error("Invalid created secret identity");await dialog.waitFor({state:"hidden"});
+      await page.getByText("Deployment API key",{exact:true}).first().waitFor();
+      const storageClean=await page.evaluate(secret=>!JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage),document.body.innerText,location.href]).includes(secret),input.credential);
+      return {processIsolation:true,testRunnerAttached:false,tracingEnabled:false,videoEnabled:false,apiStepRecorder:false,secretId:secret.id,secretUiVisible:true,humanSubmittedSecurely:true,storageClean};
     }
     if (input.mode === "gateway-token-rotation") {
       const g = input.gateway;

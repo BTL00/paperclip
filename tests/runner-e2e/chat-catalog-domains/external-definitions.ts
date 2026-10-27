@@ -26,3 +26,4 @@ export { notionRevocationExternalCases } from "./external-notion-revocation.js";
 export { scopedAssistantExternalCases } from "./external-assistant-scoped.js";
 export { pluginToolExternalCases } from "./external-plugin-tool.js";
 export { providerChoiceExternalCases } from "./external-provider-choice.js";
+export { companySecretExternalCases } from "./external-company-secret.js";

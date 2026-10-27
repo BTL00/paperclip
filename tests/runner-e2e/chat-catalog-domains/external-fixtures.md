@@ -56,6 +56,16 @@ receipts contain only scenario, provider, configured boolean and missing field
 names. Never persist the parsed private file, credential values, session state or
 raw provider receipts into tracked files/public evidence.
 
+`secrets.configure-company-secret` needs no external account. It generates one
+synthetic value in the selected attempt's private redactor and uses the finite
+`company-secret-create` browser operation. That operation permits only the local
+instance's company secret page, creates `Deployment API key` through its actual
+form using `local_encrypted`, and returns a closed receipt containing its UUID
+and booleans. The value stays out of argv, environment and Playwright Test
+instrumentation. Morgan's reference is then selected and saved through the
+ordinary visible environment-variable editor. Independent saved binding and
+human activity reads prove configuration; they do not claim next-run delivery.
+
 The two project repository scenarios use a `github` provider binding with an
 explicitly authorized token environment reference `tokenEnv` (also present in
 `credentialEnv`). Add-repository requires `siteRepositoryId` and
