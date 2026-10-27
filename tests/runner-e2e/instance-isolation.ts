@@ -28,7 +28,7 @@ export async function assertRunnerDatabaseIsolation(
     };
   };
   const docker = dockerReceiptPath ? await readDockerDatabaseReceipt(dockerReceiptPath, temporaryRoot, dockerRun) : undefined;
-  if (docker ? config.database?.mode !== "postgres" || config.database.connectionString !== docker.connectionString : config.database?.mode !== "embedded-postgres" || !!config.database.connectionString) {
+  if (docker ? config.database?.mode !== "postgres" || !!config.database.connectionString : config.database?.mode !== "embedded-postgres" || !!config.database.connectionString) {
     throw new Error("Runner E2E Paperclip instance did not use its explicitly owned database lane");
   }
   if (

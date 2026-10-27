@@ -234,11 +234,11 @@ export async function startOwnedDockerDatabase(input: { temporaryRoot: string; p
 export async function dockerDatabaseSupervisorEnvironment(input: { temporaryRoot: string; env: NodeJS.ProcessEnv; run?: DockerRun }) {
   const lane = selectedDatabaseLane(input.env), source = { ...input.env }, filename = source[DOCKER_DATABASE_ENV];
   delete source[DOCKER_DATABASE_ENV]; delete source[DATABASE_LANE_ENV];
-  if (lane === "embedded-postgres") { if (filename) throw new Error("Undeclared Docker database receipt"); return { source, filename: undefined }; }
+  if (lane === "embedded-postgres") { if (filename) throw new Error("Undeclared Docker database receipt"); return { source, filename: undefined, serverOverrides: {} as NodeJS.ProcessEnv }; }
   if (!filename) throw new Error("Selected Docker database lane is missing its owned receipt");
-  await readDockerDatabaseReceipt(filename, input.temporaryRoot, input.run);
+  const receipt = await readDockerDatabaseReceipt(filename, input.temporaryRoot, input.run);
   for (const key of ["DOCKER_CONFIG", "DOCKER_HOST", "DOCKER_CONTEXT"]) delete source[key];
-  return { source, filename };
+  return { source, filename, serverOverrides: { DATABASE_URL: receipt.connectionString } as NodeJS.ProcessEnv };
 }
 
 export function databaseFingerprintIdentity(env = process.env) {
