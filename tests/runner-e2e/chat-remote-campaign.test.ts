@@ -32,6 +32,25 @@ describe("remote Actions cell import", () => {
     ["wrong scenario", (f: ReturnType<typeof fixture>) => { f.definition.scenarioId = "tasks.other"; }],
     ["missing accounting", (f: ReturnType<typeof fixture>) => { delete f.result.accountingIdentity; }],
   ] as const)("rejects %s without recording a measurement", (_name, mutate) => { const f = fixture(); mutate(f); expect(() => validateRemoteCell(f.input())).toThrow("Remote import:"); });
+  it("imports the ordinary embedded lane only under an explicit matching intent", () => {
+    const f = fixture();
+    delete f.result.databaseIdentity; delete f.host.postgres; delete f.host.dockerEngineSha256;
+    f.host.databaseLane = "embedded-postgres";
+    expect(() => validateRemoteCell(f.input())).toThrow("host database lane mismatch");
+    const input = f.input();
+    expect(validateRemoteCell({ ...input, intent: { ...input.intent, databaseLane: { lane: "embedded-postgres" } } }).databaseLane).toEqual({ lane: "embedded-postgres" });
+  });
+  it.each(["host lane", "Docker receipt", "Docker engine", "Docker artifact"])("rejects embedded/Docker mixed evidence: %s", variant => {
+    const f = fixture(); const docker = f.result.databaseIdentity;
+    delete f.result.databaseIdentity; delete f.host.postgres; delete f.host.dockerEngineSha256;
+    f.host.databaseLane = "embedded-postgres";
+    if (variant === "host lane") f.host.databaseLane = "owned-docker-postgres";
+    if (variant === "Docker receipt") f.result.databaseIdentity = docker;
+    if (variant === "Docker engine") f.host.dockerEngineSha256 = hash;
+    if (variant === "Docker artifact") f.host.postgres = {};
+    const input = f.input();
+    expect(() => validateRemoteCell({ ...input, intent: { ...input.intent, databaseLane: { lane: "embedded-postgres" } } })).toThrow("database");
+  });
   it("rejects changed bytes, foreign result paths and unreviewed Actions reruns", () => {
     const f = fixture(), changed = f.input(); changed.result.bytes += " "; expect(() => validateRemoteCell(changed)).toThrow("bytes changed");
     const foreign = f.input(); foreign.result.path = "../result.json"; expect(() => validateRemoteCell(foreign)).toThrow("artifact path");

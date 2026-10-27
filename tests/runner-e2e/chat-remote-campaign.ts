@@ -11,6 +11,8 @@ export interface RemoteCellIntent {
   campaignId: string; sourceRevision: string;
   /** Absent on preserved strict-Spot intents. Only new explicit user-authorized sources opt in. */
   hostPolicy?: "aws-fleet-spot-or-on-demand";
+  /** Explicit new lane selection; absent preserves historical Docker-only intents. */
+  databaseLane?: DatabaseFingerprintIdentity;
   selected: Array<{ scenarioId: string; executionId: string; remoteOrdinal: 1 | 2 }>;
 }
 /** Obtained by the coordinator through authenticated Actions run/artifact APIs, not from
@@ -66,10 +68,19 @@ export function validateRemoteCell(input: {
     && allowedHost && host.architecture === "x86_64" && host.region === "us-east-1", "host not qualified for explicit intent policy");
   requireProof(host.workflowRef === "paperclipai/paperclip/.github/workflows/runner-full-stack-e2e.yml@refs/heads/master"
     && host.workflowRunId === p.runId && host.workflowAttempt === p.runAttempt && host.sourceRevision === intent.sourceRevision
-    && Array.isArray(host.executionIds) && host.executionIds.includes(result.executionId) && host.automaticRetries === 0 && hex(host.dockerEngineSha256), "host/result provenance mismatch");
-  requireProof(host.postgres?.image === POSTGRES_AMD64_IMAGE && POSTGRES_AMD64_IMAGE_IDS.includes(host.postgres?.imageId) && host.postgres.architecture === "amd64" && host.postgres.version === POSTGRES_VERSION, "foreign database artifact");
-  const databaseLane = { lane: "owned-docker-postgres" as const, image: host.postgres.image, imageId: host.postgres.imageId, version: host.postgres.version, architecture: "amd64" as const };
-  requireProof(databaseIdentityMatches(databaseLane, result.databaseIdentity) && result.databaseIdentity?.engineSha256 === host.dockerEngineSha256, "cell database identity mismatch");
+    && Array.isArray(host.executionIds) && host.executionIds.includes(result.executionId) && host.automaticRetries === 0, "host/result provenance mismatch");
+  let databaseLane: DatabaseFingerprintIdentity;
+  if (intent.databaseLane?.lane === "embedded-postgres") {
+    requireProof(host.databaseLane === "embedded-postgres" && host.postgres === undefined && host.dockerEngineSha256 === undefined, "host database lane mismatch");
+    databaseLane = intent.databaseLane;
+    requireProof(databaseIdentityMatches(databaseLane, result.databaseIdentity), "cell database identity mismatch");
+  } else {
+    requireProof(host.databaseLane === undefined || host.databaseLane === "owned-docker-postgres", "host database lane mismatch");
+    requireProof(hex(host.dockerEngineSha256) && host.postgres?.image === POSTGRES_AMD64_IMAGE && POSTGRES_AMD64_IMAGE_IDS.includes(host.postgres?.imageId) && host.postgres.architecture === "amd64" && host.postgres.version === POSTGRES_VERSION, "foreign database artifact");
+    databaseLane = { lane: "owned-docker-postgres", image: host.postgres.image, imageId: host.postgres.imageId, version: host.postgres.version, architecture: "amd64" };
+    requireProof(!intent.databaseLane || databaseIdentityMatches(intent.databaseLane, result.databaseIdentity), "intent database lane mismatch");
+    requireProof(databaseIdentityMatches(databaseLane, result.databaseIdentity) && result.databaseIdentity?.engineSha256 === host.dockerEngineSha256, "cell database identity mismatch");
+  }
   requireProof(definition.scenarioId === selection.scenarioId && hex(definition.definitionDigest) && hex(definition.graderDigest)
     && definition.suiteDefinitionHash === result.suiteDefinitionHash && hex(result.suiteDefinitionHash), "definition/result mismatch");
   return { schema: "paperclip.chat-remote-cell-import/v1", intentCampaignId: intent.campaignId, importKey: `${p.runId}/${p.runAttempt}/${result.executionId}`,

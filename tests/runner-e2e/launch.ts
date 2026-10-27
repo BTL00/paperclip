@@ -1200,8 +1200,8 @@ async function main() {
   const remoteChat = await prepareChatRemoteHost({ executions, env: process.env, repositoryRoot, outputDirectory: summaryDir });
   if (remoteChat) {
     process.env[DATABASE_LANE_ENV] = remoteChat.databaseLane;
-    process.env[POSTGRES_ARTIFACT_ENV] = remoteChat.postgresArtifact;
-    process.env[POSTGRES_IMAGE_ID_ENV] = remoteChat.postgresImageId;
+    delete process.env[POSTGRES_ARTIFACT_ENV];
+    delete process.env[POSTGRES_IMAGE_ID_ENV];
     options.maxAutomaticRetries = remoteChat.maxAutomaticRetries;
     options.maxParallel = Math.min(options.maxParallel, remoteChat.maxParallel);
   }
