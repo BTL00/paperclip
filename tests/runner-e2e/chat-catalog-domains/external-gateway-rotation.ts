@@ -5,8 +5,9 @@ import { startNotesProvider, connectNotes, type NotesProvider } from "./external
 import { definition, root, checks, externalObservation, observeExternal, verifyRenderedReply } from "./external-support.js";
 import { waitForReply, probeAgentPermission } from "./identity-support.js";
 import { scanReachableSecretOutputs, privateScanJson, bytesContainSecret } from "./external-secret-scan.js";
+import { privateBrowserEntry } from "./external-private-browser.js";
 import { collectRunEvents } from "../run-observations.js";
-interface Fixture { provider: NotesProvider; old: ToolMcpGatewayTokenCreated; other: ToolMcpGatewayTokenCreated; replacement?: ToolMcpGatewayTokenCreated }
+interface Fixture { provider: NotesProvider; old: ToolMcpGatewayTokenCreated; other: ToolMcpGatewayTokenCreated; replacement?: Pick<ToolMcpGatewayTokenCreated, "id" | "token"> }
 const fixtures = new WeakMap<ChatCatalogContext, Fixture>();
 /** Actual protocol discovery with private bytes held outside Test API steps. */
 async function discover(ctx: ChatCatalogContext, gateway: ToolMcpGatewayWithTokens, token: string, expectedName: string) {
@@ -32,7 +33,7 @@ export function gradeGatewayRotation(value: unknown) {
   const c = checks(), o = externalObservation(value); c.add("complete-token-rotation-evidence", !!o, "Scoped public gateway, private one-time issuance, actual protocol and revocation receipts are required."); if (!o) return c.result();
   c.add("existing-client-prerequisite", o.state.oldWorkedBefore === true && o.state.otherWorkedBefore === true && o.state.agentCreateStatus === 403 && o.state.agentRevokeStatus === 403, "Both clients initially authenticate; the ordinary agent cannot issue or revoke management credentials.");
   c.add("truthful-human-management-handoff", o.state.noPrematureMutation === true && tokenRotationGuidance(o.reply, o.links, o.origin, String((o.state.gateway as ToolMcpGatewayWithTokens | undefined)?.id ?? o.state.gatewayId)), "Chat identifies the human step without claiming it performed board-only rotation.");
-  c.add("safe-replacement-order", o.state.humanManagementVisible === true && o.state.operatorChannel === "board-api-one-time-private-delivery" && o.state.newWorkedBeforeRevocation === true && o.state.oldWorkedUntilRevocation === true, "The authorized human receives the new token privately and verifies it before retiring the old credential.");
+  c.add("safe-replacement-order", o.state.humanManagementVisible === true && (o.state.privateBrowser as {tokenUiVisible?: boolean} | undefined)?.tokenUiVisible === true && o.state.operatorChannel === "private-browser-token-ui" && o.state.newWorkedBeforeRevocation === true && o.state.oldWorkedUntilRevocation === true, "The authorized human receives the new token privately and verifies it before retiring the old credential.");
   c.add("actual-old-revocation-and-client-isolation", o.state.newWorksAfter === true && o.state.oldStatusAfter === 401 && o.state.otherWorksAfter === true && o.state.persistedOldRevoked === true && o.state.persistedOtherUnchanged === true && o.state.persistedNewAttributed === true, "Public saved metadata and actual protocol calls prove only the intended old credential lost access.");
   c.add("no-token-output-disclosure", o.state.tokenScanComplete === true && o.state.tokenLeaked === false, "Private token bytes remain absent from reachable conversation, event, document and attachment outputs.");
   return c.result();
@@ -43,7 +44,7 @@ export const gatewayRotationExternalCases = [definition("gateways-profiles.rotat
     const connection = await connectNotes(ctx, provider, "read-only");
     const profile = await ctx.input.api.post<ToolProfileWithDetails>(`${root(ctx)}/tools/profiles`, { profileKey: "rotation-notes", name: "Rotation notes", defaultAction: "deny", entries: [{ selectorType: "catalog_entry", effect: "include", connectionId: connection.connectionId, catalogEntryId: connection.read[0] }] });
     const gateway = await ctx.input.api.post<ToolMcpGatewayWithTokens>(`${root(ctx)}/tools/gateways`, { name: "Website test client", profileId: profile.id });
-    const issue = async (name: string) => { const token = await ctx.input.api.postSensitive<ToolMcpGatewayTokenCreated>(`/api/tool-gateway/gateways/${gateway.id}/tokens`, { companyId: ctx.input.fixtures.company.id, name, clientLabel: name, ownerNote: "Disposable rotation fixture", allowedActions: ["tools/list"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() }); ctx.input.privateSecrets?.push(token.token); return token; };
+    const issue = async (name: string) => { const token = await ctx.input.api.postSensitive<ToolMcpGatewayTokenCreated>(`/api/tool-gateway/gateways/${gateway.id}/tokens`, { companyId: ctx.input.fixtures.company.id, name, clientLabel: name, ownerNote: "Disposable rotation fixture", allowedActions: ["tools/list", "tools/call", "resources/list", "resources/read", "prompts/list", "prompts/get"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() }); ctx.input.privateSecrets?.push(token.token); return token; };
     const old = await issue("Old test client"), other = await issue("Unrelated client"); fixture = { provider, old, other }; fixtures.set(ctx, fixture);
     const access = await ctx.input.api.get<{ access: { tools: Array<{ toolName: string; gatewayToolName: string }> } }>(`/api/tool-connections/${connection.connectionId}/test-agents/${ctx.input.fixtures.agent.id}/access`);
     const name = access.access.tools.find(row => row.toolName === "launch_read")?.gatewayToolName; if (!name) throw new Error("Setup blocker: fixture read action has no public gateway identity");
@@ -56,7 +57,7 @@ export const gatewayRotationExternalCases = [definition("gateways-profiles.rotat
     return { gateway, profileId: profile.id, connectionId: connection.connectionId, readName: name, oldId: old.id, otherId: other.id, oldWorkedBefore, otherWorkedBefore, agentCreateStatus, agentRevokeStatus, otherMetadataBefore: { revokedAt: other.revokedAt, allowedActions: other.allowedActions, expiresAt: other.expiresAt, subjectId: other.subjectId }, resultPath: `/${ctx.input.fixtures.company.issuePrefix}/apps/gateways` };
   } catch (error) { fixtures.delete(ctx); await provider.close(); throw error; }
 }, gradeGatewayRotation, {
-  authentication: "human-session", sourceFiles: ["chat-catalog-domains/external-gateway-rotation.ts", "chat-catalog-domains/external-provider.ts", "chat-catalog-domains/external-secret-scan.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "run-observations.ts", "chat-scenarios/gateways-profiles.yaml"],
+  authentication: "human-session", sourceFiles: ["chat-catalog-domains/external-gateway-rotation.ts", "chat-catalog-domains/external-provider.ts", "chat-catalog-domains/external-secret-scan.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "run-observations.ts", "chat-scenarios/gateways-profiles.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx); const fixture = fixtures.get(ctx)!, gateway = state.gateway as ToolMcpGatewayWithTokens;
     const before = (await ctx.input.api.get<{ gateways: ToolMcpGatewayWithTokens[] }>(`${root(ctx)}/tools/gateways`)).gateways.find(row => row.id === gateway.id)!;
@@ -66,12 +67,13 @@ export const gatewayRotationExternalCases = [definition("gateways-profiles.rotat
     const href = observation.links.find(link => { try { const url = new URL(link, observation.origin); return url.origin === observation.origin && url.pathname.startsWith(String(state.resultPath)); } catch { return false; } });
     if (!href) throw new Error("Chat did not provide the supported gateway management path");
     const source = ctx.input.page.url(); await ctx.input.page.goto(new URL(href, observation.origin).href, { waitUntil: "domcontentloaded" }); await expect(ctx.input.page.getByRole("main")).toContainText(gateway.name); state.humanManagementVisible = true;
-    fixture.replacement = await ctx.input.api.postSensitive<ToolMcpGatewayTokenCreated>(`/api/tool-gateway/gateways/${gateway.id}/tokens`, { companyId: ctx.input.fixtures.company.id, name: "Replacement test client", clientLabel: "Replacement test client", ownerNote: "Authorized disposable replacement", allowedActions: ["tools/list"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() }); ctx.input.privateSecrets?.push(fixture.replacement.token);
-    state.newId = fixture.replacement.id; state.operatorChannel = "board-api-one-time-private-delivery";
-    state.newWorkedBeforeRevocation = (await discover(ctx, gateway, fixture.replacement.token, String(state.readName))).discovered;
-    state.oldWorkedUntilRevocation = (await discover(ctx, gateway, fixture.old.token, String(state.readName))).discovered;
-    if (!state.newWorkedBeforeRevocation) throw new Error("Replacement is not usable; old credential was retained");
-    await ctx.input.api.post(`/api/tool-gateway/gateway-tokens/${fixture.old.id}/revoke`, { companyId: ctx.input.fixtures.company.id });
+    const receipt = await privateBrowserEntry({ mode: "gateway-token-rotation", baseURL: ctx.input.api.baseURL,
+      setupURL: new URL(`/${ctx.input.fixtures.company.issuePrefix}/apps/gateways/${gateway.id}/tokens`, ctx.input.api.baseURL).href,
+      providerURL: "", credential: fixture.old.token, cookies: await ctx.input.page.context().cookies(),
+      gateway: { id: gateway.id, oldTokenId: fixture.old.id, otherToken: fixture.other.token, endpointPath: gateway.endpointPath, readName: String(state.readName) },
+    }, token => { fixture.replacement = token; ctx.input.privateSecrets?.push(token.token); });
+    state.privateBrowser = receipt; state.newId = receipt.newTokenId; state.operatorChannel = "private-browser-token-ui";
+    state.newWorkedBeforeRevocation = receipt.newWorkedBeforeRevocation; state.oldWorkedUntilRevocation = receipt.oldWorkedUntilRevocation;
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
   },
   async observe(ctx, state) {
