@@ -196,8 +196,9 @@ describe("private disposable provider prerequisite contract", () => {
     expect(() => selectedExternalCredential(ctx, binding, "PAPERCLIP_CHAT_EVAL_OTHER_AUTH")).toThrow(/not declared/);
     expect(() => selectedExternalBinding({ ...ctx, input: { ...ctx.input, privateInputs: undefined } })).toThrow(/private inputs/);
   });
-  it("enumerates the 18 named-provider journeys and four authorized repository journeys", () => {
-    expect(Object.keys(externalRequirements)).toHaveLength(22);
+  it("enumerates the 19 named-provider journeys and four authorized repository journeys", () => {
+    expect(Object.keys(externalRequirements)).toHaveLength(23);
+    expect(externalRequirements["gateways-profiles.define-profile"]).toEqual({ provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] });
     expect(Object.entries(externalRequirements).filter(([, requirement]) => requirement.provider === "github").map(([id]) => id))
       .toEqual(["projects.add-repository", "workspaces.prepare-repository", "workspaces.private-repository-no-access", "projects.replace-repository"]);
   });
