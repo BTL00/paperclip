@@ -64,7 +64,12 @@ normal SDK cache path rather than persisted by Paperclip.
 
 Only reviewed methods advertising this credential source support this flow.
 Search discovery must explain unavailable instance prerequisites rather than
-present an unavailable source as ready.
+present an unavailable source as ready. Task-bound connection requests do not
+yet support selecting this credential source. Discovery reports its readiness
+but must not send a task user to the standalone setup link, which does not carry
+the requesting agent's access defaults. It must explain that boundary and never
+silently substitute ordinary OAuth. The ordinary task-scoped connection card
+remains available if the user explicitly selects ordinary setup instead.
 
 1. Open [Vercel Connect](https://vercel.com/connect), create the provider
    connector, and attach it to the project/environments allowed to run

@@ -38,8 +38,6 @@ describe("reviewed connection setup discovery", () => {
           available: false,
           reason:
             "Vercel Connect setup is disabled on this Paperclip instance.",
-          setupPath:
-            "/ACORN/apps/vercel-connect?source=notion&method=mcp-oauth",
         },
       ],
     });
@@ -58,10 +56,16 @@ describe("reviewed connection setup discovery", () => {
       "Search alone does not authorize",
     );
   });
-  it("preserves an explicitly selected credential source rather than silently starting ordinary OAuth", () => {
-    expect(credentialSourceSelectionInstruction).toContain("share that source's setupPath only when available");
-    expect(credentialSourceSelectionInstruction).toContain("otherwise explain its reason");
-    expect(credentialSourceSelectionInstruction).toContain("Do not silently replace");
+  it("explains the unsupported task-bound source selection without widening access or silently starting OAuth", () => {
+    expect(credentialSourceSelectionInstruction).toContain("Task-bound credential-source selection is not supported");
+    expect(credentialSourceSelectionInstruction).toContain("do not send a standalone setup link");
+    expect(credentialSourceSelectionInstruction).toContain("Do not silently substitute ordinary OAuth");
+    expect(credentialSourceSelectionInstruction).toContain("only if the user instead selects ordinary setup");
+    const metadata = connectionMethodDiscoveryMetadata(notion, "notion", "ACORN", {
+      available: true, reason: null,
+    });
+    expect(metadata.credentialSources?.[0]).toMatchObject({ available: true, reason: null });
+    expect(metadata.credentialSources?.[0]).not.toHaveProperty("setupPath");
     expect(connectionSetupAdviceInstruction).toContain(credentialSourceSelectionInstruction);
   });
   it("does not advertise a reviewed source for an unrelated service", () => {

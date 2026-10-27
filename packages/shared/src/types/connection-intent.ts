@@ -32,7 +32,7 @@ export interface ConnectionSearchResultItem {
     whenToUse?: string;
     /** Optional, reviewed credential source choices with current setup readiness. */
     credentialSources?: Array<{
-      source: "vercel_connect"; label: string; available: boolean; reason: string | null; setupPath: string;
+      source: "vercel_connect"; label: string; available: boolean; reason: string | null;
     }>;
     /** AgentMail channel setup and tool methods support connection_request cards. */
     purpose?: "tool" | "channel" | "ai";
