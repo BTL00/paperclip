@@ -206,8 +206,8 @@
     },
     {
       "scenarioId": "steering.queue-follow-up",
-      "readinessClass": "local",
-      "needs": "Real busy Morgan; save once correct task queue; order/wait state and actual later delivery."
+      "readinessClass": "implemented",
+      "needs": "Actual busy native Morgan; canonical contact instruction saved once into correct ordered task queue with source-run attribution, visible waiting UI; one normal later native input consumes exact saved comment and preserves initial document revision plus contact result."
     },
     {
       "scenarioId": "steering.edit-queued-message",
@@ -286,8 +286,8 @@
     },
     {
       "scenarioId": "workspaces.preview-service",
-      "readinessClass": "local",
-      "needs": "Owned ready workspace with real website files; start supported service; independent readiness HTTP/endpoint view plus startup-failure branch."
+      "readinessClass": "implemented",
+      "needs": "Actual native HTML prerequisite; preconfigured stopped managed service, canonical start, independent HTTP/content/browser/service/work-product identity, explicit actual failed restart and phase-attributed actionable error."
     },
     {
       "scenarioId": "workspaces.inspect-git",

@@ -5,7 +5,7 @@ import { checks, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface WorkspaceView { workspace: { id: string; companyId: string; projectId?: string | null; name: string; cwd: string }; repositories: unknown[] }
-export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean; workerName?: string } = {}) {
+export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean; workerName?: string; html?: boolean } = {}) {
   const { execution, fixtures, workspacePath, nonce, api } = ctx.input;
   const base = execution.profile.buildAgent({ environmentId: fixtures.environment.id, environmentFixtureId: execution.environment.id,
     workspacePath, secretRefs: fixtures.secretRefs, executionId: nonce });
@@ -17,7 +17,7 @@ export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { art
   const marker = `Saved website prerequisite ${nonce}`;
   const previousRuns = await ctx.allRuns();
   const task = await api.post<Entity>(`${company}/issues`, { title: "Website task", status: "todo", assigneeAgentId: worker.id,
-    description: `Create a local file website-fixture.txt containing exactly ${JSON.stringify(marker)} in your admitted task workspace. Save a brief task document as evidence, ${options.artifact ? "register the actual website-fixture.txt file as a downloadable artifact work product titled website-fixture.txt," : ""} then complete this fixture task normally. Do not create a project, repository, another task, or remote side effect.` });
+    description: `Create a local file website-fixture.txt containing exactly ${JSON.stringify(marker)} in your admitted task workspace. ${options.html ? `Also save index.html as a semantic HTML page with that same visible reference in an h1 and a short Acorn product paragraph. Do not start any preview server yet.` : ""} Save a brief task document as evidence, ${options.artifact ? "register the actual website-fixture.txt file as a downloadable artifact work product titled website-fixture.txt," : ""} then complete this fixture task normally. Do not create a project, repository, another task, or remote side effect.` });
   await pollUntil({ label: "Real projectless website fixture completion", deadlineAt: Date.now() + 180_000,
     load: async () => ({ task: await api.get<Entity>(`/api/issues/${task.id}`), runs: (await ctx.allRuns()).filter(run => !previousRuns.some(prior => prior.id === run.id)) }),
     accept: value => value.task.status === "done" && value.runs.length === 1 && value.runs.every(run => run.status === "succeeded"),
