@@ -1,14 +1,14 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, test, type Cookie } from "@playwright/test";
-interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create"; companyId?:string; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
+interface Request { mode: "secure-key" | "canary" | "gateway-token-rotation" | "company-secret-create" | "personal-secret-create"; companyId?:string; personal?:{definitionId:string;userId:string}; gateway?: { id: string; oldTokenId: string; otherToken: string; endpointPath: string; readName: string }; baseURL: string; setupURL: string; providerURL: string; credential: string; cookies: Cookie[]; executablePath?: string; channel?: string }
 /** Separate Node process: no Playwright Test worker, API-step listener or artifact
  * recorder exists. This module never enables tracing, video or screenshots. */
 async function main() {
   let attached = false; try { test.info(); attached = true; } catch { /* expected outside Test */ }
   if (attached) throw new Error("Private browser worker cannot run inside Playwright Test");
   const input = JSON.parse(await readFile(process.argv[2]!, "utf8")) as Request;
-  if (!input.credential || input.credential.length > 8192 || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create"].includes(input.mode)) throw new Error("Invalid private browser request");
+  if (!input.credential || input.credential.length > 8192 || !["secure-key", "canary", "gateway-token-rotation", "company-secret-create", "personal-secret-create"].includes(input.mode)) throw new Error("Invalid private browser request");
   const base = new URL(input.baseURL);
   if (base.hostname !== "127.0.0.1" || base.protocol !== "http:" || new URL(input.setupURL).origin !== base.origin) throw new Error("Private browser target is outside the disposable loopback instance");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
@@ -20,6 +20,22 @@ async function main() {
       const field = page.getByLabel("App key"); await field.fill(input.credential);
       if (await field.inputValue() !== input.credential) throw new Error("Canary entry failed");
       return { processIsolation: true, testRunnerAttached: false, credentialEntered: true, tracingEnabled: false, videoEnabled: false, apiStepRecorder: false };
+    }
+    if(input.mode === "personal-secret-create"){
+      const personal=input.personal,setup=new URL(input.setupURL);
+      if(!input.companyId||!/^[a-f0-9-]{36}$/i.test(input.companyId)||!personal||!/^[a-f0-9-]{36}$/i.test(personal.definitionId)||!personal.userId||personal.userId.length>160||!setup.pathname.endsWith('/company/settings/secrets')||setup.searchParams.get('definition')!==personal.definitionId)throw new Error('Invalid finite personal secret operation');
+      await page.goto(input.setupURL,{waitUntil:'domcontentloaded'});
+      const session=await context.request.get('/api/auth/get-session');if(!session.ok()||(await session.json()).user?.id!==personal.userId)throw new Error('Personal secret human identity mismatch');
+      const own=await context.request.get(`/api/companies/${input.companyId}/me/user-secrets`);if(!own.ok())throw new Error('Personal definition not readable');
+      const entries=await own.json() as Array<{definition:{id:string;key:string;name:string};secret:unknown}>;const entry=entries.find(row=>row.definition.id===personal.definitionId);if(!entry||entry.definition.key!=='PERSONAL_PUBLISHING_KEY'||entry.secret)throw new Error('Personal definition already configured or mismatched');
+      await page.getByRole('button',{name:'Set my value',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('heading',{name:/^Set your value/}).waitFor();
+      if(!await dialog.getByText('Personal publishing credential',{exact:true}).isVisible())throw new Error('Wrong personal credential form');
+      await dialog.getByRole('textbox').fill(input.credential);
+      const created=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/companies/${input.companyId}/me/user-secrets`&&response.request().method()==='POST'&&response.status()===201);
+      await dialog.getByRole('button',{name:'Save value',exact:true}).click();const secret=await(await created).json() as {id:string;ownerUserId:string;userSecretDefinitionId:string};
+      if(!/^[a-f0-9-]{36}$/i.test(secret.id)||secret.ownerUserId!==personal.userId||secret.userSecretDefinitionId!==personal.definitionId)throw new Error('Personal value owner/definition mismatch');await dialog.waitFor({state:'hidden'});
+      const storageClean=await page.evaluate(value=>!JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage),document.body.innerText,location.href]).includes(value),input.credential);
+      return {processIsolation:true,testRunnerAttached:false,tracingEnabled:false,videoEnabled:false,apiStepRecorder:false,secretId:secret.id,secretUiVisible:true,humanSubmittedSecurely:true,storageClean};
     }
     if(input.mode === "company-secret-create"){
       if(!input.companyId||!/^[a-f0-9-]{36}$/i.test(input.companyId)||!new URL(input.setupURL).pathname.endsWith("/company/settings/secrets"))throw new Error("Invalid finite company secret operation");
