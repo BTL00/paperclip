@@ -16,6 +16,15 @@ function event(action: string, entityId: string, details?: Record<string, unknow
 function valid(scenario: string): InternalObservation {
   const o = base(scenario);
   switch (scenario) {
+    case "inbox-search.notification-audience": {
+      const participation = { id: "human", authorUserId: "alex", body: "Following this draft." }; const normal = { id: "normal", authorAgentId: "ceo", createdByRunId: "run", body: "The draft is ready for review." };
+      Object.assign(o.state, { alexId: "alex", rileyId: "riley", participation }); o.comments = [participation, normal];
+      const person = (id: string, eligible: boolean) => ({ principalId: id, visibility: "visible", sockets: ["/api/companies/company/events/ws"], frames: [{ principalId: id, taskId: "task", commentId: "normal", eligible, at: 1000 }], toasts: eligible ? [{ text: "CEO commented on task", hrefs: ["/ACORN/issues/task"], at: 1100 }] : [] });
+      Object.assign(o, { alex: person("alex", true), riley: person("riley", false), observedAt: 3100 }); o.state.firstAudience = structuredClone(o); o.state.mentionPhaseStartedAt = 4000;
+      o.comments.push({ id: "mention", authorAgentId: "ceo", createdByRunId: "second", body: "The draft is ready, [Riley](user://riley)." }); o.runs.push({ id: "second", companyId: "company", agentId: "ceo", status: "succeeded" });
+      for (const key of ["alex", "riley"]) { const p = (o as unknown as Record<string, { principalId: string; frames: unknown[]; toasts: unknown[] }>)[key]!; p.frames.push({ principalId: p.principalId, taskId: "task", commentId: "mention", eligible: true, at: 4500 }); p.toasts.push({ text: "CEO commented on task", hrefs: ["/ACORN/issues/task"], at: 4600 }); }
+      Object.assign(o, { observedAt: 5000 }); o.reply = "Posted both updates and the requested mention."; break;
+    }
     case "documents-artifacts.find-artifact": {
       const deliveryAt = "2026-10-21T12:00:00.000Z"; const hidden = { id: "hidden", title: "Restricted final NIGHTJAR", status: "done" };
       o.tasks[0] = { ...o.tasks[0]!, status: "done" }; const current = { ...o.tasks[0], completedAt: deliveryAt }; o.state.task = structuredClone(o.tasks[0]); o.tasks.push(hidden);
@@ -320,6 +329,7 @@ const corrupt: Record<string, (o: InternalObservation) => void> = {
   "documents-artifacts.restore-document": o => { o.documents[0]!.body = "third"; },
   "inbox-search.show-decisions": o => { o.reply = "You can approve every item."; },
   "inbox-search.find-design": o => { o.reply = "Revision 2 is the latest approved design."; },
+  "inbox-search.notification-audience": o => { Object.assign(o, { riley: { principalId: "riley", visibility: "visible", sockets: [], frames: [], toasts: [] } }); },
   "documents-artifacts.find-artifact": o => { o.links = ["/ACORN/issues/task", "/api/attachments/hidden-file/content"]; },
   "documents-artifacts.produce-download": o => { o.links = ["/ACORN/issues/task", "/tmp/website.html"]; },
   "documents-artifacts.revise-delivery": o => { o.reply = "Here is the old version again."; },
