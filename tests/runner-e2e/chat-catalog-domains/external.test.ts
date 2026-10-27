@@ -72,10 +72,10 @@ function valid(id: string) {
   } else if (id === "app-permissions.new-quarantined-action") {
     const original = { id: "read", toolName: "launch_read", status: "active", schemaHash: "same" };
     Object.assign(o.state, { catalogBefore: [original], catalogAfter: [original, { id: "export", toolName: "launch_export", status: "quarantined" }],
-      exportEntryId: "export", quarantinedBeforeQuery: true, providerCalls: [], existingReadStillAllowed: true, existingWriteStillAllowed: true });
+      exportEntryId: "export", quarantinedBeforeQuery: true, quarantineConfiguredBeforeQuery:true, quarantineConfiguredAfter:true, providerCalls: [], existingReadStillAllowed: true, existingWriteStillAllowed: true });
     o.reply = "The new export action is quarantined and needs human review.";
   } else if (id.startsWith("app-permissions.")) {
-    o.connections = [{ id: "connection" }]; Object.assign(o.state, { syntheticProvider: true, connectionId: "connection", written: null });
+    o.connections = [{ id: "connection" }]; Object.assign(o.state, { syntheticProvider: true, syntheticNotionBindingBeforeQuery:true, syntheticNotionBindingAfter:true, connectionId: "connection", written: null });
     if (id.endsWith("read-allowed-write-off")) {
       Object.assign(o.state, { providerCalls: [], readAllowed: true, writeDisabled: true }); o.reply = "Notion write permission is disabled; open settings to enable the update action.";
     } else {

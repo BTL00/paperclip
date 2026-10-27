@@ -13,6 +13,10 @@ import {
   type NotesProvider,
 } from "./external-provider.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import {
+  prepareSyntheticNotionAlias,
+  observeSyntheticNotionBinding,
+} from "./external-app-fixture.js";
 const providers = new WeakMap<ChatCatalogContext, NotesProvider>();
 export function gradeAppPolicy(value: unknown) {
   const c = checks(),
@@ -28,6 +32,8 @@ export function gradeAppPolicy(value: unknown) {
   c.add(
     "real-synthetic-integration",
     o.state.syntheticProvider === true &&
+      o.state.syntheticNotionBindingBeforeQuery === true &&
+      o.state.syntheticNotionBindingAfter === true &&
       o.connections.some((row) => row.id === o.state.connectionId),
     "The public connection and real synthetic HTTP provider exist.",
   );
@@ -62,8 +68,29 @@ const disabledWriteCases = [
       providers.set(ctx, provider);
       try {
         const connected = await connectNotes(ctx, provider, "read-only");
+        await prepareSyntheticNotionAlias(
+          ctx.input.api,
+          connected.connectionId,
+        );
+        const binding = await observeSyntheticNotionBinding(
+          ctx.input.api,
+          connected.connectionId,
+          {
+            companyId: ctx.input.fixtures.company.id,
+            agentId: ctx.input.fixtures.agent.id,
+            providerURL: provider.url,
+            readId: connected.read[0]!,
+            writeId: connected.write[0]!,
+          },
+        );
+        if (!binding.matched)
+          throw new Error(
+            "Synthetic Notion fixture is not discoverable/installed with exact read-allowed write-off access",
+          );
         return {
           ...connected,
+          syntheticNotionBindingBeforeQuery: binding.matched,
+          syntheticBinding: binding,
           syntheticProvider: true,
           resultPath: `/${ctx.input.fixtures.company.issuePrefix}/apps/${connected.connectionId}/permissions`,
           resultLabel: "Update launch page",
@@ -78,13 +105,50 @@ const disabledWriteCases = [
     {
       sourceFiles: [
         "chat-catalog-domains/external-app-permissions.ts",
+        "chat-catalog-domains/external-app-fixture.ts",
+        "../../packages/shared/src/connection-search.ts",
+        "../../server/src/services/connection-intents.ts",
+        "../../server/src/routes/tool-access.ts",
         "chat-catalog-domains/external-provider.ts",
         "chat-catalog-domains/external-support.ts",
         "chat-catalog-domains/internal-support.ts",
         "chat-scenarios/app-permissions.yaml",
       ],
+      async verifySetup(ctx, state) {
+        const provider = providers.get(ctx)!;
+        const binding = await observeSyntheticNotionBinding(
+          ctx.input.api,
+          String(state.connectionId),
+          {
+            companyId: ctx.input.fixtures.company.id,
+            agentId: ctx.input.fixtures.agent.id,
+            providerURL: provider.url,
+            readId: (state.read as string[])[0]!,
+            writeId: (state.write as string[])[0]!,
+          },
+        );
+        const c = checks();
+        c.add(
+          "actual-synthetic-notion-discovery-and-policy-prerequisite",
+          binding.matched && state.syntheticNotionBindingBeforeQuery === true,
+          "Actual owned configured alias, public effective agent inventory and product search score bind the canonical service noun without official-provider metadata or expanded write authority.",
+        );
+        return c.result();
+      },
       async observe(ctx, state) {
         const provider = providers.get(ctx)!;
+        const binding = await observeSyntheticNotionBinding(
+          ctx.input.api,
+          String(state.connectionId),
+          {
+            companyId: ctx.input.fixtures.company.id,
+            agentId: ctx.input.fixtures.agent.id,
+            providerURL: provider.url,
+            readId: (state.read as string[])[0]!,
+            writeId: (state.write as string[])[0]!,
+          },
+        );
+        state.syntheticNotionBindingAfter = binding.matched;
         state.providerCalls = provider.calls
           .filter((row) => row.method === "tools/call")
           .map(({ name, authorized }) => ({ name, authorized }));
