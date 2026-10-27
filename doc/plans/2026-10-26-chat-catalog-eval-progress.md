@@ -105,17 +105,17 @@ No live launch, selected-case probe, reservation, final retry, production edit o
 
 ## Pending authoring handoffs
 
-These committed area handoffs await the coordinator's next immutable reconciliation. They do not replace the archived `ad0907afb9` checkpoint of 134 executions or establish live acceptance. The fixed denominator remains 244; the production source baseline remains `8373d7867963674ff960d2345d0d28086f799bc7`. Live history is unchanged: three scenarios, four measurements, zero eligible passes.
+These committed area handoffs await the coordinator's next immutable reconciliation. The finite handoff cutoff includes runtime `ac8ac79d68` (`steering.steer-active`), rather than following mutable HEAD. They do not replace the archived `ad0907afb9` checkpoint of 134 executions or establish live acceptance. The fixed denominator remains 244; the production source baseline remains `8373d7867963674ff960d2345d0d28086f799bc7`. Live history is unchanged: three scenarios, four measurements, zero eligible passes.
 
 | Pending owner handoff | Authored | Without declared gaps | Partial | Still absent |
 | --- | ---: | ---: | ---: | ---: |
 | Domains, including two legacy cases | 41 | 41 | 0 | 4 |
 | Identity | 44 | 41 | 3 | 0 |
-| Runtime | 36 | 36 | 0 | 24 |
+| Runtime | 37 | 37 | 0 | 23 |
 | Integrator | 22 | 19 | 3 | 5 |
 | External | 25 | 22 | 3 | 27 |
 | Coordinator privileged | 16 | 16 | 0 | 0 |
-| Total pending reconciliation | 184 | 175 | 9 | 60 |
+| Total pending reconciliation | 185 | 176 | 9 | 59 |
 
 Integrator's latest finite area handoff is `37b72e28e3` (genuine SDK-managed routine), following `2d53c3952f` / `6cc0012da0` (actual Morgan primary execution and review handoff) and `fe05c54c11` / `edbf426db3` (partial skill enablement). Its five absent IDs are `cases.update-case-facts`, `cases.case-history`, `cases.close-case`, `routines.webhook-trigger`, and `skills.review-update`. Card explanation still lacks the actual responding-principal inaccessible-source phase; card refresh still lacks an actual persisted failed-generation phase retaining prior output. Skill enablement has concrete intended assignment/future-version callbacks but requires an observed public configuration grant and an applicable effective-denial branch; rejection of the nonexistent `skills.use` action alone is not proof that every denial context is unsupported. Partial authoring and unsupported prerequisite receipts never count as passing outcomes or complete inventory processing.
 
