@@ -173,8 +173,11 @@ are configured for warm execution. Existing agents keep their explicit policy;
 plugin runs without an explicit policy prefer warm execution. There is no
 provider-specific warm gate or additional setting. Existing runs retain their
 admitted lifecycle policy during restart recovery. The existing
-`runnerIdleTimeoutMs` controls bounded retention. Core requires an explicitly
-selected account. Drivers without warm capability and setup probes remain ephemeral.
+`runnerIdleTimeoutMs` controls bounded retention. Fresh warm admission requires
+a Core-managed credential identity before lease acquisition. Plugin-owned installed
+accounts continue per-turn until such an identity is available; the saved warm
+preference does not bypass account ownership checks. Drivers without warm
+capability and setup probes remain ephemeral.
 
 Plugin task execution does not create a Core-managed GitHub broker. Warm reuse
 and restart recovery use the same broker-ownership rule as initial startup.
@@ -212,4 +215,5 @@ Changes to account, credential generation, workspace, runtime or process policy
 retire the old owner before recovery. A new authority epoch archives the stopped
 checkpoint under its stable archive key and preserves provider session files.
 Warm status monitoring relies on PRP after startup and does not poll an idle
-Launcher. General ACPX warm support is deliberately excluded.
+Launcher. ACPX uses this task-provider contract; other execution transports retain
+their provider-specific lifecycle policies.

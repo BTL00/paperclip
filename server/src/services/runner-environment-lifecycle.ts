@@ -10,15 +10,16 @@ export function resolveRunnerEnvironmentForRun<T extends Pick<Environment, "driv
   adapterType: string,
   adapterConfig: Record<string, unknown> = {},
   admittedLifecycleMode?: "warm" | "per_turn",
+  managedAiCredentialIdentity?: string,
 ): T {
   if (adapterType !== "paperclip_runner" || !["sandbox", "plugin"].includes(environment.driver)) return environment;
   const config = environment.config ?? {};
   const lifecycleMode = admittedLifecycleMode ?? (config.runnerLifecycleMode === "warm" || config.runnerLifecycleMode === "per_turn"
     ? config.runnerLifecycleMode
     : adapterConfig.lifecycleMode);
-  // Capability admission below chooses warm retention; recovery preserves its admitted policy.
+  // Warm tasks need a managed credential identity; recovery keeps its admitted policy.
   if (environment.driver === "plugin") return { ...environment, config: { ...config,
-    runnerLifecycleMode: lifecycleMode === "per_turn" ? "per_turn" : "warm",
+    runnerLifecycleMode: admittedLifecycleMode ?? (managedAiCredentialIdentity && lifecycleMode !== "per_turn" ? "warm" : "per_turn"),
     runnerIdleTimeoutMs: resolvePaperclipRunnerIdleTimeoutMs(config.runnerIdleTimeoutMs ?? adapterConfig.idleTimeoutMs),
   } };
   if (lifecycleMode !== "warm") return environment;

@@ -12068,10 +12068,11 @@ describe("runnerd provider runtime wiring", () => {
     } finally { owner.mockRestore(); }
   });
 
-  it.each(["codex", "fresh", "missing-capability", "missing-account", "acpx"] as const)("negotiates task-only warm execution: %s", async mode => {
+  it.each(["codex", "fresh", "missing-capability", "missing-account", "acpx", "installed-codex", "installed-claude"] as const)("negotiates task-only execution: %s", async mode => {
     const current = scopedNativeExecution(`plugin-warm-${mode}`);
-    current.session.lifecyclePolicy = {mode:"warm",idleTimeoutMs:300000};
-    if(mode==="acpx") current.provider={kind:"acpx",agent:"claude",model:"fixture",permissionMode:"deny-all"} as never;
+    const installed = mode.startsWith("installed-");
+    current.session.lifecyclePolicy = installed ? {mode:"per_turn",idleTimeoutMs:null} : {mode:"warm",idleTimeoutMs:300000};
+    if(mode==="acpx" || mode==="installed-claude") current.provider={kind:"acpx",agent:"claude",model:"fixture",permissionMode:"deny-all"} as never;
     const home=await mkdtemp(join(tmpdir(),"plugin-warm-account-"));
     await writeFile(join(home,"auth.json"),JSON.stringify({OPENAI_API_KEY:"synthetic-fixture"}),{mode:0o600});
     const owner=vi.spyOn(pluginTaskRuntime,"createPluginRunnerTaskOwner");
@@ -12082,15 +12083,16 @@ describe("runnerd provider runtime wiring", () => {
     state.createBackend.mockClear();state.createTransport.mockClear();
     try {
       const backend=createRunnerdBackend({db:leaseDb(current),execution:current,runnerInstanceId:"runner",runnerIngressAuthorized:true,
-        runnerEnvironment:{ANTHROPIC_API_KEY:"synthetic-fixture"},managedAiCredentialHome:home,managedAiCredentialIdentity:mode==="missing-account" ? undefined : "revision",managedAiAccountIdentity:"account",
+        runnerEnvironment:{ANTHROPIC_API_KEY:"synthetic-fixture"},managedAiCredentialHome:home,managedAiCredentialIdentity:mode==="missing-account" || installed ? undefined : "revision",managedAiAccountIdentity:installed ? undefined : "account",
         runnerExecutionTarget:{kind:"remote",transport:"sandbox",leaseId:"lease",remoteCwd:".",runnerTask:task,
           ...(mode==="fresh" ? {sandboxLeaseAcquisition:{outcome:"resumed",providerLeaseId:"old-task"}} : {})}});
       if(mode==="missing-capability" || mode==="missing-account") {await expect(backend).rejects.toThrow("capability or account");return;}
       await backend;
       if(mode==="fresh") expect(task.mock.calls.map(([operation])=>operation.kind)).toEqual(["stop","status","complete","describe"]);
       state.createBackend.mock.calls.at(-1)![1].codexTransportFactory!();
-      expect(state.createTransport.mock.calls.at(-1)![0]).toMatchObject({lifecyclePolicy:{mode:"warm",idleTimeoutMs:300000}});
-      expect(owner.mock.calls.at(-1)![0]).toMatchObject({warmTaskVersion:1,accountIdentity:"account",onCredentials:undefined});
+      expect(state.createTransport.mock.calls.at(-1)![0]).toMatchObject({lifecyclePolicy:current.session.lifecyclePolicy});
+      expect(owner.mock.calls.at(-1)![0]).toMatchObject({warmTaskVersion:1,onCredentials:undefined});
+      expect(owner.mock.calls.at(-1)![0].accountIdentity).toBe(installed ? undefined : "account");
     } finally {owner.mockRestore();await rm(home,{recursive:true,force:true});}
   });
 

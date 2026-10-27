@@ -393,10 +393,12 @@ describe.skipIf(!support.supported)("heartbeat workspace preparation boundary", 
 
   it("persists the workspace and issue binding before acquiring its environment", async () => {
     const { input, source, issue, envOrchestrator } = await fixture();
+    input.config.managedAiCredentialIdentity = "account:generation";
     const acquire = envOrchestrator.acquireForRun;
     vi.spyOn(envOrchestrator, "acquireForRun").mockImplementation(async args => {
       expect((await readIssue(issue.id)).executionWorkspaceId).toBe(args.persistedExecutionWorkspace?.id);
       expect((await readRun(input.run.id)).contextSnapshot?.executionWorkspaceId).toBe(args.persistedExecutionWorkspace?.id);
+      expect(args.managedAiCredentialIdentity).toBe("account:generation");
       return acquire(args);
     });
     const result = await prepareHeartbeatWorkspace(db, input);
