@@ -27,7 +27,7 @@ export function selectedPostgresArtifact(env = process.env): { image: PostgresIm
   if (!imageId) throw new Error("Unreviewed amd64 PostgreSQL image identity");
   return { image: POSTGRES_AMD64_IMAGE, imageId, architecture: "amd64" as const, version: POSTGRES_VERSION };
 }
-function knownPostgresReceipt(receipt: { image: string; imageId: string; architecture?: string }) {
+export function reviewedPostgresReceiptIdentity(receipt: { image: string; imageId: string; architecture?: string }) {
   return receipt.image === POSTGRES_IMAGE && receipt.imageId === POSTGRES_IMAGE_ID && !receipt.architecture
     || receipt.image === POSTGRES_AMD64_IMAGE && POSTGRES_AMD64_IMAGE_IDS.some(id => id === receipt.imageId) && receipt.architecture === "amd64";
 }
@@ -115,7 +115,7 @@ function exactPasswordBindSource(source: unknown, receipt: DockerDatabaseReceipt
 export function assertOwnedContainer(value: any, receipt: DockerDatabaseReceipt, running?: boolean) {
   const mounts = value?.Mounts, data = mounts?.find((m: any) => m.Destination === "/var/lib/postgresql"), password = mounts?.find((m: any) => m.Destination === "/run/secrets/postgres-password");
   const ports = value?.HostConfig?.PortBindings?.["5432/tcp"], config = value?.Config;
-  if (!fullId(receipt.containerId) || value?.Id !== receipt.containerId || value.Name !== `/${receipt.containerName}` || !knownPostgresReceipt(receipt) || value.Image !== receipt.imageId || config?.Image !== receipt.image || !hasLabels(config.Labels, receipt)
+  if (!fullId(receipt.containerId) || value?.Id !== receipt.containerId || value.Name !== `/${receipt.containerName}` || !reviewedPostgresReceiptIdentity(receipt) || value.Image !== receipt.imageId || config?.Image !== receipt.image || !hasLabels(config.Labels, receipt)
     || value.HostConfig.Privileged !== false || !["default", "bridge"].includes(value.HostConfig.NetworkMode) || !Array.isArray(mounts) || mounts.length !== 2
     || data?.Type !== "volume" || data.Name !== receipt.volumeName || data.RW !== true || password?.Type !== "bind" || !exactPasswordBindSource(password.Source, receipt) || password.RW !== false
     || !Array.isArray(ports) || ports.length !== 1 || ports[0].HostIp !== "127.0.0.1" || Object.keys(value.HostConfig.PortBindings).join() !== "5432/tcp"
@@ -132,7 +132,7 @@ async function privateRoot(root: string) {
 }
 function assertReceipt(value: DockerDatabaseReceipt, root: string) {
   if (value?.schemaVersion !== 1 || value.lane !== "owned-docker-postgres" || value.temporaryRoot !== root || !uuidHex(value.nonce) || value.containerName !== `paperclip-e2e-pg-${value.nonce}` || value.volumeName !== `paperclip-e2e-pg-data-${value.nonce}`
-    || !knownPostgresReceipt(value) || value.imageVersion !== POSTGRES_VERSION || !/^[a-z][a-z0-9_]{1,60}$/.test(value.username) || !/^[a-z][a-z0-9_]{1,60}$/.test(value.database)) throw new Error("Invalid private Docker database receipt");
+    || !reviewedPostgresReceiptIdentity(value) || value.imageVersion !== POSTGRES_VERSION || !/^[a-z][a-z0-9_]{1,60}$/.test(value.username) || !/^[a-z][a-z0-9_]{1,60}$/.test(value.database)) throw new Error("Invalid private Docker database receipt");
 }
 async function readPrivateDockerReceipt(filename: string, root: string) {
   await privateRoot(root);
@@ -275,7 +275,7 @@ export function databaseFingerprintIdentity(env = process.env) {
 export type DatabaseFingerprintIdentity = ReturnType<typeof databaseFingerprintIdentity>;
 export function databaseIdentityMatches(expected: DatabaseFingerprintIdentity, actual?: DockerDatabaseIdentity) {
   if (expected.lane === "embedded-postgres") return actual === undefined;
-  return !!actual && actual.lane === expected.lane && actual.image === expected.image && actual.imageId === expected.imageId && actual.imageVersion === expected.version && knownPostgresReceipt(actual) && (expected.architecture ?? undefined) === actual.architecture
+  return !!actual && actual.lane === expected.lane && actual.image === expected.image && actual.imageId === expected.imageId && actual.imageVersion === expected.version && reviewedPostgresReceiptIdentity(actual) && (expected.architecture ?? undefined) === actual.architecture
     && actual.artifactVerified && !!actual.contextSha256 && !!actual.engineSha256 && fullId(actual.containerId) && !!actual.cluster
     && /^18\.6(?:\s|$)/.test(actual.cluster.version) && /^[0-9]+$/.test(actual.cluster.systemIdentifier) && ["ready", "removed"].includes(actual.status);
 }

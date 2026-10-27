@@ -250,4 +250,7 @@ it("creates, verifies and cleans the explicit amd64 receipt using only the owned
   expect(databaseIdentityMatches(databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres", [POSTGRES_ARTIFACT_ENV]: "linux-amd64" }), publicDockerDatabaseIdentity(owned.receipt))).toBe(true);
   expect(databaseIdentityMatches(databaseFingerprintIdentity({ [DATABASE_LANE_ENV]: "owned-docker-postgres" }), publicDockerDatabaseIdentity(owned.receipt))).toBe(false);
   await owned.close(); expect(state.container).toBeNull(); expect(state.volume).toBeNull(); expect(owned.receipt.status).toBe("removed");
+  const result = { schema: "paperclip.runner-e2e.result/v1", executionId: "remote-offline", attempt: 1, status: "passed", profileId: "offline", environmentId: "local", caseId: "offline", provider: null, model: null, runtimeMode: "none", startedAt: "2026-10-27T00:00:00Z", finishedAt: "2026-10-27T00:00:01Z", durationMs: 1000, cleanup: "passed", databaseIdentity: publicDockerDatabaseIdentity(owned.receipt) };
+  expect(() => validateRetainedRunnerResult(result)).not.toThrow();
+  for (const change of [{ architecture: undefined }, { image: POSTGRES_IMAGE }, { imageId: POSTGRES_IMAGE_ID }]) expect(() => validateRetainedRunnerResult({ ...result, databaseIdentity: { ...result.databaseIdentity, ...change } })).toThrow();
 });

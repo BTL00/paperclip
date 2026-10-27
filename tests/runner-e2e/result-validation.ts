@@ -1,4 +1,4 @@
-import { POSTGRES_IMAGE, POSTGRES_IMAGE_ID } from "./docker-postgres.js";
+import { POSTGRES_IMAGE, POSTGRES_IMAGE_ID, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, reviewedPostgresReceiptIdentity } from "./docker-postgres.js";
 import { validateWorkerTiming } from "./worker-timing.js";
 import { connectionCheckpoints, connectionEvidencePasses, connectionRunSignals } from "./connection-evidence.js";
 import { githubJourneyCheckpoints, gradeGitHubReviewJourney } from "./github-review-evidence.js";
@@ -226,12 +226,14 @@ const matcher: Rule = (value, at) => {
   rule(value, at);
 };
 const fields = {
-  databaseIdentity: optional(closedShape({
-    lane: oneOf("owned-docker-postgres"), image: oneOf(POSTGRES_IMAGE), imageId: oneOf(POSTGRES_IMAGE_ID), imageVersion: oneOf("18.6-1.pgdg13+2"),
+  databaseIdentity: optional((value, at) => { closedShape({
+    lane: oneOf("owned-docker-postgres"), image: oneOf(POSTGRES_IMAGE, POSTGRES_AMD64_IMAGE), imageId: oneOf(POSTGRES_IMAGE_ID, ...POSTGRES_AMD64_IMAGE_IDS), architecture: optional(oneOf("amd64")), imageVersion: oneOf("18.6-1.pgdg13+2"),
     artifactVerified: boolean, contextSha256: nullable(matching(/^[a-f0-9]{64}$/)), engineSha256: nullable(matching(/^[a-f0-9]{64}$/)), containerId: nullable(matching(/^[a-f0-9]{64}$/)),
     cluster: optional(closedShape({ version: matching(/^18\.6(?:\s|$)/), systemIdentifier: matching(/^[0-9]+$/) })),
     status: oneOf("creating", "ready", "failed", "removed", "cleanup-failed", "startup-unconfirmed"),
-  })),
+  })(value, at);
+    if (!reviewedPostgresReceiptIdentity(value as { image: string; imageId: string; architecture?: string })) invalid(at);
+  }),
   accountingIdentity: optional(shape({ campaignId: string, attemptId: string })),
   publicMcp: optional(assistant),
   schema: oneOf(
