@@ -7,7 +7,7 @@
     ]
   },
   "tests/runner-e2e/public-mcp-client.ts": {
-    "sourceSha256": "6cf29b9d5fb7a5fade1f149dc2894982609b7f30363639949882f83272d1de01",
+    "sourceSha256": "58c20cb6f770c749684c0d94fcf6f1d89c55f9c71a84172286aa6e43618ebd8e",
     "resolution": "pinned-external-mcp-sdk",
     "dependencies": [
       "server/package.json"
