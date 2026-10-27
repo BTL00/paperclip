@@ -6,7 +6,7 @@ import type { FeedbackTrace, FeedbackTraceBundle, FeedbackVote } from "../../../
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { checks, type Entity } from "./internal-support.js";
-import { prepareRuntimeWorkerGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
+import { prepareRuntimeWorkerGate, readRuntimeTaskGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
 import { probeAgentPermission, cleanupIdentityProbes } from "./identity-support.js";
 import { prepareOwnedCli, runOwnedCli, cleanupOwnedCli } from "./privileged-cli-support.js";
 import { privilegedDefinition, privilegedObservation, companionPhase } from "./privileged-support.js";
@@ -57,14 +57,14 @@ export function gradeFeedbackBundle(value: unknown) {
 }
 const feedback = privilegedDefinition("cli-operations.feedback-bundle", "privileged-feedback", {
   async setup(ctx) {
-    const gate = await prepareRuntimeWorkerGate(ctx); const pending = { gate, taskId: undefined as string | undefined }; pendingFixtures.set(ctx, pending);
+    const gate = await prepareRuntimeWorkerGate(ctx, { taskBound: true }); const pending = { gate, taskId: undefined as string | undefined }; pendingFixtures.set(ctx, pending);
     const marker = `Waiting for operator brief ${ctx.input.nonce}`;
     const task = await ctx.input.api.post<Entity>(`${gate.company}/issues`, { title: "Interrupted local feedback fixture", status: "todo", assigneeAgentId: gate.worker.id,
-      description: `First post one normal task comment saying exactly ${JSON.stringify(marker)}. Then run node ${JSON.stringify(gate.gate.scriptPath)} once and wait for the human brief. Do not mark this task complete or replace the script. This is an owned interruption fixture.` });
+      description: `First post one normal task comment saying exactly ${JSON.stringify(marker)}. Then run ${gate.gate.command} once and wait for the human brief. Do not mark this task complete or replace the script. This is an owned interruption fixture.` });
     pending.taskId = task.id;
     const sharingBefore = await ctx.input.api.get<{ feedbackDataSharingPreference?: string }>("/api/instance/settings/general");
     const running = await pollUntil({ label: "Actual worker comment and native waiting process", deadlineAt: Date.now() + 150000,
-      load: async () => ({ runs: await ctx.allRuns(), comments: await ctx.input.api.get<Entity[]>(`/api/issues/${task.id}/comments?order=asc`), waiting: await readFile(gate.gate.ready, "utf8").catch(() => "") }),
+      load: async () => ({ runs: await ctx.allRuns(), comments: await ctx.input.api.get<Entity[]>(`/api/issues/${task.id}/comments?order=asc`), waiting: await readRuntimeTaskGate(ctx, gate.gate, task.id, gate.worker.id) }),
       accept: o => o.waiting === "waiting" && o.runs.length === 1 && o.runs[0]?.status === "running" && o.runs[0].agentId === gate.worker.id
         && o.comments.some(c => c.authorAgentId === gate.worker.id && c.createdByRunId === o.runs[0]!.id && c.body === marker),
       reject: o => o.runs.some(r => ["failed", "cancelled", "timed_out", "succeeded"].includes(r.status)) ? "Interruption prerequisite finished before the actual held native boundary" : undefined });

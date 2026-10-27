@@ -1,5 +1,7 @@
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
+import { pollUntil } from "../api.js";
+import type { RuntimeAgent } from "./runtime-support.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { checks, project, entity, type Entity } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
@@ -15,10 +17,12 @@ export function gradeCreateFromCli(value: unknown) {
     && o.state.cliCommandExecuted === true && o.state.explicitCompany === o.companyId,
     "The later CLI journey creates exactly one task, rather than the agent creating work while merely asked for a command.");
   c.add("saved-company-project-assignee", !!saved && saved.companyId === o.companyId && saved.projectId === launch?.id
-    && saved.assigneeAgentId === worker?.id && /website/i.test(saved.title ?? "") && saved.status === "backlog",
+    && saved.assigneeAgentId === worker?.id && /website/i.test(saved.title ?? "") && ["backlog", "todo"].includes(String(o.state.expectedCliStatus)) && saved.status === o.state.expectedCliStatus,
     "Fresh public state independently binds the CLI result to the requested website task, Launch and Morgan.");
   c.add("real-command-structured-result", Array.isArray(o.state.executedArgv) && o.state.executedArgv[0] === "issue"
-    && o.state.executedArgv[1] === "create" && cli?.companyId === saved?.companyId,
+    && o.state.executedArgv[1] === "create" && cli?.companyId === saved?.companyId && cli?.projectId === saved?.projectId
+    && cli?.assigneeAgentId === saved?.assigneeAgentId && cli?.status === saved?.status && o.state.cliStructuredResultVerified === true
+    && o.state.workerWasManuallyPaused === true,
     "The response's finite supported flags actually execute with an inspectable structured result; no plausible invented flag is silently repaired.");
   return c.result();
 }
@@ -26,7 +30,12 @@ const create = privilegedDefinition("cli-operations.create-from-cli", "privilege
   async setup(ctx) {
     const operator = await prepareOwnedCli(ctx);
     const launch = await project(ctx), worker = await fixtureWorker(ctx);
-    return { ...operator, project: launch, worker };
+    await ctx.input.api.post(`/api/agents/${worker.id}/pause`, {});
+    const paused = await pollUntil({ label: "CLI fixture Morgan manually paused", deadlineAt: Date.now() + 45_000,
+      load: () => ctx.input.api.get<RuntimeAgent>(`/api/agents/${worker.id}`),
+      accept: row => row.companyId === ctx.input.fixtures.company.id && row.lifecycleState === "paused"
+        && row.status === "paused" && row.lifecycleHolds?.length === 1 && row.lifecycleHolds[0] === "manual" });
+    return { ...operator, project: launch, worker: paused, workerWasManuallyPaused: true };
   },
   async act(ctx, state) {
     const reply = await settlePrivilegedChat(ctx);
@@ -35,12 +44,19 @@ const create = privilegedDefinition("cli-operations.create-from-cli", "privilege
       agent: entity(state, "worker").id, apiBase: ctx.input.api.baseURL };
     const bindings: Array<{ flag: string; placeholder: string; fixtureValue: string }> = [];
     const argv = websiteCreateArgv(reply.reply, fixture, bindings);
-    await runOwnedCli(ctx, argv);
+    const stdout = await runOwnedCli(ctx, argv);
+    const cli = JSON.parse(stdout) as Entity;
+    const statusIndex = argv.indexOf("--status");
+    state.expectedCliStatus = statusIndex < 0 ? "backlog" : argv[statusIndex + 1];
     const created = await ctx.input.api.get<Entity[]>(`/api/companies/${fixture.company}/issues`);
     if (reply.tasks.length || created.length !== 1) throw new Error("Actual returned CLI command did not create exactly one later task");
     const result = created[0]!;
-    state.cliResult = { id: result.id, companyId: result.companyId, title: result.title, identifier: result.identifier,
-      projectId: result.projectId, assigneeAgentId: result.assigneeAgentId, status: result.status };
+    if (!cli?.id || cli.id !== result.id || cli.companyId !== fixture.company || cli.projectId !== fixture.project
+      || cli.assigneeAgentId !== fixture.agent || cli.status !== state.expectedCliStatus || result.status !== cli.status || cli.title !== result.title)
+      throw new Error("Actual CLI structured result does not match independently saved requested task");
+    state.cliStructuredResultVerified = true;
+    state.cliResult = { id: cli.id, companyId: cli.companyId, title: cli.title, identifier: cli.identifier,
+      projectId: cli.projectId, assigneeAgentId: cli.assigneeAgentId, status: cli.status };
     state.executedArgv = argv.filter((value, index) => index < 2 || value.startsWith("-"));
     state.executedArgvSha256 = createHash("sha256").update(JSON.stringify(argv)).digest("hex");
     state.unresolvedIdentifierBindingPolicy = "Only explicit unresolved company/project/assignee placeholders bind to independently saved fixture identities; resolved values are never repaired.";
@@ -60,6 +76,20 @@ const create = privilegedDefinition("cli-operations.create-from-cli", "privilege
 });
 create.sourceFiles = [...create.sourceFiles, "chat-catalog-domains/privileged-cli-support.ts", "../../cli/src/index.ts"];
 create.cleanup = cleanupOwnedCli;
+create.setupPolicy = { readiness: "preserve-scenario", invariantCheckIds: ["lead-ready", "owned-manual-pause"] };
+create.verifySetup = async (ctx, state) => {
+  const c = checks();
+  const lead = await pollUntil({ label: "CLI source agent ready", deadlineAt: Date.now() + 45_000,
+    load: () => ctx.input.api.get<RuntimeAgent>(`/api/agents/${ctx.input.fixtures.agent.id}`),
+    accept: row => row.lifecycleState === "ready" && ["idle", "active"].includes(row.status ?? "") });
+  const worker = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${entity(state, "worker").id}`);
+  c.add("lead-ready", lead.companyId === ctx.input.fixtures.company.id && lead.lifecycleState === "ready"
+    && ["idle", "active"].includes(lead.status ?? ""), "The same-company source can receive the unchanged request.");
+  c.add("owned-manual-pause", worker.companyId === ctx.input.fixtures.company.id && worker.lifecycleState === "paused"
+    && worker.status === "paused" && worker.lifecycleHolds?.length === 1 && worker.lifecycleHolds[0] === "manual",
+    "Morgan is genuinely manually paused before the command request, so later todo creation cannot admit hidden work.");
+  return c.result();
+};
 export function gradeChooseCliContext(value: unknown) {
   const c = checks(), o = privilegedObservation(value);
   c.add("owned-cli-context-evidence", !!o, "Two isolated profiles and real authenticated identity readback are required."); if (!o) return c.result();

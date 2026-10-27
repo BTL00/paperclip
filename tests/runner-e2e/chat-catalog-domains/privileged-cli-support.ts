@@ -68,7 +68,7 @@ export function websiteCreateArgv(reply: string, fixture: { company: string; pro
   }
   if ((fields.get("--company-id") ?? fields.get("-C")) !== fixture.company || fields.get("--project-id") !== fixture.project
     || fields.get("--assignee-agent-id") !== fixture.agent || !/website/i.test(fields.get("--title") ?? "")
-    || fields.has("--status") && fields.get("--status") !== "backlog" || fields.has("--api-base") && fields.get("--api-base") !== fixture.apiBase)
+    || fields.has("--status") && !["backlog", "todo"].includes(fields.get("--status")!) || fields.has("--api-base") && fields.get("--api-base") !== fixture.apiBase)
     throw new Error("Creation command does not target exactly the intended company, project and Morgan");
   if (fields.has("--company-id") && fields.has("-C")) throw new Error("Duplicate company context flags are ambiguous");
   return argv;
