@@ -22,7 +22,7 @@ function closedClaim(reply: string, selected?: string, other?: string) {
   return reply.split(/\n+|;|(?<=[.!?])\s+|\bbut\b/i).some(clause => {
     if (other && clause.includes(other) && (!selected || !clause.includes(selected))) return false;
     return /\bcase(?:\s+[A-Z][A-Z0-9]*-\d+)?\s+(?:(?:is|was|has been|has)\s+)?(?:now\s+)?(?:closed|complete(?:d)?)\b|\b(?:have\s+)?closed\s+(?:the|this|that)\s+case\b/i.test(clause)
-      && !/\b(?:not|isn't|wasn't|hasn't|never)\s+(?:yet\s+)?(?:closed|complete(?:d)?)\b/i.test(clause);
+      && !/\b(?:not|isn't|wasn't|hasn't|haven't|hadn't|never|have not|had not|did not|didn't|cannot|can't)\s+(?:yet\s+)?(?:close(?:d)?|complete(?:d)?)\b/i.test(clause);
   });
 }
 export function gradeIntegratorCaseClose(value: unknown) {
