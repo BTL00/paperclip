@@ -216,8 +216,8 @@
     },
     {
       "scenarioId": "steering.discard-queued-message",
-      "readinessClass": "local",
-      "needs": "Human-owned real queued comment; actual task UI discard plus separate genuinely dispatched cancellation-as-new-direction phase. Exact task human comment/run boundaries can be retained area-locally."
+      "readinessClass": "implemented",
+      "needs": "Actual human-owned pending contact request removed through supported discard while neighbour persists; public comment404 and human audit prove deletion, no native wake receives it. A distinct later contact request is actually consumed, rejects late discard409, and an explicit phase-bound human source follow-up sends one real new-direction continuation without erasing history. No live qualification claimed."
     },
     {
       "scenarioId": "steering.steer-active",

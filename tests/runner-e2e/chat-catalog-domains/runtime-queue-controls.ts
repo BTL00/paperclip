@@ -17,6 +17,17 @@ type State = Record<string, unknown>;
 function endpoint(state: State) { return `/api/issues/${(state.task as Entity).id}/queued-comments`; }
 async function queue(ctx: ChatCatalogContext, state: State) { return ctx.input.api.get<IssueQueuedCommentQueue>(endpoint(state)); }
 function taskUrl(ctx: ChatCatalogContext, state: State) { const task = state.task as Entity; return `/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier ?? task.id}`; }
+export async function humanQueuedRuntime(ctx: ChatCatalogContext, targetText = redText): Promise<State> {
+  const state: State = await busyRuntimeWorker(ctx); const source = ctx.input.page.url();
+  await ctx.input.page.goto(taskUrl(ctx, state), { waitUntil: "domcontentloaded" });
+  await submitTaskReply(ctx.input.page, otherText); await submitTaskReply(ctx.input.page, targetText);
+  const before = await pollUntil({ label: "Two real user-owned messages saved behind Morgan's active turn", deadlineAt: Date.now() + 30_000,
+    load: () => queue(ctx, state), accept: q => q.entries.length === 2 && q.entries[0]?.comment.body === otherText && q.entries[1]?.comment.body === targetText });
+  const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
+  if (before.entries.some(row => row.comment.authorUserId !== session.user.id || row.comment.authorAgentId || !row.canEdit)) throw new Error("Queue fixture is not genuinely owned by the signed-in human");
+  Object.assign(state, { queueBefore: before, targetId: before.entries[1]!.comment.id, humanId: session.user.id, concurrentMarker: `Preserve the human note ${ctx.input.nonce}.` });
+  await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); return state;
+}
 async function edit(page: Page, id: string, body: string) {
   await page.getByTestId(`task-chat-queued-message-${id}`).getByRole("button", { name: /^Queued message actions:/ }).click();
   await page.getByRole("menuitem", { name: "Edit message", exact: true }).click();
@@ -45,17 +56,7 @@ export function gradeQueueEdit(value: unknown) {
   return c.result();
 }
 
-export const runtimeQueueControlCases = [runtimeDefinition("steering.edit-queued-message", async ctx => {
-  const state: State = await busyRuntimeWorker(ctx); const source = ctx.input.page.url();
-  await ctx.input.page.goto(taskUrl(ctx, state), { waitUntil: "domcontentloaded" });
-  await submitTaskReply(ctx.input.page, otherText); await submitTaskReply(ctx.input.page, redText);
-  const before = await pollUntil({ label: "Two real user-owned messages saved behind Morgan's active turn", deadlineAt: Date.now() + 30_000,
-    load: () => queue(ctx, state), accept: q => q.entries.length === 2 && q.entries[0]?.comment.body === otherText && q.entries[1]?.comment.body === redText });
-  const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
-  if (before.entries.some(row => row.comment.authorUserId !== session.user.id || row.comment.authorAgentId || !row.canEdit)) throw new Error("Queue fixture is not genuinely owned by the signed-in human");
-  Object.assign(state, { queueBefore: before, targetId: before.entries[1]!.comment.id, humanId: session.user.id, concurrentMarker: `Preserve the human note ${ctx.input.nonce}.` });
-  await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); return state;
-}, gradeQueueEdit, {
+export const runtimeQueueControlCases = [runtimeDefinition("steering.edit-queued-message", ctx => humanQueuedRuntime(ctx), gradeQueueEdit, {
   sourceFiles: ["chat-catalog-domains/runtime-queue-controls.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-scenarios/steering.yaml"],
   authentication: "human-session", expectedRunCount: 3, attemptTimeoutMs: 720_000,
   setupPolicy: runtimeQueueCases[0]!.setupPolicy, verifySetup: runtimeQueueCases[0]!.verifySetup,
