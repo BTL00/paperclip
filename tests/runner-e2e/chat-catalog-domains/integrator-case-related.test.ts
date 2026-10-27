@@ -20,6 +20,8 @@ describe("case relationships rather than similar names", () => {
   });
   it("rejects inferred same-name relationships, private exposure and wrong principal access", () => {
     const o = valid();
+    const collision = structuredClone(o); collision.state.unrelated.id = collision.state.followup.id;
+    expect(gradeIntegratorRelatedWork(collision).passed).toBe(false);
     expect(gradeIntegratorRelatedWork({ ...o, links: [...o.links, "/ACN/issues/ACN-3"] }).passed).toBe(false);
     expect(gradeIntegratorRelatedWork({ ...o, reply: `${o.reply} Private customer: PRIVATE-SENTINEL.` }).passed).toBe(false);
     expect(gradeIntegratorRelatedWork({ ...o, deniedStatus: 200 }).passed).toBe(false);

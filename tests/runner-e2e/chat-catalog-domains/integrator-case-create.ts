@@ -2,7 +2,7 @@ import type { cases } from "../../../packages/db/src/schema/cases.js";
 import type { CaseHandoff } from "../../../packages/shared/src/case-handoffs.js";
 import type { IssueDocument, DocumentRevision } from "../../../packages/shared/src/types/issue.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
-import { checks, hasLink, observation, project, task, putDocument, type Entity, type InternalObservation } from "./internal-support.js";
+import { checks, hasLink, observation, project, type Entity, type InternalObservation } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
 type CaseRecord = typeof cases.$inferSelect;
@@ -72,8 +72,15 @@ export const integratorCaseCreationCases = [integratorDefinition("cases", "cases
   const settings = await ctx.input.api.get<{ enableCases: boolean }>("/api/instance/settings/experimental"); previous.set(ctx, settings.enableCases);
   try {
     await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: true });
-    const p = await project(ctx, "Launch"); const worker = await fixtureWorker(ctx); const t = await task(ctx, "Customer bug brief", p.id);
-    await putDocument(ctx, t.id, `# Customer bug brief\n\n${Object.entries(customerBugFacts).map(([key, value]) => `${key}: ${value}`).join("\n")}\n\nMorgan is the eligible initial investigator. Investigation should retain evidence for the later review handoff.`);
+    const p = await project(ctx, "Launch"); const worker = await fixtureWorker(ctx);
+    await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/chats/${ctx.input.fixtures.agent.id}`);
+    await ctx.refreshIssue(); const t = ctx.issue();
+    if (!t) throw new Error("Customer brief requires its actual standing conversation");
+    await ctx.input.api.patch(`/api/issues/${t.id}`, { projectId: p.id });
+    const body = `# Customer bug brief\n\n${Object.entries(customerBugFacts).map(([key, value]) => `${key}: ${value}`).join("\n")}`;
+    await ctx.input.api.putSensitive(`/api/issues/${t.id}/documents/brief`, { title: "Customer bug brief", format: "markdown", body, baseRevisionId: null });
+    const brief = await ctx.input.api.get<IssueDocument>(`/api/issues/${t.id}/documents/brief`);
+    if (brief.body !== body || brief.issueId !== t.id) throw new Error("Customer brief did not persist on the actual canonical conversation");
     return { project: p, task: t, worker };
   } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: settings.enableCases }); previous.delete(ctx); throw error; }
 }, observeCreation, gradeIntegratorCaseCreation, async (ctx, _state, value) => {
