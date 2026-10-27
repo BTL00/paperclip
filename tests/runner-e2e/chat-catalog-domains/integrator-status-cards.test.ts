@@ -114,3 +114,32 @@ it("a paraphrase cannot replace required saved-card link or source-access eviden
   expect(gradeIntegratorCards(o).passed).toBe(true);
   expect(gradeIntegratorCards({ ...o, links: ["/ACORN/issues/source"] }).passed).toBe(false);
 });
+
+import type { StatusCard } from "../../../packages/shared/src/validators/status-card.js";
+import { updateIssueSchema } from "../../../packages/shared/src/validators/issue.js";
+import { selectedStatusCardReference, refreshedBlockerTaskInput } from "./integrator-status-cards.js";
+it("delivers only actual selected card and saved generation/source context, not live answers or actions", () => {
+  const o = valid("status-cards.explain-card");
+  const card = { ...o.cards[0]!, fingerprint: { source: { title: "Payment approval blocks launch", status: "blocked" } } } as unknown as StatusCard;
+  const context = selectedStatusCardReference(card, [{ id: "source", identifier: "ACN-1", title: "private-current-title", status: "done" }, { id: "unrelated", title: "unrelated-private-detail" }], "ACN");
+  expect(context).toContain("[Launch blockers](/ACN/status/card)"); expect(context).toContain(card.summaryBody!); expect(context).toContain(card.lastGeneratedAt!);
+  expect(context).toContain("Payment approval blocks launch"); expect(context).toContain("/ACN/issues/ACN-1");
+  expect(context).not.toMatch(/private-current-title|unrelated-private-detail|must|expected|archive|restore|DELETE|PATCH|\/api\//i);
+  expect(() => selectedStatusCardReference(card, [], undefined)).toThrow("actual company issue prefix");
+  const other = selectedStatusCardReference({ ...card, id: "other-card", title: "Research" }, [], "ACN");
+  expect(other).not.toContain("/ACN/status/card)"); expect(other).toContain("/ACN/status/other-card");
+});
+it("makes the genuine new blocker visible in the public task title used by bounded generation input", () => {
+  const update = updateIssueSchema.parse(refreshedBlockerTaskInput());
+  expect(update.title).toMatch(/mobile Safari.*checkout regression/i); expect(update.description).toContain("Payment approval has been received");
+  expect(update).not.toHaveProperty("status"); // No task/card/native status fabricated.
+  expect(JSON.stringify(update)).not.toMatch(/summari[sz]e|write|return|tool|generationIssueId|model/i);
+});
+it("declares factual human attachments only for the two actual missing selected referents", () => {
+  for (const id of ["status-cards.explain-card", "status-cards.archive-card"]) {
+    const definition = integratorStatusCardsCases.find(row => row.scenarioId === id)!;
+    expect(definition.authentication).toBe("human-session"); expect(definition.queryAttachments).toEqual([{ stateKey: "factualContextAttachment", filename: "selected-status-card.md" }]);
+  }
+  // The refresh query already names Launch and the retained run selected it correctly.
+  expect(integratorStatusCardsCases.find(row => row.scenarioId === "status-cards.refresh-card")!.queryAttachments).toBeUndefined();
+});

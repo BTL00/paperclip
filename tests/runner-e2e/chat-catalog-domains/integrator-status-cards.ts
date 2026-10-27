@@ -1,3 +1,4 @@
+import { uploadFactualQueryAttachment, factualContextQueryAttachment } from "../chat-query-attachments.js";
 import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "../../../packages/shared/src/validators/status-card.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
@@ -125,6 +126,20 @@ async function seedCard(ctx: ChatCatalogContext, authorId: string, summarizerId:
       reject: card => card.state === "error" ? "Prerequisite card generation failed; no synthetic summary substituted" : undefined });
   } finally { await ctx.input.api.delete(`/api/agents/${authorId}/keys/${key.id}`, { allowNotFound: true }); }
 }
+/** Human-visible selected resource data, copied from actual saved public rows.
+ * Live task state is deliberately left for the responding agent to inspect. */
+export function selectedStatusCardReference(card: StatusCard, sources: Entity[], issuePrefix: string | null | undefined) {
+  if (!issuePrefix) throw new Error("Selected status card context requires the actual company issue prefix");
+  const sourceReferences = sources.filter(source => !!card.fingerprint?.[source.id]).map(source => ({ id: source.id, identifier: source.identifier,
+    title: card.fingerprint?.[source.id]?.title, href: `/${issuePrefix}/issues/${source.identifier ?? source.id}` }));
+  return `# Selected status card\n\n[${card.title ?? "Status card"}](/${issuePrefix}/status/${card.id})\n\n` + JSON.stringify({
+    cardId: card.id, title: card.title, authorAgentId: card.createdByAgentId, summarizerAgentId: card.agentId,
+    lastGeneratedAt: card.lastGeneratedAt, summaryBody: card.summaryBody, sourceReferences,
+  }, null, 2);
+}
+export function refreshedBlockerTaskInput() {
+  return { title: "Mobile Safari checkout regression blocks launch", description: "Payment approval has been received. The remaining blocker is the mobile Safari checkout regression." };
+}
 const experiments = new WeakMap<ChatCatalogContext, boolean>();
 function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<ChatCatalogCase> = {}): ChatCatalogCase {
   return integratorDefinition("status-cards", id, async ctx => {
@@ -149,18 +164,20 @@ function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<Chat
       if (["status-cards.refresh-card", "status-cards.explain-card"].includes(id)) {
         sourceTasks[0] = await ctx.input.api.patch<Entity>(`/api/issues/${t.id}`, id === "status-cards.explain-card"
           ? { status: "done", description: "The payment approval has been received; this blocker is resolved." }
-          : { description: "Payment approval has been received. The remaining blocker is the mobile Safari checkout regression." });
+          : refreshedBlockerTaskInput());
       }
-      return { project: p, sourceTasks, worker, card, otherCard, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
+      const factualContextAttachment = ["status-cards.explain-card", "status-cards.archive-card"].includes(id)
+        ? await uploadFactualQueryAttachment(ctx, { filename: "selected-status-card.md", body: selectedStatusCardReference(card, sourceTasks, ctx.input.fixtures.company.issuePrefix) }) : undefined;
+      return { project: p, sourceTasks, worker, card, otherCard, factualContextAttachment, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
     } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous.enableStatusCards }); experiments.delete(ctx); throw error; }
   }, observeCards, gradeIntegratorCards, verifyCard, { expectedRunCount: 2, attemptTimeoutMs: 540_000, ...extra,
     async cleanup(ctx) { await cleanupIdentityProbes(ctx); const previous = experiments.get(ctx); if (previous !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous }); experiments.delete(ctx); } } });
 }
 export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
   define("status-cards.create-card", "none"),
-  define("status-cards.archive-card", "ceo", { expectedRunCount: 3, attemptTimeoutMs: 720_000 }),
+  define("status-cards.archive-card", "ceo", { authentication: "human-session", queryAttachments: factualContextQueryAttachment("selected-status-card.md"), expectedRunCount: 3, attemptTimeoutMs: 720_000 }),
   define("status-cards.other-authors-card", "morgan"),
-  define("status-cards.explain-card", "ceo", { expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
+  define("status-cards.explain-card", "ceo", { authentication: "human-session", queryAttachments: factualContextQueryAttachment("selected-status-card.md"), expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
     sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
     async act(ctx, state) {
       const first = await pollUntil({ label: "accessible source explanation before actual access change", deadlineAt: Date.now() + 180_000, intervalMs: 1000,

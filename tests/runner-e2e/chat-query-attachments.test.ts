@@ -44,6 +44,7 @@ it("independently resolves declared receipt IDs and rejects undeclared, duplicat
 });
 
 it.each([
+  ["status-cards.explain-card", "selected-status-card.md"], ["status-cards.archive-card", "selected-status-card.md"],
   ["routines.webhook-trigger", "selected-routine.md"],
   ["developer-labs.gated-lab", "historical-lab-link.md"],
   ["documents-artifacts.resolve-feedback", "selected-source.md"], ["documents-artifacts.restore-document", "selected-source.md"],

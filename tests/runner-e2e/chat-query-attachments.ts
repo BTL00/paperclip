@@ -21,6 +21,7 @@ const factualFiles: Readonly<Record<string, string>> = {
   "skills.author-skill": "skill-context.md", "skills.studio-test": "skill-context.md",
   "skills.review-update": "skill-context.md", "skills.find-and-install": "skill-context.md", "skills.fork-read-only": "skill-context.md",
   "connection-setup.secure-api-key": "provider-account.md",
+  "status-cards.explain-card": "selected-status-card.md", "status-cards.archive-card": "selected-status-card.md",
   "routines.webhook-trigger": "selected-routine.md",
   "cases.create-case": "customer-bug-brief.md", "app-permissions.ask-before-action": "launch-update.md",
 };
