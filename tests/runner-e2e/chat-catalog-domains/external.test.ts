@@ -7,6 +7,7 @@ import { mcpFailureExternalCases } from "./external-mcp-failure.js";
 import { assistantConsentExternalCases } from "./external-assistant-consent.js";
 import { notionReadExternalCases } from "./external-notion-read.js";
 import { assertNotionFixture } from "./external-notion-provider.js";
+import { secureKeyExternalCases } from "./external-secure-key.js";
 import { assistantDeviceExternalCases } from "./external-assistant-device.js";
 import { pluginExternalCases } from "./external-plugins.js";
 import { appCatalogExternalCases } from "./external-app-catalog.js";
@@ -18,7 +19,7 @@ import { connectionSetupExternalCases } from "./external-connection-setup.js";
 import { externalPrerequisiteReceipt, externalRequirements, validateExternalConfig, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
 import type { ExternalObservation } from "./external-support.js";
 
-const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases];
+const definitions = [...appPermissionExternalCases, ...teamExternalCases, ...secretExternalCases, ...gatewayExternalCases, ...connectionSetupExternalCases, ...assistantConnectionExternalCases, ...chatChannelExternalCases, ...appCatalogExternalCases, ...pluginExternalCases, ...assistantDeviceExternalCases, ...gatewayClientExternalCases, ...pluginInstallExternalCases, ...mcpFailureExternalCases, ...assistantConsentExternalCases, ...notionReadExternalCases, ...secureKeyExternalCases];
 function base(scenarioId: string): ExternalObservation {
   return { scenarioId, origin: "http://fixture.invalid", companyId: "company", leadId: "ceo", state: { initialRunId: "initial" },
     phaseReplies: [], connections: [], profiles: [], secrets: [], endpoints: [], interactions: [], tasks: [], projects: [], goals: [], comments: [],
@@ -26,12 +27,15 @@ function base(scenarioId: string): ExternalObservation {
 }
 function valid(id: string) {
   const o = base(id);
-  if (id === "connection-setup.notion-connected") {
+  if (id === "connection-setup.secure-api-key") {
+    Object.assign(o.state, { challengeVisible: true, passwordInput: true, autocompleteOff: true, humanSubmittedSecurely: true, secureBrowserUntraced: true, visibleReady: true, connectionId: "connection", connectionAfter: { id: "connection", status: "active", enabled: true, healthStatus: "ok", secretIds: ["secret"], serializedValueLeaked: false }, providerAuthorizedCatalogReads: 1, secureSecretsExist: true, storageClean: true, secretScanComplete: true, secretLeaked: false, setupPath: "/ACORN/apps/connect" });
+    o.connections = [{ id: "connection" }]; o.links = ["/ACORN/apps/connect"]; o.reply = "Use the secure setup field to enter the account API key.";
+  } else if (id === "connection-setup.notion-connected") {
     Object.assign(o.state, { provider: "notion", providerOrigin: "https://mcp.notion.com", workspaceIndependentlyMatched: true,
-      pages: [{ id: "recent", url: "https://www.notion.so/recent", editedAt: "2026-10-25T12:00:00Z", marker: "New observed launch fact" }, { id: "old", url: "https://www.notion.so/old", editedAt: "2026-10-01T12:00:00Z", marker: "Old background" }], fixturesUnchanged: true,
+      pages: [{ id: "22222222-2222-4222-8222-222222222222", url: "https://www.notion.so/22222222222242228222222222222222", editedAt: "2026-10-25T12:00:00Z", marker: "Launch moves to November 8", fact: { subjectAliases: ["launch", "release"], valueAliases: ["November 8", "Nov 8", "8 November"] } }, { id: "33333333-3333-4333-8333-333333333333", url: "https://www.notion.so/33333333333343338333333333333333", editedAt: "2026-10-01T12:00:00Z", marker: "Launch originally October 1", fact: { subjectAliases: ["launch", "release"], valueAliases: ["October 1", "Oct 1"] } }], fixturesUnchanged: true,
       connectionId: "notion", healthyBeforeQuery: true, connectionCountBefore: 1, effective: { agentId: "ceo", allowedTools: [{ id: "read" }] }, readEntryIds: ["read"], sourceIssueId: "source",
       decisions: [{ runId: "initial", decisions: [{ invocation: { runId: "initial", agentId: "ceo", connectionId: "notion", issueId: "source", catalogEntryId: "read", status: "succeeded" } }] }] });
-    o.connections = [{ id: "notion" }]; o.links = ["https://www.notion.so/recent"]; o.reply = "New observed launch fact (updated 2026-10-25).";
+    o.connections = [{ id: "notion" }]; o.links = ["https://www.notion.so/22222222222242228222222222222222"]; o.reply = "Launch moves to November 8 (updated 2026-10-25).";
   } else if (id === "assistant-connections.consent-read-only") {
     Object.assign(o.state, { requestedWrite: true, readOnlyRoleVisible: true, writeCheckboxDisabled: true, writeCheckboxUnchecked: true, companyVisible: true, viewerEscalationStatus: 403,
       viewerConnections: [{ id: "grant", companyId: "company", scopes: ["paperclip:read", "offline_access"] }], tokenScopesReadOnly: true, viewerGrantId: "grant", humanConsented: true, viewerId: "viewer",
@@ -109,6 +113,7 @@ function valid(id: string) {
   return o;
 }
 const wrong: Record<string, (o: ExternalObservation) => void> = {
+  "connection-setup.secure-api-key": o => { o.state.storageClean = false; },
   "connection-setup.notion-connected": o => { o.reply = "The launch remains on schedule, according to the page title."; },
   "assistant-connections.consent-read-only": o => { o.state.viewerConnections = [{ id: "grant", companyId: "company", scopes: ["paperclip:read", "paperclip:write"] }]; },
   "connection-setup.unreachable-mcp": o => { o.connections = [{ id: "phantom", status: "active" }]; },
@@ -130,6 +135,16 @@ const wrong: Record<string, (o: ExternalObservation) => void> = {
   "connection-setup.notion-declined": o => { o.interactions[0]!.resolvedByUserId = "someone-else"; },
 };
 describe("external domain independent oracles", () => {
+  it("Notion accepts a natural paraphrase/date and same-page URL variants but rejects stale or fabricated research", () => {
+    const definition = notionReadExternalCases[0]!;
+    const natural = valid("connection-setup.notion-connected"); natural.reply = "As of Oct 25, 2026, the release is now set for 8 November.";
+    natural.links = ["https://www.notion.so/Launch-update-22222222-2222-4222-8222-222222222222?source=chat"];
+    expect(definition.grade(natural).passed).toBe(true);
+    for (const reply of ["Launch update (Oct 25, 2026), according to its title.", "The launch targets October 1 (updated Oct 1, 2026).", "The release is set for 8 November (updated Oct 24, 2026).", "The release is set for 8 November (updated Oct 25, 2025)."])
+      expect(definition.grade({ ...natural, reply }).passed).toBe(false);
+    for (const url of ["https://www.notion.so/Launch-33333333333343338333333333333333", "https://notion.so.attacker.invalid/22222222222242228222222222222222"])
+      expect(definition.grade({ ...natural, links: [url] }).passed).toBe(false);
+  });
   it("viewer consent cannot borrow the operator's session or silently claim viewer chat coverage", () => {
     for (const field of ["viewerSessionBefore", "viewerSessionAtConsent", "viewerSessionAfter", "phaseBoundary"]) {
       const o = valid("assistant-connections.consent-read-only"); o.state[field] = "operator";
@@ -185,7 +200,7 @@ describe("private disposable provider prerequisite contract", () => {
   it("local fixtures need no unrelated provider account", () => { for (const definition of definitions.filter(row => !row.externalInput)) expect(externalPrerequisiteReceipt(definition.scenarioId, undefined, {}).configured).toBe(true); });
   it("named Notion fixtures require official transport and every resource in the disposable allowlist", () => {
     const workspaceId = "11111111-1111-4111-8111-111111111111", recentPageId = "22222222-2222-4222-8222-222222222222", olderPageId = "33333333-3333-4333-8333-333333333333";
-    const binding = { disposable: true as const, resourceIds: [workspaceId, recentPageId, olderPageId], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_API", "PAPERCLIP_CHAT_EVAL_NOTION_MCP"], prerequisites: { workspaceId, recentPageId, olderPageId, mcpUrl: "https://mcp.notion.com/mcp", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_API", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_MCP", recentMarker: "Recent synthetic fact", olderMarker: "Background fact" } };
+    const binding = { disposable: true as const, resourceIds: [workspaceId, recentPageId, olderPageId], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_API", "PAPERCLIP_CHAT_EVAL_NOTION_MCP"], prerequisites: { workspaceId, recentPageId, olderPageId, mcpUrl: "https://mcp.notion.com/mcp", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_API", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_MCP", recentMarker: "Recent synthetic fact", olderMarker: "Background fact", recentFactJson: JSON.stringify({subjectAliases:["launch"],valueAliases:["November 8"]}), olderFactJson: JSON.stringify({subjectAliases:["launch"],valueAliases:["October 1"]}) } };
     expect(() => assertNotionFixture(binding)).not.toThrow();
     expect(() => assertNotionFixture({ ...binding, resourceIds: [workspaceId] })).toThrow(/allowlisted/);
     expect(() => assertNotionFixture({ ...binding, prerequisites: { ...binding.prerequisites, mcpUrl: "https://synthetic.invalid/mcp" } })).toThrow(/actual official Notion/);
@@ -193,7 +208,7 @@ describe("private disposable provider prerequisite contract", () => {
   });
   it("requires explicitly disposable allowlisted resources and namespaced env references", () => {
     const config = { schemaVersion: 1, providers: { notion: { disposable: true, resourceIds: ["workspace"], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_AUTH"],
-      prerequisites: { workspaceId: "workspace", recentPageId: "recent", olderPageId: "old", mcpUrl: "https://fixture.invalid", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", recentMarker: "Recent", olderMarker: "Older" } } } };
+      prerequisites: { workspaceId: "workspace", recentPageId: "recent", olderPageId: "old", mcpUrl: "https://fixture.invalid", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_AUTH", recentMarker: "Recent", olderMarker: "Older", recentFactJson: "{}", olderFactJson: "{}" } } } };
     const parsed = validateExternalConfig(config);
     const env = { PAPERCLIP_CHAT_EVAL_NOTION_AUTH: "secret-value-not-for-receipts" };
     expect(externalPrerequisiteReceipt("connection-setup.notion-connected", parsed, env)).toEqual({ scenarioId: "connection-setup.notion-connected", provider: "notion", configured: true, missing: [] });

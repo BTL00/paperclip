@@ -1,7 +1,8 @@
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { selectedExternalBinding, selectedExternalCredential, type ProviderBinding } from "./external-fixtures.js";
 import { root } from "./external-support.js";
-export interface NotionPageOracle { id: string; url: string; editedAt: string; marker: string; title: string }
+import { notionFactSpan, parseNotionFact, type NotionFact } from "./external-notion-semantics.js";
+export interface NotionPageOracle { id: string; url: string; editedAt: string; marker: string; title: string; fact: NotionFact }
 interface Page { object: string; id: string; url: string; last_edited_time: string; parent?: { type?: string; page_id?: string; workspace?: boolean }; properties?: Record<string, { type?: string; title?: Array<{ plain_text?: string }> }> }
 interface Block { id: string; type: string; has_children: boolean; [key: string]: unknown }
 const normalized = (id: string) => id.replaceAll("-", "").toLowerCase();
@@ -16,6 +17,7 @@ export function assertNotionFixture(binding: ProviderBinding) {
   if (url.protocol !== "https:" || url.hostname !== "mcp.notion.com" || url.pathname !== "/mcp" || url.username || url.password || url.search || url.hash) throw new Error("Setup blocker: named Notion proof requires the actual official Notion MCP resource");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p.apiVersion ?? "")) throw new Error("Setup blocker: Notion API version reference is missing");
   if (!p.recentMarker || !p.olderMarker || p.recentMarker === p.olderMarker) throw new Error("Setup blocker: distinct synthetic recent/background Notion marker references are required");
+  parseNotionFact(p.recentFactJson); parseNotionFact(p.olderFactJson);
 }
 async function notionJson<T>(token: string, version: string, pathname: string): Promise<T> {
   const url = new URL(pathname, "https://api.notion.com");
@@ -60,7 +62,9 @@ export async function readNotionFixturePages(ctx: ChatCatalogContext, binding = 
     const url = new URL(page.url); if (url.protocol !== "https:" || !/(^|\.)notion\.(?:so|site)$/.test(url.hostname)) throw new Error("Setup blocker: Notion page returned an unexpected source host");
     const body = await blocksText(token, p.apiVersion!, id);
     if (!body.includes(marker)) throw new Error(`Setup blocker: ${idField} no longer contains its authorized synthetic marker`);
-    result.push({ id, url: page.url, editedAt: page.last_edited_time, marker, title: Object.values(page.properties ?? {}).flatMap(row => row.title ?? []).map(row => row.plain_text ?? "").join("") });
+    const fact = parseNotionFact(p[idField === "recentPageId" ? "recentFactJson" : "olderFactJson"]);
+    if (!notionFactSpan(body, fact)) throw new Error(`Setup blocker: ${idField} body does not substantiate its bounded approved fact`);
+    result.push({ id, url: page.url, editedAt: page.last_edited_time, marker, fact, title: Object.values(page.properties ?? {}).flatMap(row => row.title ?? []).map(row => row.plain_text ?? "").join("") });
   }
   if (Date.parse(result[0]!.editedAt) <= Date.parse(result[1]!.editedAt)) throw new Error("Setup blocker: recent Notion fixture must actually be newer than the background page");
   return result;

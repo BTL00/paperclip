@@ -21,8 +21,10 @@ of credential environment variables belong there. The file schema is:
         "apiVersion": "2022-06-28",
         "apiTokenEnv": "PAPERCLIP_CHAT_EVAL_NOTION_API",
         "mcpTokenEnv": "PAPERCLIP_CHAT_EVAL_NOTION_MCP",
-        "recentMarker": "approved synthetic current launch fact",
-        "olderMarker": "approved synthetic older background fact"
+        "recentMarker": "Launch moves to November 8",
+        "olderMarker": "Launch originally targeted October 1",
+        "recentFactJson": "{\"subjectAliases\":[\"launch\",\"release\"],\"valueAliases\":[\"November 8\",\"Nov 8\",\"8 November\"]}",
+        "olderFactJson": "{\"subjectAliases\":[\"launch\",\"release\"],\"valueAliases\":[\"October 1\",\"Oct 1\",\"1 October\"]}"
       }
     }
   }
@@ -82,6 +84,14 @@ The model must independently perform a successful MCP read in its own source run
 the oracle's REST reads cannot satisfy that requirement. No generic or synthetic
 MCP host is accepted as a named Notion proof. Missing bindings remain executable
 setup blockers; source-reference availability is not provider validity evidence.
+
+The two marker fields identify substantive facts present in the controlled page
+bodies, never nonces or mandatory answer wording. Their bounded fact JSON defines
+approved subject and value aliases (at most eight strings each). Each actual body
+must substantiate its subject/value relation; the answer may paraphrase that
+relation within a bounded passage. The grader accepts ordinary month-name dates
+and validates Notion links by approved host and exact page UUID rather than
+requiring a title slug, hyphenation style or query string.
 
 Synthetic notes apps, MCP gateways, local plugins, team packages, local encrypted
 secrets and test endpoints do not require this file. They use real public

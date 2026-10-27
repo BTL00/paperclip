@@ -4,7 +4,7 @@ import { readNotionFixturePages } from "./external-notion-provider.js";
 const workspaceId = "11111111-1111-4111-8111-111111111111", recent = "22222222-2222-4222-8222-222222222222", older = "33333333-3333-4333-8333-333333333333";
 function context() {
   const binding = { disposable: true, resourceIds: [workspaceId, recent, older], credentialEnv: ["PAPERCLIP_CHAT_EVAL_NOTION_API", "PAPERCLIP_CHAT_EVAL_NOTION_MCP"], prerequisites: {
-    workspaceId, recentPageId: recent, olderPageId: older, mcpUrl: "https://mcp.notion.com/mcp", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_API", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_MCP", recentMarker: "Current fixture fact", olderMarker: "Earlier fixture fact",
+    workspaceId, recentPageId: recent, olderPageId: older, mcpUrl: "https://mcp.notion.com/mcp", apiVersion: "2026-03-11", apiTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_API", mcpTokenEnv: "PAPERCLIP_CHAT_EVAL_NOTION_MCP", recentMarker: "Current fixture fact", olderMarker: "Earlier fixture fact", recentFactJson: JSON.stringify({subjectAliases:["current"],valueAliases:["fixture fact"]}), olderFactJson: JSON.stringify({subjectAliases:["earlier"],valueAliases:["fixture fact"]}),
   } };
   return { scenario: { id: "connection-setup.notion-connected" }, input: { privateSecrets: [], privateInputs: { read: (name: string) => name === "PAPERCLIP_CHAT_EVAL_NOTION_API" ? "private-api-fixture" : "private-mcp-fixture", configuration: () => ({ schemaVersion: 1, providers: { notion: binding } }) } } } as unknown as ChatCatalogContext;
 }
