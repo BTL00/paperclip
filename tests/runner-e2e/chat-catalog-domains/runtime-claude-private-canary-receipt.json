@@ -1,0 +1,29 @@
+{
+  "syntheticOnly": true,
+  "tests": 3,
+  "successAndExpectedFailureReports": true,
+  "syntheticHttpOnly": true,
+  "realProviderCalls": 0,
+  "canonicalAttempts": 0,
+  "initialSandboxListenDenied": true,
+  "explicitOfflineEscalatedCanaryPassed": true,
+  "trace": "off",
+  "video": "off",
+  "screenshots": "off",
+  "checkedSinks": [
+    "stdout",
+    "JUnit",
+    "blob ZIP entries",
+    "HTML embedded report ZIP",
+    "error-context"
+  ],
+  "scannedItems": 13,
+  "privateValueCount": 12,
+  "findings": [],
+  "sourceSha256": {
+    "runtime-claude-private.ts": "12805653235725987079a38cdcbca609ec60ffd4a33782d007b30f1b36879689",
+    "runtime-claude-private-worker.ts": "38d1299d6ed030807ad9296fb6feb7b313c4244bf5a2c5fdbc13f101098cace0",
+    "runtime-claude-private-privacy.spec.ts": "da1aceeb242da84b19f81b26b5572c4587996f2ed53e6c64f128bb1217360172"
+  },
+  "configSha256": "890c62895e7b90eb24c2b96a321edc58b2f6b800531c2607a663fa6e4a155554"
+}
