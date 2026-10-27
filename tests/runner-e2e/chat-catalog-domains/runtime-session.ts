@@ -52,7 +52,9 @@ export const runtimeSessionCases = [runtimeDefinition("runs-adapters.reset-sessi
     state.agentResetStatus = await probeAgentPermission(ctx, `/api/agents/${worker.id}/runtime-state/reset-session`, "POST", {});
     state.sessionPresentBeforeHuman = (await ctx.input.api.get<unknown[]>(`/api/agents/${worker.id}/task-sessions`)).length > 0;
     const source = ctx.input.page.url(); await openRuntimeAgentProfile(ctx, worker, query);
-    await ctx.input.page.getByRole("button", { name: "Open actions for Morgan", exact: true }).click();
+    const profile = ctx.input.page.locator("#main-content");
+    await expect(profile.getByRole("heading", { name: worker.name!, exact: true })).toBeVisible();
+    await profile.getByRole("button", { name: `Open actions for ${worker.name}`, exact: true }).click();
     await ctx.input.page.getByRole("button", { name: "Reset Sessions", exact: true }).click();
     await pollUntil({ label: "Human reset clears the real task session", deadlineAt: Date.now() + 30_000,
       load: () => ctx.input.api.get<unknown[]>(`/api/agents/${worker.id}/task-sessions`), accept: rows => rows.length === 0 });
