@@ -70,7 +70,7 @@ it("rejects undeclared runtime scenarios and fields before resolving or writing 
 it("resolves only the finite SSH private key reference and refuses an alternate ambient name", () => {
   const root = fixture(), configFile = path.join(root, "ssh.json"); const scenarioId = "execution-environments.test-computer"; const spec = runtimePrivateRequirements[scenarioId];
   const descriptor = { scenarioId, externalInput: { provider: spec.provider, fields: spec.fields }, requiredCredentials: spec.credentials };
-  const prerequisites = { hostname: "synthetic.test", port: "22", login: "eval", hostKeySha256: "SHA256:synthetic", allowedRemoteRoot: "/owned/disposable", privateKeyEnv: "PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY", qualifiedHarness: "native-codex" };
+  const prerequisites = { hostname: "synthetic.test", port: "22", login: "eval", hostKeySha256: "SHA256:synthetic", knownHosts: "synthetic.test ssh-ed25519 synthetic-private-metadata", allowedRemoteRoot: "/owned/disposable", privateKeyEnv: "PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY", qualifiedHarness: "native-codex" };
   const config = { schemaVersion: 1, providers: { ssh: { disposable: true, resourceIds: ["owned-ssh"], credentialEnv: [], prerequisites } } };
   writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
   const staged = stageChatPrivateInputs({ execution: { ...execution, task: { id: scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY: "selected-ssh-key" } });
