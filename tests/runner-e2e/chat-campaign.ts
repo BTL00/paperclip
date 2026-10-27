@@ -6,7 +6,56 @@ import { parseDocument } from "yaml";
 
 export const CHAT_CAMPAIGN_MANIFEST = "tests/runner-e2e/chat-campaign-manifest.json";
 export type CampaignOutcome = "passed" | "failed" | "blocked";
+export type CampaignProductLane = "source-build" | "published-global-npm" | "empty-installed-boundary";
+export interface CampaignPublishedIdentity {
+  version: string; treeSha256: string;
+  artifacts: Array<{ package: "paperclipai" | "@paperclipai/server"; version: string; integrity: string; entrySha256: string }>;
+}
+export type CampaignProductIdentity =
+  | { kind: "unknown"; reason: string }
+  | { kind: "source-build" | "source-built-installed"; productionSourceRevision: string; snapshotSourceRevision: string;
+      nativeBinarySha256: string; workspaceBuildDigest: string; receiptPaths: string[]; coreCandidate: boolean;
+      cliSha256?: string; serverSha256?: string; artifactTreeSha256?: string }
+  | { kind: "published-release"; declaredLane: "published-global-npm" | "empty-installed-boundary";
+      source: CampaignPublishedIdentity; target?: CampaignPublishedIdentity; observed: CampaignPublishedIdentity;
+      receiptPaths: string[]; coreCandidate: boolean };
+const identityHash = (s: unknown): s is string => typeof s === "string" && /^[a-f0-9]{64}$/.test(s);
+const identityRevision = (s: unknown): s is string => typeof s === "string" && /^[a-f0-9]{40}$/.test(s);
+const retainedIdentityPaths = (paths: string[]) => Array.isArray(paths) && paths.length > 0 && paths.every(p => typeof p === "string" && p.startsWith("tests/runner-e2e/results/") && !p.split("/").includes(".."));
+export function scenarioProductPolicy(id: string, baselineRevision: string) {
+  const lane: CampaignProductLane = ["instance-operations.update-instance", "instance-operations.provision-runtime"].includes(id)
+    ? "published-global-npm" : id === "onboarding.new-instance" ? "empty-installed-boundary" : "source-build";
+  return { lane, sourceBaselineRevision: baselineRevision };
+}
+function publishedIdentityValid(value: CampaignPublishedIdentity) {
+  return !!value && /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(value.version) && identityHash(value.treeSha256)
+    && Array.isArray(value.artifacts) && value.artifacts.length === 2
+    && ["paperclipai", "@paperclipai/server"].every(name => value.artifacts.filter(a => a && a.package === name).length === 1)
+    && value.artifacts.every(a => a.version === value.version && /^sha512-[A-Za-z0-9+/]+=*$/.test(a.integrity) && identityHash(a.entrySha256));
+}
+function samePublishedIdentity(a: CampaignPublishedIdentity, b: CampaignPublishedIdentity) {
+  return publishedIdentityValid(a) && publishedIdentityValid(b) && a.version === b.version && a.treeSha256 === b.treeSha256
+    && a.artifacts.every(x => b.artifacts.some(y => x.package === y.package && x.version === y.version && x.integrity === y.integrity && x.entrySha256 === y.entrySha256));
+}
+/** Identity gates eligibility independently of a model's outcome or test-source SHA. */
+export function campaignProductIdentityEligible(scenario: CampaignScenario, attempt: CampaignAttempt, baselineRevision = scenario.productPolicy?.sourceBaselineRevision): boolean {
+  const policy = scenario.productPolicy, product = attempt.productIdentity;
+  if (!policy || policy.sourceBaselineRevision !== baselineRevision || !identityRevision(baselineRevision)
+    || policy.lane !== scenarioProductPolicy(scenario.id, baselineRevision).lane || !product || product.kind === "unknown"
+    || product.coreCandidate !== false || attempt.corePrDependencies.length || !retainedIdentityPaths(product.receiptPaths)) return false;
+  if (product.kind === "source-build" || product.kind === "source-built-installed") {
+    return product.productionSourceRevision === baselineRevision && product.snapshotSourceRevision === attempt.sourceRevision
+      && identityRevision(product.snapshotSourceRevision) && identityHash(product.nativeBinarySha256) && identityHash(product.workspaceBuildDigest)
+      && (product.kind === "source-build" ? policy.lane === "source-build" : policy.lane === "empty-installed-boundary"
+        && identityHash(product.cliSha256) && identityHash(product.serverSha256) && identityHash(product.artifactTreeSha256));
+  }
+  if (product.kind !== "published-release") return false;
+  if (policy.lane === "source-build" || product.declaredLane !== policy.lane || !publishedIdentityValid(product.source)) return false;
+  if (scenario.id === "instance-operations.update-instance") return !!product.target && product.target.version !== product.source.version && samePublishedIdentity(product.target, product.observed);
+  return !product.target && samePublishedIdentity(product.source, product.observed);
+}
 export interface CampaignAttempt {
+  productIdentity?: CampaignProductIdentity;
   ordinal: 1 | 2;
   outcome: CampaignOutcome | "running";
   executionId: string;
@@ -40,6 +89,7 @@ export interface CampaignScenario {
   readiness: "unimplemented" | "partial" | "implemented" | "blocked";
   executionId: string | null;
   blocker: string | null;
+  productPolicy?: { lane: CampaignProductLane; sourceBaselineRevision: string };
   attempts: CampaignAttempt[];
 }
 export interface ChatCampaign {
@@ -71,7 +121,7 @@ export function freezeChatCampaign(root: string, baselineRevision: string): Chat
         qualifyingDefinitionDigest: null, qualifyingGraderDigest: null,
         owner: legacy ? "eval_integrator" : "unassigned", readiness: legacy ? "implemented" : "unimplemented",
         executionId: legacy ? `chat-features.runner-codex-subscription.local.${scenario.id.slice(6)}` : null,
-        blocker: null, attempts: [] });
+        blocker: null, productPolicy: scenarioProductPolicy(scenario.id, baselineRevision), attempts: [] });
     }
   }
   scenarios.sort((a, b) => a.id.localeCompare(b.id));
@@ -89,13 +139,14 @@ export function validateFrozenCampaign(campaign: ChatCampaign, root: string): vo
     || campaign.inventoryDigest !== fresh.inventoryDigest) throw new Error("Frozen campaign inventory metadata changed");
   for (let index = 0; index < campaign.scenarios.length; index++) {
     const actual = campaign.scenarios[index]!; const expected = fresh.scenarios[index]!;
-    for (const field of ["id", "feature", "sourceFile", "sourceSha256", "scenarioSha256", "capabilities", "context", "query", "expected_outcome"] as const) {
+    for (const field of ["id", "feature", "sourceFile", "sourceSha256", "scenarioSha256", "capabilities", "context", "query", "expected_outcome", "productPolicy"] as const) {
       if (JSON.stringify(actual[field]) !== JSON.stringify(expected[field])) throw new Error(`Frozen scenario content changed: ${expected.id}`);
     }
     if (actual.attempts.length > 2 || actual.attempts.some((attempt, attemptIndex) => attempt.ordinal !== attemptIndex + 1 || attempt.automaticRetries !== 0)) throw new Error(`Invalid attempt history: ${actual.id}`);
   }
 }
 export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: CampaignAttempt): void {
+  if (!scenario.productPolicy || !identityRevision(scenario.productPolicy.sourceBaselineRevision) || scenario.productPolicy.lane !== scenarioProductPolicy(scenario.id, scenario.productPolicy.sourceBaselineRevision).lane) throw new Error("Attempt requires a declared product lane");
   if (scenario.readiness !== "implemented" || !scenario.executionId) throw new Error("Scenario has no executable implementation");
   if (scenario.attempts.some(entry => entry.outcome === "running")) throw new Error("Previous attempt still running");
   if (scenario.attempts.length >= 2 || attempt.ordinal !== scenario.attempts.length + 1) throw new Error("Attempt budget exhausted or incorrect ordinal");
@@ -106,7 +157,7 @@ export function reserveCampaignAttempt(scenario: CampaignScenario, attempt: Camp
   scenario.attempts.push(attempt);
 }
 export function completeCampaignAttempt(scenario: CampaignScenario, completion: {
-  outcome: CampaignOutcome; finishedAt: string; definitionDigest: string; graderDigest: string;
+  outcome: CampaignOutcome; productIdentity?: CampaignProductIdentity; finishedAt: string; definitionDigest: string; graderDigest: string;
   evidencePaths: string[]; cleanup: CampaignAttempt["cleanup"]; usage: CampaignAttempt["usage"];
   classification: string | null;
   diagnosisHistory?: Array<{ at: string; classification: string | null; detail: string | null; supersededBy: string }>; observedFailure: string | null; corePrDependencies: string[];
@@ -116,15 +167,20 @@ export function completeCampaignAttempt(scenario: CampaignScenario, completion: 
   if (completion.definitionDigest !== attempt.definitionDigest || completion.graderDigest !== attempt.graderDigest) throw new Error("Definition or grader changed during attempt");
   if (completion.evidencePaths.some(value => !value.startsWith("tests/runner-e2e/results/") || value.split("/").includes(".."))) throw new Error("Evidence must use retained sanitized result paths");
   if (completion.outcome === "passed" && (!completion.evidencePaths.length || completion.cleanup !== "passed")) throw new Error("Pass requires evidence and successful cleanup");
+  if (completion.outcome === "passed" && !campaignProductIdentityEligible(scenario, { ...attempt, ...completion })) throw new Error("Pass requires eligible product identity");
   if (Date.parse(completion.finishedAt) < Date.parse(attempt.startedAt) || !Number.isFinite(Date.parse(completion.finishedAt))) throw new Error("Invalid completion timing");
   Object.assign(attempt, completion);
 }
 export function campaignSummary(campaign: ChatCampaign) {
-  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0; }).length;
-  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest; }).length;
+  const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision); }).length;
+  const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision); }).length;
   const attempted = campaign.scenarios.filter(scenario => scenario.attempts.length).length;
   const implemented = campaign.scenarios.filter(scenario => scenario.readiness === "implemented").length;
-  return { denominator: campaign.denominator, implemented, attempted, unrun: campaign.denominator - attempted,
+  const measured = campaign.scenarios.flatMap(scenario => scenario.attempts.map(attempt => ({ scenario, attempt })));
+  const productEvidence = { sourceBaselineRevision: campaign.baselineRevision,
+    measurementsByIdentity: Object.fromEntries(["source-build", "published-release", "source-built-installed", "unknown"].map(kind => [kind, measured.filter(row => (row.attempt.productIdentity?.kind ?? "unknown") === kind).length])),
+    identityIneligibleMeasurements: measured.filter(row => !campaignProductIdentityEligible(row.scenario, row.attempt, campaign.baselineRevision)).length };
+  return { productEvidence, denominator: campaign.denominator, implemented, attempted, unrun: campaign.denominator - attempted,
     initialPassed, finalPassed: passed, firstAttemptRate: initialPassed / campaign.denominator,
     finalRate: passed / campaign.denominator, requiredPasses: campaign.requiredPasses,
     mergeEligible: implemented === campaign.denominator && attempted === campaign.denominator && passed >= campaign.requiredPasses && !campaign.scenarios.some(scenario => scenario.attempts.some(attempt => attempt.outcome === "running")) };

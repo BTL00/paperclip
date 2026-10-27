@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
-import { campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt } from "./chat-campaign.js";
+import { campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity } from "./chat-campaign.js";
 const root = new URL("../../", import.meta.url).pathname;
 const base = "8373d7867963674ff960d2345d0d28086f799bc7";
 function attempt(ordinal: 1 | 2, executionId: string): CampaignAttempt {
-  return { ordinal, outcome: "running", executionId, startedAt: new Date().toISOString(), finishedAt: null,
+  return { productIdentity: { kind: "source-build", productionSourceRevision: base, snapshotSourceRevision: base, nativeBinarySha256: "a".repeat(64), workspaceBuildDigest: "b".repeat(64), receiptPaths: ["tests/runner-e2e/results/fixture/source-receipt.json"], coreCandidate: false }, ordinal, outcome: "running", executionId, startedAt: new Date().toISOString(), finishedAt: null,
     sourceRevision: base, workingTreeDigest: "fixture", definitionDigest: "fixture", suiteDefinitionDigest: "fixture", graderDigest: "fixture",
     model: "fixture", profile: "fixture", environment: "local", automaticRetries: 0,
     correction: ordinal === 2 ? "Demonstrated fixture defect corrected" : null, classification: null, observedFailure: null,
@@ -82,4 +82,43 @@ it("does not turn partial implementations or automatic retries into valid campai
   const invalid = { ...attempt(1, scenario.executionId!), automaticRetries: 1 } as unknown as CampaignAttempt;
   expect(() => reserveCampaignAttempt(scenario, invalid)).toThrow("Invalid attempt reservation");
   expect(scenario.attempts).toHaveLength(0);
+});
+
+it("gates source acceptance on actual baseline/build receipts, not merely test source revision", () => {
+  const campaign = freezeChatCampaign(root, base), scenario = campaign.scenarios.find(s => s.id === "tasks.create-backlog")!;
+  const valid = attempt(1, scenario.executionId!);
+  expect(campaignProductIdentityEligible(scenario, valid, base)).toBe(true);
+  expect(campaignProductIdentityEligible(scenario, { ...valid, productIdentity: undefined }, base)).toBe(false);
+  for (const delta of [{ productionSourceRevision: "c".repeat(40) }, { nativeBinarySha256: "" }, { snapshotSourceRevision: "d".repeat(40) }, { coreCandidate: true }, { receiptPaths: [] }]) {
+    const product = { ...valid.productIdentity!, ...delta } as CampaignAttempt["productIdentity"];
+    expect(campaignProductIdentityEligible(scenario, { ...valid, productIdentity: product }, base)).toBe(false);
+  }
+});
+it("admits declared published operator transitions but rejects wrong observed targets and arbitrary installed substitution", () => {
+  const campaign = freezeChatCampaign(root, base), scenario = campaign.scenarios.find(s => s.id === "instance-operations.update-instance")!;
+  const publication = (version: string, h: string): CampaignPublishedIdentity => ({ version, treeSha256: h.repeat(64), artifacts: ["paperclipai", "@paperclipai/server"].map(name => ({ package: name as "paperclipai" | "@paperclipai/server", version, integrity: "sha512-YWJj", entrySha256: h.repeat(64) })) });
+  const source = publication("1.0.0", "a"), target = publication("1.0.1", "b");
+  const valid: CampaignAttempt = { ...attempt(1, "installed"), productIdentity: { kind: "published-release", declaredLane: "published-global-npm", source, target, observed: target, receiptPaths: ["tests/runner-e2e/results/fixture/installed.json"], coreCandidate: false } };
+  expect(campaignProductIdentityEligible(scenario, valid, base)).toBe(true);
+  expect(campaignProductIdentityEligible(scenario, { ...valid, productIdentity: { ...valid.productIdentity as Extract<CampaignAttempt["productIdentity"], { kind: "published-release" }>, observed: source } }, base)).toBe(false);
+  const unrelated = campaign.scenarios.find(s => s.id === "tasks.create-backlog")!;
+  expect(campaignProductIdentityEligible(unrelated, valid, base)).toBe(false);
+  expect(campaignProductIdentityEligible({ ...scenario, productPolicy: undefined }, valid, base)).toBe(false);
+  expect(campaignProductIdentityEligible(scenario, { ...valid, corePrDependencies: ["unmerged-core"] }, base)).toBe(false);
+  const boundary = campaign.scenarios.find(s => s.id === "onboarding.new-instance")!;
+  const installed = { ...valid, productIdentity: { kind: "published-release" as const, declaredLane: "empty-installed-boundary" as const, source, observed: source, receiptPaths: ["tests/runner-e2e/results/fixture/published-boundary.json"], coreCandidate: false } };
+  expect(campaignProductIdentityEligible(boundary, installed, base)).toBe(true);
+  const sourceBuilt = { ...attempt(1, "boundary"), productIdentity: { kind: "source-built-installed" as const, productionSourceRevision: base, snapshotSourceRevision: base, nativeBinarySha256: "a".repeat(64), workspaceBuildDigest: "b".repeat(64), cliSha256: "c".repeat(64), serverSha256: "d".repeat(64), artifactTreeSha256: "e".repeat(64), receiptPaths: ["tests/runner-e2e/results/fixture/source-pack.json"], coreCandidate: false } };
+  expect(campaignProductIdentityEligible(boundary, sourceBuilt, base)).toBe(true);
+  expect(campaignProductIdentityEligible(scenario, sourceBuilt, base)).toBe(false);
+});
+it("does not complete or report a qualifying pass when its product identity is missing", () => {
+  const campaign = freezeChatCampaign(root, base), scenario = campaign.scenarios.find(s => s.id === "tasks.create-backlog")!;
+  const reserved = attempt(1, scenario.executionId!); reserved.productIdentity = undefined;
+  reserveCampaignAttempt(scenario, reserved);
+  scenario.qualifyingDefinitionDigest = "fixture"; scenario.qualifyingGraderDigest = "fixture";
+  const completion = { outcome: "passed" as const, finishedAt: new Date().toISOString(), definitionDigest: "fixture", graderDigest: "fixture", evidencePaths: ["tests/runner-e2e/results/fixture/result.json"], cleanup: "passed" as const, usage: reserved.usage, classification: null, observedFailure: null, corePrDependencies: [] };
+  expect(() => completeCampaignAttempt(scenario, completion)).toThrow("eligible product identity");
+  Object.assign(reserved, completion);
+  expect(campaignSummary(campaign)).toMatchObject({ initialPassed: 0, finalPassed: 0, productEvidence: { identityIneligibleMeasurements: 1, measurementsByIdentity: { unknown: 1 } } });
 });

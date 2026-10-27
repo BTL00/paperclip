@@ -30,7 +30,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "access.invite-teammate",
@@ -45,12 +49,16 @@
       "sourceSha256": "14324aa63a93c0ac919e7b8650bed87d8ae24ca7ebdbcbc68f5a441b925bf9e8",
       "scenarioSha256": "b8d487e3cece03601e24a0dd7505d442acd62dc8998a86be656b5d75df953bf6",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.access.invite-teammate",
+      "blocker": "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; actual intended mutation and human acceptance/reuse callbacks remain unqualified until this setup capability is available.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "access.manage-membership",
@@ -65,12 +73,16 @@
       "sourceSha256": "14324aa63a93c0ac919e7b8650bed87d8ae24ca7ebdbcbc68f5a441b925bf9e8",
       "scenarioSha256": "ded235736b996ae7b7162a64300ce122750240a000f63a780d44c630b74bf049",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
-      "blocker": null,
+      "readiness": "partial",
+      "executionId": "chat-features.runner-codex-subscription.local.access.manage-membership",
+      "blocker": "The current public grant-management route rejects agent membership principals. Required users:* agent authority cannot be established through the supported API; actual intended mutation and human acceptance/reuse callbacks remain unqualified until this setup capability is available.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "access.other-company",
@@ -90,7 +102,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "access.private-resource",
@@ -111,7 +127,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "access.sign-in",
@@ -131,7 +151,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.agent-feedback",
@@ -151,7 +175,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.audit-change",
@@ -171,7 +199,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.company-overview",
@@ -191,7 +223,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.find-runs",
@@ -211,7 +247,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.routine-audit",
@@ -232,7 +272,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "activity.work-timeline",
@@ -252,7 +296,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.chat-disabled",
@@ -274,7 +322,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.conference-room",
@@ -294,7 +346,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.multiple-handoffs",
@@ -315,7 +371,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.remember-and-follow-up",
@@ -335,7 +395,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.reopen-conversation",
@@ -356,7 +420,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agent-chat.track-delegated-work",
@@ -377,7 +445,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.agent-api-key",
@@ -397,7 +469,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.ambiguous-cloud-code",
@@ -418,7 +494,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.change-manager",
@@ -438,7 +518,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.choose-primary",
@@ -459,7 +543,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.configure-required-agent",
@@ -479,7 +567,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.edit-instructions",
@@ -499,7 +591,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.existing-grok-bot",
@@ -520,7 +616,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.hire-claude-code",
@@ -542,7 +642,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.hire-denied",
@@ -563,7 +667,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.hire-needs-account",
@@ -584,7 +692,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.hire-needs-approval",
@@ -605,7 +717,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.managed-profile",
@@ -625,7 +741,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.pause-agent",
@@ -645,7 +765,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.restore-instructions",
@@ -665,7 +789,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.resume-agent",
@@ -685,7 +813,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "agents.retire-agent",
@@ -705,7 +837,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.ask-before-action",
@@ -726,7 +862,11 @@
       "blocker": "rejection-and-supported-always-allow-branch",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.grant-one-agent",
@@ -747,7 +887,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.new-quarantined-action",
@@ -762,12 +906,16 @@
       "sourceSha256": "1b036a6b3af46d8d07cd1cb80a40e466285f2c0fcd1f517d161919f8bccb1c75",
       "scenarioSha256": "aa26bff418036f2cc93422f8e35a21a553410c261cc4106675ace233d36d24e8",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.app-permissions.new-quarantined-action",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.read-allowed-write-off",
@@ -787,7 +935,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.revoke-account",
@@ -807,7 +959,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "app-permissions.test-as-agent",
@@ -827,7 +983,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.connect-external-assistant",
@@ -847,7 +1007,11 @@
       "blocker": "named-chatgpt-human-setup",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.consent-read-only",
@@ -867,7 +1031,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.decline-consent",
@@ -887,7 +1055,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.device-login",
@@ -902,12 +1074,16 @@
       "sourceSha256": "b87c34edd99aa5cce96cf2196327b66366ef24bbcea96dc8c86d404030372901",
       "scenarioSha256": "f76bbccad010e366250260a15256899d70e01e527f197504e811b2136a31ff01",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.assistant-connections.device-login",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.revoke-personal-grant",
@@ -927,7 +1103,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "assistant-connections.use-scoped-client",
@@ -948,7 +1128,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.explain-hard-stop",
@@ -963,12 +1147,16 @@
       "sourceSha256": "6f78a112b8f93f2f13975a8262fcf658461298516878e48e3f336282731de767",
       "scenarioSha256": "ca1eb0c8b8fc24d80ac26ec2bb5c155a7717da3c83ca87308840f60f98d0b7b4",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.budgets-costs.explain-hard-stop",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.repair-cost-recording",
@@ -988,7 +1176,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.resolve-budget",
@@ -1003,12 +1195,16 @@
       "sourceSha256": "6f78a112b8f93f2f13975a8262fcf658461298516878e48e3f336282731de767",
       "scenarioSha256": "beefa6d0502e1f77ba8a90f23469a7ce191666f6f338e3e09d4fc8590a6ddf57",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.budgets-costs.resolve-budget",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.set-budget",
@@ -1028,7 +1224,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.spend-breakdown",
@@ -1048,7 +1248,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "budgets-costs.subscription-fees",
@@ -1068,7 +1272,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.browse-cases",
@@ -1088,7 +1296,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.case-history",
@@ -1108,7 +1320,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.cases-disabled",
@@ -1129,7 +1345,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.close-case",
@@ -1150,7 +1370,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.create-case",
@@ -1172,7 +1396,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.handoff-same-task",
@@ -1193,7 +1421,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.related-work",
@@ -1213,7 +1445,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cases.update-case-facts",
@@ -1233,7 +1469,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.channel-file",
@@ -1254,7 +1494,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.connect-slack",
@@ -1275,7 +1519,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.link-sender",
@@ -1295,7 +1543,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.outbound-email",
@@ -1315,7 +1567,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.provider-disabled",
@@ -1336,7 +1592,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.repair-endpoint",
@@ -1356,7 +1616,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.reply-in-thread",
@@ -1377,7 +1641,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "chat-channels.reply-to-email",
@@ -1397,7 +1665,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.choose-cli-context",
@@ -1417,7 +1689,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.create-from-cli",
@@ -1438,7 +1714,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.export-document-cli",
@@ -1459,7 +1739,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.feedback-bundle",
@@ -1480,7 +1764,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.inspect-run-cli",
@@ -1501,7 +1789,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "cli-operations.owned-dev-instance",
@@ -1522,7 +1814,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.agent-observability",
@@ -1542,7 +1838,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.archive-company",
@@ -1562,7 +1862,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.configure-decision-model",
@@ -1577,12 +1881,16 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "99086772a0d532384d28a45833eeb1959f4b03f61b92a1dde9539b29179a0051",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.configure-decision-model",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.export-company",
@@ -1602,7 +1910,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.fast-responses",
@@ -1617,12 +1929,16 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "62b3854452a9a027f22f627d04b946d575ef50516dab4207a33bfdf8b395c3f7",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.fast-responses",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.import-preview",
@@ -1643,7 +1959,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.prompt-injection-guard",
@@ -1658,12 +1978,16 @@
       "sourceSha256": "395472a5531e93259672c2c07f1819992f6f14ccf11513e1990aa3c576f3fa27",
       "scenarioSha256": "81fd20a3be346fe9ac102a6646341cf5f0eee85fa6060cf90146e899e622c056",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.companies.prompt-injection-guard",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.rename-company",
@@ -1683,7 +2007,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "companies.switch-company",
@@ -1704,7 +2032,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.channel-prerequisites",
@@ -1725,7 +2057,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.choose-provider",
@@ -1745,7 +2081,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-agent-unassigned",
@@ -1766,7 +2106,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-connected",
@@ -1787,7 +2131,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-declined",
@@ -1808,7 +2156,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-expired",
@@ -1829,7 +2181,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-missing",
@@ -1852,7 +2208,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.notion-wrong-account",
@@ -1873,7 +2233,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.return-from-login",
@@ -1894,7 +2258,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.save-and-resume",
@@ -1914,7 +2282,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.secure-api-key",
@@ -1934,7 +2306,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.unreachable-mcp",
@@ -1949,12 +2325,16 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "82c13a0d2517a8d72693d9c99dabbb89059efe3365f7f1908d809a665d9e9d2f",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.unreachable-mcp",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "connection-setup.wrong-person-resolves",
@@ -1975,7 +2355,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "developer-labs.component-reference",
@@ -1995,7 +2379,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "developer-labs.gated-lab",
@@ -2016,7 +2404,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "developer-labs.interaction-fixture",
@@ -2036,7 +2428,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "developer-labs.long-thread-performance",
@@ -2056,7 +2452,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.find-artifact",
@@ -2077,7 +2477,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.private-download",
@@ -2098,7 +2502,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.produce-download",
@@ -2119,7 +2527,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.resolve-feedback",
@@ -2139,7 +2551,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.restore-document",
@@ -2154,12 +2570,16 @@
       "sourceSha256": "766da628af9419eaf0b112ec635cddb8e9d1fca903d1dc4602f69f31b0c539ca",
       "scenarioSha256": "599cd29de92a742528b555bdf22e00a1f58867164d6473c4ea52133dee14ad3d",
       "owner": "eval_domains",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.documents-artifacts.restore-document",
-      "blocker": "concurrent-edit-conflict",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.revise-delivery",
@@ -2180,7 +2600,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "documents-artifacts.write-plan",
@@ -2200,7 +2624,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "execution-environments.add-computer",
@@ -2220,7 +2648,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "execution-environments.assign-computer",
@@ -2241,7 +2673,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "execution-environments.choose-capable-target",
@@ -2262,7 +2698,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "execution-environments.prepare-image",
@@ -2282,7 +2722,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "execution-environments.test-computer",
@@ -2303,7 +2747,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "gateways-profiles.connect-client",
@@ -2318,12 +2766,16 @@
       "sourceSha256": "8c34eba6c05d3cf4dcd65384b1a7797da734da91c77a4ec8bca64f857a9ac99c",
       "scenarioSha256": "fe825d560eae8ffa44db7aa142d90f279b6e5459a2f8dfc3d6cad447cd49e238",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.gateways-profiles.connect-client",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "gateways-profiles.create-gateway",
@@ -2343,7 +2795,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "gateways-profiles.define-profile",
@@ -2363,7 +2819,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "gateways-profiles.inspect-gateway-error",
@@ -2383,7 +2843,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "gateways-profiles.rotate-token",
@@ -2403,7 +2867,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "goals.align-existing-work",
@@ -2462,11 +2930,26 @@
               "detail": "Two successful native runs: authorized task/project goal alignment and correct cross-company rejection. Final reply contains task/project links but no inspectable strategic-goal link; only linked-work-and-goal oracle failed. No coherent eval correction identified; no unchanged retry authorized.",
               "supersededBy": "Manager and domain review of exact frozen YAML"
             }
-          ]
+          ],
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "e652b0de6eff21473a6d9b4915846c9851f292fa",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "61a6f74dbf832ffca5a7675bc6ee96223622e75a141f86bef600725c5c976d4a",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-e652b0de6e.json"
+            ],
+            "coreCandidate": false
+          }
         }
       ],
       "qualifyingDefinitionDigest": "f5579e3ec3870ebdb2403dc7cc7f88724173f833e7fb899b46b3f3611a1fe0fe",
-      "qualifyingGraderDigest": "f5579e3ec3870ebdb2403dc7cc7f88724173f833e7fb899b46b3f3611a1fe0fe"
+      "qualifyingGraderDigest": "f5579e3ec3870ebdb2403dc7cc7f88724173f833e7fb899b46b3f3611a1fe0fe",
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "goals.create-goal-tree",
@@ -2514,7 +2997,18 @@
             "tokens": null
           },
           "cleanup": "passed",
-          "corePrDependencies": []
+          "corePrDependencies": [],
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "10d0ce63610dd85ae338b0cc4d9addcba2cd8f80",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "612cddbe7dee08bf913c475d01604b920cf60d0267e6f5a3e24ef105a6726d2c",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json"
+            ],
+            "coreCandidate": false
+          }
         },
         {
           "ordinal": 2,
@@ -2547,11 +3041,26 @@
             "tokens": 44131
           },
           "cleanup": "passed",
-          "corePrDependencies": []
+          "corePrDependencies": [],
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "e652b0de6eff21473a6d9b4915846c9851f292fa",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "61a6f74dbf832ffca5a7675bc6ee96223622e75a141f86bef600725c5c976d4a",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-e652b0de6e.json"
+            ],
+            "coreCandidate": false
+          }
         }
       ],
       "qualifyingDefinitionDigest": "153d8dbb78cd48975ff52ba2feee177f8303bd768cfb63d6d800a3c533c0ab97",
-      "qualifyingGraderDigest": "153d8dbb78cd48975ff52ba2feee177f8303bd768cfb63d6d800a3c533c0ab97"
+      "qualifyingGraderDigest": "153d8dbb78cd48975ff52ba2feee177f8303bd768cfb63d6d800a3c533c0ab97",
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "goals.explain-purpose",
@@ -2602,11 +3111,26 @@
             "tokens": 25256
           },
           "cleanup": "passed",
-          "corePrDependencies": []
+          "corePrDependencies": [],
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "e652b0de6eff21473a6d9b4915846c9851f292fa",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "61a6f74dbf832ffca5a7675bc6ee96223622e75a141f86bef600725c5c976d4a",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-e652b0de6e.json"
+            ],
+            "coreCandidate": false
+          }
         }
       ],
       "qualifyingDefinitionDigest": "86a9666f9222957f32e081f42ecae3a61bf9b8b8ded0807f840c75a3cb36f3b4",
-      "qualifyingGraderDigest": "86a9666f9222957f32e081f42ecae3a61bf9b8b8ded0807f840c75a3cb36f3b4"
+      "qualifyingGraderDigest": "86a9666f9222957f32e081f42ecae3a61bf9b8b8ded0807f840c75a3cb36f3b4",
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.archive-done",
@@ -2626,7 +3150,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.archive-partial-failure",
@@ -2646,7 +3174,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.archive-without-grant",
@@ -2666,7 +3198,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.find-design",
@@ -2686,7 +3222,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.notification-audience",
@@ -2707,7 +3247,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.restore-archive",
@@ -2727,7 +3271,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.show-decisions",
@@ -2748,7 +3296,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "inbox-search.show-my-work",
@@ -2768,7 +3320,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.backup-and-restore",
@@ -2788,7 +3344,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.diagnose-health",
@@ -2808,7 +3368,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.instance-settings",
@@ -2828,7 +3392,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.provision-runtime",
@@ -2843,12 +3411,16 @@
       "sourceSha256": "7cf3dbf8bcddd40a9b5d7ca9430231c15dc2d10346eadad96ab81617c20c6aa4",
       "scenarioSha256": "286887bd9a36e5ba926b5420db411cab8ac05ddb0bffa41e6b014594f87d369b",
       "owner": "eval_campaign",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.instance-operations.provision-runtime",
-      "blocker": "installed-source-activation-and-artifact-fingerprint-lane",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "published-global-npm",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.restart-service",
@@ -2868,7 +3440,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "instance-operations.update-instance",
@@ -2883,12 +3459,16 @@
       "sourceSha256": "7cf3dbf8bcddd40a9b5d7ca9430231c15dc2d10346eadad96ab81617c20c6aa4",
       "scenarioSha256": "e1dae8554a765745a6e05392a5e42d3532716904b30c2c64c1f9c4fd789866d7",
       "owner": "eval_campaign",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.instance-operations.update-instance",
-      "blocker": "installed-source-activation-and-artifact-fingerprint-lane",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "published-global-npm",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.broken-link",
@@ -2904,12 +3484,16 @@
       "sourceSha256": "097af7c681a618cf3b1b543a6218ebb732f94b0873e388d9795b88d33894b3ab",
       "scenarioSha256": "1f442ae4c9ef8b255f62a310d0f108da8939bd0708761b0c28b8e989e306b88e",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.navigation-preferences.broken-link",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.dismiss-announcement",
@@ -2924,12 +3508,16 @@
       "sourceSha256": "097af7c681a618cf3b1b543a6218ebb732f94b0873e388d9795b88d33894b3ab",
       "scenarioSha256": "ca913b11ab83b79e774404baae39c2331dfdf0a1ca8e34a4fd7c792a12d777ff",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.navigation-preferences.dismiss-announcement",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.edit-profile",
@@ -2949,7 +3537,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.find-project-view",
@@ -2970,7 +3562,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.quick-search",
@@ -2991,7 +3587,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "navigation-preferences.sidebar-order",
@@ -3011,7 +3611,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "onboarding.choose-first-runtime",
@@ -3027,12 +3631,16 @@
       "sourceSha256": "b759a43d8cfaafaee368b25f863a88786e8277352a9fe6ab798192ff9ee39732",
       "scenarioSha256": "9fad8bacc30a02f9dd08bf384ae5ba9c84b061a0ef90561503933ba683a6c02f",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.onboarding.choose-first-runtime",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "onboarding.first-work",
@@ -3054,7 +3662,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "onboarding.new-company",
@@ -3076,7 +3688,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "onboarding.new-instance",
@@ -3092,12 +3708,16 @@
       "sourceSha256": "b759a43d8cfaafaee368b25f863a88786e8277352a9fe6ab798192ff9ee39732",
       "scenarioSha256": "cab36be3c32416ee57eda4a7dc2ff5dcbf1c87a5324a206b29677bfe6478ede4",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.onboarding.new-instance",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "empty-installed-boundary",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "onboarding.resume-wizard",
@@ -3112,12 +3732,16 @@
       "sourceSha256": "b759a43d8cfaafaee368b25f863a88786e8277352a9fe6ab798192ff9ee39732",
       "scenarioSha256": "bd5561bb5fd7fcd8ecc0c180510e35278ecc3c0f489603232789eb6fda30a790",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.onboarding.resume-wizard",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "plugins.configure-plugin",
@@ -3132,12 +3756,16 @@
       "sourceSha256": "a136eb30c3acd32d2bf4ef90a1c5724bc16c9adbd7643a2243dfcbd22a558611",
       "scenarioSha256": "d13c944d9cd5368e8daa80b915f600de326f0039c8b0ceb7e4b47a078109010d",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.plugins.configure-plugin",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "plugins.disable-plugin",
@@ -3152,12 +3780,16 @@
       "sourceSha256": "a136eb30c3acd32d2bf4ef90a1c5724bc16c9adbd7643a2243dfcbd22a558611",
       "scenarioSha256": "3042597b2aa93bc81cf451385c80a7c2dec72a314506642724818196fec7d1de",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.plugins.disable-plugin",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "plugins.install-plugin",
@@ -3172,12 +3804,16 @@
       "sourceSha256": "a136eb30c3acd32d2bf4ef90a1c5724bc16c9adbd7643a2243dfcbd22a558611",
       "scenarioSha256": "1d43da12b868429becf2eefef1dc6237be6e018ef4bbf463cf75b6aab4bd903b",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.plugins.install-plugin",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "plugins.use-plugin-tool",
@@ -3197,7 +3833,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.add-repository",
@@ -3218,7 +3858,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.archive-project",
@@ -3238,7 +3882,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.create-project",
@@ -3258,7 +3906,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.private-project",
@@ -3279,7 +3931,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.project-defaults",
@@ -3300,7 +3956,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.project-work",
@@ -3321,7 +3981,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.replace-repository",
@@ -3341,7 +4005,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "projects.share-project",
@@ -3361,7 +4029,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.accept-one-proposal",
@@ -3377,12 +4049,16 @@
       "sourceSha256": "f72b3d7e4ba0b4bb52b2912e3bce58c5f75fa0561411cb86330f2f5ba6d2df7f",
       "scenarioSha256": "9868a28b080e1019871e892a9575b8f956d4fd674a92879b626db72c4bb2adc6",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.questions-and-approvals.accept-one-proposal",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.ambiguous-yes",
@@ -3402,7 +4078,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.approve-tool-once",
@@ -3423,7 +4103,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.decline-tool",
@@ -3444,7 +4128,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.defer-and-reopen",
@@ -3465,7 +4153,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.duplicate-answer",
@@ -3480,12 +4172,16 @@
       "sourceSha256": "f72b3d7e4ba0b4bb52b2912e3bce58c5f75fa0561411cb86330f2f5ba6d2df7f",
       "scenarioSha256": "6f3f49eded1e486384a593bbfc028111df190f20a5b654c03ad9ad4aebb740c2",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.questions-and-approvals.duplicate-answer",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.formal-hire-revision",
@@ -3501,12 +4197,16 @@
       "sourceSha256": "f72b3d7e4ba0b4bb52b2912e3bce58c5f75fa0561411cb86330f2f5ba6d2df7f",
       "scenarioSha256": "febf40cdad876c82137344377be8ed3b115ca60bc8c5f4973234a4d54a226ad8",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.questions-and-approvals.formal-hire-revision",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.multi-part-question",
@@ -3526,7 +4226,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.necessary-question",
@@ -3547,7 +4251,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.reject-and-revise",
@@ -3562,12 +4270,16 @@
       "sourceSha256": "f72b3d7e4ba0b4bb52b2912e3bce58c5f75fa0561411cb86330f2f5ba6d2df7f",
       "scenarioSha256": "b29b451c2b0b9c52871d095024c23c3e8cd2c23a3d0c0ea92bec9da8b8448faf",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.questions-and-approvals.reject-and-revise",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.review-plan",
@@ -3584,12 +4296,16 @@
       "sourceSha256": "f72b3d7e4ba0b4bb52b2912e3bce58c5f75fa0561411cb86330f2f5ba6d2df7f",
       "scenarioSha256": "17ea3fc769c041689df8fb1a4be8dec6794922d7656bc5e521d221d39fa6fcdd",
       "owner": "eval_identity",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.questions-and-approvals.review-plan",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "questions-and-approvals.wrong-reviewer",
@@ -3610,7 +4326,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.browser-reconnect",
@@ -3631,7 +4351,11 @@
       "blocker": "Reconnect after a genuinely failed native run remains unexercised; successful and still-running native phases plus failed-evidence negative controls are authored.",
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.controller-restart",
@@ -3652,7 +4376,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.explain-stall",
@@ -3673,7 +4401,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.post-stop-message",
@@ -3694,7 +4426,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.retry-exhausted",
@@ -3714,7 +4450,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.source-action",
@@ -3734,7 +4474,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.unknown-email-outcome",
@@ -3755,7 +4499,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "recovery.workspace-repair",
@@ -3776,7 +4524,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.create-daily-brief",
@@ -3797,7 +4549,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.manage-other-owner",
@@ -3818,7 +4574,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.pause-owned",
@@ -3838,7 +4598,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.plugin-managed-routine",
@@ -3859,7 +4623,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.read-history",
@@ -3880,7 +4648,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.run-now",
@@ -3900,7 +4672,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "routines.webhook-trigger",
@@ -3920,7 +4696,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "runs-adapters.inspect-failed-run",
@@ -3941,7 +4721,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "runs-adapters.list-model-options",
@@ -3961,7 +4745,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "runs-adapters.reset-session",
@@ -3981,7 +4769,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "runs-adapters.upgrade-runner",
@@ -4003,7 +4795,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "runs-adapters.validate-hire",
@@ -4024,7 +4820,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.ask-for-plaintext",
@@ -4045,7 +4845,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.configure-company-secret",
@@ -4066,7 +4870,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.least-scope-delivery",
@@ -4086,7 +4894,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.personal-secret",
@@ -4106,7 +4918,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.secret-proposal",
@@ -4126,7 +4942,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "secrets.vault-reference",
@@ -4146,7 +4966,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.author-skill",
@@ -4166,7 +4990,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.enable-for-agent",
@@ -4187,7 +5015,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.explicit-restriction",
@@ -4208,7 +5040,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.find-and-install",
@@ -4228,7 +5064,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.fork-read-only",
@@ -4249,7 +5089,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.review-update",
@@ -4269,7 +5113,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "skills.studio-test",
@@ -4290,7 +5138,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "status-cards.archive-card",
@@ -4310,7 +5162,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "status-cards.create-card",
@@ -4330,7 +5186,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "status-cards.explain-card",
@@ -4350,7 +5210,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "status-cards.other-authors-card",
@@ -4371,7 +5235,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "status-cards.refresh-card",
@@ -4391,7 +5259,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.approval-delivery",
@@ -4412,7 +5284,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.discard-queued-message",
@@ -4432,7 +5308,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.edit-queued-message",
@@ -4452,7 +5332,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.interrupt-with-direction",
@@ -4473,7 +5357,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.preserve-draft",
@@ -4494,7 +5382,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.queue-follow-up",
@@ -4514,7 +5406,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.steer-active",
@@ -4534,7 +5430,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "steering.stop-versus-pause",
@@ -4555,7 +5455,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "task-coordination.block-on-design",
@@ -4575,7 +5479,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "task-coordination.delegate-with-context",
@@ -4596,7 +5504,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "task-coordination.independent-review",
@@ -4617,7 +5529,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "task-coordination.pause-tree",
@@ -4638,7 +5554,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "task-coordination.reject-dependency-cycle",
@@ -4658,7 +5578,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.ambiguous-task",
@@ -4679,7 +5603,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.assignment-conflict",
@@ -4700,7 +5628,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.attachment-brief",
@@ -4721,7 +5653,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.comment-with-reference",
@@ -4741,7 +5677,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.completion-with-gate",
@@ -4762,7 +5702,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.create-backlog",
@@ -4784,7 +5728,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.delegate-announcement",
@@ -4807,7 +5755,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.edit-properties",
@@ -4822,12 +5774,16 @@
       "sourceSha256": "31fca6be61221bb970b7c67f1b9234aa0705162571b46c99592926a286b240f0",
       "scenarioSha256": "d81f9639eb2e0b7a972f269656cee3baf4d69cd7a74e50560c8ef7289803c5a8",
       "owner": "eval_domains",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.tasks.edit-properties",
-      "blocker": "execution-ownership-denied",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.organize-open-work",
@@ -4847,7 +5803,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.private-task",
@@ -4868,7 +5828,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.share-private-task",
@@ -4888,7 +5852,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.website-task",
@@ -4910,7 +5878,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "tasks.website-without-project",
@@ -4932,7 +5904,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "teams.configure-team",
@@ -4953,7 +5929,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "teams.find-team",
@@ -4973,7 +5953,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "teams.install-team",
@@ -4994,7 +5978,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "teams.preview-install",
@@ -5014,7 +6002,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.close-and-reopen",
@@ -5034,7 +6026,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.inspect-git",
@@ -5054,7 +6050,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.locate-files",
@@ -5074,7 +6074,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.prepare-repository",
@@ -5095,7 +6099,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.preview-service",
@@ -5116,7 +6124,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.private-repository-no-access",
@@ -5137,7 +6149,11 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     },
     {
       "id": "workspaces.recover-lost-sandbox",
@@ -5158,15 +6174,19 @@
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null
+      "qualifyingGraderDigest": null,
+      "productPolicy": {
+        "lane": "source-build",
+        "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
+      }
     }
   ],
   "implementationCheckpoint": {
-    "sourceRevision": "b33f3b8b649cc597ffe9a4a66fc834e47fd93e0e",
-    "descriptorSha256": "6273f9afea18717074abe13bda4bc3132485c2c73245a42b9bee7f25c07a3c73",
-    "authored": 110,
-    "complete": 103,
-    "partial": 7,
-    "unimplemented": 134
+    "sourceRevision": "ad0907afb9ca7b6d528d90616c3a12b52c94620c",
+    "descriptorSha256": "caddd992cd120e2a83c463669e5d480859830b566c57f03f2e56148eeece6e00",
+    "authored": 134,
+    "complete": 129,
+    "partial": 5,
+    "unimplemented": 110
   }
 }
