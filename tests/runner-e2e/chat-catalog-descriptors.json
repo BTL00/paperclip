@@ -535,6 +535,22 @@
     "scenarioId": "agents.existing-grok-bot",
     "sourceFiles": [
       "chat-catalog-domains/runtime-grok.ts",
+      "chat-catalog-domains/runtime-grok-operator.ts",
+      "chat-catalog-domains/runtime-grok-operator-worker.ts",
+      "chat-catalog-domains/runtime-grok-operator-contract.ts",
+      "chat-runtime-private-requirements.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "../../ui/src/pages/Auth.tsx",
+      "../../ui/src/pages/McpConnect.tsx",
+      "../../ui/src/components/AgentSetupPrompt.tsx",
+      "../../ui/src/lib/grok-bot-setup-prompt.ts",
+      "../../ui/src/components/new-agent/GrokBotSetup.tsx",
+      "../../ui/src/components/NewAgentDialog.tsx",
+      "../../ui/src/components/new-agent/AgentBasicsDialog.tsx",
       "chat-catalog-domains/runtime-private.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/external-private-browser.ts",
@@ -543,14 +559,18 @@
       "../../server/src/routes/grok-bot.ts",
       "../../server/src/services/grok-bot/routine.ts",
       "../../server/src/services/dot-runner-broker.ts",
+      "../../server/src/modules/external-agents/dot.ts",
+      "../../server/src/services/public-mcp/oauth.ts",
+      "../../ui/src/components/AgentsToolbar.tsx",
+      "../../ui/src/pages/Agents.tsx",
+      "../../ui/src/components/new-agent/ExternalAgentInviteDialog.tsx",
+      "../../ui/src/components/new-agent/ExternalAgentInviteContent.tsx",
       "../../ui/src/components/GrokBotConnection.tsx",
       "../../ui/src/components/new-agent/GrokBotSetupContent.tsx",
       "chat-scenarios/agents.yaml"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
-    "coverageGaps": [
-      "Disposable harness public/auth origin is pinned to loopback HTTP; actual owned HTTPS origin/tunnel binding is not yet supported. This is separate from the genuine existing Bot human OAuth/pairing prerequisite."
-    ],
+    "coverageGaps": [],
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 2,
     "turnTimeoutMs": 120000,
@@ -838,6 +858,10 @@
   {
     "scenarioId": "app-permissions.new-quarantined-action",
     "sourceFiles": [
+      "chat-catalog-domains/external-app-fixture.ts",
+      "../../packages/shared/src/connection-search.ts",
+      "../../server/src/routes/tool-access.ts",
+      "../../server/src/services/tool-access/catalog/publication.ts",
       "chat-catalog-domains/external-app-catalog.ts",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
@@ -856,6 +880,10 @@
     "scenarioId": "app-permissions.read-allowed-write-off",
     "sourceFiles": [
       "chat-catalog-domains/external-app-permissions.ts",
+      "chat-catalog-domains/external-app-fixture.ts",
+      "../../packages/shared/src/connection-search.ts",
+      "../../server/src/services/connection-intents.ts",
+      "../../server/src/routes/tool-access.ts",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -919,22 +947,44 @@
     "exportName": "appTestExternalCases"
   },
   {
+    "requiredCredentials": [],
+    "externalInput": {
+      "provider": "chatgpt",
+      "fields": [
+        "operatorRef",
+        "chatgptAuthorizationRef",
+        "operatorMode"
+      ]
+    },
     "scenarioId": "assistant-connections.connect-external-assistant",
     "sourceFiles": [
-      "chat-catalog-domains/external-assistant-connections.ts",
+      "chat-catalog-domains/external-chatgpt-setup.ts",
+      "chat-catalog-domains/external-chatgpt.ts",
+      "chat-catalog-domains/external-chatgpt-worker.ts",
+      "chat-catalog-domains/external-chatgpt-contract.ts",
+      "chat-catalog-domains/runtime-private.ts",
+      "chat-runtime-private-requirements.ts",
+      "chat-catalog-domains/external-public-signin.ts",
+      "chat-catalog-domains/external-public-signin-worker.ts",
+      "chat-catalog-domains/external-public-signin-contract.ts",
+      "public-mcp-flow.ts",
+      "chat-public-origin.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/identity-support.ts",
-      "public-mcp-client.ts",
-      "chat-scenarios/assistant-connections.yaml"
+      "chat-scenarios/assistant-connections.yaml",
+      "../../ui/src/pages/apps/AssistantConnection.tsx",
+      "../../ui/src/pages/McpConnect.tsx",
+      "../../server/src/routes/public-mcp.ts",
+      "../../server/src/services/public-mcp/capabilities.ts",
+      "../../server/src/services/public-mcp/oauth.ts",
+      "../../packages/shared/src/mcp-setup.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.external.v1",
-    "coverageGaps": [
-      "named-chatgpt-human-setup"
-    ],
     "expectedRunCount": 1,
+    "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
-    "attemptTimeoutMs": 300000,
+    "attemptTimeoutMs": 1500000,
     "authentication": "human-session",
     "modulePath": "./chat-catalog-domains/external-assistant-connections.js",
     "exportName": "assistantConnectionExternalCases"
@@ -3831,6 +3881,14 @@
     "minimumRunCount": 3,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 660000,
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "lead-ready",
+        "future-worker-ready",
+        "existing-work-actively-owned"
+      ]
+    },
     "runPolicy": {
       "kind": "source-settled-with-active-work",
       "maximumActiveWorkerRuns": 1
@@ -5437,7 +5495,8 @@
       "chat-catalog-domains/internal-definition.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/internal-tasks.ts",
-      "chat-scenarios/tasks.yaml"
+      "chat-scenarios/tasks.yaml",
+      "chat-catalog-domains/internal-distinct-fixtures.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.internal.v1",
     "coverageGaps": [],
@@ -5551,18 +5610,20 @@
       "chat-scenarios/tasks.yaml",
       "chat-catalog-domains/internal-edit-ownership.ts",
       "chat-catalog-domains/internal-run-brief.ts",
-      "../e2e/fetch-allowed-port.ts"
+      "../e2e/fetch-allowed-port.ts",
+      "run-observations.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.internal.v1",
     "coverageGaps": [],
-    "expectedRunCount": 3,
+    "expectedRunCount": 4,
     "expectedHumanMessageCount": 2,
     "minimumRunCount": 3,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 600000,
     "runPolicy": {
       "kind": "source-settled-with-active-work",
-      "maximumActiveWorkerRuns": 1
+      "maximumActiveWorkerRuns": 1,
+      "expectedWorkerCancellation": "owned-task-reassignment"
     },
     "modulePath": "./chat-catalog-domains/internal-tasks.js",
     "exportName": "tasksCases"
@@ -5803,9 +5864,11 @@
   {
     "scenarioId": "workspaces.locate-files",
     "sourceFiles": [
-      "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/runtime-workspaces.ts",
-      "chat-scenarios/workspaces.yaml"
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-scenarios/workspaces.yaml",
+      "../../ui/src/components/IsolatedWorkspacesRouteGate.tsx",
+      "../../ui/src/pages/ExecutionWorkspaceDetail.tsx"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
@@ -5828,6 +5891,8 @@
     "sourceFiles": [
       "chat-catalog-domains/runtime-workspace-repositories.ts",
       "chat-catalog-domains/runtime-workspace-repositories-support.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-auth.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-auth-worker.ts",
       "chat-catalog-domains/runtime-workspaces.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/internal-repositories.ts",
@@ -5838,7 +5903,10 @@
       "../../server/src/services/git-credentials.ts",
       "../../server/src/services/github-operation-credentials.ts",
       "../../packages/adapter-utils/src/github-launcher.ts",
-      "../../server/src/routes/secrets.ts"
+      "../../server/src/routes/secrets.ts",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../server/src/routes/tool-access.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
     "coverageGaps": [],
@@ -5882,13 +5950,16 @@
       "fields": [
         "siteRepositoryId",
         "siteRepositoryFullName",
-        "tokenEnv"
+        "tokenEnv",
+        "humanAuthEnv"
       ]
     },
     "scenarioId": "workspaces.private-repository-no-access",
     "sourceFiles": [
       "chat-catalog-domains/runtime-workspace-repositories.ts",
       "chat-catalog-domains/runtime-workspace-repositories-support.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-auth.ts",
+      "chat-catalog-domains/runtime-workspace-repositories-auth-worker.ts",
       "chat-catalog-domains/runtime-workspaces.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/internal-repositories.ts",
@@ -5899,12 +5970,13 @@
       "../../server/src/services/git-credentials.ts",
       "../../server/src/services/github-operation-credentials.ts",
       "../../packages/adapter-utils/src/github-launcher.ts",
-      "../../server/src/routes/secrets.ts"
+      "../../server/src/routes/secrets.ts",
+      "../../ui/src/features/connections/ConnectionIntentInteractionBody.tsx",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../server/src/routes/tool-access.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.runtime.v2",
-    "coverageGaps": [
-      "Unfinished required after-grant conditional: the selected metadata-only fixture has no executable protected human GitHub account/installation completion callback and therefore cannot yet resume preparation/fix the header after authorization. Reserved act preserves the actual initial request and probes real setup options, then stops instead of fabricating a grant. Missing designated disposable repo is a separate external prerequisite, not this authoring gap."
-    ],
+    "coverageGaps": [],
     "expectedRunCount": 10,
     "expectedHumanMessageCount": 3,
     "minimumRunCount": 7,
