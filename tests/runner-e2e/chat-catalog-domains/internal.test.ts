@@ -51,7 +51,7 @@ function valid(scenario: string): InternalObservation {
       o.reply = "Riley owns the backlog task. Observed old brief."; o.state.firstRead = structuredClone(o);
       const held = { ...o.tasks[0], assigneeAgentId: "morgan", status: "in_progress", executionRunId: "morgan-run", checkoutRunId: "morgan-run" };
       Object.assign(o.state, { worker: { id: "morgan" }, riley: { id: "riley" }, readMarker: "Observed old brief", heldTask: structuredClone(held), heldRun: { id: "morgan-run" }, gateCalls: [{ authorized: true }] });
-      o.tasks[0] = held; Object.assign(o, { currentTask: held, phaseReply: "Morgan holds the running checkout. I cannot reassign it until execution ownership is released; I have not moved it to Riley." });
+      o.tasks[0] = held; Object.assign(o, { currentTask: held, assignmentDenials: [{ runId: "second", taskId: "task", assigneeId: "morgan", callId: "denied", reason: "Cannot stop the owned checkout safely" }], phaseReply: "Morgan holds the running checkout. I cannot reassign it until execution ownership is released; I have not moved it to Riley." });
       o.activity = [{ id: "owner-change", action: "issue.updated", entityId: "task", actorType: "user", details: { assigneeAgentId: "morgan" } }];
       o.runs.push({ id: "morgan-run", companyId: "company", agentId: "morgan", status: "running" }, { id: "final", companyId: "company", agentId: "ceo", status: "succeeded" }); break;
     }
@@ -229,7 +229,7 @@ function valid(scenario: string): InternalObservation {
       o.state.worker = { id: "morgan" }; o.tasks = [{ ...o.tasks[0]!, priority: "high", assigneeAgentId: "morgan" }]; o.activity = [event("issue.updated", "task")]; o.state.firstEdit = structuredClone(o);
       const held = { ...o.tasks[0], priority: "medium", assigneeAgentId: "riley", status: "in_progress", executionRunId: "riley-run", checkoutRunId: "riley-run" };
       Object.assign(o.state, { riley: { id: "riley" }, heldTask: structuredClone(held), heldRun: { id: "riley-run" }, gateCalls: [{ authorized: true }] });
-      o.tasks[0] = held; Object.assign(o, { currentTask: held, phaseReply: "Riley holds the running execution checkout. I cannot change priority or reassign to Morgan until that ownership is released." });
+      o.tasks[0] = held; Object.assign(o, { currentTask: held, assignmentDenials: [{ runId: "second", taskId: "task", assigneeId: "morgan", callId: "denied", reason: "Cannot stop the owned checkout safely" }], phaseReply: "Riley holds the running execution checkout. I cannot change priority or reassign to Morgan until that ownership is released." });
       o.runs.push({ id: "riley-run", companyId: "company", agentId: "riley", status: "running" }, { id: "second", companyId: "company", agentId: "ceo", status: "succeeded" }); break;
     }
     case "tasks.ambiguous-task": {

@@ -4,7 +4,9 @@ import { connectRepositoryFixture, repositoryProjectCases } from "./internal-rep
 import { externalRequirements } from "./external-fixtures.js";
 describe("repository selected-input integration", () => {
   it.each(["workspaces.prepare-repository", "workspaces.private-repository-no-access"])("%s requires selected GitHub inputs before any provider/discovery operation", async scenarioId => {
-    expect(externalRequirements[scenarioId]).toEqual(externalRequirements["projects.add-repository"]);
+    const repositoryInputs = externalRequirements["projects.add-repository"];
+    expect(externalRequirements[scenarioId]).toEqual({ ...repositoryInputs,
+      fields: scenarioId === "workspaces.private-repository-no-access" ? [...repositoryInputs.fields, "humanAuthEnv"] : repositoryInputs.fields });
     const postSensitive = vi.fn();
     await expect(connectRepositoryFixture({ scenario: { id: scenarioId }, input: { api: { postSensitive } } } as unknown as ChatCatalogContext)).rejects.toThrow("selected-case private inputs are unavailable");
     expect(postSensitive).not.toHaveBeenCalled();
