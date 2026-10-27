@@ -4116,9 +4116,60 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.projects.create-project",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null,
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.projects.create-project",
+          "startedAt": "2026-10-27T07:03:53.222Z",
+          "finishedAt": "2026-10-27T07:06:50.432Z",
+          "sourceRevision": "6951f67ecd1aaedec789703dc9c7227bddd2b59a",
+          "workingTreeDigest": "47a870ad808d1c035fdd33b6a03cae551e613dba3a5bdbad27ae73b723e15188",
+          "definitionDigest": "567438721d3906fcc37e884375250066033f04e74ea2ca3b21d86e5f95dab953",
+          "suiteDefinitionDigest": "84c79b71867072783585112b8835a5080a2da146d303deda091a9cbaf2d9c8b1",
+          "graderDigest": "567438721d3906fcc37e884375250066033f04e74ea2ca3b21d86e5f95dab953",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "secret_leak_pending_harness_custody_diagnosis",
+          "observedFailure": "Secret leak in persisted Paperclip home state at paperclip-home/instances/runner-e2e-c5fde44ccf0a66ae/config.json: exact secret value (unattributed credential)",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-selection-6951f67ecd.json",
+            "tests/runner-e2e/results/catalog-initial-2026-10-27T07-03-53-222Z-projects-create-project/chat-features/runner-codex-subscription/local/projects.create-project/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-projects.create-project.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 704239,
+            "coverage": "Actual two native usage receipts;704239 total tokens including cache; subscription cost unpriced, fixture cost events excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "6951f67ecd1aaedec789703dc9c7227bddd2b59a",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-6951f67ecd.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
+      "qualifyingDefinitionDigest": "567438721d3906fcc37e884375250066033f04e74ea2ca3b21d86e5f95dab953",
+      "qualifyingGraderDigest": "567438721d3906fcc37e884375250066033f04e74ea2ca3b21d86e5f95dab953",
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
