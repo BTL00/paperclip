@@ -196,6 +196,27 @@ async function observeChoiceExplanation(
     state.choiceExplanationVisible = true;
   }
 }
+export function completeAdvertisedNotionChoices(
+  value: unknown,
+  reason: unknown,
+) {
+  const c = record(value),
+    a = record(c.alternative);
+  return (
+    c.service === "notion" &&
+    c.methodKey === "mcp-oauth" &&
+    c.auth === "oauth" &&
+    c.transport === "mcp_remote" &&
+    c.serverUrl === "https://mcp.notion.com/mcp" &&
+    typeof c.whenToUse === "string" &&
+    !!c.whenToUse.trim() &&
+    a.source === "vercel_connect" &&
+    a.available === false &&
+    typeof reason === "string" &&
+    !!reason.trim() &&
+    a.reason === reason
+  );
+}
 export function gradeProviderChoice(value: unknown) {
   const c = checks(),
     o = externalObservation(value);
@@ -210,7 +231,10 @@ export function gradeProviderChoice(value: unknown) {
   c.add(
     "real-catalog-and-truthful-choices",
     o.state.catalogChoicesIndependentlyMatched === true &&
-      !!o.state.advertisedChoices &&
+      completeAdvertisedNotionChoices(
+        o.state.advertisedChoices,
+        o.state.unavailableReason,
+      ) &&
       typeof o.state.unavailableReason === "string" &&
       truthfulNotionChoices(body, o.state.unavailableReason) &&
       o.state.choiceExplanationVisible === true &&

@@ -27,7 +27,10 @@ function valid() {
     links: [],
     humanQueries: [],
     state: {
-      advertisedChoices: { service: "notion" },
+      advertisedChoices: notionSetupChoices({
+        apps: [getConnectableAppDefinition("notion")!],
+        credentialSources: { vercelConnect: { available: false, reason } },
+      }).advertisedChoices,
       catalogChoicesIndependentlyMatched: true,
       choiceExplanation: {
         runId: "source-run",
@@ -122,6 +125,17 @@ describe("actual source attribution and supported choice lanes", () => {
   it("rejects lost catalog, invisible explanation, wrong source run and unbound selection", () => {
     for (const change of [
       { catalogChoicesIndependentlyMatched: false },
+      { advertisedChoices: { service: "notion" } },
+      {
+        advertisedChoices: {
+          ...valid().state.advertisedChoices,
+          alternative: {
+            source: "vercel_connect",
+            available: true,
+            reason: null,
+          },
+        },
+      },
       { choiceExplanationVisible: false },
       { selectionAttributionMatched: false },
       {
