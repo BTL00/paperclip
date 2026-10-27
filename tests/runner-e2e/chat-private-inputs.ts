@@ -3,10 +3,12 @@ import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CREDENTIAL_NAMES, type CredentialName, type MatrixExecution } from "./types.js";
 import type { ChatCatalogDescriptor } from "./chat-catalog-registry.js";
+import { runtimePrivateProviders, runtimePrivateReferenceNames, validateRuntimePrivateRequirement, type RuntimePrivateProvider } from "./chat-runtime-private-requirements.js";
 
 export const CHAT_PRIVATE_INPUTS_ENV = "PAPERCLIP_CHAT_PRIVATE_INPUTS";
 const externalConfigEnv = "PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG";
-export interface ChatExternalInputRequirement { provider: "notion" | "slack" | "agentmail" | "vault" | "github"; fields: readonly string[] }
+export interface ChatExternalInputRequirement { provider: "notion" | "slack" | "agentmail" | "vault" | "github" | RuntimePrivateProvider; fields: readonly string[] }
+type PrivateInputDescriptor = Pick<ChatCatalogDescriptor, "requiredCredentials" | "externalInput"> & Partial<Pick<ChatCatalogDescriptor, "scenarioId">>;
 export interface ChatPrivateInputs {
   readonly credentials: Readonly<Partial<Record<CredentialName, string>>>;
   read(name: string): string | undefined;
@@ -20,16 +22,18 @@ function readPrivateJson(filename: string, ownedRoot?: string): unknown {
     throw new Error("Selected-case inputs require a bounded private0600 owned file; contents withheld");
   try { return JSON.parse(readFileSync(filename, "utf8")); } catch { throw new Error("Selected-case private inputs are invalid; contents withheld"); }
 }
-export function chatPrivateInputRequirements(descriptor?: Pick<ChatCatalogDescriptor, "requiredCredentials" | "externalInput">) {
+export function chatPrivateInputRequirements(descriptor?: PrivateInputDescriptor) {
   const credentialNames = [...new Set(descriptor?.requiredCredentials ?? [])].sort();
   if (credentialNames.some(name => !CREDENTIAL_NAMES.includes(name))) throw new Error("Unknown selected-case credential name");
   const external = descriptor?.externalInput;
-  if (external && (!["notion", "slack", "agentmail", "vault", "github"].includes(external.provider)
+  if (external && (!["notion", "slack", "agentmail", "vault", "github", ...runtimePrivateProviders].includes(external.provider)
     || !external.fields.length || external.fields.some(field => !/^[a-zA-Z][a-zA-Z0-9]*$/.test(field)))) throw new Error("Invalid selected external configuration requirements");
+  if (external) validateRuntimePrivateRequirement(descriptor?.scenarioId, external.provider, external.fields, credentialNames);
   const requirements = { credentialNames, external: external ? { provider: external.provider, fields: [...external.fields].sort() } : null };
   return { ...requirements, digest: createHash("sha256").update(JSON.stringify(requirements)).digest("hex") };
 }
-export function stageChatPrivateInputs(input: { execution: MatrixExecution; descriptor?: Pick<ChatCatalogDescriptor, "requiredCredentials" | "externalInput">; privateDir: string; env: NodeJS.ProcessEnv; secrets: string[] }) {
+export function stageChatPrivateInputs(input: { execution: MatrixExecution; descriptor?: PrivateInputDescriptor; privateDir: string; env: NodeJS.ProcessEnv; secrets: string[] }) {
+  if (input.descriptor?.scenarioId && input.execution.task?.id !== input.descriptor.scenarioId) throw new Error("Selected private input declaration belongs to another scenario");
   const requirements = chatPrivateInputRequirements(input.descriptor);
   const envelope: PrivateEnvelope = { version: 1, executionId: input.execution.id, credentials: {}, references: {} };
   for (const name of requirements.credentialNames) {
@@ -41,11 +45,15 @@ export function stageChatPrivateInputs(input: { execution: MatrixExecution; desc
     const config = readPrivateJson(ref) as { schemaVersion?: number; providers?: Record<string, { disposable?: boolean; resourceIds?: string[]; credentialEnv?: string[]; prerequisites?: Record<string, string> }> };
     const binding = config.schemaVersion === 1 ? config.providers?.[requirements.external.provider] : undefined;
     if (!binding || binding.disposable !== true || !Array.isArray(binding.resourceIds) || !binding.resourceIds.length
-      || !Array.isArray(binding.credentialEnv) || !binding.credentialEnv.length || !binding.prerequisites
-      || requirements.external.fields.some(field => !binding.prerequisites?.[field])) throw new Error("Selected disposable external configuration lacks declared prerequisites; contents withheld");
+      || !Array.isArray(binding.credentialEnv) || (!binding.credentialEnv.length && !runtimePrivateProviders.includes(requirements.external.provider)) || !binding.prerequisites
+      || requirements.external.fields.some(field => typeof binding.prerequisites?.[field] !== "string" || !binding.prerequisites[field]?.trim())) throw new Error("Selected disposable external configuration lacks declared prerequisites; contents withheld");
     const selected = { disposable: true, resourceIds: binding.resourceIds, credentialEnv: binding.credentialEnv,
       prerequisites: Object.fromEntries(requirements.external.fields.map(field => [field, binding.prerequisites![field]])) };
-    const names = [...binding.credentialEnv, ...requirements.external.fields.filter(field => field.endsWith("Env")).map(field => binding.prerequisites![field]!)];
+    const names = [...binding.credentialEnv, ...requirements.external.fields.filter(field => /(?:Env|EnvName)$/.test(field)).map(field => binding.prerequisites![field]!)];
+    if (runtimePrivateProviders.includes(requirements.external.provider)) {
+      const expected = runtimePrivateReferenceNames(requirements.external.provider);
+      if (expected.some(name => !names.includes(name)) || names.some(name => !expected.includes(name))) throw new Error("Runtime private reference names do not match the selected provider's finite contract");
+    }
     for (const name of new Set(names)) {
       if (!/^PAPERCLIP_CHAT_EVAL_[A-Z0-9_]+$/.test(name)) throw new Error("External credential reference is not a declared private environment name");
       const value = input.env[name]?.trim(); if (!value) throw new Error(`Missing selected external environment reference ${name}`);

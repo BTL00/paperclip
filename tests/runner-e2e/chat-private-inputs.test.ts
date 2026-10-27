@@ -5,6 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import { stageChatPrivateInputs, readChatPrivateInputs, chatPrivateInputNameIdentity, scrubChatPrivateEnvironment, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 import type { MatrixExecution } from "./types.js";
 import type { ChatCatalogDescriptor } from "./chat-catalog-registry.js";
+import { runtimePrivateRequirements } from "./chat-runtime-private-requirements.js";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function fixture() { const root = mkdtempSync(path.join(tmpdir(), "chat-private-")); roots.push(root); return root; }
@@ -41,4 +42,40 @@ it("resolves only the selected provider references and fingerprints names rather
   expect(JSON.stringify(inputs.configuration("external-provider"))).not.toContain("not-selected");
   const identity = JSON.stringify(chatPrivateInputNameIdentity("selected", env));
   expect(identity).toContain("PAPERCLIP_CHAT_EVAL_NOTION_AUTH"); expect(identity).not.toContain("notion-private"); expect(identity).not.toContain("test-space");
+});
+it("stages only an exact declared runtime metadata contract and standard key without dummy provider refs", () => {
+  const root = fixture(), configFile = path.join(root, "runtime.json");
+  const scenarioId = "execution-environments.prepare-image"; const spec = runtimePrivateRequirements[scenarioId];
+  const descriptor = { scenarioId, externalInput: { provider: spec.provider, fields: spec.fields }, requiredCredentials: spec.credentials };
+  const runtimeExecution = { ...execution, task: { id: scenarioId } } as MatrixExecution;
+  const prerequisites = { imageDigest: "sha256:synthetic-image-pin", imageRef: "owned-image", region: "test-region", disposableNamespace: "owned-test-namespace", toolsManifest: "private-tools-reference", unrelated: "not-selected" };
+  writeFileSync(configFile, JSON.stringify({ schemaVersion: 1, providers: { daytona: { disposable: true, resourceIds: ["owned-test-namespace"], credentialEnv: [], prerequisites } } }), { mode: 0o600 });
+  const staged = stageChatPrivateInputs({ execution: runtimeExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, DAYTONA_API_KEY: "selected-daytona-key", ANTHROPIC_API_KEY: "unrelated-key" } });
+  const env = { [CHAT_PRIVATE_INPUTS_ENV]: staged.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root };
+  const inputs = readChatPrivateInputs("selected", [], env);
+  expect(inputs.credentials.DAYTONA_API_KEY).toBe("selected-daytona-key"); expect(inputs.credentials.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(JSON.stringify(inputs.configuration("external-provider"))).not.toContain("not-selected");
+  const publicIdentity = JSON.stringify(chatPrivateInputNameIdentity("selected", env));
+  expect(publicIdentity).toContain("imageDigest"); expect(publicIdentity).not.toContain("synthetic-image-pin"); expect(publicIdentity).not.toContain("selected-daytona-key");
+  expect(() => stageChatPrivateInputs({ execution, descriptor, privateDir: root, secrets: [], env: {} })).toThrow("another scenario");
+});
+it("rejects undeclared runtime scenarios and fields before resolving or writing private values", () => {
+  const root = fixture(); const spec = runtimePrivateRequirements["execution-environments.prepare-image"];
+  for (const descriptor of [
+    { scenarioId: "tasks.create-backlog", externalInput: { provider: spec.provider, fields: spec.fields }, requiredCredentials: spec.credentials },
+    { scenarioId: "execution-environments.prepare-image", externalInput: { provider: spec.provider, fields: [...spec.fields, "arbitraryCommand"] }, requiredCredentials: spec.credentials },
+    { scenarioId: "execution-environments.prepare-image", externalInput: { provider: spec.provider, fields: spec.fields }, requiredCredentials: [] },
+  ]) expect(() => stageChatPrivateInputs({ execution: { ...execution, task: { id: descriptor.scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: {} })).toThrow("exact selected canonical case");
+});
+it("resolves only the finite SSH private key reference and refuses an alternate ambient name", () => {
+  const root = fixture(), configFile = path.join(root, "ssh.json"); const scenarioId = "execution-environments.test-computer"; const spec = runtimePrivateRequirements[scenarioId];
+  const descriptor = { scenarioId, externalInput: { provider: spec.provider, fields: spec.fields }, requiredCredentials: spec.credentials };
+  const prerequisites = { hostname: "synthetic.test", port: "22", login: "eval", hostKeySha256: "SHA256:synthetic", allowedRemoteRoot: "/owned/disposable", privateKeyEnv: "PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY", qualifiedHarness: "native-codex" };
+  const config = { schemaVersion: 1, providers: { ssh: { disposable: true, resourceIds: ["owned-ssh"], credentialEnv: [], prerequisites } } };
+  writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
+  const staged = stageChatPrivateInputs({ execution: { ...execution, task: { id: scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY: "selected-ssh-key" } });
+  const inputs = readChatPrivateInputs("selected", [], { [CHAT_PRIVATE_INPUTS_ENV]: staged.filename, PAPERCLIP_RUNNER_E2E_TEMP_ROOT: root });
+  expect(inputs.read("PAPERCLIP_CHAT_EVAL_SSH_PRIVATE_KEY")).toBe("selected-ssh-key"); expect(inputs.read("PAPERCLIP_CHAT_EVAL_OTHER_KEY")).toBeUndefined();
+  prerequisites.privateKeyEnv = "PAPERCLIP_CHAT_EVAL_OTHER_KEY"; writeFileSync(configFile, JSON.stringify(config), { mode: 0o600 });
+  expect(() => stageChatPrivateInputs({ execution: { ...execution, task: { id: scenarioId } } as MatrixExecution, descriptor, privateDir: root, secrets: [], env: { PAPERCLIP_CHAT_CATALOG_EXTERNAL_CONFIG: configFile, PAPERCLIP_CHAT_EVAL_OTHER_KEY: "wrong-key" } })).toThrow("finite contract");
 });
