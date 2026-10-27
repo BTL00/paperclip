@@ -166,8 +166,8 @@
     },
     {
       "scenarioId": "recovery.explain-stall",
-      "readinessClass": "local",
-      "needs": "Real retained recovery interruption/attempt counter/next action; contrast infrastructure, input, budget and deliberate stop causes."
+      "readinessClass": "implemented",
+      "needs": "Actual local native process-fault fixture verifies public PID/company/task/actor, OS UID/group/start/executable and attempt-owned realpath runtime root twice before signalling only the exact owned Runner PID. Requires three distinct actual coordinator process attempts on the same heartbeat and genuine terminal native_session_retry_exhausted source-scoped board recovery action with retained run/cause/maxAttempts/nextAction. Unexpected quarantine, permanent/model failure or replacement heartbeat blocks setup concretely, never relabelled. Canonical reply must preserve original task/action/owner and failure, no duplicate repair; diagnosis additionally binds actual three-attempt infrastructure facts. All paths authored; no process signals or live qualification performed."
     },
     {
       "scenarioId": "recovery.controller-restart",
@@ -176,8 +176,8 @@
     },
     {
       "scenarioId": "recovery.source-action",
-      "readinessClass": "local",
-      "needs": "Real failed task and source recovery action, owner readback, separate independent repair only when actual work warrants it."
+      "readinessClass": "implemented",
+      "needs": "Actual local native process-fault fixture verifies public PID/company/task/actor, OS UID/group/start/executable and attempt-owned realpath runtime root twice before signalling only the exact owned Runner PID. Requires three distinct actual coordinator process attempts on the same heartbeat and genuine terminal native_session_retry_exhausted source-scoped board recovery action with retained run/cause/maxAttempts/nextAction. Unexpected quarantine, permanent/model failure or replacement heartbeat blocks setup concretely, never relabelled. Canonical reply must preserve original task/action/owner and failure, no duplicate repair; diagnosis additionally binds actual three-attempt infrastructure facts. All paths authored; no process signals or live qualification performed."
     },
     {
       "scenarioId": "recovery.retry-exhausted",
