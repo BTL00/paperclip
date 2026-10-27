@@ -39,6 +39,9 @@ export async function privateSlackHumanConnect(
     channelName: input.channelName,
     senderUserId: input.senderUserId,
     command: input.command,
+    operation: input.operation,
+    appId: input.appId,
+    callbackURL: input.callbackURL,
     session,
   };
   if (!validSlackHumanConnect(request))

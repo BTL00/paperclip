@@ -78,3 +78,41 @@ it("requires independently copied exact human ID and closed isolated browser rec
   ])
     expect(validSlackHumanReceipt(wrong, input)).toBe(false);
 });
+
+it("permits only exact app Request URL retry and distinct closed action evidence", () => {
+  const retry = {
+    ...input,
+    operation: "retry-callback" as const,
+    appId: "A123",
+    callbackURL: "https://owned.invalid/api/chat-webhooks/owned/slack",
+  };
+  expect(validSlackHumanConnect(retry)).toBe(true);
+  for (const bad of [
+    { ...retry, appId: "other" },
+    {
+      ...retry,
+      callbackURL: "http://owned.invalid/api/chat-webhooks/owned/slack",
+    },
+    {
+      ...retry,
+      callbackURL:
+        "https://user:key@owned.invalid/api/chat-webhooks/owned/slack",
+    },
+    { ...retry, callbackURL: "https://owned.invalid/other" },
+  ])
+    expect(validSlackHumanConnect(bad)).toBe(false);
+  const receipt = {
+    processIsolation: true,
+    testRunnerAttached: false,
+    tracingEnabled: false,
+    videoEnabled: false,
+    verifiedWorkspaceId: input.workspaceId,
+    verifiedHumanId: input.senderUserId,
+    callbackRetryRequested: true,
+  };
+  expect(validSlackHumanReceipt(receipt, retry)).toBe(true);
+  expect(validSlackHumanReceipt(receipt, input)).toBe(false);
+  expect(
+    validSlackHumanReceipt({ ...receipt, commandSubmitted: true }, retry),
+  ).toBe(false);
+});

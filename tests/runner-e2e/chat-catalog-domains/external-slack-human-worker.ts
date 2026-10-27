@@ -81,6 +81,52 @@ async function main() {
         "Actual signed-in Slack human does not match selected provider identity",
       );
     await page.keyboard.press("Escape");
+    if (input.operation === "retry-callback") {
+      await page.goto(
+        `https://api.slack.com/apps/${input.appId}/event-subscriptions`,
+        { waitUntil: "domcontentloaded" },
+      );
+      const appURL = new URL(page.url());
+      if (
+        appURL.origin !== "https://api.slack.com" ||
+        appURL.pathname !== `/apps/${input.appId}/event-subscriptions`
+      )
+        throw new Error(
+          "Slack app settings did not retain the exact authorized app",
+        );
+      const field = page.getByLabel("Request URL", { exact: true });
+      await field.waitFor();
+      if ((await field.inputValue()) !== input.callbackURL)
+        throw new Error(
+          "Slack's saved Request URL differs from the actual owned Paperclip endpoint",
+        );
+      const retry = page.getByRole("button", { name: "Retry", exact: true });
+      if (await retry.isVisible()) await retry.click();
+      else {
+        await field.fill("");
+        await field.fill(input.callbackURL!);
+      }
+      await page.getByText("Verified", { exact: true }).waitFor();
+      if ((await field.inputValue()) !== input.callbackURL)
+        throw new Error(
+          "Slack callback validation changed the saved destination",
+        );
+      const save = page.getByRole("button", {
+        name: "Save Changes",
+        exact: true,
+      });
+      if ((await save.isVisible()) && (await save.isEnabled()))
+        await save.click();
+      return {
+        processIsolation: true,
+        testRunnerAttached: false,
+        tracingEnabled: false,
+        videoEnabled: false,
+        verifiedWorkspaceId: input.workspaceId,
+        verifiedHumanId: actualUserId,
+        callbackRetryRequested: true,
+      };
+    }
     const composer = page.getByRole("textbox", {
       name: new RegExp(`^Message #?${input.channelName}$`, "i"),
     });

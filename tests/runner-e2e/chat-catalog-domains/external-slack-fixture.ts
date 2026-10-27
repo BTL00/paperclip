@@ -91,6 +91,8 @@ export async function prepareSlackFixture(
   ctx: ChatCatalogContext,
   options: {
     unlinkBeforeCanonical?: boolean;
+    observeWithRepairCredential?: boolean;
+    useExistingAppCommand?: boolean;
     normalWizard?: { endpointId: string; agentId: string };
   } = {},
 ) {
@@ -107,7 +109,15 @@ export async function prepareSlackFixture(
   const priorExperiments = await ctx.input.api.get<{
     enableChatConnectors?: boolean;
   }>("/api/instance/settings/experimental");
-  const provider = slackProvider(ctx, binding);
+  const provider = slackProvider(
+    ctx,
+    options.observeWithRepairCredential
+      ? {
+          ...binding,
+          prerequisites: { ...p, botTokenEnv: p.repairBotTokenEnv! },
+        }
+      : binding,
+  );
   let endpoint: ChatEndpoint | undefined,
     relay: Awaited<ReturnType<typeof startSlackRelay>> | undefined,
     originalManifest: Record<string, unknown> | undefined,
@@ -182,6 +192,33 @@ export async function prepareSlackFixture(
       throw new Error(
         "Setup blocker: actual server PAPERCLIP_CHAT_WEBHOOK_PUBLIC_URL must match designated registeredWebhookOrigin before any Slack operation",
       );
+    if (options.useExistingAppCommand) {
+      const current = await provider.call<{
+        ok: true;
+        manifest: {
+          features?: { slash_commands?: Array<{ command: string }> };
+        };
+      }>("configuration", "apps.manifest.export", { app_id: p.appId });
+      const commands = current.manifest.features?.slash_commands ?? [];
+      if (
+        commands.length !== 1 ||
+        !/^\/[a-z0-9_-]{1,31}$/.test(commands[0]!.command) ||
+        !endpoint.setup.slackApp
+      )
+        throw new Error(
+          "Setup blocker: selected installed Slack app must expose one supported saved command",
+        );
+      endpoint = await ctx.input.api.patch<ChatEndpoint>(
+        `/api/chat-endpoints/${endpoint.id}`,
+        {
+          slackSetupMethod: "existing",
+          slackApp: {
+            ...endpoint.setup.slackApp,
+            command: commands[0]!.command,
+          },
+        },
+      );
+    }
     relay = await startSlackRelay({
       port,
       endpointPublicId: endpoint.publicId,
@@ -267,6 +304,15 @@ export async function prepareSlackFixture(
         credential: selectedExternalCredential(ctx, binding, "botTokenEnv"),
         cookies: await ctx.input.page.context().cookies(ctx.input.api.baseURL),
       });
+      if (credentialUiReceipt.credentialUiRejected) {
+        await ctx.input.evidence(
+          "chat-catalog-Slack-credential-UI-rejected.json",
+          credentialUiReceipt,
+        );
+        throw new Error(
+          "Product Slack credential form rejected the actual selected bot-token format; connectivity remains incomplete",
+        );
+      }
       endpoint = await ctx.input.api.get<ChatEndpoint>(
         `/api/chat-endpoints/${endpoint.id}`,
       );

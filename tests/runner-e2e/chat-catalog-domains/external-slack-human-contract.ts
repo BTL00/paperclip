@@ -6,8 +6,34 @@ export interface SlackHumanConnectInput {
   senderUserId: string;
   command: string;
   session: StorageState;
+  operation?: "connect" | "retry-callback";
+  appId?: string;
+  callbackURL?: string;
 }
 export function validSlackHumanConnect(input: SlackHumanConnectInput) {
+  if (input.operation === "retry-callback") {
+    try {
+      const url = new URL(input.callbackURL ?? "");
+      if (
+        !/^A[A-Z0-9]+$/.test(input.appId ?? "") ||
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash ||
+        !/^\/api\/chat-webhooks\/[a-zA-Z0-9_-]+\/slack$/.test(url.pathname)
+      )
+        return false;
+    } catch {
+      return false;
+    }
+  } else if (
+    (input.operation && input.operation !== "connect") ||
+    input.appId ||
+    input.callbackURL
+  )
+    return false;
+
   if (
     !/^T[A-Z0-9]+$/.test(input.workspaceId) ||
     !/^C[A-Z0-9]+$|^G[A-Z0-9]+$/.test(input.channelId) ||
@@ -70,11 +96,15 @@ export interface SlackHumanConnectReceipt {
   videoEnabled: false;
   verifiedWorkspaceId: string;
   verifiedHumanId: string;
-  commandSubmitted: true;
+  commandSubmitted?: true;
+  callbackRetryRequested?: true;
 }
 export function validSlackHumanReceipt(
   value: unknown,
-  input: Pick<SlackHumanConnectInput, "workspaceId" | "senderUserId">,
+  input: Pick<
+    SlackHumanConnectInput,
+    "workspaceId" | "senderUserId" | "operation"
+  >,
 ) {
   const r = value as Partial<SlackHumanConnectReceipt> | undefined;
   return (
@@ -88,6 +118,7 @@ export function validSlackHumanReceipt(
         "verifiedWorkspaceId",
         "verifiedHumanId",
         "commandSubmitted",
+        "callbackRetryRequested",
       ].includes(key),
     ) &&
     r.processIsolation === true &&
@@ -96,6 +127,8 @@ export function validSlackHumanReceipt(
     r.videoEnabled === false &&
     r.verifiedWorkspaceId === input.workspaceId &&
     r.verifiedHumanId === input.senderUserId &&
-    r.commandSubmitted === true
+    (input.operation === "retry-callback"
+      ? r.callbackRetryRequested === true && r.commandSubmitted === undefined
+      : r.commandSubmitted === true && r.callbackRetryRequested === undefined)
   );
 }

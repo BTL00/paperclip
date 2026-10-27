@@ -8,6 +8,7 @@ export function validSlackSetupPrivate(
   companyId: unknown,
   input: SlackSetupPrivateInput | undefined,
   setupURL: string,
+  repair = false,
 ) {
   try {
     const url = new URL(setupURL);
@@ -27,7 +28,10 @@ export function validSlackSetupPrivate(
       url.searchParams.get("purpose") === "chat" &&
       url.searchParams.get("resume") === input.endpointId &&
       url.searchParams.get("stage") === "credentials" &&
-      url.searchParams.size === 4 &&
+      (repair
+        ? url.searchParams.size === 5 &&
+          url.searchParams.get("reconnect") === "1"
+        : url.searchParams.size === 4) &&
       !url.hash
     );
   } catch {

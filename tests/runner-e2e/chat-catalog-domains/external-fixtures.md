@@ -236,3 +236,27 @@ remain in the selected private envelope, redactor, process memory and private
 0600 child handoff. They never enter model input, public case state, argv,
 subprocess environment, trace, video, screenshots or closed receipts. The child
 handoff is removed unconditionally. Supply no unrelated browser sessions.
+
+`chat-channels.repair-endpoint` selects the same Slack fields plus
+`botTokenExpiresAt` and `repairBotTokenEnv`. The original bot token must still
+successfully identify the designated bot during historical fixture qualification
+and naturally expire within the bounded two-to-eight-minute window. The separate
+repair token must independently identify that same bot/app/workspace and remain
+valid. No token is revoked, rotated, exchanged or minted by this fixture. Initial
+historical qualification uses the actual public board configure route, not the
+normal UI under evaluation. The SDK generation is invalidated by an actual
+pause/resume while the old credential still works. Its next genuine signed
+intake must fail after the official provider returns `token_expired`, without a
+setup native run; any other starting condition blocks qualification.
+
+The tested human repair uses the actual protected Reconnect form, the selected
+human's Slack App Settings Request URL retry/re-entry, fresh provider-signed
+verification, normal existing-person wizard continuation and Done. A later new
+same-thread native reply is still mandatory. Expiry timing is credential-fixture
+metadata, not an expected model answer. Missing qualified tokens/session/app
+management authority are prerequisites, never positive coverage. The case is
+bounded at 25 minutes and performs no external operations during offline
+calibration. A visible real form rejection is retained as a nonpassing product
+observation; the harness does not pre-reject an actual rotating-token format or
+bypass that form. Slack's documented rotating access-token format is described at
+https://docs.slack.dev/authentication/using-token-rotation/.
