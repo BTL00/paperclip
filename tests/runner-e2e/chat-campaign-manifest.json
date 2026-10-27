@@ -6177,7 +6177,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.create-backlog",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "passed",
+          "executionId": "chat-features.runner-codex-subscription.local.create-backlog",
+          "startedAt": "2026-10-27T07:48:02.705Z",
+          "finishedAt": "2026-10-27T07:49:36.818Z",
+          "sourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+          "workingTreeDigest": "53640393f175333461cda9166a04dd4d99895eacf646cfd14838e579cc12ba57",
+          "definitionDigest": "29bdc2510b0d747e1d78be8d4598cfd2d1ca428d8bb36279da9d852a708a915a",
+          "suiteDefinitionDigest": "87540a2990ac4e8af4ec918da2550547cc10e18fc0ec557941d427080951430a",
+          "graderDigest": "29bdc2510b0d747e1d78be8d4598cfd2d1ca428d8bb36279da9d852a708a915a",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "provisional_initial_pass_pending_final_closure",
+          "observedFailure": null,
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/admitted-initials-6beacfe0a9.json",
+            "tests/runner-e2e/results/catalog-initial-2026-10-27T07-48-02-705Z-tasks-create-backlog/chat-features/runner-codex-subscription/local/create-backlog/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-tasks.create-backlog.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 346471,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-6beacfe0a9.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
       "productPolicy": {
@@ -6205,9 +6256,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.delegate-announcement",
       "blocker": null,
-      "attempts": [],
-      "qualifyingDefinitionDigest": null,
-      "qualifyingGraderDigest": null,
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "running",
+          "executionId": "chat-features.runner-codex-subscription.local.delegate-announcement",
+          "startedAt": "2026-10-27T07:49:37.766Z",
+          "finishedAt": null,
+          "sourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+          "workingTreeDigest": "53640393f175333461cda9166a04dd4d99895eacf646cfd14838e579cc12ba57",
+          "definitionDigest": "d008f0db4ad68402292e33b61dcaa71ce1a4fd93d21d355fe249191821e8be07",
+          "suiteDefinitionDigest": "87540a2990ac4e8af4ec918da2550547cc10e18fc0ec557941d427080951430a",
+          "graderDigest": "d008f0db4ad68402292e33b61dcaa71ce1a4fd93d21d355fe249191821e8be07",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": null,
+          "observedFailure": null,
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/admitted-initials-6beacfe0a9.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": null,
+            "coverage": "pending actual native usage receipts"
+          },
+          "cleanup": "pending",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "6beacfe0a94e87b9b834f0f1d46d42e8ec7aec42",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-6beacfe0a9.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
+      "qualifyingDefinitionDigest": "d008f0db4ad68402292e33b61dcaa71ce1a4fd93d21d355fe249191821e8be07",
+      "qualifyingGraderDigest": "d008f0db4ad68402292e33b61dcaa71ce1a4fd93d21d355fe249191821e8be07",
       "productPolicy": {
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
