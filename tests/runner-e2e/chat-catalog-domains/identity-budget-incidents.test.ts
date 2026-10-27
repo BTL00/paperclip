@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetIncidentIdentityCases, budgetHoldSurvivesChat } from "./identity-budget-incidents.js";
+import { budgetIncidentIdentityCases, budgetHoldSurvivesChat, incidentSourceFundingReady } from "./identity-budget-incidents.js";
 import type { IdentityObservation } from "./identity-support.js";
 function valid(scenarioId: string): IdentityObservation {
   const resolve = scenarioId.endsWith("resolve-budget"); const task = { id: "task", companyId: "acorn", title: "Unfinished website", status: "backlog", assigneeAgentId: "morgan" };
@@ -35,4 +35,15 @@ it("stops before human controls when chat already changes the cap or clears the 
   expect(budgetHoldSurvivesChat({ ...budget, activeIncidents: [] }, incident, worker)).toBe(false);
   expect(budgetHoldSurvivesChat(budget, incident, { ...worker, pauseReason: null, status: "idle" })).toBe(false);
   expect(budgetHoldSurvivesChat({ ...budget, policies: [{ ...budget.policies[0]!, scopeId: "foreign" }] }, incident, worker)).toBe(false);
+});
+
+it("requires source/company funding without clearing or funding the target incident", () => {
+  const row = { amount: 500, unpricedUsagePolicy: "allow", hardStopEnabled: true, isActive: true, paused: false, status: "ok" };
+  const target = { scopeType: "agent", scopeId: "morgan", amount: 100, paused: true, status: "hard_stop", unpricedUsagePolicy: "allow" };
+  const budget = { policies: [{ ...row, scopeType: "company", scopeId: "company" }, { ...row, scopeType: "agent", scopeId: "ceo" }, target],
+    activeIncidents: [{ scopeType: "agent", scopeId: "morgan", thresholdType: "hard" }] } as Parameters<typeof incidentSourceFundingReady>[0];
+  expect(incidentSourceFundingReady(budget, "company", "ceo")).toBe(true);
+  expect(incidentSourceFundingReady({ ...budget, policies: budget.policies.map(p => p.scopeId === "company" ? { ...p, unpricedUsagePolicy: "block" } : p) }, "company", "ceo")).toBe(false);
+  expect(incidentSourceFundingReady({ ...budget, activeIncidents: [...budget.activeIncidents, { ...budget.activeIncidents[0]!, scopeId: "ceo" }] }, "company", "ceo")).toBe(false);
+  expect(incidentSourceFundingReady({ ...budget, policies: budget.policies.filter(p => p.scopeId !== "ceo") }, "company", "ceo")).toBe(false);
 });

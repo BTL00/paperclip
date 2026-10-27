@@ -7,6 +7,16 @@ import { checks, entity, project, sameTask, task, type Entity } from "./internal
 import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, probeAgentPermission, waitForReply } from "./identity-support.js";
 
 interface PausedAgent { id: string; status: string; pauseReason: string | null; lifecycleState: string }
+export function incidentSourceFundingReady(budget: BudgetOverview, companyId: string, leadId: string): boolean {
+  return [["company", companyId], ["agent", leadId]].every(([scopeType, scopeId]) =>
+    budget.policies.some(row => row.scopeType === scopeType && row.scopeId === scopeId && row.amount === 500
+      && row.unpricedUsagePolicy === "allow" && row.hardStopEnabled && row.isActive && !row.paused && row.status === "ok")
+    && !budget.activeIncidents.some(row => row.scopeType === scopeType && row.scopeId === scopeId && row.thresholdType === "hard"));
+}
+const targetBudgetContext = (budget: BudgetOverview, agentId: string) => JSON.stringify({
+  policies: budget.policies.filter(row => row.scopeType === "agent" && row.scopeId === agentId),
+  incidents: budget.activeIncidents.filter(row => row.scopeType === "agent" && row.scopeId === agentId),
+});
 export function budgetHoldSurvivesChat(budget: BudgetOverview, incident: BudgetIncident, worker: PausedAgent): boolean {
   return worker.id === incident.scopeId && worker.status === "paused" && worker.pauseReason === "budget"
     && budget.policies.some(row => row.policyId === incident.policyId && row.scopeType === incident.scopeType && row.scopeId === incident.scopeId && row.amount === incident.amountLimit)
@@ -53,6 +63,22 @@ export const budgetIncidentIdentityCases: readonly ChatCatalogCase[] = ["budgets
   const t = await task(ctx, "Unfinished Launch website", p.id, { assigneeAgentId: worker.id, description: "Build an accessible introduction for Acorn Notes, a research notebook for small science teams.", status: "backlog" });
   await ctx.input.api.post(`/api/agents/${manual.id}/pause`, {});
   const root = `/api/companies/${ctx.input.fixtures.company.id}`;
+  // Fund only the source and its company before the recorded hard-stop
+  // prehistory. Preserve-scenario deliberately excludes Morgan from shared funding.
+  const beforeFunding = await ctx.input.api.get<BudgetOverview>(`${root}/budgets/overview`);
+  const beforeFundingWorker = await ctx.input.api.get<PausedAgent>(`/api/agents/${worker.id}`);
+  for (const [scopeType, scopeId] of [["company", ctx.input.fixtures.company.id], ["agent", ctx.input.fixtures.agent.id]])
+    await ctx.input.api.post(`${root}/budgets/policies`, { scopeType, scopeId, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
+  const afterFunding = await ctx.input.api.get<BudgetOverview>(`${root}/budgets/overview`);
+  const afterFundingWorker = await ctx.input.api.get<PausedAgent>(`/api/agents/${worker.id}`);
+  const targetUnchanged = targetBudgetContext(beforeFunding, worker.id) === targetBudgetContext(afterFunding, worker.id)
+    && beforeFundingWorker.pauseReason === afterFundingWorker.pauseReason;
+  const sourceReady = incidentSourceFundingReady(afterFunding, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id);
+  await ctx.input.evidence("identity-budget-source-funding.json", { companyId: ctx.input.fixtures.company.id, sourceAgentId: ctx.input.fixtures.agent.id,
+    workerId: worker.id, beforeTarget: JSON.parse(targetBudgetContext(beforeFunding, worker.id)), afterTarget: JSON.parse(targetBudgetContext(afterFunding, worker.id)),
+    beforeWorkerPauseReason: beforeFundingWorker.pauseReason, afterWorkerPauseReason: afterFundingWorker.pauseReason,
+    targetUnchanged, sourceReady, fundedScopes: ["company", "source-agent"], fundingBeforeIncidentPrehistory: true });
+  if (!targetUnchanged || !sourceReady) throw new Error("Scoped source funding must leave Morgan unchanged and admit the canonical source turn");
   await ctx.input.api.post(`${root}/budgets/policies`, { scopeType: "agent", scopeId: worker.id, amount: 100, windowKind: "calendar_month_utc", hardStopEnabled: true, unpricedUsagePolicy: "allow", isActive: true });
   const receipt = await ctx.input.api.post<CostEvent>(`${root}/cost-events`, { agentId: worker.id, issueId: t.id, projectId: p.id, provider: "synthetic-eval-import", biller: "synthetic-eval-import",
     model: "imported-fixture-receipt", billingType: "metered_api", costStatus: "reported", costCents: 125, inputTokens: 0, outputTokens: 0, occurredAt: new Date().toISOString(), idempotencyKey: `identity-prerequisite:${ctx.input.nonce}` });
@@ -67,7 +93,8 @@ export const budgetIncidentIdentityCases: readonly ChatCatalogCase[] = ["budgets
     const c = checks(); const rows = await Promise.all([entity(state, "worker").id, entity(state, "manual").id].map(id => ctx.input.api.get<PausedAgent>(`/api/agents/${id}`)));
     const budget = await ctx.input.api.get<BudgetOverview>(`/api/companies/${ctx.input.fixtures.company.id}/budgets/overview`);
     c.add("real-budget-and-manual-holds", rows[0]?.pauseReason === "budget" && rows[1]?.pauseReason === "manual"
-      && budget.activeIncidents.some(row => row.id === entity(state, "incident").id && row.status === "open"), "The real prerequisite budget incident and separate manual pause survive harness setup, without changing either hold."); return c.result();
+      && budget.activeIncidents.some(row => row.id === entity(state, "incident").id && row.status === "open")
+      && incidentSourceFundingReady(budget, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id), "The real prerequisite budget incident and separate manual pause survive harness setup, without changing either hold."); return c.result();
   },
   async act(ctx, state) {
     await waitForReply(ctx); if (scenarioId.endsWith("explain-hard-stop")) return;
