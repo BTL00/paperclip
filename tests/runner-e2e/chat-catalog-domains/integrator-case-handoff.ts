@@ -26,7 +26,9 @@ async function observeHandoff(ctx: ChatCatalogContext, state: Record<string, unk
 function handoffObservation(value: unknown): HandoffObservation | undefined { const o = value as HandoffObservation; return observation(value) && !!o.caseRecord && Array.isArray(o.handoffs) && !!o.findings && Array.isArray(o.findingVersions) && Array.isArray(o.sourceReplies) && !!o.actingAgent && !!o.reviewer ? o : undefined; }
 function checkoutObservations(body: string) {
   const parts = body.split(/\n+|;|(?<=[.!?])\s+/);
-  return /mobile Safari/i.test(body) && parts.some(part => /\b(?:tap|tapping|touch)\b/i.test(part) && /\b(?:Pay|checkout|button)\b/i.test(part) && /\b(?:no effect|no response|does not|doesn't|fails?|unresponsive|nothing)\b/i.test(part))
+  return /mobile Safari/i.test(body) && parts.some(part => /\b(?:tap|tapping|touch)\b/i.test(part) && /\b(?:Pay|checkout|button)\b/i.test(part)
+    && /\b(?:no effect|no response|fails?|unresponsive|nothing|not responsive)\b|\b(?:does not|doesn't)\s+(?:respond|work|activate|trigger|submit|produce)\b/i.test(part)
+    && !/\b(?:does not|doesn't|never|not)\s+(?:fail|unresponsive)\b|\bno (?:failure|issue)\b/i.test(part))
     && parts.some(part => /keyboard/i.test(part) && /\b(?:succeeds?|successful|works?|responds?)\b/i.test(part) && !/\b(?:not|fails?|doesn't|does not)\b/i.test(part));
 }
 export function gradeIntegratorCaseHandoff(value: unknown) {

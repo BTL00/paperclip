@@ -35,6 +35,7 @@ describe("real Morgan same-primary review handoff", () => {
     const chat = valid(); chat.handoffs[1]!.sourceRunId = "source"; expect(gradeIntegratorCaseHandoff(chat).passed).toBe(false);
     const missing = valid(); missing.findingVersions = []; expect(gradeIntegratorCaseHandoff(missing).passed).toBe(false);
     const wrong = valid(); wrong.handoffs[1]!.instructions = "Mobile Safari tapping Pay works. Keyboard fails."; expect(gradeIntegratorCaseHandoff(wrong).passed).toBe(false);
+    const negated = valid(); negated.handoffs[1]!.instructions = "On mobile Safari, tapping Pay does not fail. Keyboard activation works."; expect(gradeIntegratorCaseHandoff(negated).passed).toBe(false);
   });
   it("rejects fictional delivery before the actual handoff and task-done-as-case-closed", () => {
     const early = valid(); early.state.handoffCheckpoint.reply = "I handed this case to Riley."; expect(gradeIntegratorCaseHandoff(early).passed).toBe(false);
