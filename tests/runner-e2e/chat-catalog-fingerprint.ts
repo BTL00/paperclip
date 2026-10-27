@@ -1,3 +1,4 @@
+import { publicOriginFingerprintIdentity } from "./chat-public-origin.js";
 import { databaseFingerprintIdentity } from "./docker-postgres.js";
 import { verifyRetainedChatOracleIdentity } from "./chat-private-inputs.js";
 import { installedChatFingerprintIdentity, installedChatScenarioIds } from "./chat-installed-lane.js";
@@ -112,11 +113,13 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
   const attachmentFormatter = descriptor.queryAttachments?.length ? ["ui/src/components/IssueChatThread.tsx", "ui/src/components/task-chat/TaskChatComposer.tsx"].map(file => ({
     file, sha256: hash(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8")),
   })) : null;
+  const originIdentity = publicOriginFingerprintIdentity((selectedExecution as { executionId: string }).executionId, descriptor.scenarioId);
+  const originReaders = originIdentity.selected ? ["server/src/config.ts", "server/src/auth/better-auth.ts", "server/src/routes/tool-access.ts", "server/src/services/chat-task-url.ts", "server/src/services/muse-setup.ts", "server/src/services/workspace-runtime.ts"] : [];
   const result = fingerprintChatDependencyClosure({ root,
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
-      "tests/runner-e2e/chat-scenarios/defaults.yaml", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, installedIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
+      "tests/runner-e2e/chat-scenarios/defaults.yaml", ...originReaders, ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
+    selected: { descriptor, selectedExecution, lane, publicOriginIdentity: originIdentity, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, installedIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
     reviewedDynamicResolutions,
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,

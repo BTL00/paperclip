@@ -1,3 +1,5 @@
+import { readSelectedVaultServerEnvironment } from "./chat-vault-private-server.js";
+import { readValidatedPublicOriginReceipt, publicOriginServerOverrides, PUBLIC_ORIGIN_RECEIPT_ENV, PUBLIC_ORIGIN_CONTROL_ENV } from "./chat-public-origin.js";
 import { dockerDatabaseSupervisorEnvironment } from "./docker-postgres.js";
 import { archiveServerEnvironment } from "./chat-archive-fault-control.js";
 import { CHAT_INSTALL_PLAN, refreshInstalledChatPins, publishInstalledChatReceipt } from "./chat-installed-lane.js";
@@ -55,6 +57,12 @@ const installedRelease = process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI
   ? installedReleaseLaunch(process.env.PAPERCLIP_RUNNER_E2E_INSTALLED_CLI) : null;
 const dockerEnvironment = await dockerDatabaseSupervisorEnvironment({ temporaryRoot, env: process.env });
 const archiveEnvironment = await archiveServerEnvironment({ selected: executionIds, temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, env: dockerEnvironment.source });
+const publicOriginReceipt = process.env[PUBLIC_ORIGIN_RECEIPT_ENV] ? await readValidatedPublicOriginReceipt({ receiptPath: required(PUBLIC_ORIGIN_RECEIPT_ENV), executionId: executionIds.length === 1 ? executionIds[0]! : "", attemptId: required("PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID"), backendOrigin: `http://127.0.0.1:${port}` }) : undefined;
+if (publicOriginReceipt && process.env.PAPERCLIP_RUNNER_E2E_PUBLIC_MCP !== "1") throw new Error("Owned public origin requires the exact authenticated selected case");
+// Only the validated handoff can advertise a public origin. Neither private
+// receipt paths nor ambient public/auth configuration reach the product child.
+for (const key of [PUBLIC_ORIGIN_RECEIPT_ENV, PUBLIC_ORIGIN_CONTROL_ENV, "PAPERCLIP_PUBLIC_URL", "PAPERCLIP_AUTH_PUBLIC_BASE_URL", "PAPERCLIP_MANAGED_RUNTIME_PUBLIC_URL", "PAPERCLIP_ALLOWED_HOSTNAMES"]) delete archiveEnvironment.source[key];
+const vaultEnvironment = await readSelectedVaultServerEnvironment({ executionIds, temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, env: process.env });
 const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
   ? installedReleaseEnvironment(archiveEnvironment.source, repositoryRoot, path.join(temporaryRoot, "provider-bin"))
   : archiveEnvironment.source, {
@@ -82,6 +90,7 @@ const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
     PAPERCLIP_PUBLIC_URL: `http://127.0.0.1:${port}`,
     PAPERCLIP_AUTH_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
     PAPERCLIP_AUTH_BASE_URL_MODE: "explicit",
+    ...publicOriginServerOverrides(publicOriginReceipt),
     // Use empty provider configuration as the managed homes' seed. A local
     // operator's installed plugins, MCP connections and auth are not fixtures.
     CODEX_HOME: path.join(temporaryRoot, "provider-config", "codex"),
@@ -98,6 +107,7 @@ const serverEnvironment = buildPaperclipServerEnvironment(installedRelease
   // Onboarding normally opens the app after listen. Browser ownership belongs
   // to Playwright in this harness, so never create a developer desktop tab.
   PAPERCLIP_OPEN_ON_LISTEN: "false",
+  ...vaultEnvironment,
 });
 assertIsolatedServerEnvironment(serverEnvironment, {
   temporaryRoot,

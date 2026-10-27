@@ -1,3 +1,4 @@
+import { prepareOwnedPublicOrigin, PublicOriginCleanupError, PUBLIC_ORIGIN_CONTROL_ENV, PUBLIC_ORIGIN_RECEIPT_ENV } from "./chat-public-origin.js";
 import { DATABASE_LANE_ENV, DOCKER_DATABASE_ENV, dockerDatabaseLaunchState, publicDockerDatabaseIdentity, selectedDatabaseLane, startOwnedDockerDatabase } from "./docker-postgres.js";
 import { ARCHIVE_CONTROL_ENV, ARCHIVE_SCENARIO, startArchiveFaultControl } from "./chat-archive-fault-control.js";
 import { abnormalFinalizationResult } from "./abnormal-finalization.js";
@@ -515,6 +516,7 @@ async function runAttempt(input: {
   let processCleanupFailed = false;
   let startupReceiptPath: string | undefined;
   let dockerDatabase: Awaited<ReturnType<typeof startOwnedDockerDatabase>> | undefined;
+  let ownedPublicOrigin: Awaited<ReturnType<typeof prepareOwnedPublicOrigin>>;
   let archiveControl: Awaited<ReturnType<typeof startArchiveFaultControl>> | undefined;
   let gateway: Awaited<ReturnType<EvalOperations["start"]>> | undefined;
   const rawCleanupResults: Array<{ cleanup: string; synthetic: boolean; status: string }> = [];
@@ -568,6 +570,8 @@ async function runAttempt(input: {
     if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
     await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
     const privateInputs = needsPrivateInputs ? stageChatPrivateInputs({ execution, descriptor: selectedDescriptor, privateDir: selectedPrivateInputsDirectory, env: process.env, secrets: credentials }) : undefined;
+    ownedPublicOrigin = await prepareOwnedPublicOrigin({ controlDirectory: process.env[PUBLIC_ORIGIN_CONTROL_ENV], executionId: execution.id, scenarioId: selectedDescriptor?.scenarioId ?? "", attemptId: accountingAttemptId, backendOrigin: `http://127.0.0.1:${port}`, temporaryRoot, privateSecrets: credentials });
+    delete sourceEnvironment[PUBLIC_ORIGIN_CONTROL_ENV]; delete sourceEnvironment[PUBLIC_ORIGIN_RECEIPT_ENV];
     if (selectedDescriptor?.scenarioId === ARCHIVE_SCENARIO) archiveControl = await startArchiveFaultControl({ selected: executions.map(row => row.id), temporaryRoot, backendOrigin: `http://127.0.0.1:${port}`, privateSecrets: credentials });
     if (databaseLane === "owned-docker-postgres") dockerDatabase = await startOwnedDockerDatabase({ temporaryRoot, privateSecrets: credentials });
     const diagnosticRegistry = stagePrivateDiagnostics(temporaryRoot, executions.map(row => row.id), credentials);
@@ -580,6 +584,7 @@ async function runAttempt(input: {
     const childEnv: NodeJS.ProcessEnv = {
       ...buildRunnerE2EProcessEnvironment(sourceEnvironment, executions),
       [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
+      [PUBLIC_ORIGIN_RECEIPT_ENV]: ownedPublicOrigin?.filename,
       [ARCHIVE_CONTROL_ENV]: archiveControl?.filename,
       [DATABASE_LANE_ENV]: dockerDatabase ? "owned-docker-postgres" : undefined,
       [DOCKER_DATABASE_ENV]: dockerDatabase?.filename,
@@ -913,6 +918,7 @@ async function runAttempt(input: {
     }
     return [...publishedResults];
   } catch (error) {
+    if (error instanceof PublicOriginCleanupError) processCleanupFailed = true;
     // Packaging/diagnostic failures must not erase an actually launched attempt
     // or its primary startup failure. Retain only closed sanitized metadata;
     // raw reports stay private when their normal packaging path failed.
@@ -939,6 +945,8 @@ async function runAttempt(input: {
     return [...publishedResults];
   } finally {
     // runProcess has completed its owned Playwright/server process shutdown.
+    let publicOriginCleanupError: unknown;
+    try { await ownedPublicOrigin?.close(); } catch (error) { publicOriginCleanupError = error; processCleanupFailed = true; }
     let archiveCleanupError: unknown;
     try { await archiveControl?.close(); } catch (error) { archiveCleanupError = error; processCleanupFailed = true; }
     let dockerCleanupError: unknown;
@@ -992,7 +1000,7 @@ async function runAttempt(input: {
         `Refusing to remove unexpected temporary path ${temporaryRoot}`,
       );
     }
-    if (gatewayCleanupError || archiveCleanupError || dockerCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError, archiveCleanupError, dockerCleanupError].filter(Boolean), "Eval owned gateway/transport cleanup failed");
+    if (gatewayCleanupError || archiveCleanupError || dockerCleanupError || publicOriginCleanupError) cleanupError = new AggregateError([cleanupError, gatewayCleanupError, archiveCleanupError, dockerCleanupError, publicOriginCleanupError].filter(Boolean), "Eval owned gateway/transport cleanup failed");
     if (startupReceiptPath) {
       const receipt = JSON.parse(await readFile(startupReceiptPath, "utf8"));
       receipt.status = cleanupError ? "installed_launch_chain_cleanup_failed" : "installed_launch_chain_passed";
