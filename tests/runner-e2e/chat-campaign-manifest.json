@@ -3075,7 +3075,61 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.companies.archive-company",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "passed",
+          "executionId": "chat-features.runner-codex-subscription.local.companies.archive-company",
+          "startedAt": "2026-10-27T10:29:19.521Z",
+          "finishedAt": "2026-10-27T10:31:23.533Z",
+          "sourceRevision": "c167a54162fadffe665b4d35a7a1308c6233b75d",
+          "workingTreeDigest": "6251a7763d81986af3d43a142a52c702da1bde2b57cee5aef2606e4418ccc698",
+          "definitionDigest": "e45461119cd11cbc7d9f3659a35bbd7a6c1ac72d5c5b2e4f187f97210ac8c7c7",
+          "suiteDefinitionDigest": "c0a8d311ea4dc7616bc8cef7a815457e5c013bd491d2ac6510f62500d3d0ac25",
+          "graderDigest": "e45461119cd11cbc7d9f3659a35bbd7a6c1ac72d5c5b2e4f187f97210ac8c7c7",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "provisional_initial_pass_pending_final_closure",
+          "observedFailure": null,
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/two-lane-initial-pair-c167a54162.json",
+            "tests/runner-e2e/results/two-lane-initial-c167a54162fa-b95423a10d79997385db/chat-features/runner-codex-subscription/local/companies.archive-company/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-companies.archive-company.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/initial-pass-identity-review-companies.archive-company.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/operations/two-lane-exact-absence-c167.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/operations/two-lane-archive-replayed-completion.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 541825,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "c167a54162fadffe665b4d35a7a1308c6233b75d",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-two-lane-c167a54162.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "e45461119cd11cbc7d9f3659a35bbd7a6c1ac72d5c5b2e4f187f97210ac8c7c7",
       "qualifyingGraderDigest": "e45461119cd11cbc7d9f3659a35bbd7a6c1ac72d5c5b2e4f187f97210ac8c7c7",
       "productPolicy": {
@@ -3405,7 +3459,58 @@
       "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.connection-setup.choose-provider",
       "blocker": null,
-      "attempts": [],
+      "attempts": [
+        {
+          "ordinal": 1,
+          "outcome": "failed",
+          "executionId": "chat-features.runner-codex-subscription.local.connection-setup.choose-provider",
+          "startedAt": "2026-10-27T10:29:19.551Z",
+          "finishedAt": "2026-10-27T10:30:11.290Z",
+          "sourceRevision": "c167a54162fadffe665b4d35a7a1308c6233b75d",
+          "workingTreeDigest": "c7fd9a3a9f33cdc907f3e8c61d5f40eeb107cc8f856e01552745cd438e4e27d7",
+          "definitionDigest": "2650b5969af7a28ce555ba5ec92dfb6cf3eb3c21dfce0b8ab99be9c41e2ff772",
+          "suiteDefinitionDigest": "c0a8d311ea4dc7616bc8cef7a815457e5c013bd491d2ac6510f62500d3d0ac25",
+          "graderDigest": "2650b5969af7a28ce555ba5ec92dfb6cf3eb3c21dfce0b8ab99be9c41e2ff772",
+          "model": "gpt-5.6-sol",
+          "profile": "runner-codex-subscription",
+          "environment": "local",
+          "automaticRetries": 0,
+          "correction": null,
+          "classification": "candidate_failure",
+          "observedFailure": "Actual reply does not explain the advertised Notion choices and unavailable prerequisite",
+          "evidencePaths": [
+            "tests/runner-e2e/results/chat-catalog-campaign/two-lane-initial-pair-c167a54162.json",
+            "tests/runner-e2e/results/two-lane-initial-c167a54162fa-41b15d773be40166eeb1/chat-features/runner-codex-subscription/local/connection-setup.choose-provider/attempt-1/result.json",
+            "tests/runner-e2e/results/chat-catalog-campaign/active-connection-setup.choose-provider.json"
+          ],
+          "usage": {
+            "costUsd": null,
+            "tokens": 54395,
+            "coverage": "Actual heartbeat usage receipts, including cache; subscription cost unpriced unless complete billing; fixture costs excluded."
+          },
+          "cleanup": "passed",
+          "corePrDependencies": [],
+          "databaseLane": {
+            "lane": "owned-docker-postgres",
+            "image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "imageId": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+            "version": "18.6-1.pgdg13+2"
+          },
+          "productIdentity": {
+            "kind": "source-build",
+            "productionSourceRevision": "8373d7867963674ff960d2345d0d28086f799bc7",
+            "snapshotSourceRevision": "c167a54162fadffe665b4d35a7a1308c6233b75d",
+            "nativeBinarySha256": "9d8af6b85b836a03092ade2273be6f29f5c2f6ec67ee891d83ee9693ba39d3b4",
+            "workspaceBuildDigest": "222e10a8a2a20d3015ec4470b952e2dd9b927dfe9390c4a5ed1e19d740c0e35b",
+            "receiptPaths": [
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-two-lane-c167a54162.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-10d0ce63610.json",
+              "tests/runner-e2e/results/chat-catalog-campaign/snapshot-0fdcb539a8.json"
+            ],
+            "coreCandidate": false
+          }
+        }
+      ],
       "qualifyingDefinitionDigest": "2650b5969af7a28ce555ba5ec92dfb6cf3eb3c21dfce0b8ab99be9c41e2ff772",
       "qualifyingGraderDigest": "2650b5969af7a28ce555ba5ec92dfb6cf3eb3c21dfce0b8ab99be9c41e2ff772",
       "productPolicy": {
