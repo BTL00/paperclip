@@ -72,7 +72,7 @@
     {
       "scenarioId": "agents.agent-api-key",
       "readinessClass": "implemented",
-      "needs": "Human-session credential UI; one-time token privateSecrets sink, named-key public readback and revoke with identity retained."
+      "needs": "Human-session canonical query, real agent-only denial; standalone browser child (not merely newContext) owns actual human one-time key creation, /agents/me identity, reload disappearance and revoke401. Token stays exclusively in child memory; child privately scans complete generated document/artifact/run evidence, returning only closed validated boolean/UUID metadata. Synthetic real Test raw API debug/report canary passed offline; no live key qualification claimed."
     },
     {
       "scenarioId": "agents.existing-grok-bot",
