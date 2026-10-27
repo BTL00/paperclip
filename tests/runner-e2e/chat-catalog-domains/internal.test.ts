@@ -224,7 +224,13 @@ function valid(scenario: string): InternalObservation {
       }
       break;
     }
-    case "tasks.edit-properties": o.state.worker = { id: "morgan" }; o.tasks = [{ ...o.tasks[0]!, priority: "high", assigneeAgentId: "morgan" }]; o.activity = [event("issue.updated", "task")]; break;
+    case "tasks.edit-properties": {
+      o.state.worker = { id: "morgan" }; o.tasks = [{ ...o.tasks[0]!, priority: "high", assigneeAgentId: "morgan" }]; o.activity = [event("issue.updated", "task")]; o.state.firstEdit = structuredClone(o);
+      const held = { ...o.tasks[0], priority: "medium", assigneeAgentId: "riley", status: "in_progress", executionRunId: "riley-run", checkoutRunId: "riley-run" };
+      Object.assign(o.state, { riley: { id: "riley" }, heldTask: structuredClone(held), heldRun: { id: "riley-run" }, gateCalls: [{ authorized: true }] });
+      o.tasks[0] = held; Object.assign(o, { currentTask: held, phaseReply: "Riley holds the running execution checkout. I cannot change priority or reassign to Morgan until that ownership is released." });
+      o.runs.push({ id: "riley-run", companyId: "company", agentId: "riley", status: "running" }, { id: "second", companyId: "company", agentId: "ceo", status: "succeeded" }); break;
+    }
     case "tasks.ambiguous-task": {
       const other = { ...o.tasks[0]!, id: "other", projectId: "other-project", title: "Landing page" };
       o.tasks[0] = { ...o.tasks[0]!, title: "Landing page" }; o.state.task = { ...o.tasks[0] }; o.state.otherTask = other;

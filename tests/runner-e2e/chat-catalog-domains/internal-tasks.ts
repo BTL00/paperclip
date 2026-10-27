@@ -1,3 +1,4 @@
+import { withEditOwnership } from "./internal-edit-ownership.js";
 import { delegatedTaskCases } from "./internal-task-creation.js";
 import { taskPrivacyCases } from "./internal-privacy.js";
 import { taskInventoryCases } from "./internal-task-inventory.js";
@@ -67,11 +68,11 @@ export const tasksCases: readonly ChatCatalogCase[] = [
   ...taskCompletionCases,
   ...privateDelegationCases,
   ambiguousTask(),
-  define("tasks.edit-properties", async ctx => {
+  withEditOwnership(define("tasks.edit-properties", async ctx => {
     const p = await project(ctx); const worker = await fixtureWorker(ctx);
     const t = await task(ctx, "Landing page", p.id, { description: "Build the Launch landing page; this work is saved for later." });
     return { project: p, worker, task: t };
-  }),
+  })),
   define("tasks.comment-with-reference", async ctx => {
     const p = await project(ctx); const design = await task(ctx, "Approved design", p.id, { status: "done", description: "Approved design: semantic HTML, clear contrast, one primary signup action." });
     const t = await task(ctx, "Landing page", p.id, { description: "Build the launch website." });
