@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -88,4 +88,22 @@ it("replays the retained public name-only identity after raw selected inputs hav
   vi.stubEnv("PAPERCLIP_CHAT_PRIVATE_INPUTS", "/removed/owned-secret-file.json");
   expect(chatCatalogCaseFingerprint(descriptor, execution, names).digest).toBe(before);
   expect(() => chatCatalogCaseFingerprint(descriptor, execution)).toThrow();
+});
+
+it("binds extensionless TSX components and directory TSX entries", () => {
+  const f = fixture(); mkdirSync(path.join(f.root, "nested"));
+  f.write("selected.ts", 'export { value } from "./Component";');
+  f.write("Component.tsx", 'export { value } from "./nested";');
+  f.write("nested/index.tsx", 'export const value = "actual component";');
+  const before = f.fingerprint();
+  f.write("nested/index.tsx", 'export const value = "changed component";');
+  expect(f.fingerprint()).not.toBe(before);
+  expect(fingerprintChatDependencyClosure({ root: f.root, entries: ["selected.ts"], selected: {} }).sources.map(row => row.file))
+    .toEqual(expect.arrayContaining(["Component.tsx", "nested/index.tsx"]));
+});
+it("rejects a missing extensionless component instead of binding an unrelated TSX file", () => {
+  const f = fixture();
+  f.write("selected.ts", 'export { value } from "./MissingComponent";');
+  f.write("OtherComponent.tsx", 'export const value = "unrelated";');
+  expect(f.fingerprint).toThrow("Unresolved fingerprint dependency: ./MissingComponent");
 });

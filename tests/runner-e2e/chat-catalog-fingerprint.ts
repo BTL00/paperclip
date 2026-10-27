@@ -15,7 +15,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 function resolveSource(specifier: string, parent: string): string {
   const absolute = path.resolve(path.dirname(parent), specifier);
   const candidates = [absolute.replace(/\.js$/, ".ts"), absolute.replace(/\.js$/, ".tsx"), absolute,
-    `${absolute}.ts`, path.join(absolute, "index.ts")];
+    `${absolute}.ts`, `${absolute}.tsx`, path.join(absolute, "index.ts"), path.join(absolute, "index.tsx")];
   const found = candidates.find(candidate => existsSync(candidate) && statSync(candidate).isFile());
   if (!found) throw new Error(`Unresolved fingerprint dependency: ${specifier} from ${parent}`);
   return found;
