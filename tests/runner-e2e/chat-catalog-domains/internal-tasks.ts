@@ -1,4 +1,5 @@
 import { withEditOwnership } from "./internal-edit-ownership.js";
+import { verifyDistinctTaskFixtures } from "./internal-distinct-fixtures.js";
 import { delegatedTaskCases } from "./internal-task-creation.js";
 import { taskPrivacyCases } from "./internal-privacy.js";
 import { taskInventoryCases } from "./internal-task-inventory.js";
@@ -102,10 +103,13 @@ export const tasksCases: readonly ChatCatalogCase[] = [
 function ambiguousTask(): ChatCatalogCase {
   const base = define("tasks.ambiguous-task", async ctx => {
     const p = await project(ctx); const otherProject = await project(ctx, "Experiments");
-    const t = await task(ctx, "Landing page", p.id); const otherTask = await task(ctx, "Landing page", otherProject.id);
+    const t = await task(ctx, "Landing page", p.id);
+    // Public creation defaults to company-wide recent-title reuse, regardless of project.
+    const otherTask = await task(ctx, "Landing page", otherProject.id, { allowDuplicate: true });
+    await verifyDistinctTaskFixtures(ctx, [t, otherTask]);
     return { project: p, task: t, otherProject, otherTask };
   });
-  return { ...base, expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
+  return { ...base, sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-distinct-fixtures.ts"], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
     async act(ctx, state) {
       const first = await pollUntil({ label: "Task ambiguity clarification", deadlineAt: Date.now() + 150_000,
         load: () => observeInternal(ctx, state), accept: o => o.runs.length === 1 && o.runs.every(row => row.status === "succeeded")

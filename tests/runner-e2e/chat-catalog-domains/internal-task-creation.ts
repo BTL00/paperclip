@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { verifyDistinctTaskFixtures } from "./internal-distinct-fixtures.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { ChatRun, ChatIssue } from "../chat-flow.js";
 import { dropChatSendAcknowledgement } from "../lost-send.js";
@@ -104,7 +105,8 @@ function creationDefinition(scenarioId: string): ChatCatalogCase {
       if (scenarioId === "projects.project-work") {
         priorTasks.push(await task(ctx, "Signup copy", p.id));
         priorTasks.push(await task(ctx, "Product brief", p.id, { status: "done" }));
-        const other = await project(ctx, "Experiments"); priorTasks.push(await task(ctx, "Signup copy", other.id));
+        const other = await project(ctx, "Experiments"); priorTasks.push(await task(ctx, "Signup copy", other.id, { allowDuplicate: true }));
+        await verifyDistinctTaskFixtures(ctx, priorTasks);
       }
     }
     if (scenarioId === "tasks.website-without-project") interception = await dropChatSendAcknowledgement(ctx.input.page, ctx.scenario.query);
