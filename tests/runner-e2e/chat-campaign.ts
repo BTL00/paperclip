@@ -1,6 +1,6 @@
 import { databaseFingerprintIdentity, databaseIdentityMatches, type DatabaseFingerprintIdentity } from "./docker-postgres.js";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseDocument } from "yaml";
@@ -96,6 +96,8 @@ export interface CampaignAttempt {
   evidencePaths: string[];
   usage: { costUsd: number | null; coverage: string; tokens: number | null };
   cleanup: "pending" | "passed" | "failed" | "not_started";
+  /** Later resource verification never rewrites the measured cleanup outcome. */
+  cleanupResolutions?: Array<{ at: string; receiptPath: string; receiptSha256: string }>;
   corePrDependencies: string[];
 }
 export interface CampaignScenario {
@@ -231,6 +233,69 @@ export function campaignAttemptProcessed(attempt: CampaignAttempt, root = proces
     } catch { return false; }
   });
 }
+
+/** Closed, hash-bound evidence of later absence; an acknowledgement or partial PID census is insufficient. */
+export function campaignCleanupResolved(attempt: CampaignAttempt, root = process.cwd()): boolean {
+  if (attempt.cleanup === "passed" || attempt.cleanup === "not_started") return true;
+  if (attempt.outcome === "running" || !attempt.finishedAt) return false;
+  const retained = (relative: string, sha: string) => {
+    if (!identityHash(sha) || !retainedIdentityPaths([relative])) throw new Error("Invalid cleanup evidence reference");
+    const file = path.resolve(realpathSync(root), relative);
+    if (!lstatSync(file).isFile() || lstatSync(file).isSymbolicLink() || realpathSync(file) !== file) throw new Error("Cleanup evidence must be a retained regular file");
+    const bytes = readFileSync(file);
+    if (createHash("sha256").update(bytes).digest("hex") !== sha) throw new Error("Cleanup evidence changed");
+    return JSON.parse(bytes.toString("utf8"));
+  };
+  return (attempt.cleanupResolutions ?? []).some(resolution => {
+    try {
+      const r = retained(resolution.receiptPath, resolution.receiptSha256);
+      if (r.schemaVersion !== 1 || r.executionId !== attempt.executionId || r.ordinal !== attempt.ordinal || r.originalCleanup !== attempt.cleanup
+        || r.observedAt !== resolution.at || !identityRevision(r.verifierSourceRevision) || !Number.isFinite(Date.parse(r.observedAt))
+        || Date.parse(r.observedAt) < Date.parse(attempt.finishedAt!)) return false;
+      if (!attempt.evidencePaths.includes(r.originalEvidence.path)) return false;
+      const original = retained(r.originalEvidence.path, r.originalEvidence.sha256);
+      if (original.schemaVersion !== 1 || original.kind !== "campaign-admitted-resource-inventory" || original.executionId !== attempt.executionId
+        || original.ordinal !== attempt.ordinal || original.cleanup !== attempt.cleanup || !Array.isArray(original.resources)
+        || !Number.isFinite(Date.parse(original.recordedAt)) || Date.parse(original.recordedAt) > Date.parse(attempt.finishedAt!)) return false;
+      const inventory = retained(r.inventory.path, r.inventory.sha256);
+      if (inventory.executionId !== attempt.executionId || inventory.ordinal !== attempt.ordinal || inventory.complete !== true
+        || !["processes", "database", "proxy"].every(scope => inventory.completeScopes?.includes(scope)) || !Array.isArray(inventory.resources)) return false;
+      const scopeFor = (kind: string) => kind === "process" ? "processes" : kind === "proxy" ? "proxy" : "database";
+      for (const scope of ["processes", "database", "proxy"]) {
+        if (original.resources.some((row: { kind: string }) => scopeFor(row.kind) === scope)) continue;
+        const unused = original.notAdmittedScopes?.[scope];
+        if (!unused) return false;
+        const evidence = retained(unused.path, unused.sha256);
+        if (evidence.executionId !== attempt.executionId || evidence.ordinal !== attempt.ordinal || evidence.scope !== scope || evidence.notAdmitted !== true
+          || !Number.isFinite(Date.parse(evidence.observedAt)) || Date.parse(evidence.observedAt) > Date.parse(attempt.finishedAt!)) return false;
+      }
+      const identity = (row: { kind: string; id: string; ownershipEvidence: { path: string; sha256: string } }) => JSON.stringify([row.kind, row.id, row.ownershipEvidence.path, row.ownershipEvidence.sha256]);
+      if (inventory.resources.length !== original.resources.length
+        || inventory.resources.some((row: Parameters<typeof identity>[0]) => !original.resources.some((saved: Parameters<typeof identity>[0]) => identity(row) === identity(saved)))) return false;
+      if (!Array.isArray(r.resources) || r.resources.length !== inventory.resources.length) return false;
+      const identities = new Set<string>();
+      return inventory.resources.every((resource: { kind: string; id: string; ownershipEvidence: { path: string; sha256: string } }) => {
+        if (!["process", "container", "volume", "proxy"].includes(resource.kind) || !resource.id) return false;
+        const key = `${resource.kind}:${resource.id}`;
+        if (identities.has(key)) return false;
+        identities.add(key);
+        const ownership = retained(resource.ownershipEvidence.path, resource.ownershipEvidence.sha256);
+        if (ownership.executionId !== attempt.executionId || ownership.ordinal !== attempt.ordinal || ownership.kind !== resource.kind
+          || ownership.id !== resource.id || ownership.owned !== true) return false;
+        const rows = r.resources.filter((row: { kind: string; id: string }) => row.kind === resource.kind && row.id === resource.id);
+        if (rows.length !== 1) return false;
+        const evidence = retained(rows[0].absenceEvidence.path, rows[0].absenceEvidence.sha256);
+        return evidence.kind === resource.kind && evidence.id === resource.id && evidence.absent === true
+          && evidence.ownershipEvidenceSha256 === resource.ownershipEvidence.sha256 && evidence.observedAt === r.observedAt;
+      });
+    } catch { return false; }
+  });
+}
+export function appendCampaignCleanupResolution(attempt: CampaignAttempt, resolution: NonNullable<CampaignAttempt["cleanupResolutions"]>[number], root = process.cwd()): void {
+  if (!["failed", "pending"].includes(attempt.cleanup) || attempt.cleanupResolutions?.some(row => row.receiptPath === resolution.receiptPath)) throw new Error("Cleanup resolution must append distinct evidence to unresolved historical cleanup");
+  if (!campaignCleanupResolved({ ...attempt, cleanupResolutions: [resolution] }, root)) throw new Error("Cleanup resolution lacks complete verified resource absence");
+  (attempt.cleanupResolutions ??= []).push({ ...resolution });
+}
 export function campaignSummary(campaign: ChatCampaign, root = process.cwd()) {
   const initialPassed = campaign.scenarios.filter(scenario => { const first = scenario.attempts[0]; return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && first?.outcome === "passed" && first.cleanup === "passed" && first.corePrDependencies.length === 0 && campaignProductIdentityEligible(scenario, first, campaign.baselineRevision) && campaignDatabaseEvidenceEligible(first, root); }).length;
   const passed = campaign.scenarios.filter(scenario => { const final = scenario.attempts.at(-1); return scenario.readiness === "implemented" && (!scenario.authoringStatus || scenario.authoringStatus === "complete") && final?.outcome === "passed" && final.corePrDependencies.length === 0 && final.cleanup === "passed" && final.definitionDigest === scenario.qualifyingDefinitionDigest && final.graderDigest === scenario.qualifyingGraderDigest && campaignProductIdentityEligible(scenario, final, campaign.baselineRevision) && campaignDatabaseEvidenceEligible(final, root); }).length;
@@ -248,7 +313,8 @@ export function campaignSummary(campaign: ChatCampaign, root = process.cwd()) {
   return { authored, coverageComplete: implemented, concreteBlockers, unfinished, authoringResolved, processed, sourceChatHumanCountScope: "standing-source-chat-only", productEvidence, denominator: campaign.denominator, implemented, attempted, unrun: campaign.denominator - attempted,
     initialPassed, finalPassed: passed, firstAttemptRate: initialPassed / campaign.denominator,
     finalRate: passed / campaign.denominator, requiredPasses: campaign.requiredPasses,
-    mergeEligible: authoringResolved === campaign.denominator && processed === campaign.denominator && passed >= campaign.requiredPasses && !campaign.scenarios.some(scenario => scenario.attempts.some(attempt => attempt.outcome === "running" || attempt.cleanup === "failed" || attempt.cleanup === "pending")) };
+    unresolvedCleanup: measured.filter(({ attempt }) => !campaignCleanupResolved(attempt, root)).length,
+    mergeEligible: authoringResolved === campaign.denominator && processed === campaign.denominator && passed >= campaign.requiredPasses && !campaign.scenarios.some(scenario => scenario.attempts.some(attempt => attempt.outcome === "running" || !campaignCleanupResolved(attempt, root))) };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const [command, baseline] = process.argv.slice(2);

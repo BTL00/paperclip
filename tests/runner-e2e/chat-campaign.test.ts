@@ -1,10 +1,60 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
-import { campaignRevalidationIdentity, campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity, campaignAttemptProcessed } from "./chat-campaign.js";
+import { appendCampaignCleanupResolution, campaignCleanupResolved, campaignRevalidationIdentity, campaignSummary, completeCampaignAttempt, freezeChatCampaign, reserveCampaignAttempt, validateFrozenCampaign, type CampaignAttempt, campaignProductIdentityEligible, type CampaignPublishedIdentity, campaignAttemptProcessed } from "./chat-campaign.js";
 const root = new URL("../../", import.meta.url).pathname;
 const base = "8373d7867963674ff960d2345d0d28086f799bc7";
+it("resolves only complete hash-bound later resource absence without rewriting the original failure", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "chat-cleanup-resolution-"));
+  try {
+    const prefix = "tests/runner-e2e/results/cleanup-fixture/";
+    mkdirSync(path.join(directory, prefix), { recursive: true });
+    const save = (name: string, value: unknown) => {
+      const text = JSON.stringify(value); const relative = prefix + name;
+      writeFileSync(path.join(directory, relative), text);
+      return { path: relative, sha256: createHash("sha256").update(text).digest("hex") };
+    };
+    const a = attempt(1, "fixture-execution"); a.outcome = "failed"; a.cleanup = "failed"; a.finishedAt = a.startedAt;
+    const ownership = save("owned.json", { executionId: a.executionId, ordinal: 1, kind: "container", id: "owned-container", owned: true, nonce: "fixture-nonce" });
+    const noResources = (scope: string) => save(`${scope}-not-admitted.json`, { executionId: a.executionId, ordinal: 1, scope, notAdmitted: true, observedAt: a.startedAt });
+    const original = save("original.json", { schemaVersion: 1, kind: "campaign-admitted-resource-inventory", executionId: a.executionId, ordinal: 1, recordedAt: a.startedAt, cleanup: "failed",
+      resources: [{ kind: "container", id: "owned-container", ownershipEvidence: ownership }], notAdmittedScopes: { processes: noResources("processes"), proxy: noResources("proxy") } });
+    a.evidencePaths = [original.path];
+    const observedAt = new Date(Date.parse(a.startedAt) + 1000).toISOString();
+    const absence = save("absence.json", { kind: "container", id: "owned-container", absent: true, ownershipEvidenceSha256: ownership.sha256, observedAt });
+    const inventory = save("inventory.json", { executionId: a.executionId, ordinal: 1, complete: true, completeScopes: ["processes", "database", "proxy"],
+      resources: [{ kind: "container", id: "owned-container", ownershipEvidence: ownership }] });
+    const body = { schemaVersion: 1, executionId: a.executionId, ordinal: 1, originalCleanup: "failed", observedAt, verifierSourceRevision: base,
+      originalEvidence: original, inventory, resources: [{ kind: "container", id: "owned-container", absenceEvidence: absence }] };
+    const closed = save("resolution.json", body); const resolution = { at: observedAt, receiptPath: closed.path, receiptSha256: closed.sha256 };
+    const before = JSON.stringify(a);
+    expect(campaignCleanupResolved(a, directory)).toBe(false);
+    appendCampaignCleanupResolution(a, resolution, directory);
+    expect(campaignCleanupResolved(a, directory)).toBe(true);
+    const { cleanupResolutions: _, ...unchanged } = a;
+    expect(JSON.stringify(unchanged)).toBe(before);
+    expect(() => appendCampaignCleanupResolution(a, resolution, directory)).toThrow("distinct");
+    for (const wrong of [
+      { ...body, executionId: "foreign" }, { ...body, resources: [] },
+      { ...body, inventory: save("partial.json", { executionId: a.executionId, ordinal: 1, complete: false, resources: [] }) },
+      { ...body, inventory: save("empty.json", { executionId: a.executionId, ordinal: 1, complete: true, completeScopes: ["processes", "database", "proxy"], resources: [] }), resources: [] },
+      { ...body, resources: [{ kind: "container", id: "foreign", absenceEvidence: absence }] },
+    ]) {
+      const ref = save("wrong.json", wrong);
+      expect(campaignCleanupResolved({ ...a, cleanupResolutions: [{ at: observedAt, receiptPath: ref.path, receiptSha256: ref.sha256 }] }, directory)).toBe(false);
+    }
+    const foreignOwnership = save("foreign-owned.json", { executionId: "foreign", ordinal: 1, kind: "container", id: "owned-container", owned: true });
+    const foreignOriginal = save("foreign-original.json", { schemaVersion: 1, kind: "campaign-admitted-resource-inventory", executionId: a.executionId, ordinal: 1, recordedAt: a.startedAt, cleanup: "failed",
+      resources: [{ kind: "container", id: "owned-container", ownershipEvidence: foreignOwnership }], notAdmittedScopes: { processes: noResources("processes"), proxy: noResources("proxy") } });
+    const foreignInventory = save("foreign-inventory.json", { executionId: a.executionId, ordinal: 1, complete: true, completeScopes: ["processes", "database", "proxy"], resources: [{ kind: "container", id: "owned-container", ownershipEvidence: foreignOwnership }] });
+    const foreignResolution = save("foreign-resolution.json", { ...body, originalEvidence: foreignOriginal, inventory: foreignInventory });
+    expect(campaignCleanupResolved({ ...a, evidencePaths: [foreignOriginal.path], cleanupResolutions: [{ at: observedAt, receiptPath: foreignResolution.path, receiptSha256: foreignResolution.sha256 }] }, directory)).toBe(false);
+    writeFileSync(path.join(directory, absence.path), JSON.stringify({ absent: false }));
+    expect(campaignCleanupResolved(a, directory)).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 function attempt(ordinal: 1 | 2, executionId: string): CampaignAttempt {
   return { productIdentity: { kind: "source-build", productionSourceRevision: base, snapshotSourceRevision: base, nativeBinarySha256: "a".repeat(64), workspaceBuildDigest: "b".repeat(64), receiptPaths: ["tests/runner-e2e/results/fixture/source-receipt.json"], coreCandidate: false }, ordinal, outcome: "running", executionId, startedAt: new Date().toISOString(), finishedAt: null,
     sourceRevision: base, workingTreeDigest: "fixture", definitionDigest: "fixture", suiteDefinitionDigest: "fixture", graderDigest: "fixture",
