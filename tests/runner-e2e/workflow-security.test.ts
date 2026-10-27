@@ -753,13 +753,13 @@ describe("public repository paid workflow security", () => {
     );
   });
 
-  it("keeps reporting jobs on the committed lockfile without registry re-resolution", async () => {
+  it("resolves stale trusted reporting dependencies without using the target lockfile", async () => {
     const workflow = await readFile(
       path.join(repositoryRoot, ".github/workflows/runner-full-stack-e2e.yml"), "utf8",
     );
     for (const jobName of ["report", "publish_history"]) {
       const job = workflow.split(`\n  ${jobName}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
-      const install = job.indexOf("pnpm install --frozen-lockfile --ignore-scripts");
+      const install = job.indexOf("node scripts/install-trusted-eval-dependencies.mjs");
       expect(job).toContain("ref: ${{ github.sha }}");
       expect(job).not.toContain("resolved-target-lockfile");
       expect(job, jobName).not.toContain("--no-frozen-lockfile");
@@ -936,9 +936,10 @@ describe("public repository paid workflow security", () => {
     }
     for (const name of ["report", "publish_history"]) {
       const job = jobs.find(value => value.startsWith(`  ${name}:`))!;
-      const installs = [...job.matchAll(/\bpnpm install[^\n]*/gu)];
+      const installs = [...job.matchAll(/node scripts\/install-trusted-eval-dependencies\.mjs[^\n]*/gu)];
       expect(installs).toHaveLength(1);
-      for (const install of installs) expect(install[0]).toContain('--store-dir "${{ runner.temp }}/eval-');
+      expect(installs[0]![0]).toContain('"${{ runner.temp }}/eval-');
+      expect(job).not.toMatch(/\bpnpm install/gu);
     }
   });
 });
