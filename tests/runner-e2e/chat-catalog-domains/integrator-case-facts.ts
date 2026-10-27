@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { cases } from "../../../packages/db/src/schema/cases.js";
 import type { HandoffCaseResult } from "../../../packages/shared/src/case-handoffs.js";
 import type { Issue } from "../../../packages/shared/src/types/issue.js";
@@ -5,12 +6,13 @@ import type { IssueDocument, DocumentRevision } from "../../../packages/shared/s
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, type Entity, type InternalObservation } from "./internal-support.js";
+import { startRunBriefGate } from "./internal-run-brief.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { integratorDefinition, inspectResult, observeInternal } from "./integrator-support.js";
 type CaseRecord = typeof cases.$inferSelect;
 interface FactsObservation extends InternalObservation { caseRecord: CaseRecord; brief: IssueDocument; briefRevisions: DocumentRevision[] }
-const settings = new WeakMap<ChatCatalogContext, boolean>();
-async function cleanup(ctx: ChatCatalogContext) { const prior = settings.get(ctx); if (prior === undefined) return; await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: prior }); settings.delete(ctx); }
+const settings = new WeakMap<ChatCatalogContext, { experimental: boolean; gate?: Awaited<ReturnType<typeof startRunBriefGate>> }>();
+async function cleanup(ctx: ChatCatalogContext) { const prior = settings.get(ctx); if (prior === undefined) return; try { await prior.gate?.close(); } finally { await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: prior.experimental }); settings.delete(ctx); } }
 async function observeFacts(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<FactsObservation> {
   const base = await observeInternal(ctx, state); const row = state.case as CaseRecord;
   return { ...base, caseRecord: await ctx.input.api.get<CaseRecord>(`/api/cases/${row.id}`), brief: await ctx.input.api.get<IssueDocument>(`/api/issues/${row.workIssueId}/documents/brief`), briefRevisions: await ctx.input.api.get<DocumentRevision[]>(`/api/issues/${row.workIssueId}/documents/brief/revisions`) };
@@ -31,6 +33,7 @@ function retained(o: FactsObservation, concurrent: boolean) {
 }
 export function gradeIntegratorCaseFacts(value: unknown) {
   const c = checks(); const o = factsObservation(value); c.add("saved-case-and-task-document-evidence", !!o, "Requires real case facts, ordinary-task document revisions, phase checkpoints and native handoff context."); if (!o) return c.result();
+  c.add("genuine-paused-active-primary-prerequisite", o.runs.some(run => run.id === o.state.initialRunId && run.agentId === (o.state.worker as Entity).id && run.contextSnapshot?.issueId === (o.state.case as CaseRecord).workIssueId && run.status === "cancelled" && run.runtimeMode === "native"), "The initial ordinary active task is released by an actual operator stop, allowing a later normal board handoff without silently overriding a blocked-task gate.");
   const first = factsObservation(o.state.firstCorrection); const fresh = factsObservation(o.state.collaborationCheckpoint);
   c.add("initial-correction-preserves-unrelated-fields", !!first && retained(first, false), "The unchanged first query must already correct the saved facts without discarding unrelated fields; a later turn cannot repair an initially wrong mutation.");
   c.add("fresh-collaborative-change-not-stale-replacement", !!fresh && retained(fresh, true) && retained(o, true)
@@ -51,33 +54,39 @@ export function gradeIntegratorCaseFacts(value: unknown) {
   return c.result();
 }
 export const integratorCaseFactsCases = [integratorDefinition("cases", "cases.update-case-facts", async ctx => {
-  const prior = await ctx.input.api.get<{ enableCases: boolean }>("/api/instance/settings/experimental"); settings.set(ctx, prior.enableCases);
+  const prior = await ctx.input.api.get<{ enableCases: boolean }>("/api/instance/settings/experimental"); settings.set(ctx, { experimental: prior.enableCases });
   try {
     await ctx.input.api.patch("/api/instance/settings/experimental", { enableCases: true }); const p = await project(ctx, "Launch");
     const worker = await fixtureWorker(ctx); const reviewer = await fixtureWorker(ctx); await ctx.input.api.patch(`/api/agents/${reviewer.id}`, { name: "Riley" });
     for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, ...[worker.id, reviewer.id].map(scopeId => ({ scopeType: "agent", scopeId }))])
       await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
+    const gate = await startRunBriefGate(ctx, worker.id); settings.get(ctx)!.gate = gate;
     const kickoff = await ctx.input.api.post<HandoffCaseResult>(`/api/companies/${ctx.input.fixtures.company.id}/case-handoffs`, {
       idempotencyKey: `facts-${ctx.input.nonce}`, case: { create: { caseType: "customer", title: "Checkout reproduction case", projectId: p.id,
         fields: { browser: "Safari; affected device not yet confirmed", customer: "Acorn Test Shop", severity: "normal", expected: "Pay should submit a single order" } } }, toAgentId: worker.id, phase: "investigation",
-      instructions: "Read the saved customer brief. The affected device is not yet confirmed: record the missing reproduction detail in a task comment and mark this ordinary investigation blocked awaiting the customer's correction. Do not invent the affected device or alter case facts.",
+      instructions: "Read the saved customer brief. The affected device is not yet confirmed: record the missing reproduction detail in a task comment, then call the connected Website Brief read_website_brief tool to wait for the remaining customer evidence. Keep this ordinary investigation active; do not complete it, invent the affected device, or alter case facts.",
       workflow_document_text: "Morgan investigates this ordinary primary. A corrected customer reproduction detail must remain in saved case facts alongside unrelated customer fields. Riley reviews the current saved case when a later actual review handoff is requested, records a task comment, and completes the review task without closing the case.",
       initialDocuments: [{ key: "brief", title: "Customer reproduction brief", body: "Acorn Test Shop: Safari checkout Pay sometimes does not submit. The affected device has not yet been confirmed. Expected result is one submitted order." }],
     });
-    await pollUntil({ label: "actual active case awaiting missing reproduction detail", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-      load: async () => ({ task: await ctx.input.api.get<Entity>(`/api/issues/${kickoff.taskId}`), runs: await ctx.allRuns() }), accept: v => v.runs.length === 1 && v.runs[0]?.status === "succeeded" && v.task.status === "blocked" });
-    return { project: p, worker: { id: worker.id }, reviewer: { id: reviewer.id }, case: await ctx.input.api.get<CaseRecord>(`/api/cases/${kickoff.caseId}`),
+    const initial = await pollUntil({ label: "actual active case waiting for missing reproduction evidence", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+      load: async () => ({ task: await ctx.input.api.get<Entity>(`/api/issues/${kickoff.taskId}`), runs: await ctx.allRuns() }), accept: v => v.runs.length === 1 && v.runs[0]?.status === "running" && v.task.status === "in_progress" && gate.calls.some(call => call.authorized) });
+    await ctx.input.api.post(`/api/heartbeat-runs/${initial.runs[0]!.id}/cancel`, { cancellationRequestId: randomUUID() });
+    await pollUntil({ label: "actual operator stop releases primary without changing task status", deadlineAt: Date.now() + 90_000, intervalMs: 1000,
+      load: async () => ({ task: await ctx.input.api.get<Issue>(`/api/issues/${kickoff.taskId}`), runs: await ctx.allRuns() }),
+      accept: v => v.runs.length === 1 && v.runs[0]?.status === "cancelled" && v.task.status === "in_progress" && !v.task.executionRunId && !v.task.checkoutRunId });
+    gate.release();
+    return { initialRunId: initial.runs[0]!.id, project: p, worker: { id: worker.id }, reviewer: { id: reviewer.id }, case: await ctx.input.api.get<CaseRecord>(`/api/cases/${kickoff.caseId}`),
       brief: await ctx.input.api.get<IssueDocument>(`/api/issues/${kickoff.taskId}/documents/brief`), collaboratorValue: `support-${ctx.input.nonce}` };
   } catch (error) { await cleanup(ctx); throw error; }
 }, observeFacts, gradeIntegratorCaseFacts, async (ctx, state) => {
   const row = state.case as CaseRecord; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/cases/${row.identifier}`, row.title);
   const task = await ctx.input.api.get<Issue>(`/api/issues/${row.workIssueId}`);
   await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier}`, task.title);
-}, { expectedRunCount: 4, expectedHumanMessageCount: 2, attemptTimeoutMs: 900_000,
-  sourceFiles: ["chat-catalog-domains/integrator-case-facts.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"], cleanup,
+}, { expectedRunCount: 4, expectedHumanMessageCount: 2, attemptTimeoutMs: 900_000, runPolicy: { kind: "terminal-counts", terminalStatusCounts: { cancelled: 1, succeeded: 3 } },
+  sourceFiles: ["chat-catalog-domains/integrator-case-facts.ts", "chat-catalog-domains/internal-run-brief.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"], cleanup,
   async act(ctx, state) {
     const settle = (count: number) => pollUntil({ label: `saved case correction phase ${count}`, deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-      load: () => observeFacts(ctx, state), accept: o => o.runs.length === count && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      load: () => observeFacts(ctx, state), accept: o => o.runs.length === count && o.runs.every(run => run.status === (run.id === state.initialRunId ? "cancelled" : "succeeded")) && ctx.issue()?.conversationState === "waiting" });
     const first = await settle(2); state.firstCorrection = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-case-initial-correction.json", state.firstCorrection);
     if (!retained(first, false)) throw new Error("Initial case correction was incorrect; a follow-up cannot repair this phase");
     const row = first.caseRecord;
