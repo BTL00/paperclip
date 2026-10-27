@@ -21,8 +21,8 @@
     ]
   },
   "tests/runner-e2e/installed-cli.ts": {
-    "sourceSha256": "414a75423585d8120896e07a6b86636446e6ee88990af2726261b3a17fd8bba6",
-    "resolution": "inactive-source-local-chat-lane",
+    "sourceSha256": "6b421b69db24985d7310ac3a48bbc93e207ace22f1fbe7f42732633ed93e6761",
+    "resolution": "inactive-installed-startup-only-probe",
     "dependencies": []
   },
   "tests/runner-e2e/product-journeys/launch.ts": {

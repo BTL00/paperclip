@@ -1,3 +1,4 @@
+import { installedChatScenarioIds } from "./chat-installed-lane.js";
 import { existsSync, readFileSync } from "node:fs";
 import { validChatCatalogHumanCounts } from "./chat-catalog-contract.js";
 import type { ChatCatalogCase } from "./chat-catalog-contract.js";
@@ -21,6 +22,8 @@ export function findChatCatalogCase(scenarioId: string): ChatCatalogDescriptor |
   if (matches.length > 1) throw new Error(`Duplicate chat implementation: ${scenarioId}`);
   const descriptor = matches[0];
   if (!descriptor) return;
+  if (descriptor.installedSource && (descriptor.installedSource !== "published-global-npm" || !(installedChatScenarioIds as readonly string[]).includes(scenarioId)))
+    throw new Error("Installed ordinary Chat is allowlisted only for the two published-source operator scenarios");
   if (!known.has(scenarioId) || !descriptor.oracleVersion || !descriptor.sourceFiles.length
     || !/^\.\/chat-catalog-domains\/[a-z0-9-]+\.js$/.test(descriptor.modulePath)
     || !descriptor.exportName || (descriptor.journeyKind !== "browser-boundary" && !validChatCatalogHumanCounts(descriptor)) || descriptor.expectedRunCount < 0 || descriptor.turnTimeoutMs <= 0 || descriptor.attemptTimeoutMs <= 0
@@ -45,7 +48,7 @@ export async function loadChatCatalogImplementation(
   const selected = implementations.filter((row: ChatCatalogCase) => row.scenarioId === descriptor.scenarioId);
   if (selected.length !== 1) throw new Error(`Missing or duplicate runtime case: ${descriptor.scenarioId}`);
   const implementation = selected[0] as ChatCatalogCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")
@@ -72,7 +75,7 @@ export async function loadIdentityBoundaryImplementation(descriptor: ChatCatalog
   const selected = Array.isArray(rows) ? rows.filter(row => row.scenarioId === descriptor.scenarioId) : [];
   if (selected.length !== 1) throw new Error("Missing or duplicate browser boundary implementation");
   const implementation = selected[0] as IdentityBoundaryCase;
-  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "boundaryTarget", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput"] as const) {
+  for (const key of ["sourceFiles", "oracleVersion", "expectedRunCount", "minimumRunCount", "expectedHumanMessageCount", "setupHumanMessageCount", "turnTimeoutMs", "attemptTimeoutMs", "coverageGaps", "journeyKind", "boundaryTarget", "authentication", "setupPolicy", "runPolicy", "queryOutcome", "queryBindings", "queryAttachments", "requiredCredentials", "externalInput", "installedSource"] as const) {
     if (JSON.stringify(implementation[key]) !== JSON.stringify(descriptor[key])) throw new Error(`Runtime boundary descriptor drift: ${descriptor.scenarioId}.${key}`);
   }
   if ([implementation.run, implementation.grade, implementation.cleanup].some(value => typeof value !== "function") || descriptor.queryBindings?.length || descriptor.queryAttachments?.length

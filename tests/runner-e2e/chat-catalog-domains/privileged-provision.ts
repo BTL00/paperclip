@@ -33,7 +33,7 @@ export function gradeProvisionRuntime(value: unknown) {
 const provision = privilegedDefinition("instance-operations.provision-runtime", "privileged-provision", {
   async setup(ctx) {
     const target = await ownedInstalledTarget(ctx), envName = target.receipt.piCredentialEnv;
-    if (!envName || !process.env[envName]) throw new Error("Real Pi qualification requires the explicitly declared private OpenRouter credential environment reference");
+    if (!envName || !ctx.input.privateInputs?.read(envName)) throw new Error("Real Pi qualification requires the explicitly declared private OpenRouter credential environment reference");
     const vendor = path.resolve(target.server, "../vendor/paperclip-runner"), assets = path.join(vendor, "provider-assets/pi", `${process.platform}-${process.arch}`);
     let exists = false; try { exists = (await stat(assets)).isDirectory(); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
     if (exists) throw new Error("Canonical provision context requires this owned release to lack Pi assets; existing assets are never removed by the fixture");
@@ -50,7 +50,7 @@ const provision = privilegedDefinition("instance-operations.provision-runtime", 
     state.assetPathOwned = closure.startsWith(target.root + path.sep); if (!state.assetPathOwned) throw new Error("Provisioned Pi closure escapes the intended installation");
     state.nativeClosureSha256 = sha(await readFile(closure));
     // Credentials remain exclusively in the public encrypted secret boundary.
-    const token = process.env[target.receipt.piCredentialEnv!]!; ctx.input.privateSecrets?.push(token);
+    const token = ctx.input.privateInputs?.read(target.receipt.piCredentialEnv!); if (!token) throw new Error("Missing selected private Pi credential"); ctx.input.privateSecrets?.push(token);
     const company = ctx.input.fixtures.company.id;
     const secret = await ctx.input.api.postSensitive<{ id: string }>(`/api/companies/${company}/secrets`, { name: "Owned Pi qualification", key: "OPENROUTER_API_KEY", value: token });
     const profile = extendedHarnessProfiles.find(p => p.id === "runner-acpx-pi")!;
@@ -84,6 +84,8 @@ const provision = privilegedDefinition("instance-operations.provision-runtime", 
   }, grade: gradeProvisionRuntime, async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); },
 });
 provision.expectedRunCount = 3; provision.expectedHumanMessageCount = 2; provision.attemptTimeoutMs = 1_440_000;
-provision.coverageGaps = ["installed-source-activation-and-artifact-fingerprint-lane"];
+provision.coverageGaps = [];
+provision.installedSource = "published-global-npm";
+provision.requiredCredentials = ["OPENROUTER_API_KEY"];
 provision.sourceFiles = [...provision.sourceFiles, "chat-catalog-domains/privileged-installed.ts", "../../cli/src/commands/runtime.ts", "../../packages/paperclip-runner/scripts/provision-pi.mjs"];
 export const privilegedProvisionCases = [provision];

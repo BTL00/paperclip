@@ -181,3 +181,32 @@ The frozen denominator is 244 requests across 35 areas and 191 capabilities. The
 Domain descriptors declare real setup/actions/independent grading and exact bounds. `setupHumanMessageCount` defaults to zero; genuine earlier human turns and native setup runs remain in the declared total, with persisted comment/run IDs captured before the canonical query. No historical model reply is fabricated.
 
 Only `steering.preserve-draft` and `tasks.attachment-brief` may currently declare one `queryAttachments` receipt. The canonical typed query remains unchanged; the production composer appends its exact attachment reference. Before and after send, the harness independently reads the public same-source receipt and actual bytes, verifies SHA-256 and human attribution, and binds it to the real canonical comment. Extra markdown, text changes, foreign receipts and hidden followups fail. Attachment fingerprints pin both production composer source hashes as data, without importing the UI graph.
+
+### Selected private inputs and published operator sources
+
+A case declares `requiredCredentials` by standard credential name and, where
+needed, `externalInput` by provider and required field names. The launcher resolves
+only that selected case into a mode0600 file outside diagnostic artifacts. The
+worker exposes `input.privateInputs.credentials`, `.read(name)` and
+`.configuration("external-provider")`; boundary callbacks retain their typed
+`credentials` map. Extra wizard/external keys are never inserted into the chat
+agent's secret references or inherited server environment. The launcher removes
+raw input files even when retaining recovery/diagnostic state. The definition
+snapshot retains only credential/reference/field names. Offline eligibility calls
+`chatCatalogCaseFingerprint(descriptor, normalizedExecution, retainedNames,
+retainedInstalledIdentity)` (or the boundary equivalent with its retained names),
+so recomputing an identity after cleanup never requires the raw credential file.
+
+Only `instance-operations.update-instance` and `instance-operations.provision-runtime`
+can declare `installedSource: "published-global-npm"`. They require private0600
+`PAPERCLIP_CHAT_INSTALLED_SOURCE_CONFIG` with schemaVersion1, disposable true,
+`source: {version, integrity}`, and optional distinct `target: {version, integrity}`.
+Provision additionally names `piCredentialEnv: "OPENROUTER_API_KEY"` and declares
+that selected private credential. These are exact semver/sha512 pins, never a local
+source pack or arbitrary URL. During the governed attempt the launcher obtains
+registry metadata and actual public CLI/server tarballs, verifies their integrity,
+installs the source into its owned prefix, and records the complete dependency tree.
+The supervisor binds the actual CLI PID, version and CLI/server bytes before setup
+and after an allowed update restart. The operator receipt stays private0600;
+fingerprints bind public artifact hashes and the full owned dependency tree.
+Source-local refusal remains the default for every other ordinary chat case.

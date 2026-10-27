@@ -1,3 +1,4 @@
+import { installedChatFingerprintIdentity, installedChatScenarioIds } from "./chat-installed-lane.js";
 import { chatPrivateInputRequirements, chatPrivateInputNameIdentity } from "./chat-private-inputs.js";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -74,21 +75,28 @@ export function fingerprintChatDependencyClosure(input: {
 }
 
 export function assertChatCatalogFingerprintLane(selected: unknown, env: NodeJS.ProcessEnv = process.env, args: readonly string[] = process.argv) {
-  const execution = selected as { suiteId?: string; flow?: string; environment?: string };
+  const execution = selected as { suiteId?: string; flow?: string; environment?: string; executionId?: string; scenarioId?: string; installedSource?: string; profile?: { id?: string } };
+  const installed = execution.installedSource === "published-global-npm" && (installedChatScenarioIds as readonly string[]).includes(String(execution.scenarioId));
   const installedKeys = ["PAPERCLIP_RUNNER_E2E_INSTALLED_CLI", "PAPERCLIP_RUNNER_E2E_INSTALLED_CLI_SHA256",
     "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_ROOT", "PAPERCLIP_RUNNER_E2E_INSTALLED_SERVER_SHA256", "PAPERCLIP_RUNNER_E2E_INSTALLED_STARTUP_ONLY"];
   const forbiddenArguments = ["--target-config", "--github-review-config", "--connection-config", "--installed-startup-only", "product-journeys"];
-  if (execution.suiteId !== "chat-features" || execution.flow !== "agent_chat" || execution.environment !== "local"
-    || installedKeys.some(key => env[key] && env[key] !== "0") || args.some(argument => forbiddenArguments.includes(argument)))
+  if (installed && execution.profile?.id !== "runner-codex-subscription" || execution.suiteId !== "chat-features" || execution.flow !== "agent_chat" || execution.environment !== "local"
+    || !installed && installedKeys.some(key => env[key] && env[key] !== "0") || args.some(argument => forbiddenArguments.includes(argument)))
     throw new Error("Reviewed dynamic resolutions require source-local Agent Chat without external dispatch overrides");
   return { suiteId: execution.suiteId, flow: execution.flow, environment: execution.environment,
-    installedLane: false, externalJourneyDispatch: false };
+    installedLane: installed, externalJourneyDispatch: false };
 }
 
-export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>) {
+export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, selectedExecution: unknown, retainedPrivateInputNames?: ReturnType<typeof chatPrivateInputNameIdentity>, retainedInstalledIdentity?: Omit<ReturnType<typeof installedChatFingerprintIdentity>, "observedProcess">) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const privateInputNameIdentity = retainedPrivateInputNames === undefined ? chatPrivateInputNameIdentity((selectedExecution as { executionId: string }).executionId) : retainedPrivateInputNames;
-  const lane = assertChatCatalogFingerprintLane(selectedExecution);
+  const lane = assertChatCatalogFingerprintLane({ ...(selectedExecution as Record<string, unknown>), scenarioId: descriptor.scenarioId, installedSource: descriptor.installedSource });
+  const installedObservation = descriptor.installedSource && retainedInstalledIdentity === undefined
+    ? installedChatFingerprintIdentity(process.env, (selectedExecution as { executionId: string }).executionId) : undefined;
+  const installedIdentity = descriptor.installedSource ? retainedInstalledIdentity ?? (installedObservation && {
+    kind: installedObservation.kind, sourceVersion: installedObservation.sourceVersion, cliSha256: installedObservation.cliSha256,
+    serverSha256: installedObservation.serverSha256, treeSha256: installedObservation.treeSha256, publishedArtifacts: installedObservation.publishedArtifacts,
+  }) : null;
   const reviewedDynamicResolutions = JSON.parse(readFileSync(new URL("./chat-catalog-dynamic-resolutions.json", import.meta.url), "utf8"));
   const selectedModule = `tests/runner-e2e/${descriptor.modulePath.slice(2)}`;
   const scenario = JSON.parse(readFileSync(new URL("./chat-campaign-manifest.json", import.meta.url), "utf8")).scenarios
@@ -102,13 +110,13 @@ export function chatCatalogCaseFingerprint(descriptor: ChatCatalogDescriptor, se
     entries: [selectedModule, "tests/runner-e2e/chat-catalog-flow.ts", "tests/runner-e2e/chat-catalog-fingerprint.ts", "tests/runner-e2e/chat-catalog-dynamic-resolutions.json",
       "tests/runner-e2e/chat-feature-flow.ts", "tests/runner-e2e/runner.spec.ts", "tests/runner-e2e/launch.ts",
       "tests/runner-e2e/chat-scenarios/defaults.yaml", ...descriptor.sourceFiles.map(file => `tests/runner-e2e/${file}`)],
-    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
+    selected: { descriptor, selectedExecution, lane, attachmentFormatter, privateInputRequirements: chatPrivateInputRequirements(descriptor), privateInputNameIdentity, installedIdentity, scenario: { id, capabilities, context, query, expected_outcome } },
     reviewedDynamicResolutions,
     selectedDispatchFile: "tests/runner-e2e/chat-catalog-registry.ts",
     normalizedMetadata: { "tests/runner-e2e/chat-catalog-descriptors.json": descriptor,
       "tests/runner-e2e/chat-campaign-manifest.json": { id, capabilities, context, query, expected_outcome } },
   });
-  return { ...result, attachmentFormatter, privateInputNameIdentity, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
+  return { ...result, attachmentFormatter, privateInputNameIdentity, installedIdentity, installedSourceProcess: installedObservation?.observedProcess, privateInputRequirements: chatPrivateInputRequirements(descriptor) };
 }
 
 export function normalizedChatCatalogExecution(execution: MatrixExecution) {

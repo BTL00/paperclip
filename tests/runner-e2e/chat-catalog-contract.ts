@@ -36,6 +36,7 @@ export interface ChatCatalogCase {
   scenarioId: string;
   requiredCredentials?: readonly CredentialName[];
   externalInput?: ChatExternalInputRequirement;
+  installedSource?: "published-global-npm";
   journeyKind?: "agent-chat";
   authentication?: "local-trusted" | "human-session";
   setupPolicy?: ChatCatalogSetupPolicy;

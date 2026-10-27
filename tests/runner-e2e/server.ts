@@ -1,3 +1,4 @@
+import { CHAT_INSTALL_PLAN, refreshInstalledChatPins, publishInstalledChatReceipt } from "./chat-installed-lane.js";
 import { parseFinalizationCrashBinding, readFinalizationCrashBoundary, type FinalizationCrashBinding } from "./finalization-crash-boundary.js";
 import { parseRestartRunnerIdentity, type RestartRunnerIdentity } from "./process-tree-owner.js";
 import { recoverInterruptedFeedback } from "./feedback-recovery.js";
@@ -182,6 +183,7 @@ async function startServer() {
   if (shutdownRequested()) {
     throw new Error("Refusing to start Paperclip after wrapper shutdown");
   }
+  if (process.env[CHAT_INSTALL_PLAN]) refreshInstalledChatPins(process.env, selectedExecutions[0]!.id);
   // Recheck bytes and dependency resolution on every controller restart.
   const installed = await verifyInstalledCli(process.env, selectedExecutions);
   const candidate = spawn(
@@ -197,6 +199,7 @@ async function startServer() {
     },
   );
   child = candidate;
+  if (process.env[CHAT_INSTALL_PLAN] && candidate.pid) publishInstalledChatReceipt(process.env, selectedExecutions[0]!.id, candidate.pid);
 
   candidate.stdout?.on("data", (chunk) => {
     process.stdout.write(chunk);

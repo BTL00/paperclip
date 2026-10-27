@@ -1,3 +1,4 @@
+import { stagePublishedChatInstall, ChatInstalledCleanupError } from "./chat-installed-lane.js";
 import { stageChatPrivateInputs, CHAT_PRIVATE_INPUTS_ENV } from "./chat-private-inputs.js";
 import { findChatCatalogCase } from "./chat-catalog-registry.js";
 import { recoverWorkerTiming } from "./worker-timing.js";
@@ -497,7 +498,9 @@ async function runAttempt(input: {
     );
   }
   assertInstalledCliSelection(process.env, executions);
-  const installedCli = await verifyInstalledCli(process.env, executions);
+  let installedCli = await verifyInstalledCli(process.env, executions);
+  const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
+  let sourceEnvironment = { ...process.env };
   const installedPlugin = await verifyInstalledDaytonaPlugin(process.env, executions);
   const startedAtMs = Date.now();
   const sharedMemoryBaseline = snapshotDarwinSharedMemory();
@@ -528,6 +531,12 @@ async function runAttempt(input: {
       mkdir(workspace, { recursive: true }),
       mkdir(privateDir, { recursive: true }),
     ]);
+    if (selectedDescriptor?.installedSource === "published-global-npm") {
+      if (executions.length !== 1) throw new Error("Published chat source requires one explicit operation");
+      try { sourceEnvironment = { ...sourceEnvironment, ...await stagePublishedChatInstall({ execution, root: temporaryRoot, env: sourceEnvironment }) }; }
+      catch (error) { if (error instanceof ChatInstalledCleanupError) processCleanupFailed = true; throw error; }
+      installedCli = await verifyInstalledCli(sourceEnvironment, executions);
+    }
     const providerPath = await prepareProviderPath(
       temporaryRoot,
       process.env.PATH,
@@ -551,7 +560,6 @@ async function runAttempt(input: {
     };
     const credentials = normalizedSecrets(Object.values(credentialSources));
     attemptSecrets = credentials;
-    const selectedDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;
     const needsPrivateInputs = selectedDescriptor && ((selectedDescriptor.requiredCredentials?.length ?? 0) > 0 || selectedDescriptor.externalInput);
     if (needsPrivateInputs && executions.length !== 1) throw new Error("Private case inputs require one explicitly selected execution");
     if (needsPrivateInputs) await mkdir(selectedPrivateInputsDirectory, { mode: 0o700 });
@@ -563,7 +571,7 @@ async function runAttempt(input: {
       repositoryRoot,
     );
     const childEnv: NodeJS.ProcessEnv = {
-      ...buildRunnerE2EProcessEnvironment(process.env, executions),
+      ...buildRunnerE2EProcessEnvironment(sourceEnvironment, executions),
       [CHAT_PRIVATE_INPUTS_ENV]: privateInputs?.filename,
       PATH: providerPath,
       PAPERCLIP_RUNNER_E2E_EXECUTION_IDS: JSON.stringify(

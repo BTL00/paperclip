@@ -54,7 +54,8 @@ const update = privilegedDefinition("instance-operations.update-instance", "priv
     await sendChatMessage(ctx.input.page, message); state.updateReport = await companionPhase(ctx, initial.runs.map(run => run.id), message);
   }, grade: gradeInstalledUpdate, async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); },
 });
-update.coverageGaps = ["installed-source-activation-and-artifact-fingerprint-lane"];
+update.coverageGaps = [];
+update.installedSource = "published-global-npm";
 update.expectedRunCount = 2; update.expectedHumanMessageCount = 2; update.attemptTimeoutMs = 720_000;
 update.sourceFiles = [...update.sourceFiles, "chat-catalog-domains/privileged-installed.ts", "../../cli/src/commands/update.ts", "installed-release.ts"];
 export const privilegedUpdateCases = [update];
