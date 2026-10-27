@@ -40,7 +40,7 @@ export interface ChatCompanionResult {
   messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
   providerResponseIds: string[]; toolCalls: Array<{ name: string; arguments: unknown; result: unknown }>; links: string[];
 }
-export interface ChatSlackIngress { kind: "native-slack-thread"; maximumProviderCalls: 20; ingressTimeoutMs: 120000 }
+export interface ChatSlackIngress { kind: "native-slack-thread"; maximumProviderCalls: 20; ingressTimeoutMs: 120000; setupThread?: "same-agent-distractor" }
 export interface ChatSlackIngressReceipt {
   query: string; endpointId: string; conversationId: string; issueId: string; humanCommentId: string; linkedPaperclipUserId: string; providerCalls: number;
   provider: { workspaceId: string; channelId: string; threadId: string; canonicalMessageId: string; senderUserId: string };
@@ -56,6 +56,8 @@ export interface ChatCatalogCase {
   installedSource?: "published-global-npm";
   journeyKind?: "agent-chat" | "scoped-external-assistant" | "native-slack-thread";
   slackIngress?: ChatSlackIngress;
+  /** Only reply-in-thread: one real other-source setup exchange, included in total native bounds. */
+  dispatchSlackOtherThread?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatSlackIngressReceipt & { runId: string }>;
   dispatchSlackQuery?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatSlackIngressReceipt>;
   companionSurface?: ChatCompanionSurface;
   runCompanionSurface?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatCompanionResult>;

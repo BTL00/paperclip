@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { loadChatCatalogImplementation, type ChatCatalogDescriptor } from "./chat-catalog-registry.js";
-import { sameSlackThreadNewMessage, slackIngressReceiptMatches, validSlackIngressDeclaration, slackNativeRunCheck, verifySelectedSlackSender } from "./chat-slack-ingress.js";
+import { sameSlackThreadNewMessage, slackIngressReceiptMatches, validSlackIngressDeclaration, slackNativeRunCheck, verifySelectedSlackSender, slackOtherThreadBoundaryMatches, slackOtherThreadSetupQuery } from "./chat-slack-ingress.js";
 import type { ChatCatalogContext, ChatSlackIngressReceipt } from "./chat-catalog-contract.js";
 import type { ChatConversation, ChatEndpoint, ExternalChannelBindingSummary } from "../../packages/shared/src/types/chat-channels.js";
 import type { IssueComment } from "../../packages/shared/src/types/issue.js";
 const query = "What happened in this thread?";
-const metadata = { scenarioId: "chat-channels.reply-in-thread", journeyKind: "native-slack-thread", slackIngress: { kind: "native-slack-thread" as const, maximumProviderCalls: 20 as const, ingressTimeoutMs: 120000 as const }, expectedRunCount: 3, minimumRunCount: 1, expectedHumanMessageCount: 1, turnTimeoutMs: 120000, attemptTimeoutMs: 600000 };
+const metadata = { scenarioId: "chat-channels.reply-in-thread", journeyKind: "native-slack-thread", slackIngress: { kind: "native-slack-thread" as const, maximumProviderCalls: 20 as const, ingressTimeoutMs: 120000 as const, setupThread:"same-agent-distractor" as const }, expectedRunCount: 4, minimumRunCount: 2, expectedHumanMessageCount: 1, turnTimeoutMs: 120000, attemptTimeoutMs: 600000 };
 function input() {
   const receipt: ChatSlackIngressReceipt = { query, endpointId: "endpoint", conversationId: "conversation", issueId: "issue", humanCommentId: "comment", linkedPaperclipUserId: "person", providerCalls: 2, provider: { workspaceId: "T123", channelId: "C123", threadId: "1234567890.123456", canonicalMessageId: "1234567891.123456", senderUserId: "U123" } };
   return { receipt, query, companyId: "company", agentId: "agent", endpoint: { id: "endpoint", companyId: "company", assignedAgentId: "agent", provider: "slack", providerAccountId: "T123" } as ChatEndpoint,
@@ -60,7 +60,7 @@ describe("only real declared Slack canonical ingress", () => {
     const actual = { ...implementation, dispatchSlackQuery: async () => input().receipt };
     await expect(loadChatCatalogImplementation(descriptor, async () => ({ slackCases: [actual] }))).resolves.toBe(actual);
     await expect(loadChatCatalogImplementation(descriptor, async () => ({ slackCases: [{ ...actual, act: async () => {} }] }))).rejects.toThrow("actual Slack ingress");
-    const fileDescriptor: ChatCatalogDescriptor = { ...descriptor, scenarioId: "chat-channels.channel-file", expectedRunCount: 6, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000 };
+    const fileDescriptor: ChatCatalogDescriptor = { ...descriptor, scenarioId: "chat-channels.channel-file", slackIngress:{kind:"native-slack-thread" as const,maximumProviderCalls:20 as const,ingressTimeoutMs:120000 as const}, expectedRunCount: 6, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000 };
     const file = { ...actual, ...fileDescriptor };
     await expect(loadChatCatalogImplementation(fileDescriptor, async () => ({ slackCases: [file] }))).rejects.toThrow("supported and unsupported transfer phases");
     const completeFile = { ...file, verifySlackSupportedTransfer: async () => ({ passed: true, checks: [{ id: "actual-transfer", passed: true, detail: "Independent phase-specific byte/egress evidence" }] }), dispatchSlackUnsupportedFile: async () => input().receipt };
@@ -68,7 +68,7 @@ describe("only real declared Slack canonical ingress", () => {
 
   });
   it("requires a separate same-thread canonical upload and declared two-phase bounds for the file conditional", () => {
-    const file = { ...metadata, scenarioId: "chat-channels.channel-file", expectedRunCount: 6, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000 };
+    const file = { ...metadata, scenarioId: "chat-channels.channel-file", slackIngress:{kind:"native-slack-thread" as const,maximumProviderCalls:20 as const,ingressTimeoutMs:120000 as const}, expectedRunCount: 6, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 900000 };
     expect(validSlackIngressDeclaration(file)).toBe(true);
     expect(validSlackIngressDeclaration({ ...file, expectedHumanMessageCount: 1 })).toBe(false);
     expect(validSlackIngressDeclaration({ ...metadata, scenarioId: "chat-channels.channel-file" })).toBe(false);
@@ -88,4 +88,14 @@ describe("only real declared Slack canonical ingress", () => {
     expect(slackNativeRunCheck(ctx, [{ ...run, agentId: "other" }]).passed).toBe(false);
     expect(slackNativeRunCheck(ctx, [{ ...run, contextSnapshot: { issueId: "other" } }]).passed).toBe(false);
   });
+});
+
+it("binds exactly one other-source setup native without treating that source's human as canonical setup history",()=>{
+ const receipt={...input().receipt,query:slackOtherThreadSetupQuery,runId:"setup-native"};
+ const run={id:"setup-native",companyId:"company",agentId:"agent",runtimeMode:"native",status:"succeeded",contextSnapshot:{issueId:"issue"}};
+ const value={receipt,runs:[run],companyId:"company",agentId:"agent"};
+ expect(slackOtherThreadBoundaryMatches(value)).toBe(true);
+ for(const wrong of [{...value,runs:[]},{...value,runs:[run,{...run,id:"unrelated"}]},{...value,runs:[{...run,contextSnapshot:{issueId:"other-source"}}]},{...value,runs:[{...run,agentId:"other-agent"}]},{...value,runs:[{...run,status:"running"}]},{...value,receipt:{...receipt,query:"Undeclared setup instruction"}},{...value,sourceIssueId:"issue"}])expect(slackOtherThreadBoundaryMatches(wrong)).toBe(false);
+ expect(validSlackIngressDeclaration({...metadata,slackIngress:{kind:"native-slack-thread",maximumProviderCalls:20,ingressTimeoutMs:120000}})).toBe(false);
+ expect(validSlackIngressDeclaration({...metadata,expectedRunCount:3})).toBe(false);
 });

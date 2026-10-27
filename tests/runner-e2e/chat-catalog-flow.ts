@@ -1,4 +1,4 @@
-import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, slackNativeRunCheck } from "./chat-slack-ingress.js";
+import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
 import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
@@ -100,6 +100,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       && policy.amount === 500 && policy.hardStopEnabled && policy.isActive && policy.unpricedUsagePolicy === "allow")), "Public funding policy persisted").toBe(true);
     await input.evidence("chat-catalog-funding.json", { scopes, mode: implementation.setupPolicy?.funding ?? "standard",
       policies: funding.policies.filter(policy => scopes.some(scope => scope.scopeType === policy.scopeType && scope.scopeId === policy.scopeId)), setupProbeUsage: "unknown; production hello probes are outside heartbeat accounting" });
+    if (slack && implementation.slackIngress?.setupThread === "same-agent-distractor") await prepareNativeSlackOtherThread(context,implementation,state,deadlineAt);
     await input.evidence("chat-catalog-setup.json", { scenario, state, inventoryDigest: chatCatalogInventoryDigest,
       oracleVersion: implementation.oracleVersion, expectedRunCount: implementation.expectedRunCount,
       minimumRunCount: implementation.minimumRunCount, turnTimeoutMs: implementation.turnTimeoutMs,
@@ -118,7 +119,9 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       expectedHumanMessageCount: implementation.expectedHumanMessageCount ?? 1, expectedRunCount: implementation.expectedRunCount });
     await input.evidence("chat-catalog-query.json", { query: scenario.query, expectedOutcome: implementation.queryOutcome ?? "persisted", journeyKind: implementation.journeyKind ?? "agent-chat" });
     if (slack) {
-      if (setupBoundary.runIds.length || setupBoundary.humanCommentIds.length) throw new Error("Native Slack setup cannot admit canonical or unrelated work");
+      const other=state.slackOtherThreadSetupReceipt as (import("./chat-catalog-contract.js").ChatSlackIngressReceipt & {runId:string})|undefined;
+      const declaredOther=implementation.scenarioId==="chat-channels.reply-in-thread"&&implementation.slackIngress?.setupThread==="same-agent-distractor";
+      if (setupBoundary.humanCommentIds.length || (declaredOther ? !other || !slackOtherThreadBoundaryMatches({receipt:other,runs:setupConversation.runs,companyId:input.fixtures.company.id,agentId:input.fixtures.agent.id}) : setupBoundary.runIds.length!==0)) throw new Error("Native Slack setup cannot admit undeclared canonical or unrelated work");
       state.slackIngressReceipt = await dispatchNativeSlackIngress(context, implementation, state, deadlineAt);
       await input.page.goto(new URL(`/${input.fixtures.company.issuePrefix}/issues/${context.issue()!.id}`, input.api.baseURL).href);
       if (implementation.scenarioId === "chat-channels.channel-file") await completeNativeSlackFileConditional(context, implementation, state, deadlineAt);
