@@ -58,6 +58,9 @@ export interface ChatCatalogCase {
   dispatchSlackQuery?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatSlackIngressReceipt>;
   companionSurface?: ChatCompanionSurface;
   runCompanionSurface?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatCompanionResult>;
+  /** Only channel-file: independently settle the supported transfer before a second actual upload. */
+  verifySlackSupportedTransfer?(context: ChatCatalogContext, state: Record<string, unknown>): Promise<ChatCatalogGrade>;
+  dispatchSlackUnsupportedFile?(context: ChatCatalogContext, state: Record<string, unknown>, input: { query: string; signal: AbortSignal }): Promise<ChatSlackIngressReceipt>;
   authentication?: "local-trusted" | "human-session";
   setupPolicy?: ChatCatalogSetupPolicy;
   runPolicy?: ChatCatalogRunPolicy;

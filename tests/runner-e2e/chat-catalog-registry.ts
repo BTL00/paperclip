@@ -8,7 +8,7 @@ import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
 import type { IdentityBoundaryCase } from "./chat-catalog-domains/identity-boundary-contract.js";
 import { identityBoundaryScenarioIds } from "./chat-catalog-domains/identity-boundary-contract.js";
 
-export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
+export type ChatCatalogDescriptor = Omit<ChatCatalogCase, "verifySlackSupportedTransfer" | "dispatchSlackUnsupportedFile" | "dispatchSlackQuery" | "runCompanionSurface" | "journeyKind" | "setup" | "act" | "observe" | "grade" | "cleanup" | "verifyResult" | "verifySetup" | "verifyQueryRejection"> & {
   journeyKind?: "agent-chat" | "browser-boundary" | "scoped-external-assistant" | "native-slack-thread";
   boundaryTarget?: "authenticated-harness" | "empty-installed-target";
   modulePath: string;
@@ -62,6 +62,8 @@ export async function loadChatCatalogImplementation(
   }
   if ((descriptor.companionSurface || descriptor.journeyKind === "scoped-external-assistant") && (!validCompanionDeclaration(implementation) || typeof implementation.runCompanionSurface !== "function" || implementation.act)) throw new Error("Missing actual finite scoped assistant driver");
   if ((descriptor.slackIngress || descriptor.journeyKind === "native-slack-thread") && (!validSlackIngressDeclaration(implementation) || typeof implementation.dispatchSlackQuery !== "function" || implementation.act)) throw new Error("Missing finite actual Slack ingress driver");
+  if (descriptor.scenarioId === "chat-channels.channel-file" && descriptor.slackIngress && (typeof implementation.verifySlackSupportedTransfer !== "function" || typeof implementation.dispatchSlackUnsupportedFile !== "function")) throw new Error("Slack file case requires actual supported and unsupported transfer phases");
+  if ((descriptor.scenarioId !== "chat-channels.channel-file" || !descriptor.slackIngress) && (implementation.verifySlackSupportedTransfer || implementation.dispatchSlackUnsupportedFile)) throw new Error("Undeclared Slack file conditional");
   if (!descriptor.slackIngress && implementation.dispatchSlackQuery) throw new Error("Undeclared Slack ingress driver");
   if (!descriptor.companionSurface && implementation.runCompanionSurface) throw new Error("Undeclared external assistant driver");
   if ((descriptor.setupPolicy?.funding === "preserve-scenario" || descriptor.setupPolicy?.readiness === "preserve-scenario")

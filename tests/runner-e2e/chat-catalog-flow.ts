@@ -1,4 +1,4 @@
-import { dispatchNativeSlackIngress, slackNativeRunCheck } from "./chat-slack-ingress.js";
+import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
 import { chatCatalogAllowedRunStatuses, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
@@ -62,7 +62,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
         detail: "The persisted request preserves the catalog query with only audited public-fixture identity bindings; all human turns were declared." },
       { id: "catalog-query-attachment-receipts", passed: attachmentsValid,
         detail: "Only declared production attachment suffixes are allowed, backed by same-source human receipts and independently retrieved matching bytes." },
-      ...(slack ? [slackNativeRunCheck(context, evidence.runs)] : []),
+      ...(slack ? [slackNativeRunCheck(context, evidence.runs, state)] : []),
       ...gradeChatCatalogRuns({ implementation: implementation!, companyId: input.fixtures.company.id,
         leadId: input.fixtures.agent.id, source: evidence.issue, runs: evidence.runs }).checks,
     ];
@@ -121,6 +121,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       if (setupBoundary.runIds.length || setupBoundary.humanCommentIds.length) throw new Error("Native Slack setup cannot admit canonical or unrelated work");
       state.slackIngressReceipt = await dispatchNativeSlackIngress(context, implementation, state, deadlineAt);
       await input.page.goto(new URL(`/${input.fixtures.company.issuePrefix}/issues/${context.issue()!.id}`, input.api.baseURL).href);
+      if (implementation.scenarioId === "chat-channels.channel-file") await completeNativeSlackFileConditional(context, implementation, state, deadlineAt);
     } else await sendChatMessage(input.page, renderedQuery);
     if (implementation.queryOutcome === "rejected") {
       const rejection = validateChatCatalogGrade(await implementation.verifyQueryRejection!(context, state));
