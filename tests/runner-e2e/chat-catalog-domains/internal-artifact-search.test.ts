@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildHistoricalWebsiteImport, gradeArtifactSearch } from "./internal-artifact-search.js";
+import { buildHistoricalWebsiteImport, gradeArtifactSearch, historicalWebsitePreviewMatches } from "./internal-artifact-search.js";
+import { parse } from "yaml";
+import { companyPortabilityService } from "../../../server/src/services/company-portability.js";
 function valid() {
   const target = { id: "final-task", companyId: "company", title: "Final launch website delivery", status: "done", completedAt: "2026-10-21T12:00:00.000Z" };
   const hidden = { id: "hidden-task", companyId: "company", title: "Restricted final website NIGHTJAR", status: "done" };
@@ -11,7 +13,24 @@ function valid() {
 }
 describe("migrated historical website artifact calibration", () => {
   it("accepts preserved original last-week delivery and actual later import", () => expect(gradeArtifactSearch(valid()).passed).toBe(true));
-  it("builds real inline migration files with SHA-bound bytes and comment linkage", () => { const bundle = buildHistoricalWebsiteImport("2026-10-21T12:00:00.000Z", "ORCHID"); const yaml = JSON.parse(bundle.files[".paperclip.yaml"] as string); expect(yaml.schemaVersion).toBe(7); for (const row of bundle.receipts) { expect(bundle.files[`blobs/${row.sha256}`]).toMatchObject({ encoding: "base64" }); expect(yaml.tasks[row.slug].attachments[0]).toMatchObject({ sha256: row.sha256, commentIndex: 0 }); } expect(yaml.tasks["final-website"].completedAt).toBe("2026-10-21T12:00:00.000Z"); });
+  it("builds real inline migration files with SHA-bound bytes and comment linkage", () => { const bundle = buildHistoricalWebsiteImport("2026-10-21T12:00:00.000Z", "ORCHID"); const yaml = parse(bundle.files[".paperclip.yaml"] as string); expect(yaml.schemaVersion).toBe(7); for (const row of bundle.receipts) { expect(bundle.files[`blobs/${row.sha256}`]).toMatchObject({ encoding: "base64" }); expect(yaml.tasks[row.slug].attachments[0]).toMatchObject({ sha256: row.sha256, commentIndex: 0 }); } expect(yaml.tasks["final-website"].completedAt).toBe("2026-10-21T12:00:00.000Z"); });
+  it("passes the actual production portability parser with all original dates/comments/attachments and no database access", async () => {
+    const bundle = buildHistoricalWebsiteImport("2026-10-21T12:00:00.000Z", "ORCHID");
+    const noDatabase = new Proxy({}, { get(_target, key) { throw new Error(`Offline preview must not access database property ${String(key)}`); } }) as Parameters<typeof companyPortabilityService>[0];
+    const service = companyPortabilityService(noDatabase);
+    const request = { source: { type: "inline" as const, files: bundle.files }, include: { company: false, agents: false, projects: false, issues: true, skills: false }, target: { mode: "new_company" as const }, collisionStrategy: "rename" as const };
+    const preview = await service.previewImport(request);
+    expect(historicalWebsitePreviewMatches(preview, bundle)).toBe(true);
+    const jsonRoot = { ...request, source: { ...request.source, files: { ...bundle.files, ".paperclip.yaml": JSON.stringify(parse(bundle.files[".paperclip.yaml"] as string)) } } };
+    const lost = await service.previewImport(jsonRoot);
+    expect(lost.manifest.issues).toHaveLength(4);
+    expect(lost.manifest.issues.every(row => row.attachments?.length === 0 && row.completedAt == null)).toBe(true);
+    expect(historicalWebsitePreviewMatches(lost, bundle)).toBe(false);
+    const wrongDate = structuredClone(preview); wrongDate.manifest.issues.find(row => row.slug === "final-website")!.completedAt = "2026-10-27T12:00:00.000Z";
+    expect(historicalWebsitePreviewMatches(wrongDate, bundle)).toBe(false);
+    const wrongComment = structuredClone(preview); wrongComment.manifest.issues.find(row => row.slug === "final-website")!.attachments![0]!.commentIndex = 1;
+    expect(historicalWebsitePreviewMatches(wrongComment, bundle)).toBe(false);
+  });
   it("accepts an explicitly qualified link to older authorized history", () => { const o = valid(); const old = { id: "old-task", companyId: "company", title: "Earlier website final", status: "done" }; o.state.distractors.push(old); o.links.push("/RUN/issues/old-task"); o.reply += "\n[Earlier website final](/RUN/issues/old-task) is older history outside last week."; expect(gradeArtifactSearch(o).passed).toBe(true); });
   it("rejects treating today's import as last week's delivery", () => { const o = valid(); o.currentSource.completedAt = "2026-10-26T12:00:00.000Z"; expect(gradeArtifactSearch(o).passed).toBe(false); });
   it("rejects invented attachment-bound source history", () => { const o = valid(); o.deliveryComments[0]!.id = "wrong-comment"; expect(gradeArtifactSearch(o).passed).toBe(false); const noImport = valid(); noImport.activity = []; expect(gradeArtifactSearch(noImport).passed).toBe(false); });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect } from "@playwright/test";
+import { stringify } from "yaml";
 import type { IssueAttachment } from "../../../packages/shared/src/types/issue.js";
 import type { CompanyPortabilityFileEntry } from "../../../packages/shared/src/types/company-portability.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
@@ -29,8 +30,26 @@ export function buildHistoricalWebsiteImport(deliveryAt: string, nonce: string) 
       attachments: [{ sha256: digest, contentType: "text/html", originalFilename: spec.filename, byteSize: Buffer.byteLength(body), commentIndex: 0 }] };
     return { ...spec, body, sha256: digest };
   });
-  files[".paperclip.yaml"] = JSON.stringify({ schemaVersion: 7, tasks });
+  // The production portability reader implements block YAML, not a generic
+  // JSON/YAML parser. Keep keys plain and values JSON-compatible quoted scalars.
+  files[".paperclip.yaml"] = stringify({ schemaVersion: 7, tasks }, { defaultKeyType: "PLAIN", defaultStringType: "QUOTE_DOUBLE", lineWidth: 0, indentSeq: true });
   return { files, receipts };
+}
+export function historicalWebsitePreviewMatches(value: unknown, bundle: ReturnType<typeof buildHistoricalWebsiteImport>): boolean {
+  const preview = value as { errors?: unknown[]; manifest?: { schemaVersion?: number; issues?: Array<{
+    slug: string; status?: string; completedAt?: string | null; comments?: Array<{ body: string; createdAt?: string | null }>;
+    attachments?: Array<{ sha256: string; originalFilename?: string | null; byteSize: number; commentIndex?: number | null }>;
+  }> } } | undefined;
+  const issues = preview?.manifest?.issues;
+  return Array.isArray(preview?.errors) && preview.errors.length === 0 && preview?.manifest?.schemaVersion === 7
+    && Array.isArray(issues) && issues.length === bundle.receipts.length && bundle.receipts.every(expected => {
+      const matching = issues.filter(row => row.slug === expected.slug); const row = matching[0];
+      return matching.length === 1 && row?.status === expected.status && (expected.status !== "done" || row.completedAt === expected.at)
+        && row.comments?.length === 1 && row.comments[0]?.createdAt === expected.at && row.comments[0].body.includes(expected.sha256)
+        && row.attachments?.length === 1 && row.attachments[0]?.sha256 === expected.sha256
+        && row.attachments[0].originalFilename === expected.filename && row.attachments[0].byteSize === Buffer.byteLength(expected.body)
+        && row.attachments[0].commentIndex === 0;
+    });
 }
 function fileLink(o: InternalObservation, file: IssueAttachment) {
   return o.links.find(href => { try { const url = new URL(href, o.origin); return url.origin === o.origin && url.pathname === file.contentPath; } catch { return false; } });
@@ -75,7 +94,11 @@ function findArtifact(): ChatCatalogCase {
     const deliveryAt = new Date(weekStart + 2 * 86400000 + 12 * 3600000).toISOString();
     const bundle = buildHistoricalWebsiteImport(deliveryAt, ctx.input.nonce); const root = `/api/companies/${ctx.input.fixtures.company.id}`;
     const request = { source: { type: "inline", files: bundle.files, expectedFileCount: Object.keys(bundle.files).length }, include: { company: false, agents: false, projects: false, issues: true }, target: { mode: "existing_company", companyId: ctx.input.fixtures.company.id }, collisionStrategy: "rename", pauseAutomations: true };
-    const preview = await ctx.input.api.post(`${root}/imports/preview`, request); const imported = await ctx.input.api.post(`${root}/imports/apply`, request);
+    const preview = await ctx.input.api.post(`${root}/imports/preview`, request);
+    await ctx.input.evidence("chat-catalog-historical-import-preview.json", preview);
+    if (!historicalWebsitePreviewMatches(preview, bundle)) throw new Error("Public historical preview omitted the original task dates, source comments or SHA-bound attachment linkage");
+    const imported = await ctx.input.api.post(`${root}/imports/apply`, request);
+    await ctx.input.evidence("chat-catalog-historical-import-apply.json", imported);
     const p = await project(ctx); const oldProject = await project(ctx, "Earlier launch experiments"); const hiddenProject = await project(ctx, "Restricted launch history", { visibility: "private" });
     const all = await ctx.input.api.get<HistoricalTask[]>(`${root}/issues?limit=1000&includeAgentCreatedTasks=true`); const records: HistoricalTask[] = [];
     const files: IssueAttachment[] = [];
