@@ -201,6 +201,34 @@ describeEmbeddedPostgres("connectionIntentService", () => {
     expect(serialized).not.toContain(claims.sub);
   });
 
+  it("returns actual advice-first single and multiple choices without creating setup", async () => {
+    vi.stubEnv("PAPERCLIP_VERCEL_CONNECT_ENABLED", "false");
+    vi.stubEnv("PAPERCLIP_VERCEL_CONNECT_ACCESS_TOKEN", "private-discovery-control");
+    try {
+      const before = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.issueId, issueId));
+      const service = connectionIntentService(db);
+      for (const query of ["Notion", "Compare Linear and Notion"]) {
+        const result = await service.search(claims, query);
+        expect(result.instruction).toMatch(/For setup advice or comparison, explain/);
+        expect(result.instruction).toMatch(/If the user explicitly requests setup or selects a method/);
+        expect(result.instruction).not.toContain("user already asked to connect");
+        expect(result.results.find(item => item.service === "notion")?.methods).toContainEqual(expect.objectContaining({
+          key: "mcp-oauth", whenToUse: "Use the provider-hosted connection for the quickest setup.",
+          setupPath: "/CONN/apps/connect?source=notion&method=mcp-oauth",
+          credentialSources: [expect.objectContaining({ source: "vercel_connect", available: false, reason: "Vercel Connect setup is disabled on this Paperclip instance.", setupPath: "/CONN/apps/vercel-connect?source=notion&method=mcp-oauth" })],
+        }));
+        if (query.startsWith("Compare")) expect(result.results.some(item => item.service === "linear")).toBe(true);
+        expect(JSON.stringify(result)).not.toContain("private-discovery-control");
+      }
+      expect(await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.issueId, issueId))).toEqual(before);
+      const explicit = await service.search(claims, "Connect Notion");
+      expect(explicit.instruction).toContain("call connection_request");
+      const request = await service.request(claims, "notion");
+      try { expect(request).toMatchObject({ state: "needs_user_action", service: "notion", interactionId: expect.any(String) }); }
+      finally { await db.delete(issueThreadInteractions).where(eq(issueThreadInteractions.id, request.interactionId!)); }
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("discovers GitHub review bots independently from chat connectors", async () => {
     const settings = instanceSettingsService(db);
     const previous = await settings.getExperimental();
