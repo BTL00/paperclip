@@ -2,6 +2,7 @@ import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "..
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, task, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
+import { readAgentResource, cleanupIdentityProbes } from "./identity-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { groundedStatement, integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
 interface CardsObservation extends InternalObservation { cards: StatusCard[]; updates: Record<string, StatusCardUpdate[]>; summaries: Record<string, StatusCardSummaryRevision[]>; cardsEnabled: boolean }
@@ -25,6 +26,11 @@ function freshSummary(o: CardsObservation, card: StatusCard) {
     && o.runs.some(run => run.id === row.runId && run.status === "succeeded") && row.generationIssueId != null)
     && o.summaries[card.id]?.some(row => row.body === card.summaryBody);
 }
+function explainsSavedStaleness(reply: string) {
+  return groundedStatement(reply, /\b(?:card|summary|observation)\b/i, /\b(?:stale|older|previous|last|outdated)\b/i,
+    /\b(?:still|currently|remains)\s+(?:is\s+)?blocked\b|\b(?:summary|card)\s+(?:is\s+)?(?:current|up.to.date|fresh)\b/i)
+    && /payment approval/i.test(reply) && /\b(?:done|resolved|completed|approved)\b/i.test(reply);
+}
 export function gradeIntegratorCards(value: unknown) {
   const c = checks(); const o = cardsObservation(value);
   c.add("public-card-generation-history", !!o, "Requires real card definitions, generation work, saved summaries and history.");
@@ -33,7 +39,7 @@ export function gradeIntegratorCards(value: unknown) {
   const originals = o.state.sourceTasks as Entity[] | undefined;
   c.add("source-prerequisite-evidence", Array.isArray(originals), "Original source task snapshots are required.");
   if (!Array.isArray(originals)) return c.result();
-  c.add("feature-and-source-records-retained", o.cardsEnabled && originals.every(row => sameTask(row, o.tasks.find(now => now.id === row.id))), "The source tasks remain intact; compilation cannot alter source state to fit its result.");
+  c.add("feature-and-source-records-retained", o.cardsEnabled && originals.every(row => o.scenarioId === "status-cards.explain-card" && o.state.sourceUnavailable === true && o.state.sourceReadStatus === 404 && row.id === originals[0]?.id ? !o.tasks.some(now => now.id === row.id) : sameTask(row, o.tasks.find(now => now.id === row.id))), "The source tasks remain intact; compilation cannot alter source state to fit its result.");
   if (o.scenarioId === "status-cards.create-card") {
     const p = o.state.project as Entity;
     c.add("one-agent-authored-valid-card", o.cards.length === 1 && !!card && card.companyId === o.companyId && card.createdByAgentId === o.leadId && !card.archivedAt
@@ -55,9 +61,12 @@ export function gradeIntegratorCards(value: unknown) {
     const source = originals[0];
     c.add("saved-observation-is-stale", !!before && !!card && !!source && card.summaryBody === before.summaryBody && card.lastGeneratedAt === before.lastGeneratedAt
       && card.fingerprint?.[source.id]?.status === "blocked" && source.status === "done" && freshSummary(o, card), "The real previous generated blocker summary is retained while the actual source task is now done.");
-    c.add("saved-versus-live-explained", groundedStatement(o.reply, /\b(?:card|summary|observation)\b/i, /\b(?:stale|older|previous|last|outdated)\b/i,
-      /\b(?:still|currently|remains)\s+(?:is\s+)?blocked\b|\b(?:summary|card)\s+(?:is\s+)?(?:current|up.to.date|fresh)\b/i)
-      && /payment approval/i.test(o.reply) && /\b(?:done|resolved|completed|approved)\b/i.test(o.reply), "The explanation grounds the saved blocker in its older generation and distinguishes the resolved live source state.");
+    const initial = cardsObservation(o.state.accessCheckpoint);
+    c.add("saved-versus-live-explained", !!initial && explainsSavedStaleness(initial.reply), "The original canonical explanation grounds the blocker in its older generation and distinguishes the then-resolved accessible source; a later follow-up cannot repair it.");
+    const later = initial && o.reply.startsWith(initial.reply) ? o.reply.slice(initial.reply.length) : "";
+    c.add("actual-current-source-access-loss", !!initial && o.state.sourceReadStatus === 404 && o.state.sourceUnavailable === true && o.state.accessPrincipalId === o.leadId
+      && /(?:cannot|can't|no longer|lack|missing|not (?:able|permitted)|lost)/i.test(later) && /access|read|permission|verif|check/i.test(later)
+      && !/\b(?:I (?:have )?(?:verified|read|checked)|currently verified)\b/i.test(later), "After an explicit later unavailable-source question, the actual responding principal's public read is404 after genuine deletion. Chat cannot newly ground current facts; legitimate earlier cached summary/history remains allowed. This is not permission-denial proof.");
     c.add("saved-card-and-live-task-links", !!card && !!source && !!cardLink(o, card.id) && hasLink(o, "issues", source), "The explanation links the actual saved card and its changed source task.");
   } else if (o.scenarioId === "status-cards.refresh-card") {
     const initial = cardsObservation(o.state.firstRefresh); const oldIds = new Set((o.state.originalUpdates as StatusCardUpdate[] | undefined)?.map(row => row.id));
@@ -132,13 +141,31 @@ function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<Chat
       return { project: p, sourceTasks, worker, card, otherCard, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
     } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous.enableStatusCards }); experiments.delete(ctx); throw error; }
   }, observeCards, gradeIntegratorCards, verifyCard, { expectedRunCount: 2, attemptTimeoutMs: 540_000, ...extra,
-    async cleanup(ctx) { const previous = experiments.get(ctx); if (previous !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous }); experiments.delete(ctx); } } });
+    async cleanup(ctx) { await cleanupIdentityProbes(ctx); const previous = experiments.get(ctx); if (previous !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous }); experiments.delete(ctx); } } });
 }
 export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
   define("status-cards.create-card", "none"),
   define("status-cards.archive-card", "ceo", { expectedRunCount: 3, attemptTimeoutMs: 720_000 }),
   define("status-cards.other-authors-card", "morgan"),
-  define("status-cards.explain-card", "ceo", { coverageGaps: ["missing-source-access"] }),
+  define("status-cards.explain-card", "ceo", { expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
+    sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
+    async act(ctx, state) {
+      const first = await pollUntil({ label: "accessible source explanation before actual access change", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+        load: () => observeCards(ctx, state), accept: o => o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      if (!explainsSavedStaleness(first.reply)) throw new Error("Initial saved-versus-live explanation was incorrect; later unavailability cannot repair it");
+      state.accessCheckpoint = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-card-explanation-before-access-loss.json", state.accessCheckpoint);
+      const source = (state.sourceTasks as Entity[])[0]!;
+      await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/issues/${source.identifier ?? source.id}`, source.title!, resultHref(first, source.identifier ?? source.id, "issues") ?? resultHref(first, source.id, "issues"));
+      await ctx.input.api.delete(`/api/issues/${source.id}`);
+      const denial = await readAgentResource(ctx, `/api/issues/${source.id}`); state.sourceReadStatus = denial.status; state.accessPrincipalId = ctx.input.fixtures.agent.id; state.sourceUnavailable = true;
+      const retained = await ctx.input.api.get<StatusCard>(`/api/status-cards/${(state.card as StatusCard).id}`);
+      const retainedSummaries = await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${retained.id}/summary-revisions`);
+      await ctx.input.evidence("chat-card-current-source-unavailable-probe.json", { principalId: state.accessPrincipalId, sourceId: source.id, status: denial.status, kind: "source-deleted-unavailable", permissionDenialClaimed: false,
+        savedSummaryRetained: retained.summaryBody === (state.card as StatusCard).summaryBody, savedHistoryRetained: JSON.stringify(retainedSummaries) === JSON.stringify(state.originalSummaries) });
+      if (denial.status !== 404 || retained.summaryBody !== (state.card as StatusCard).summaryBody || JSON.stringify(retainedSummaries) !== JSON.stringify(state.originalSummaries)) throw new Error("Deleted source prerequisite did not retain card/history and actual principal404");
+      const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "That disposable source task was removed after your earlier answer. Can you still read and verify its current blocker details? Distinguish the older saved summary from what you can check now.");
+    },
+  }),
   define("status-cards.refresh-card", "ceo", { expectedRunCount: 4, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
     coverageGaps: ["failed-generation-retains-prior-summary"],
     async act(ctx, state) {

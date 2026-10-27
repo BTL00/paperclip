@@ -15,6 +15,9 @@ function valid(id: string) {
     result.tasks[0]!.status = "done"; result.state.sourceTasks[0]!.status = "done";
     result.reply = "The card reflects its older observation: payment approval blocked Launch. The source task is now done and the payment approval is resolved.";
     result.links.push("/ACORN/issues/source");
+    const first = structuredClone(result); Object.assign(result.state, { accessCheckpoint: first, sourceReadStatus: 404, sourceUnavailable: true, accessPrincipalId: "ceo" });
+    result.tasks = [];
+    result.reply = `${first.reply}\nI can no longer read or verify the current source details; the task is unavailable. The older saved card is historical context only.`;
   }
   if (id === "status-cards.refresh-card") {
     const first = structuredClone(result); first.reply = "The refresh was requested; generation is pending.";
@@ -60,6 +63,8 @@ describe("saved card state and truthful generation controls", () => {
     const o = valid("status-cards.explain-card");
     expect(gradeIntegratorCards({ ...o, reply: "The card is current and up-to-date. Payment approval still blocks Launch although the task is done." }).passed).toBe(false);
     expect(gradeIntegratorCards({ ...o, links: ["/ACORN/status/card"] }).passed).toBe(false);
+    const falseCurrent = structuredClone(o); falseCurrent.reply += " I verified the current restricted task."; expect(gradeIntegratorCards(falseCurrent).passed).toBe(false);
+    const unrelated = structuredClone(o); Object.assign(unrelated.state, { accessPrincipalId: "someone-else" }); expect(gradeIntegratorCards(unrelated).passed).toBe(false);
     const fabricated = structuredClone(o); fabricated.cards[0]!.lastGeneratedAt = "2026-10-26T12:00:00Z";
     expect(gradeIntegratorCards(fabricated).passed).toBe(false);
   });
