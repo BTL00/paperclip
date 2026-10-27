@@ -1196,6 +1196,60 @@
     "exportName": "chatChannelExternalCases"
   },
   {
+    "slackIngress": {
+      "kind": "native-slack-thread",
+      "maximumProviderCalls": 20,
+      "ingressTimeoutMs": 120000,
+      "setupThread": "same-agent-distractor"
+    },
+    "externalInput": {
+      "provider": "slack",
+      "fields": [
+        "workspaceId",
+        "channelId",
+        "senderUserId",
+        "botUserId",
+        "appId",
+        "registeredWebhookOrigin",
+        "webhookRelayPort",
+        "botTokenEnv",
+        "senderTokenEnv",
+        "signingSecretEnv",
+        "configurationTokenEnv"
+      ]
+    },
+    "scenarioId": "chat-channels.reply-in-thread",
+    "sourceFiles": [
+      "chat-catalog-domains/external-slack-thread.ts",
+      "chat-catalog-domains/external-slack-fixture.ts",
+      "chat-catalog-domains/external-slack-provider.ts",
+      "chat-catalog-domains/external-slack-relay.ts",
+      "chat-catalog-domains/external-slack-render.ts",
+      "chat-catalog-domains/runtime-rendered-artifact.ts",
+      "chat-catalog-domains/external-fixtures.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-slack-ingress.ts",
+      "../../packages/shared/src/types/chat-channels.ts",
+      "../../server/src/routes/chat-channels.ts",
+      "../../server/src/services/chat-channels.ts",
+      "../../server/src/services/chat-channels/inbound/authorization.ts",
+      "../../server/src/services/chat-channels/inbound/wakeups.ts",
+      "chat-scenarios/chat-channels.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 4,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 600000,
+    "journeyKind": "native-slack-thread",
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-slack-thread.js",
+    "exportName": "slackThreadExternalCases"
+  },
+  {
     "scenarioId": "cli-operations.choose-cli-context",
     "sourceFiles": [
       "chat-catalog-domains/privileged-support.ts",
@@ -1641,6 +1695,31 @@
     "exportName": "mcpFailureExternalCases"
   },
   {
+    "scenarioId": "connection-setup.wrong-person-resolves",
+    "sourceFiles": [
+      "chat-catalog-domains/external-wrong-resolver.ts",
+      "chat-catalog-domains/identity-auth.ts",
+      "chat-catalog-domains/identity-private-browser.ts",
+      "chat-catalog-domains/identity-private-browser-worker.ts",
+      "chat-catalog-domains/identity-wizard.ts",
+      "chat-catalog-domains/identity-support.ts",
+      "chat-catalog-domains/external-support.ts",
+      "chat-catalog-domains/internal-support.ts",
+      "../../server/src/routes/connection-intents.ts",
+      "../../server/src/services/connection-intents.ts",
+      "chat-scenarios/connection-setup.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "expectedRunCount": 2,
+    "expectedHumanMessageCount": 1,
+    "minimumRunCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 540000,
+    "authentication": "human-session",
+    "modulePath": "./chat-catalog-domains/external-wrong-resolver.js",
+    "exportName": "wrongResolverExternalCases"
+  },
+  {
     "scenarioId": "developer-labs.component-reference",
     "sourceFiles": [
       "chat-catalog-domains/privileged-support.ts",
@@ -2017,12 +2096,11 @@
       "chat-scenarios/inbox-search.yaml",
       "chat-catalog-domains/internal-archive-partial.ts",
       "chat-catalog-domains/internal-archive-transport.ts",
-      "../e2e/fetch-allowed-port.ts"
+      "../e2e/fetch-allowed-port.ts",
+      "chat-archive-fault-control.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.internal.v1",
-    "coverageGaps": [
-      "native-archive-transport-launcher-wiring"
-    ],
+    "coverageGaps": [],
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 2,
     "minimumRunCount": 2,
@@ -3086,6 +3164,49 @@
     },
     "modulePath": "./chat-catalog-domains/runtime-infrastructure.js",
     "exportName": "runtimeInfrastructureCases"
+  },
+  {
+    "canonicalBoundary": "native-stop-cleanup",
+    "scenarioId": "recovery.post-stop-message",
+    "sourceFiles": [
+      "chat-catalog-domains/runtime-post-stop.ts",
+      "chat-catalog-domains/runtime-provider-cleanup.ts",
+      "chat-catalog-domains/runtime-native-fault.ts",
+      "chat-catalog-domains/runtime-busy-worker.ts",
+      "chat-catalog-domains/runtime-rendered-artifact.ts",
+      "chat-catalog-domains/runtime-support.ts",
+      "chat-native-stop-boundary.ts",
+      "../../server/src/services/native-runtime/native-session-executor.ts",
+      "../../server/src/services/explicit-native-continuation.ts",
+      "../../packages/paperclip-runner/src/live/runnerd-codex-transport.ts",
+      "../../packages/paperclip-runner/runner/crates/runner-core/src/codex_provider.rs",
+      "../../packages/paperclip-runner/runner/crates/runner-core/src/process_supervisor.rs",
+      "registered-artifact.ts",
+      "chat-scenarios/recovery.yaml"
+    ],
+    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "coverageGaps": [],
+    "expectedRunCount": 2,
+    "setupHumanMessageCount": 1,
+    "expectedHumanMessageCount": 2,
+    "turnTimeoutMs": 120000,
+    "attemptTimeoutMs": 720000,
+    "authentication": "human-session",
+    "setupPolicy": {
+      "readiness": "preserve-scenario",
+      "invariantCheckIds": [
+        "actual-source-native-owner"
+      ]
+    },
+    "runPolicy": {
+      "kind": "terminal-counts",
+      "terminalStatusCounts": {
+        "cancelled": 1,
+        "succeeded": 1
+      }
+    },
+    "modulePath": "./chat-catalog-domains/runtime-post-stop.js",
+    "exportName": "runtimePostStopCases"
   },
   {
     "scenarioId": "recovery.retry-exhausted",

@@ -1763,8 +1763,8 @@
       "sourceSha256": "e9eacfaf22ab445de8ecd131439a2bab37708b6bd9ea1edcf72c55a2948e6c46",
       "scenarioSha256": "b44908f447ae54ab82edef01bd417e0f82b3e97808f571d7b2caf08fd9df3026",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.chat-channels.reply-in-thread",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -1773,7 +1773,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "chat-channels.reply-to-email",
@@ -2506,8 +2506,8 @@
       "sourceSha256": "9e71e1ea7d9216d80396df117d14f7629aace3dbcfdcddc14dfb1edf38e992c4",
       "scenarioSha256": "18aaf7e343d9a1a81eebc09e4cd2733ce9764997fec0b4b23ba58f6b69e55ec0",
       "owner": "eval_external",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.connection-setup.wrong-person-resolves",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -2516,7 +2516,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "developer-labs.component-reference",
@@ -3351,9 +3351,9 @@
       "sourceSha256": "afc939f4eec821edd38b8e819274ede302c10550aca68b2ff72c5ebf870aed05",
       "scenarioSha256": "327f96d910bf6645fab9dfcd49b38e26eec57e44d31764bbd2fea13fdb08409d",
       "owner": "eval_domains",
-      "readiness": "partial",
+      "readiness": "implemented",
       "executionId": "chat-features.runner-codex-subscription.local.inbox-search.archive-partial-failure",
-      "blocker": "native-archive-transport-launcher-wiring",
+      "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
       "qualifyingGraderDigest": null,
@@ -3361,7 +3361,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "unfinished"
+      "authoringStatus": "complete"
     },
     {
       "id": "inbox-search.archive-without-grant",
@@ -4654,8 +4654,8 @@
       "sourceSha256": "f74fb387ab717d656e4ce11b8abc03960946f0cba83ccf76e83f4ac77c520a3a",
       "scenarioSha256": "6d063076ce3d4b3763610a4bec43c5a8685970d88f98e2f22e4a69bcdd1def3c",
       "owner": "eval_runtime",
-      "readiness": "unimplemented",
-      "executionId": null,
+      "readiness": "implemented",
+      "executionId": "chat-features.runner-codex-subscription.local.recovery.post-stop-message",
       "blocker": null,
       "attempts": [],
       "qualifyingDefinitionDigest": null,
@@ -4664,7 +4664,7 @@
         "lane": "source-build",
         "sourceBaselineRevision": "8373d7867963674ff960d2345d0d28086f799bc7"
       },
-      "authoringStatus": "absent"
+      "authoringStatus": "complete"
     },
     {
       "id": "recovery.retry-exhausted",
@@ -6490,11 +6490,11 @@
     }
   ],
   "implementationCheckpoint": {
-    "sourceRevision": "e4b62f48aacef0bef16fd1f5a28433a8192af8ba",
-    "descriptorSha256": "dc3ef609f877a88a8546e6e9c2c29d9462dcfe693b85e15d398b56ccb4c2c069",
-    "authored": 207,
-    "complete": 198,
-    "partial": 9,
-    "unimplemented": 37
+    "sourceRevision": "4043cf898485d8a4cff9789d6b2708ab581b195c",
+    "descriptorSha256": "ca0146b40da076fd21a5a1e4670c317b40b613638a794f921c3ebc0e795fdbb7",
+    "authored": 210,
+    "complete": 202,
+    "partial": 8,
+    "unimplemented": 34
   }
 }
