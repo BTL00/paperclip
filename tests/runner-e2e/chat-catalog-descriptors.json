@@ -2545,6 +2545,10 @@
   {
     "scenarioId": "connection-setup.unreachable-mcp",
     "sourceFiles": [
+      "../../ui/src/App.tsx",
+      "../../ui/src/pages/apps/Browse.tsx",
+      "../../ui/src/features/connections/ConnectionSetupFlow.tsx",
+      "../../ui/src/pages/apps/app-connect-policy.ts",
       "chat-catalog-domains/external-mcp-failure.ts",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
