@@ -553,7 +553,9 @@ Trusted report and publication jobs check out the workflow SHA. They first try a
 frozen, script-free install in a job-local store. Only pnpm's stale-lockfile
 errors permit script-free resolution from that same trusted tree, followed by
 another frozen install. They never use the target branch's resolved lockfile.
-Network failures do not trigger resolution. This runs before AWS credential
+A warning marks each repair. Network failures do not trigger resolution. Cold
+installs use the existing job deadline, without an added per-call timeout.
+This runs before AWS credential
 exchange and does not change target execution or retained results.
 
 Report identities preserve legacy chat tasks and exact `area.case` chat catalog

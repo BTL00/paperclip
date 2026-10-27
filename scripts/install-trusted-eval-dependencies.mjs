@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
  * Never consume a target-branch lockfile or run dependency lifecycle scripts.
  */
 export function installTrustedEvalDependencies(store, run = args => spawnSync("pnpm", args, {
-  encoding: "utf8", timeout: 180_000, maxBuffer: 16 * 1024 * 1024,
+  encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
 }), output = result => { process.stdout.write(result.stdout ?? ""); process.stderr.write(result.stderr ?? ""); }) {
   if (!path.isAbsolute(store)) throw new Error("Trusted dependency store must be an absolute job-local path");
   const frozen = ["install", "--frozen-lockfile", "--ignore-scripts", "--store-dir", store];
@@ -15,6 +15,7 @@ export function installTrustedEvalDependencies(store, run = args => spawnSync("p
   if (first.status === 0) return;
   if (first.error || !/ERR_PNPM_(?:LOCKFILE_CONFIG_MISMATCH|OUTDATED_LOCKFILE)\b/.test(`${first.stdout ?? ""}\n${first.stderr ?? ""}`))
     throw new Error("Trusted dependency install failed without a stale-lockfile diagnosis");
+  output({ stderr: "::warning title=Trusted dependency lockfile::The trusted checkout lockfile is stale; resolving from its trusted manifests before a frozen script-free install. Refresh the committed lockfile.\n" });
   const resolved = invoke(["install", "--resolution-only", "--ignore-scripts", "--no-frozen-lockfile", "--store-dir", store]);
   if (resolved.status !== 0 || resolved.error) throw new Error("Trusted dependency lockfile resolution failed");
   const installed = invoke(frozen);
