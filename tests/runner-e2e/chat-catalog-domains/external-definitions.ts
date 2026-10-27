@@ -16,3 +16,5 @@ export { mcpFailureExternalCases } from "./external-mcp-failure.js";
 export { assistantConsentExternalCases } from "./external-assistant-consent.js";
 export { notionReadExternalCases } from "./external-notion-read.js";
 export { secureKeyExternalCases } from "./external-secure-key.js";
+export { teamInstallExternalCases } from "./external-team-install.js";
+export { teamConfigureExternalCases } from "./external-team-configure.js";
