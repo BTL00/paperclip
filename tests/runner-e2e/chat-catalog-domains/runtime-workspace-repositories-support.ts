@@ -8,6 +8,13 @@ import type { executionWorkspaceRepositories } from "../../../packages/db/src/sc
 export type RepositoryReceipt = typeof executionWorkspaceRepositories.$inferSelect;
 export interface RepositoryWorkspace { issueId: string; workspace: { id: string; companyId: string; cwd: string; providerType?: string }; repositories: RepositoryReceipt[] }
 export const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+/** Require changed header/navigation markup on both sides, not a comment or
+ * assistant claim that happens to contain the word header. */
+export function changedHeaderMarkup(diff: string) {
+  const changed = diff.split("\n").filter(line => /^[+-](?![+-])/.test(line) && !/^[+-]\s*(?:<!--|\/\/|\/\*|\*)/.test(line));
+  const markup = /<(?:header|h1|nav)\b|(?:className|class|id)=["'][^"']*(?:header|navbar)[^"']*["']/i;
+  return changed.some(line => line.startsWith("-") && markup.test(line)) && changed.some(line => line.startsWith("+") && markup.test(line));
+}
 /** Read-only local evidence; this never clones, authenticates, changes Git or runs repository code. */
 export async function inspectCheckout(view: RepositoryWorkspace, row: RepositoryReceipt) {
   const root = await realpath(view.workspace.cwd), checkout = path.resolve(root, row.relativePath);
@@ -29,16 +36,16 @@ export async function inspectCheckout(view: RepositoryWorkspace, row: Repository
   const config = await readFile(path.join(checkout, ".git", "config"), "utf8");
   const diff = await git("diff", "--no-ext-diff", "--no-textconv", "--", ".");
   return { origin, head, ownership, trackedFile: sample, trackedBytes: bytes.length, trackedSha256: digest(bytes),
-    headerChanged: /^[-+](?![-+]).*(?:<header\b|<h1\b|header|navbar)/im.test(diff), diffSha256: digest(diff),
+    headerChanged: changedHeaderMarkup(diff), diffSha256: digest(diff),
     credentialConfigClean: !/https?:\/\/[^\s/]*@|(?:token|password|authorization|extraheader)\s*=/i.test(config),
     // Raw source/diff is inspected before redacted diagnostic projection.
     rawConfig: config, rawSample: bytes.toString("utf8"), rawDiff: diff };
 }
 /** Actual workload code executes with its OWN run capability. It prints only
  * closed booleans; it never prints credentials or a broker response body. */
-export const workloadBoundaryCode = `const e=process.env; const base=e.PAPERCLIP_API_URL; const api=e.PAPERCLIP_API_KEY; const capability=e.PAPERCLIP_GITHUB_BROKER_TOKEN; if(!base||!api||!capability)throw Error('workload authority unavailable'); const root=new URL(base); const secret=new URL('/api/agents/me/secrets/GITHUB_TOKEN/value',root); const broker=new URL('/runtime-tools/github/credentials',e.PAPERCLIP_GITHUB_BROKER_URL||root); const brokerAuth=e.PAPERCLIP_GITHUB_BRIDGE_TOKEN||api||capability; const list=await fetch(new URL('/api/agents/me/secrets',root),{headers:{authorization:'Bearer '+api},redirect:'error'}); const listing=await list.json(); const a=await fetch(secret,{method:'POST',redirect:'error',headers:{authorization:'Bearer '+api,'content-type':'application/json'},body:'{}'}); await a.body?.cancel(); const b=await fetch(broker,{method:'POST',redirect:'error',headers:{authorization:'Bearer '+brokerAuth,'x-paperclip-github-capability':capability,'content-type':'application/json'},body:'{}'}); const j=await b.json(); console.log('PAPERCLIP_GIT_BOUNDARY '+JSON.stringify({runId:e.PAPERCLIP_RUN_ID,identityContextId:j.identityContextId,runSecretListAvailable:list.status===200&&Array.isArray(listing.secrets),githubSecretNotBound:Array.isArray(listing.secrets)&&!listing.secrets.some(s=>s.key==='GITHUB_TOKEN'),secretStatus:a.status,brokerStatus:b.status,brokerAbsent:j.status==='absent',brokerEnvEmpty:Object.keys(j.env||{}).length===0,rawGitCredentialPresent:['GH_TOKEN','GITHUB_TOKEN','PAPERCLIP_GIT_TOKEN'].some(k=>!!e[k])}));`;
+export const workloadBoundaryCode = `const e=process.env; const base=e.PAPERCLIP_API_URL; const api=e.PAPERCLIP_API_KEY; const capability=e.PAPERCLIP_GITHUB_BROKER_TOKEN; if(!base||!api||!capability)throw Error('workload authority unavailable'); const root=new URL(base); const secret=new URL('/api/agents/me/secrets/GITHUB_TOKEN/value',root); const broker=new URL('/runtime-tools/github/credentials',e.PAPERCLIP_GITHUB_BROKER_URL||root); const brokerAuth=e.PAPERCLIP_GITHUB_BRIDGE_TOKEN||api||capability; const list=await fetch(new URL('/api/agents/me/secrets',root),{headers:{authorization:'Bearer '+api},redirect:'error'}); const listing=await list.json(); const a=await fetch(secret,{method:'POST',redirect:'error',headers:{authorization:'Bearer '+api,'content-type':'application/json'},body:'{}'}); await a.body?.cancel(); const b=await fetch(broker,{method:'POST',redirect:'error',headers:{authorization:'Bearer '+brokerAuth,'x-paperclip-github-capability':capability,'content-type':'application/json'},body:'{}'}); const j=await b.json(); console.log('PAPERCLIP_GIT_BOUNDARY '+JSON.stringify({runId:e.PAPERCLIP_RUN_ID,identityContextId:j.identityContextId,runSecretListAvailable:list.status===200&&Array.isArray(listing.secrets),githubSecretNotBound:Array.isArray(listing.secrets)&&!listing.secrets.some(s=>s.key==='GITHUB_TOKEN'),secretStatus:a.status,brokerStatus:b.status,brokerAbsent:j.status==='absent',brokerAvailable:j.status==='available',brokerConnectionId:j.connectionId||null,brokerGrantId:j.grantId||null,brokerEnvEmpty:Object.keys(j.env||{}).length===0,rawGitCredentialPresent:['GH_TOKEN','GITHUB_TOKEN','PAPERCLIP_GIT_TOKEN'].some(k=>!!e[k])}));`;
 export const workloadBoundaryCommand = `node --input-type=module -e ${JSON.stringify(workloadBoundaryCode)}`;
-export interface BoundaryReceipt { identityMatched?: boolean; runId: string; identityContextId: string; runSecretListAvailable: boolean; githubSecretNotBound: boolean; secretStatus: number; brokerStatus: number; brokerAbsent: boolean; brokerEnvEmpty: boolean; rawGitCredentialPresent: boolean }
+export interface BoundaryReceipt { identityMatched?: boolean; runId: string; identityContextId: string; runSecretListAvailable: boolean; githubSecretNotBound: boolean; secretStatus: number; brokerStatus: number; brokerAbsent: boolean; brokerAvailable?: boolean; brokerConnectionId?: string | null; brokerGrantId?: string | null; brokerEnvEmpty: boolean; rawGitCredentialPresent: boolean }
 const record = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 /** A reply/file containing these words cannot qualify: require the actual
  * durable provider command item and its successful terminal result. */
@@ -54,8 +61,12 @@ export function workloadBoundaryReceipts(events: Array<{ eventType?: string; pay
   }
   return receipts;
 }
-export function protectedWorkload(receipts: BoundaryReceipt[]) {
-  return receipts.length > 0 && receipts.every(r => r.identityMatched === true && !!r.runId && !!r.identityContextId && r.runSecretListAvailable && r.githubSecretNotBound && r.secretStatus === 403 && r.brokerStatus === 200 && r.brokerAbsent && r.brokerEnvEmpty && !r.rawGitCredentialPresent);
+export function protectedWorkload(receipts: BoundaryReceipt[], grant?: { connectionId: string; grantId: string; readonlyAppVerified: true; selectedRepositoryVerified: true }) {
+  const managed = (r: BoundaryReceipt) => !!grant && grant.readonlyAppVerified && grant.selectedRepositoryVerified && r.brokerAvailable === true && r.brokerAbsent === false
+    && r.brokerConnectionId === grant.connectionId && r.brokerGrantId === grant.grantId && r.brokerEnvEmpty === false;
+  return receipts.length > 0 && receipts.every(r => r.identityMatched === true && !!r.runId && !!r.identityContextId && r.runSecretListAvailable && r.githubSecretNotBound && r.secretStatus === 403
+    && r.brokerStatus === 200 && !r.rawGitCredentialPresent && (r.brokerAbsent && r.brokerEnvEmpty || managed(r)))
+    && (!grant || receipts.some(managed));
 }
 export async function sourceProtectionReceipt(ctx: ChatCatalogContext) {
   const sources = ["server/src/services/execution-workspace-repositories.ts", "server/src/services/git-credentials.ts", "server/src/services/github-operation-credentials.ts", "packages/adapter-utils/src/github-launcher.ts"];

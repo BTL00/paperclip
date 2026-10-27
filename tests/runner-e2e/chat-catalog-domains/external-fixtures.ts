@@ -14,7 +14,7 @@ export interface ExternalFixtureConfig { schemaVersion: 1; providers: Partial<Re
 export const externalRequirements: Record<string, { provider: ExternalProvider; fields: readonly string[] }> = {
   "projects.add-repository": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
   "workspaces.prepare-repository": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
-  "workspaces.private-repository-no-access": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv"] },
+  "workspaces.private-repository-no-access": { provider: "github", fields: ["siteRepositoryId", "siteRepositoryFullName", "tokenEnv", "humanAuthEnv"] },
   "projects.replace-repository": { provider: "github", fields: ["oldRepositoryId", "oldRepositoryFullName", "newRepositoryId", "newRepositoryFullName", "tokenEnv"] },
   "app-permissions.revoke-account": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },
   "app-permissions.grant-one-agent": { provider: "notion", fields: ["workspaceId", "mcpUrl", "apiVersion", "apiTokenEnv", "mcpTokenEnv"] },

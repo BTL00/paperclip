@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { affirmativeRepositorySuccess, gradeWorkspaceRepositories, runtimeWorkspaceRepositoryCases } from "./runtime-workspace-repositories.js";
-import { protectedWorkload, workloadBoundaryCode, workloadBoundaryReceipts } from "./runtime-workspace-repositories-support.js";
+import { parseHumanGitHubAuth, qualifiesReadOnlyApp, qualifiesReadOnlyGrant, type ReadOnlyGitHubGrant } from "./runtime-workspace-repositories-auth.js";
+import { changedHeaderMarkup, protectedWorkload, workloadBoundaryCode, workloadBoundaryReceipts } from "./runtime-workspace-repositories-support.js";
+const readonlyGrant = { connectionId: "human-connection", grantId: "actual-grant", readonlyAppVerified: true, selectedRepositoryVerified: true } as ReadOnlyGitHubGrant;
 function valid(privateCase = false) {
   const row = { id: "repository", companyId: "company", executionWorkspaceId: "workspace", requestedByIssueId: "task", repoUrl: "https://github.com/owned/site", catalogRepositoryId: "42", state: "ready", pinnedCommit: "a".repeat(40) };
   const result = { scenarioId: privateCase ? "workspaces.private-repository-no-access" : "workspaces.prepare-repository", companyId: "company", leadId: "ceo", origin: "https://fixture.test", agents: [], projects: [], goals: [], tasks: [], comments: [], documents: [], revisions: [], humanQueries: [], links: [],
@@ -17,7 +19,9 @@ function valid(privateCase = false) {
   if (privateCase) {
     const denied = { ...first, runs: [{ ...first.runs[0]!, id: "denied-worker" }], reply: "GitHub repository access is missing; connect the intended account. I haven't cloned the private source.", interactions: [{ kind: "connection_intent", status: "pending", sourceRunId: "denied-worker", payload: { serviceSlug: "github" } }] };
     result.runs.unshift({ ...result.runs[0]!, id: "denied-worker" });
-    Object.assign(result.state, { deniedPhase: denied });
+    Object.assign(result.state, { deniedPhase: denied, readOnlyGrant: readonlyGrant });
+    Object.assign(result.boundary[0]!, { brokerAbsent: false, brokerAvailable: true, brokerEnvEmpty: false, brokerConnectionId: readonlyGrant.connectionId, brokerGrantId: readonlyGrant.grantId });
+    result.reply += " I corrected the header locally without pushing changes.";
   }
   return result;
 }
@@ -58,8 +62,11 @@ describe("actual task-bound repository preparation and missing-access continuati
     expect(gradeWorkspaceRepositories(substitute).passed).toBe(false);
     expect(gradeWorkspaceRepositories({ ...o, state: { ...o.state, humanGrantId: undefined } }).passed).toBe(false);
     expect(gradeWorkspaceRepositories({ ...o, checkout: { ...o.checkout, headerChanged: false } }).passed).toBe(false);
+    expect(gradeWorkspaceRepositories({ ...o, reply: o.state.initialReply + " The files are available now; I haven't fixed the header." }).passed).toBe(false);
+    expect(gradeWorkspaceRepositories({ ...o, boundary: [{ ...o.boundary[0], brokerGrantId: "another-person" }] }).passed).toBe(false);
+    expect(gradeWorkspaceRepositories({ ...o, boundary: [{ ...o.boundary[0], rawGitCredentialPresent: true }] }).passed).toBe(false);
     expect(runtimeWorkspaceRepositoryCases.find(row => row.scenarioId === "workspaces.prepare-repository")!.coverageGaps).toEqual([]);
-    expect(runtimeWorkspaceRepositoryCases.find(row => row.scenarioId === "workspaces.private-repository-no-access")!.coverageGaps).toHaveLength(1);
+    expect(runtimeWorkspaceRepositoryCases.find(row => row.scenarioId === "workspaces.private-repository-no-access")!.coverageGaps).toEqual([]);
   });
 });
 describe("real own-workload authority proof provenance", () => {
@@ -77,5 +84,69 @@ describe("real own-workload authority proof provenance", () => {
     expect(protectedWorkload([{ ...closed, githubSecretNotBound: false }])).toBe(false);
     expect(protectedWorkload([{ ...closed, rawGitCredentialPresent: true }])).toBe(false);
     expect(protectedWorkload([{ ...closed, brokerAbsent: false }])).toBe(false);
+  });
+});
+describe("genuine selected human account and read-only exact-repository consent", () => {
+  const auth = { appSlug: "disposable-readonly", clientId: "Iv1.abcdefgh", clientSecret: "synthetic-secret-for-offline-controls", installationId: "71", storageState: { cookies: [{ name: "user_session", value: "synthetic-session", domain: ".github.com", path: "/", expires: -1, httpOnly: true, secure: true, sameSite: "Lax" }], origins: [] } };
+  const app = { id: 17, slug: auth.appSlug, client_id: auth.clientId, name: "Disposable read-only", html_url: `https://github.com/apps/${auth.appSlug}`, permissions: { contents: "read", metadata: "read" } };
+  function grantInput() {
+    // Relevant projections are actual public DTO fields, rather than an invented
+    // permissions flag. Independent App API metadata supplies contents authority.
+    return { companyId: "company", personId: "person", workerId: "morgan", repositoryId: "42", repositoryFullName: "owned/site", auth, app,
+      connection: { id: "connection", companyId: "company", enabled: true, status: "active", credentialPolicy: "per_user", config: { sourceTemplateKey: "github", oauth: { clientId: auth.clientId } } },
+      grant: { id: "grant", companyId: "company", connectionId: "connection", status: "active", kind: "user", subjectUserId: "person", providerTenant: { github: { appSlug: auth.appSlug, userId: "8", login: "owner", installationCount: 1, repositoryCount: 1, repositorySelection: "selected", installationIds: ["71"], repositories: [{ id: "42", fullName: "owned/site", private: true, installationId: "71" }] } } },
+      installs: [{ connectionId: "connection", targetType: "agent", targetId: "morgan" }],
+      interaction: { kind: "connection_intent", status: "accepted", addresseeUserId: "person", resolvedByUserId: "person", resolvedByAgentId: null, payload: { serviceSlug: "github" }, result: { outcome: "connected", connectionId: "connection" } },
+    } as unknown as Parameters<typeof qualifiesReadOnlyGrant>[0];
+  }
+  it("validates the private declared bundle and refuses other origins or token substitution", () => {
+    expect(parseHumanGitHubAuth(JSON.stringify(auth)).installationId).toBe("71");
+    expect(() => parseHumanGitHubAuth(JSON.stringify({ ...auth, token: "not-a-human-session" }))).toThrow();
+    expect(() => parseHumanGitHubAuth(JSON.stringify({ ...auth, storageState: { cookies: [{ ...auth.storageState.cookies[0], domain: ".example.test" }], origins: [] } }))).toThrow();
+    expect(() => parseHumanGitHubAuth("synthetic malformed private content")).toThrow("private GitHub human session/client bundle is invalid");
+  });
+  it("rejects a write-enabled or different App even with an otherwise plausible saved grant", () => {
+    expect(qualifiesReadOnlyApp(app, auth)).toBe(true);
+    expect(qualifiesReadOnlyApp({ ...app, permissions: { contents: "write" } }, auth)).toBe(false);
+    expect(qualifiesReadOnlyApp({ ...app, permissions: { contents: "read", issues: "write" } }, auth)).toBe(false);
+    expect(qualifiesReadOnlyApp({ ...app, client_id: "another-client" }, auth)).toBe(false);
+    expect(qualifiesReadOnlyGrant(grantInput())).toBe(true);
+    const wrong = grantInput(); wrong.app = { ...app, permissions: { contents: "write" } };
+    expect(qualifiesReadOnlyGrant(wrong)).toBe(false);
+  });
+  it("requires the genuine person, selected private source, installation and exact requesting worker", () => {
+    const wrongPerson = grantInput(); wrongPerson.grant.subjectUserId = "another-person";
+    expect(qualifiesReadOnlyGrant(wrongPerson)).toBe(false);
+    const wrongSource = grantInput(); wrongSource.grant.providerTenant!.github!.repositories![0]!.id = "999";
+    expect(qualifiesReadOnlyGrant(wrongSource)).toBe(false);
+    const broad = grantInput(); broad.grant.providerTenant!.github!.repositorySelection = "all";
+    expect(qualifiesReadOnlyGrant(broad)).toBe(false);
+    const nullTenant = grantInput(); nullTenant.grant.providerTenant = null;
+    expect(qualifiesReadOnlyGrant(nullTenant)).toBe(false);
+    const publicSource = grantInput(); publicSource.grant.providerTenant!.github!.repositories![0]!.private = false;
+    expect(qualifiesReadOnlyGrant(publicSource)).toBe(false);
+    const wrongInstall = grantInput(); wrongInstall.grant.providerTenant!.github!.repositories![0]!.installationId = "72";
+    expect(qualifiesReadOnlyGrant(wrongInstall)).toBe(false);
+    const companyWide = grantInput(); companyWide.installs[0]!.targetType = "company";
+    expect(qualifiesReadOnlyGrant(companyWide)).toBe(false);
+    const agentConsent = grantInput(); agentConsent.interaction.resolvedByAgentId = "morgan";
+    expect(qualifiesReadOnlyGrant(agentConsent)).toBe(false);
+  });
+  it("requires a new exact managed receipt after grant without exposing the broader metadata secret", () => {
+    const initial = valid().boundary[0]!;
+    expect(protectedWorkload([initial], readonlyGrant)).toBe(false);
+    const after = { ...initial, brokerAbsent: false, brokerAvailable: true, brokerEnvEmpty: false, brokerConnectionId: readonlyGrant.connectionId, brokerGrantId: readonlyGrant.grantId };
+    expect(protectedWorkload([initial, after], readonlyGrant)).toBe(true);
+    expect(protectedWorkload([initial, { ...after, brokerGrantId: "another-grant" }], readonlyGrant)).toBe(false);
+    expect(protectedWorkload([initial, { ...after, secretStatus: 200 }], readonlyGrant)).toBe(false);
+  });
+});
+
+describe("independent local header change evidence", () => {
+  it("accepts actual changed header markup and rejects comments or unrelated body edits", () => {
+    expect(changedHeaderMarkup('-<header><h1>Old</h1></header>\n+<header><h1>Updated</h1></header>')).toBe(true);
+    expect(changedHeaderMarkup('-// header broken\n+// header fixed')).toBe(false);
+    expect(changedHeaderMarkup('-<p>Before</p>\n+<p>After</p>')).toBe(false);
+    expect(changedHeaderMarkup('+<header>claim only</header>')).toBe(false);
   });
 });
