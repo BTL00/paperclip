@@ -1,3 +1,4 @@
+import { installChatReadinessObserver } from "./chat-readiness-observer.js";
 // This entrypoint is used only by isolated Runner E2E instances. Production
 // service code has no test flag, delay, altered prompt, or private test API.
 import { ServerResponse } from "node:http";
@@ -8,6 +9,11 @@ import { installOwnedEmailResponseLoss } from "./chat-catalog-domains/runtime-em
 import { installOwnedEmailReceiptDuplicate } from "./chat-catalog-domains/runtime-email-duplicate.js";
 
 const ids: string[] = JSON.parse(process.env.PAPERCLIP_RUNNER_E2E_EXECUTION_IDS ?? "[]");
+if (ids.length && ids.every(id => id.startsWith("chat-features.runner-opencode.local."))) {
+  const { requireServerAdapter } = await import("../../server/src/adapters/index.js");
+  await installChatReadinessObserver({ executionIds: ids, temporaryRoot: process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "",
+    adapter: requireServerAdapter("paperclip_runner") });
+}
 await installOwnedEmailResponseLoss({ executionIds: ids, attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", temporaryRoot: process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "" });
 await installOwnedEmailReceiptDuplicate({ executionIds: ids, attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", temporaryRoot: process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "" });
 const contextCommentGate = contextCommentGateSelected(ids);

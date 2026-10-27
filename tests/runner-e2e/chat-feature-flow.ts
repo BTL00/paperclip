@@ -1,3 +1,4 @@
+import { readChatReadinessReceipts } from "./chat-readiness-observer.js";
 import { legacyChatFeatureFingerprint } from "./chat-catalog-fingerprint.js";
 import { runChatCatalogFlow } from "./chat-catalog-flow.js";
 import { chatCatalogScenarios } from "./chat-catalog-inventory.js";
@@ -79,7 +80,8 @@ export async function runChatFeatureFlow(context: {
   async function saveEvidence() {
     await input.evidence("chat-feature.json", { schema: CHAT_FEATURE_GRADER, scenarioId: scenario!.id,
       capabilities: scenario!.capabilities, observation, grade: gradeChatFeature(observation),
-      setupObservations, setupUsageCoverage: "Production agent hello probes are outside heartbeat usage; their detailed tokens and cost are unavailable." });
+      setupObservations, setupProbeReceipts: await readChatReadinessReceipts(process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "", f.company.id),
+      setupUsageCoverage: "Production agent hello probes are outside heartbeat usage; their detailed tokens and cost are unavailable." });
   }
   try {
     expect(await api.get(`${company}/issues?includeAgentCreatedTasks=true`)).toEqual([]);
@@ -87,7 +89,8 @@ export async function runChatFeatureFlow(context: {
       await pollUntil({ label: `chat feature agent readiness ${agentId}`, deadlineAt: Date.now() + 45_000, intervalMs: 500,
         load: async () => {
           const agent = await api.get<{ lifecycleState: string; status: string; lifecycleError?: string; lifecycleHolds?: string[] }>(`/api/agents/${agentId}`);
-          setupObservations.push({ agentId, lifecycleState: agent.lifecycleState, status: agent.status });
+          setupObservations.push({ agentId, lifecycleState: agent.lifecycleState, status: agent.status,
+            lifecycleErrorPresent: !!agent.lifecycleError, lifecycleHeld: !!agent.lifecycleHolds?.length });
           return agent;
         },
         accept: agent => agent.lifecycleState === "ready" && ["idle", "active"].includes(agent.status),
