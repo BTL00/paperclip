@@ -1,5 +1,5 @@
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
-import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
+import { internalResultLink, project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
 
 export function grade_goals(value: unknown) {
@@ -119,7 +119,7 @@ function crossCompanyAlignment(): ChatCatalogCase {
         const saved = (kind === "issues" ? o.tasks : o.projects).find(item => item.id === row.id);
         if (!saved) throw new Error("Aligned result is missing from public readback");
         const href = o.links.find(link => hasLink({ ...o, links: [link] }, kind, saved));
-        if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+        if (href) await internalResultLink(ctx, o, href).first().click();
         else await ctx.input.page.goto(new URL(`/${ctx.input.fixtures.company.issuePrefix}/${kind}/${saved.identifier ?? saved.urlKey ?? saved.id}`, o.origin).href, { waitUntil: "domcontentloaded" });
         await expect(ctx.input.page.getByRole("heading", { name: saved.title ?? saved.name!, exact: true }).first()).toBeVisible();
         await ctx.input.evidence(`chat-catalog-alignment-opened-${kind}.json`, { id: saved.id, goalId: growth.id, url: ctx.input.page.url(), viaReturnedLink: !!href });
@@ -232,7 +232,7 @@ function createGoalTree(): ChatCatalogCase {
       try { const url = new URL(link, o.origin); return url.origin === new URL(o.origin).origin
         && (hasLink({ ...o, links: [link] }, "goals", root) || /\/goals\/?$/.test(url.pathname)); } catch { return false; }
     })!;
-    await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+    await internalResultLink(ctx, o, href).first().click();
     if (/\/goals\/?$/.test(new URL(href, o.origin).pathname)) {
       const rootLink = ctx.input.page.locator(`a[href*=${JSON.stringify(`/goals/${root.id}`)}]`).first();
       await expect(rootLink).toBeVisible(); await rootLink.click();

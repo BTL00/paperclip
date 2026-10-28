@@ -1,3 +1,4 @@
+import { collectConversationLinks, conversationLinkLocator, type RenderedConversationLink } from "../chat-rendered-links.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { ChatRun } from "../chat-flow.js";
@@ -16,7 +17,7 @@ export interface Entity {
 export interface InternalObservation {
   scenarioId: string; origin: string; companyId: string; leadId: string; state: Record<string, unknown>;
   tasks: Entity[]; projects: Entity[]; goals: Entity[]; comments: Entity[];
-  activity: Entity[]; annotations?: Entity[]; agents?: Entity[]; documents: Entity[]; revisions: Entity[]; reply: string; links: string[]; humanQueries: string[]; runs: ChatRun[];
+  renderedLinkEvidence?: RenderedConversationLink[]; activity: Entity[]; annotations?: Entity[]; agents?: Entity[]; documents: Entity[]; revisions: Entity[]; reply: string; links: string[]; humanQueries: string[]; runs: ChatRun[];
 }
 export function entity(state: Record<string, unknown>, key: string): Entity {
   const value = state[key];
@@ -50,15 +51,16 @@ export async function observeInternal(ctx: ChatCatalogContext, state: Record<str
   const source = ctx.issue();
   const chat = source ? await api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`) : [];
   const replies = chat.filter(row => row.authorAgentId === fixtures.agent.id && runs.some(run => run.id === row.createdByRunId));
-  const links: string[] = [];
-  for (const reply of replies) {
-    links.push(...await ctx.input.page.locator(`[id=${JSON.stringify(`comment-${reply.id}`)}] a[href]`).evaluateAll(elements => elements.map(element => element.getAttribute("href")!)));
-  }
   const target = state.task ? entity(state, "task") : undefined;
   const comments = target ? await api.get<Entity[]>(`/api/issues/${target.id}/comments?order=asc`) : [];
   const companyActivity = await api.get<Entity[]>(`${companyPath(ctx)}/activity?limit=1000`);
   const taskActivity = target ? await api.get<Entity[]>(`/api/issues/${target.id}/activity`) : [];
   const activity = [...new Map([...companyActivity, ...taskActivity].map(row => [row.id, row])).values()];
+  const renderedLinkEvidence = source ? await collectConversationLinks(ctx.input.page, {
+    origin: api.baseURL, companyId: fixtures.company.id, companyPrefix: fixtures.company.issuePrefix,
+    sourceId: source.id, leadId: fixtures.agent.id, comments: chat, runs, projects, activity,
+  }) : [];
+  const links = [...new Set(renderedLinkEvidence.map(link => link.href))];
   const documents: Entity[] = []; const revisions: Entity[] = [];
   if (target) {
     for (const summary of await api.get<Entity[]>(`/api/issues/${target.id}/documents`)) {
@@ -69,7 +71,7 @@ export async function observeInternal(ctx: ChatCatalogContext, state: Record<str
   }
   return { scenarioId: ctx.scenario.id, origin: api.baseURL, companyId: fixtures.company.id, leadId: fixtures.agent.id,
     state, tasks: tasks.filter(row => row.id !== source?.id), projects, goals, runs, comments, activity, documents, revisions,
-    humanQueries: chat.filter(row => !row.authorAgentId).map(row => row.body ?? ""), reply: replies.map(row => row.body ?? "").join("\n"), links };
+    renderedLinkEvidence, humanQueries: chat.filter(row => !row.authorAgentId).map(row => row.body ?? ""), reply: replies.map(row => row.body ?? "").join("\n"), links };
 }
 export function hasLink(o: InternalObservation, kind: "issues" | "projects" | "goals", row: Entity): boolean {
   return o.links.some(href => {
@@ -112,7 +114,7 @@ export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Reco
   if (!candidates.length) throw new Error("No independently matched result link was rendered");
   for (const { kind, row } of candidates) {
     const href = o.links.find(link => hasLink({ ...o, links: [link] }, kind, row))!;
-    const link = ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first();
+    const link = internalResultLink(ctx, o, href).first();
     await expect(link).toBeVisible(options());
     await link.click(options());
     await ctx.input.page.waitForURL(url => {
@@ -125,4 +127,10 @@ export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Reco
     await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(options());
     remainingBudget?.();
   }
+}
+
+export function internalResultLink(ctx: ChatCatalogContext, o: InternalObservation, href: string) {
+  const receipt = o.renderedLinkEvidence?.find(link => link.href === href);
+  if (!receipt) throw new Error("Result navigation requires current-conversation rendered-link custody");
+  return conversationLinkLocator(ctx.input.page, receipt);
 }

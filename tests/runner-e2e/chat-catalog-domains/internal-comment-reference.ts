@@ -3,7 +3,7 @@ import { expect } from "@playwright/test";
 import { parseIssueReferenceFromHref } from "../../../ui/src/lib/issue-reference.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
-import { entity, hasLink, observeInternal, type Entity, type InternalObservation } from "./internal-support.js";
+import { internalResultLink, entity, hasLink, observeInternal, type Entity, type InternalObservation } from "./internal-support.js";
 
 const digest = (body: string) => createHash("sha256").update(body).digest("hex");
 export function savedDesignInstruction(o: InternalObservation, body: string, design: Entity) {
@@ -63,7 +63,7 @@ export function withRenderedCommentReference(base: ChatCatalogCase): ChatCatalog
       if (!taskHref) return;
       const page = ctx.input.page, source = page.url();
       try {
-        const link = page.locator(`[id^="comment-"] a[href=${JSON.stringify(taskHref)}]`).first();
+        const link = internalResultLink(ctx, o, taskHref).first();
         await expect(link).toBeVisible(); await link.click();
         await page.waitForURL(url => hasLink({ ...o, links: [url.href] }, "issues", target));
         await expect(page.getByRole("heading", { name: target.title!, exact: true }).first()).toBeVisible();

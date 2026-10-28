@@ -1,3 +1,4 @@
+import { collectConversationLinks, type ConversationLinkInput } from "./chat-rendered-links.js";
 import { chatCatalogAgentIsReady, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
 import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
@@ -41,12 +42,15 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     const comments = issue ? await input.api.get<Array<{ id: string; body: string; authorAgentId?: string; authorUserId?: string; issueId?: string; companyId?: string; createdByRunId?: string }>>(
       `/api/issues/${issue.id}/comments?order=asc`,
     ) : [];
-    const renderedLinks = [];
-    for (const comment of comments) {
-      const reply = input.page.locator(`[id=${JSON.stringify(`comment-${comment.id}`)}]`);
-      for (const href of await reply.locator("a[href]").evaluateAll(elements => elements.map(element => element.getAttribute("href"))))
-        renderedLinks.push({ commentId: comment.id, href });
-    }
+    const hasCreationCard = await input.page.locator('[data-testid="task-chat-thread"] article[aria-label^="Project created: "]').count() > 0;
+    const [projects, activity] = hasCreationCard ? await Promise.all([
+      input.api.get<ConversationLinkInput["projects"]>(`/api/companies/${input.fixtures.company.id}/projects?includeArchived=true`),
+      input.api.get<ConversationLinkInput["activity"]>(`/api/companies/${input.fixtures.company.id}/activity?limit=1000`),
+    ]) : [[], []];
+    const renderedLinks = issue ? await collectConversationLinks(input.page, {
+      origin: input.api.baseURL, companyId: input.fixtures.company.id, companyPrefix: input.fixtures.company.issuePrefix,
+      sourceId: issue.id, leadId: input.fixtures.agent.id, comments, runs, projects, activity,
+    }) : [];
     const evidence = { issue, runs, comments, renderedLinks };
     await input.evidence("chat-catalog-conversation.json", evidence);
     return evidence;

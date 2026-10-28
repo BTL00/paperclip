@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { makeDefinition } from "./internal-definition.js";
-import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
+import { internalResultLink, checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface Probe { status: number; body: unknown }
 interface InboxObservation extends InternalObservation {
@@ -137,7 +137,7 @@ function inboxBoundary(scenarioId: string): ChatCatalogCase {
       }
       if (!href && o.scenarioId !== "inbox-search.archive-without-grant") throw new Error("Missing rendered Mine link");
       const source = ctx.input.page.url();
-      if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+      if (href) await internalResultLink(ctx, o, href).first().click();
       else await ctx.input.page.getByRole("link", { name: "Inbox", exact: true }).first().click();
       const mine = ctx.input.page.getByRole("button", { name: "Mine", exact: true }).or(ctx.input.page.getByRole("link", { name: "Mine", exact: true }))
         .or(ctx.input.page.getByRole("tab", { name: "Mine", exact: true })).first();

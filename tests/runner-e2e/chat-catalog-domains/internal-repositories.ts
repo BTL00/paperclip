@@ -3,7 +3,7 @@ import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contra
 import { pollUntil } from "../api.js";
 import { makeDefinition } from "./internal-definition.js";
 import { externalRequirements, selectedExternalBinding, selectedExternalCredential } from "./external-fixtures.js";
-import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
+import { internalResultLink, checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface Repository { id: string; fullName: string; url: string; connectionIds?: string[] }
 interface Workspace extends Entity { repoUrl?: string | null; cwd?: string | null; metadata?: { githubRepositoryId?: string } }
@@ -123,7 +123,7 @@ export function gradeRepositories(value: unknown) {
 async function openProject(ctx: ChatCatalogContext, o: RepositoryObservation) {
   const p = o.repositoryProject; if (!p) throw new Error("No saved repository project");
   const href = o.links.find(link => hasLink({ ...o, links: [link] }, "projects", p));
-  if (href) await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+  if (href) await internalResultLink(ctx, o, href).first().click();
   else await ctx.input.page.goto(new URL(`/${ctx.input.fixtures.company.issuePrefix}/projects/${p.urlKey ?? p.id}`, o.origin).href, { waitUntil: "domcontentloaded" });
   await expect(ctx.input.page.getByRole("heading", { name: p.name!, exact: true }).first()).toBeVisible();
   await ctx.input.page.getByText("Configuration", { exact: true }).last().click();

@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { makeDefinition, fixtureWorker } from "./internal-definition.js";
-import { project, task, entity, observation, checks, observeInternal, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
+import { internalResultLink, project, task, entity, observation, checks, observeInternal, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
 import { pollUntil } from "../api.js";
 
 type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
@@ -196,7 +196,7 @@ function shareProject(): ChatCatalogCase {
       const href = first.links.find(link => hasLink({ ...first, links: [link] }, "projects", p));
       if (!href) throw new Error("Owner handoff omitted the actual project link");
       const sourceUrl = ctx.input.page.url();
-      await ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first().click();
+      await internalResultLink(ctx, first, href).first().click();
       await ctx.input.page.getByText("Configuration", { exact: true }).last().click();
       await ctx.input.page.getByRole("button", { name: "Manage access", exact: true }).click();
       const dialog = ctx.input.page.getByRole("dialog", { name: "Private project access", exact: true });
