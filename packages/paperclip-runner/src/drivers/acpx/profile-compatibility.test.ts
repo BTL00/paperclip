@@ -21,7 +21,7 @@ describe("historical ACPX profile decoding", () => {
       expect(isSupportedAcpxProfileVersion(agent, 5)).toBe(true);
       expect(isSupportedAcpxProfileVersion(agent, 6)).toBe(false);
     }
-    for (const version of [1, 2, 3, 4, 5, QUALIFIED_ACPX_PROFILE_DATA.grok.agentProfileVersion]) {
+    for (const version of [1, 2, 3, 4, 5, 6, 7, QUALIFIED_ACPX_PROFILE_DATA.grok.agentProfileVersion]) {
       expect(isSupportedAcpxProfileVersion("grok", version)).toBe(true);
     }
     expect(isSupportedAcpxProfileVersion("grok", QUALIFIED_ACPX_PROFILE_DATA.grok.agentProfileVersion + 1)).toBe(false);

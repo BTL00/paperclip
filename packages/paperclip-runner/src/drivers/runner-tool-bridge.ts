@@ -53,6 +53,8 @@ export interface RunnerToolBridgeOptions {
   /** Internal test seam; production bounds headers and body reads to 30 seconds. */
   requestBodyTimeoutMs?: number;
   secret?: string;
+  socketPath?: string;
+  sessionScope?: () => string | null;
 }
 
 export interface RunnerToolBridge {
@@ -143,6 +145,9 @@ export async function startRunnerToolBridge(
     validators,
     calls,
     controllers,
+    sessionScope: options.sessionScope,
+    sessions: new Map<string, string>(),
+    activeScope: null as string | null,
     handler: options.handler,
     captureSemanticReceipt: options.captureSemanticReceipt,
     timeoutMs: options.timeoutMs === null ? null : positiveBoundedInteger(
@@ -184,15 +189,25 @@ export async function startRunnerToolBridge(
   server.requestTimeout = context.requestBodyTimeoutMs;
   server.headersTimeout = context.requestBodyTimeoutMs;
   server.on("clientError", (_error, socket) => socket.destroy());
-  await listenLoopback(server);
+  if (options.socketPath) {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.socketPath, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+  } else {
+    await listenLoopback(server);
+  }
   const address = server.address();
-  if (address === null || typeof address === "string") {
+  if (address === null || (typeof address === "string" && !options.socketPath)) {
     await closeServer(server);
     throw new Error("Runner tool bridge failed to bind a loopback port");
   }
   let closed = false;
   return Object.freeze({
-    url: `http://127.0.0.1:${address.port}/mcp`,
+    url: typeof address === "string" ? "http://localhost/mcp" : `http://127.0.0.1:${address.port}/mcp`,
     secret,
     async close() {
       if (closed) return;
@@ -208,6 +223,9 @@ async function handleRequest(
   response: ServerResponse,
   context: {
     secret: string;
+    sessionScope?: () => string | null;
+    sessions: Map<string, string>;
+    activeScope: string | null;
     preserveToolNames: boolean;
     visibleTools: RunnerToolDefinition[];
     admittedTools: Map<string, RunnerToolDefinition>;
@@ -255,11 +273,28 @@ async function handleRequest(
   }
   const id = message.id ?? null;
   const method = typeof message.method === "string" ? message.method : "";
+  let sessionKey = "";
+  if (context.sessionScope) {
+    const scope = context.sessionScope();
+    if (!scope) { response.statusCode = 403; response.end(); return; }
+    if (context.activeScope !== scope) {
+      for (const controller of context.controllers.values()) controller.abort();
+      context.sessions.clear(); context.calls.clear(); context.controllers.clear();
+      context.activeScope = scope;
+    }
+    if (method !== "initialize") {
+      const supplied = request.headers["mcp-session-id"];
+      if (typeof supplied !== "string" || context.sessions.get(supplied) !== scope) {
+        response.statusCode = 404; response.end(); return;
+      }
+      sessionKey = supplied + ":";
+    }
+  }
   if (method === "notifications/cancelled") {
     const params = isRecord(message.params) ? message.params : {};
     const requestId = params.requestId;
     if (typeof requestId === "string" || typeof requestId === "number") {
-      context.controllers.get(rpcIdKey(requestId))?.abort();
+      context.controllers.get(sessionKey + rpcIdKey(requestId))?.abort();
     }
     response.statusCode = 202;
     response.end();
@@ -271,7 +306,12 @@ async function handleRequest(
     return;
   }
   if (method === "initialize") {
-    response.setHeader("Mcp-Session-Id", randomBytes(16).toString("hex"));
+    const sessionId = randomBytes(16).toString("hex");
+    if (context.sessionScope) {
+      if (context.sessions.size >= 64) { response.statusCode = 429; response.end(); return; }
+      context.sessions.set(sessionId, context.activeScope!);
+    }
+    response.setHeader("Mcp-Session-Id", sessionId);
     writeRpc(response, id, {
       protocolVersion: "2025-03-26",
       capabilities: { tools: { listChanged: false } },
@@ -308,8 +348,8 @@ async function handleRequest(
     );
     return;
   }
-  const callId = String(id);
-  const callKey = rpcIdKey(id);
+  const callId = context.sessionScope ? sessionKey + rpcIdKey(id) : String(id);
+  const callKey = sessionKey + rpcIdKey(id);
   const args = params.arguments ?? {};
   const validator = context.validators.get(tool);
   if (validator === undefined || !validator(args)) {

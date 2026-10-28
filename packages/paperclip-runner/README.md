@@ -214,6 +214,42 @@ are unavailable. Accepting a native plan ends the planning run successfully whil
 the task waits for the next instruction. See the
 [Cursor release report](../../doc/plans/2026-10-03-cursor-production-readiness.md).
 
+Cursor Cloud is a separate experimental native provider (`cursor_cloud`, driver
+`cursor_cloud_api`). In Cursor Cloud agent setup, select **Paperclip Runner** under
+Advanced, bind `CURSOR_API_KEY`, choose an explicit model, and supply a repository
+or named Cursor Cloud environment. Existing Cursor Cloud agents keep their saved
+Legacy selection. The initial controller target is local; Cursor executes tools
+in its hosted VM. Native Cloud requires per-turn Runner lifecycle.
+Agent environment bindings support `CURSOR_API_KEY` only. Configure hosted shell
+secrets in the Cursor Cloud environment. Other selected process variables are
+rejected; they are not silently omitted from the hosted run.
+
+The hosted agent needs a reachable HTTPS callback origin from the server's public
+URL configuration (for example `PAPERCLIP_PUBLIC_URL`). Forward only
+`POST /mcp/native-runs/:runId` through a callback proxy; keep the local trusted
+application private. The callback requires an expiring run capability and current
+company/run authority, then passes tool calls through normal PRP/Core dispatch.
+**Test** checks configuration, callback reachability and account/model access
+without launching a paid prompt. A passing Test does not qualify task completion.
+
+Cloud v1 provides no independent acknowledgment of the effective model or exact
+instruction digest. Paperclip records submitted inputs and treats this support as
+experimental. Cursor manages its own shell permissions; native permission,
+question and plan callbacks and fixed per-run dollar limits are unavailable.
+Production usage and dollar cost remain unknown; the Cloud usage API is not yet
+projected through the Runner facade.
+Paperclip semantic tools use their existing authorization. Stop cancels the exact
+Cloud run and requires a terminal provider receipt. Unknown cancellation remains
+unconfirmed. Recovery reuses the saved Agent/Run and stream cursor, keeps the
+original deadline, and does not replay an ambiguous paid mutation.
+
+Cloud deliverables use `cursor-artifact:<listed relative path>` with the exact
+byte count and SHA-256. Runner downloads the provider artifact to its private
+artifact root before normal deliverable registration. A remote path never grants
+access to the controller's project files. See the
+[local qualification record](../../doc/plans/2026-10-28-cursor-cloud-native-runner.md)
+for runnable acceptance cells and the remaining live qualification gates.
+
 A release includes all four platform daemons and the Linux provider-pack identity
 from its matching Daytona image. Run `stage:release-binaries` with a manifest that
 binds each daemon path and SHA-256, plus `remoteProviderPacks: {"linux-x64": {path, sha256}, "linux-arm64": {path, sha256}}` for

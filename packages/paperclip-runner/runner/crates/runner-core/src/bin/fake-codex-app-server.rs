@@ -1125,6 +1125,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }))?;
             }
             "initialized" => {}
+            "paperclip/shutdown" if args.iter().any(|arg| arg == "--cursor-cloud-shutdown") => {
+                let unconfirmed =
+                    argument(&args, "--cursor-cloud-shutdown-control").is_some_and(|path| {
+                        fs::read_to_string(path).is_ok_and(|value| value.trim() == "unconfirmed")
+                    });
+                let params = &message["params"];
+                let has_remote_run = state.next_turn > 0;
+                if !unconfirmed {
+                    state.active_turn_id = None;
+                    save_state(&state_path, &state)?;
+                }
+                send(json!({ "id": id, "result": {
+                    "threadId": params["threadId"], "turnId": params["turnId"],
+                    "remoteStopped": !unconfirmed,
+                    "remoteAgentId": if has_remote_run { json!("cursor-agent-fixture") } else { Value::Null },
+                    "remoteRunId": if has_remote_run { json!("cursor-run-fixture") } else { Value::Null },
+                    "status": if unconfirmed { "RUNNING" } else { "CANCELLED" },
+                }}))?;
+            }
+
             "thread/start" => {
                 if let Some(delay) = argument(&args, "--thread-start-delay-ms") {
                     thread::sleep(Duration::from_millis(delay.parse()?));
