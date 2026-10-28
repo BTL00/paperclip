@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { AiConnectionList, AiManagedConnectionSummary } from "../../../packages/shared/src/ai-connections.js";
@@ -104,7 +105,7 @@ export const companyModelIdentityCases: readonly ChatCatalogCase[] = specs.map(s
 }, gradeCompanyModel, {
   sourceFiles: sources, authentication: "human-session", requiredCredentials: ["OPENROUTER_API_KEY"], attemptTimeoutMs: 420_000,
   async act(ctx, state) {
-    await waitForReply(ctx); const root = `/api/companies/${ctx.input.fixtures.company.id}`; const source = ctx.input.page.url();
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const root = `/api/companies/${ctx.input.fixtures.company.id}`; const source = ctx.input.page.url();
     state.afterReplyEnabled = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings.enabled;
     state.agentWriteStatus = await probeAgentPermission(ctx, `${root}/${spec.path}`, "PUT", { enabled: true, connectionId: (state.connection as AiManagedConnectionSummary).id, grantId: (state.connection as AiManagedConnectionSummary).grantId,
       ...(spec.path === "decision-model" ? { allowBackground: false } : spec.path === "fast-response" ? { model: requestedAuxiliaryServiceModel, allowSponsored: false } : { model: requestedAuxiliaryServiceModel }) });

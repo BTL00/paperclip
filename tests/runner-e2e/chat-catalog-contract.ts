@@ -48,6 +48,7 @@ const originalClockExecutionIds = new Set([
   "chat-features.runner-opencode.local.secrets.configure-company-secret",
   "chat-features.runner-opencode.local.teams.configure-team",
   "chat-features.runner-opencode.local.steering.interrupt-with-direction",
+  "chat-features.runner-opencode.local.companies.fast-responses",
 ]);
 function usesOriginalNativePhaseClock(ctx: ChatCatalogContext): boolean {
   return originalClockExecutionIds.has(ctx.input?.execution?.id);
