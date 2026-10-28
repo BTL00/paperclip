@@ -11,7 +11,7 @@ export interface SdkPublicInputs {
   parserPackageSha256: string; parserEntrySha256: string; zodPackageSha256: string; zodEntrySha256: string; zodTypeFiles: Record<string, string>;
 }
 interface PublicSource {
-  root: string; parser: { parse(text: string, options: unknown): any }; constructors: Record<string, unknown>;
+  root: string; parser: { parse(text: string, options: unknown): any }; constructors: Record<string, unknown>; factories: Record<string, unknown>;
   inputs: SdkPublicInputs; identity: { inputs: number; manifestSha256: string; lockSha256: string; compilerPackageSha256: string; parserPackageSha256: string; parserEntrySha256: string; zodPackageSha256: string; zodEntrySha256: string; zodTypeGraphSha256: string };
 }
 const verified = new WeakSet<PublicSource>();
@@ -23,8 +23,9 @@ export async function verifySdkPublicSource(root: string, expectations?: SdkPubl
     if (!/^[A-Za-z0-9._/-]+$/.test(file) || file.split("/").includes("..")) throw new Error("SDK public source proof unavailable");
     const filename = path.join(root, file), stat = await lstat(filename);
     const bytes = await readFile(filename);
+    // The authenticated restored lock is the sole overlay on frozen Git inputs.
     if (!stat.isFile() || stat.isSymbolicLink() || await realpath(filename) !== filename
-      || createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") !== expected) throw new Error("SDK public source proof unavailable");
+      || (file === "pnpm-lock.yaml" ? hash(bytes) !== inputs.lockSha256 : createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") !== expected)) throw new Error("SDK public source proof unavailable");
   }
   const actualSources: string[] = [];
   const collect = async (directory: string) => {
@@ -60,9 +61,11 @@ export async function verifySdkPublicSource(root: string, expectations?: SdkPubl
   const namespaces = entry.program.body.filter((n: any) => n.type === "ImportDeclaration" && resolves("index.d.cts", n.source?.value, "v4/classic/external.d.cts")).flatMap((n: any) => n.specifiers.filter((s: any) => s.type === "ImportNamespaceSpecifier").map((s: any) => s.local.name));
   if (!entry.program.body.some((n: any) => n.type === "ExportNamedDeclaration" && n.specifiers?.some((s: any) => s.exported?.name === "z" && namespaces.includes(s.local?.name)))) throw new Error("SDK public source proof unavailable");
   const declaredTypes = new Set(schemas.program.body.filter((n: any) => n.type === "ExportNamedDeclaration" && ["TSInterfaceDeclaration", "TSTypeAliasDeclaration", "ClassDeclaration"].includes(n.declaration?.type)).map((n: any) => n.declaration.id.name));
+  const declaredFactories = new Set(schemas.program.body.filter((n: any) => n.type === "ExportNamedDeclaration" && ["TSDeclareFunction", "FunctionDeclaration"].includes(n.declaration?.type)).map((n: any) => n.declaration.id.name));
   const zod = require("zod"), namespace = zod.z ?? zod;
   const constructors = Object.freeze(Object.fromEntries(Object.entries(namespace).filter(([name, value]) => declaredTypes.has(name) && typeof value === "function")));
-  const source = { root, parser, constructors, inputs, identity: { inputs: Object.keys(inputs.inputs).length, manifestSha256: hash(JSON.stringify(inputs)),
+  const factories = Object.freeze(Object.fromEntries(Object.entries(namespace).filter(([name, value]) => declaredFactories.has(name) && typeof value === "function")));
+  const source = { root, parser, constructors, factories, inputs, identity: { inputs: Object.keys(inputs.inputs).length, manifestSha256: hash(JSON.stringify(inputs)),
     lockSha256: inputs.lockSha256, compilerPackageSha256: inputs.compilerPackageSha256, parserPackageSha256: inputs.parserPackageSha256,
     parserEntrySha256: inputs.parserEntrySha256, zodPackageSha256: inputs.zodPackageSha256, zodEntrySha256: inputs.zodEntrySha256, zodTypeGraphSha256: hash(JSON.stringify(inputs.zodTypeFiles)) } };
   Object.freeze(source.identity); Object.freeze(source); verified.add(source); return source;
@@ -103,7 +106,7 @@ function publicSourceProperty(source: PublicSource, ast: any, key: string) {
     if (!value.arguments.every(primitive)) return false;
     factory = value.callee.property.name; value = value.callee.object;
   }
-  return value?.type === "Identifier" && publicAliases.includes(value.name) && !!factory && Object.hasOwn(source.constructors, factory) && typeof source.constructors[factory] === "function";
+  return value?.type === "Identifier" && publicAliases.includes(value.name) && !!factory && Object.hasOwn(source.factories, factory) && typeof source.factories[factory] === "function";
 }
 export async function sdkPublicTypeSyntax(source: PublicSource, file: string, text: string, span: { start: number; end: number }) {
   if (!verified.has(source) || Buffer.byteLength(text) > 8 * 1024 * 1024) return false;

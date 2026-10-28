@@ -5,7 +5,8 @@ import os from "node:os";
 import { beforeAll, afterAll, expect, it } from "vitest";
 import pins from "./source-sdk-public-inputs.json" with { type: "json" };
 import { createSdkArtifactScanner, sdkPublicTypeSyntax } from "./source-sdk-public-type.js";
-import { normalizedSecrets } from "./redaction.js";
+import { findSecretLeakMatch, normalizedSecrets } from "./redaction.js";
+import { diagnosticSecrets } from "./private-diagnostics.js";
 const hash = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 const blob = (v: string | Buffer) => createHash("sha1").update(`blob ${Buffer.byteLength(v)}\0`).update(v).digest("hex");
 const originalRoot = path.resolve(import.meta.dirname, "../.."), file = "packages/shared/dist/validators/synthetic-unit.d.ts", inputFile = file.replace("/dist/", "/src/").replace(/\.d\.ts$/, ".ts");
@@ -74,4 +75,32 @@ it("rejects changed source and unknown source initializers", async () => {
 it("keeps shape overflow blocked with bounded retained observations", async () => {
   const scanner = createSdkArtifactScanner(root, [], await fixture()); expect(await scanner.scan(file, Buffer.from((declaration+'\n').repeat(40)))).toBe(false);
   const audit = await scanner.audit(); expect(audit.bounded).toBe(false); expect(audit.observations).toHaveLength(32);
+});
+
+it("requires the authenticated public type export graph", async () => {
+  const expected = await fixture();
+  const scanner = createSdkArtifactScanner(root, [], { ...expected, zodTypeFiles: { ...expected.zodTypeFiles, "v4/classic/schemas.d.cts": "0".repeat(64) } });
+  expect(await scanner.scan(file, Buffer.from(declaration))).toBe(false);
+  expect((await scanner.audit()).publicSource).toBeNull();
+});
+it("rejects non-exported source factories and declaration constructors independently", async () => {
+  const unknownFactory = createSdkArtifactScanner(root, [], await fixture(source.replace("z.string()", "z.syntheticUnknownFactory()")));
+  expect(await unknownFactory.scan(file, Buffer.from(declaration))).toBe(false);
+  const unknownType = createSdkArtifactScanner(root, [], await fixture());
+  expect(await unknownType.scan(file, Buffer.from(declaration.replace("ZodString", "syntheticUnknownType")))).toBe(false);
+});
+it("does not apply typed syntax classification to API, stream, JavaScript or ZIP-shaped content", async () => {
+  for (const untyped of ["api-state.json", "persisted-run.ndjson", "entry.js", "blob.zip"]) {
+    const scanner = createSdkArtifactScanner(root, [], await fixture());
+    expect(await scanner.scan(untyped, Buffer.from(declaration))).toBe(false);
+  }
+  expect(findSecretLeakMatch(declaration, [])).toBeTruthy();
+});
+it("keeps raw and encoded credential leaves protected during a synthetic scan roundtrip", async () => {
+  const roots = diagnosticSecrets([JSON.stringify({ private: { kind: "identity", value: "synthetic-private-value-71983521" } })]).values;
+  for (const value of ["identity", "synthetic-private-value-71983521", Buffer.from("synthetic-private-value-71983521").toString("base64"), encodeURIComponent("synthetic-private-value-71983521")]) {
+    const scanner = createSdkArtifactScanner(root, roots, await fixture());
+    const bytes = Buffer.from(declaration+'type SyntheticPrivateValue="'+value+'";');
+    expect(await scanner.scan(file, bytes)).toBe(false);
+  }
 });
