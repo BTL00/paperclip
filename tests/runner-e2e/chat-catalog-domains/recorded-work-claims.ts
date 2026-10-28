@@ -15,12 +15,13 @@ export function recordedTaskUnits(reply: string, target: Entity, knownTasks: Ent
         .filter(value => companyPrefixes.some(prefix => value.toLowerCase().startsWith(prefix)));
       const textIdentifiers = knownTasks.filter(task => mentions(prose, task.identifier));
       const urlIdentifiers = knownTasks.filter(task => [task.id, task.identifier].some(id => !!id && new RegExp(`/issues/${escape(id)}(?![\\w-])`, "i").test(sentence)));
-      const identifiers = textIdentifiers.length ? textIdentifiers : explicitIdentifiers.length ? [] : urlIdentifiers;
-      let subjects = identifiers.length ? identifiers : explicitIdentifiers.length ? [] : knownTasks.filter(task => mentions(prose, task.title));
+      const unknownIssueResource = /\/issues\/(?:[a-f0-9]{8}-[a-f0-9-]{27}|[A-Z][A-Z0-9]*-\d+)(?![\w-])/i.test(sentence) && !urlIdentifiers.length;
+      const identifiers = unknownIssueResource ? [] : textIdentifiers.length ? textIdentifiers : explicitIdentifiers.length ? [] : urlIdentifiers;
+      let subjects = identifiers.length ? identifiers : explicitIdentifiers.length || unknownIssueResource ? [] : knownTasks.filter(task => mentions(prose, task.title));
       if (!identifiers.length) subjects = subjects.filter(task => !subjects.some(other => other.id !== task.id && other.title !== task.title && other.title?.includes(task.title ?? "")));
       const ids = [...new Set(subjects.map(task => task.id))];
       if (ids.length === 1) { current = { taskId: ids[0]!, text: sentence }; units.push(current); }
-      else if (ids.length > 1 || explicitIdentifiers.length) current = undefined;
+      else if (ids.length > 1 || explicitIdentifiers.length || unknownIssueResource) current = undefined;
       else if (current) current.text += ` ${sentence}`;
     }
   }
