@@ -42,13 +42,14 @@ async function syntheticRepository(){
  await write(root,"node_modules/typescript/package.json",'{"name":"synthetic-test-compiler-only"}');
  const actual=path.resolve(import.meta.dirname,"../..");await mkdir(path.join(root,"cli"));await symlink(path.join(actual,"cli/node_modules"),path.join(root,"cli/node_modules"));await mkdir(path.join(root,"tests"));await symlink(path.join(actual,"tests/runner-e2e"),path.join(root,"tests/runner-e2e"));
  const git=(...args:string[])=>execFileSync("git",args,{cwd:root,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim();git("init","-q");git("add","package.json","pnpm-lock.yaml","tsconfig.json","tsconfig.base.json","scripts","packages");git("-c","user.name=Synthetic Test","-c","user.email=synthetic@example.invalid","commit","-qm","Synthetic diagnostic controls only");
- return{root,expected:{shared:git("rev-parse","HEAD:packages/shared/src"),sdk:git("rev-parse","HEAD:packages/plugins/sdk/src"),helper:hash(helper)}};
+ const frozenInputs=Object.fromEntries(git("ls-files","--stage").split("\n").map(row=>{const [metadata,file]=row.split("\t");return[file,metadata.split(" ")[1]!];}).filter(([file])=>!file!.includes("/node_modules/")));
+ return{root,inputManifest:{schema:"paperclip.sdk-diagnostic-frozen-inputs/v1",frozenRevision:git("rev-parse","HEAD"),inputs:frozenInputs},expected:{shared:git("rev-parse","HEAD:packages/shared/src"),sdk:git("rev-parse","HEAD:packages/plugins/sdk/src"),helper:hash(helper)}};
 }
 it("keeps temporary workspace links/cache owned and invokes no real SDK build in its synthetic full-flow control",async()=>{
- const {root,expected}=await syntheticRepository(),owned=await temp();await prepareSdkDiagnosticCopy(root,owned);
+ const {root,expected,inputManifest}=await syntheticRepository(),owned=await temp();await prepareSdkDiagnosticCopy(root,owned,undefined,inputManifest);
  expect((await lstat(path.join(owned,"node_modules"))).isSymbolicLink()).toBe(false);expect((await lstat(path.join(owned,"node_modules/.cache"))).isDirectory()).toBe(true);
  expect(await readFile(path.join(owned,"packages/shared/src/index.ts"),"utf8")).toContain("syntheticShared");
- const receipt=await runSdkBuildDiagnostic(root,{expected});expect(receipt.failureCode).toBeNull();expect(receipt).toMatchObject({status:"completed",cleanupConfirmed:true,runtimeOutputUnchanged:true,caseResult:false,scenarioAttempts:0});expect(receipt.build).toMatchObject({exitCode:0,processGroupSettled:true});expect(receipt.scan?.files.length).toBe(4);
+ const receipt=await runSdkBuildDiagnostic(root,{expected,inputManifest});expect(receipt.failureCode).toBeNull();expect(receipt).toMatchObject({status:"completed",cleanupConfirmed:true,runtimeOutputUnchanged:true,caseResult:false,scenarioAttempts:0});expect(receipt.build).toMatchObject({exitCode:0,processGroupSettled:true});expect(receipt.scan?.files.length).toBe(4);
  await expect(lstat(path.join(root,"packages/shared/dist"))).rejects.toThrow();await expect(lstat(path.join(root,"node_modules/.cache/synthetic-owned-cache"))).rejects.toThrow();
  expect(await readFile(path.join(root,SDK_DIAGNOSTIC_FILE),"utf8")).not.toContain("synthetic-owned-cache");
 });
@@ -65,4 +66,14 @@ it("fails closed before any live launcher path while keeping the existing catalo
  for(const args of [[],["--id","example"],["--matrix-json","--installed-startup-only"],["--list","--target-config","private.json"],["product-journeys","--list"]])expect(()=>assertSdkDiagnosticInvocation(true,args)).toThrow("scenario execution is forbidden");
  for(const args of [["--matrix-json","--id","example"],["--list","--suite","chat-features"]])expect(()=>assertSdkDiagnosticInvocation(true,args)).not.toThrow();
  expect(()=>assertSdkDiagnosticInvocation(false,["--id","example"])).not.toThrow();
+});
+
+it.each(["packages/plugins/sdk/src/index.ts","packages/shared/tsconfig.json","packages/shared/src/untracked.ts"])("rejects dirty or unexpected copied %s bytes before any builder",async file=>{
+ const {root,expected,inputManifest}=await syntheticRepository();await write(root,file,"synthetic dirty working bytes\n");let invoked=false;const receipt=await runSdkBuildDiagnostic(root,{expected,inputManifest,builder:async()=>{invoked=true;throw Error("must not run");}});expect(invoked).toBe(false);expect(receipt.status).toBe("failed");expect(["source_input_blob_mismatch","source_input_untracked"]).toContain(receipt.failureCode);expect(receipt.cleanupConfirmed).toBe(true);
+});
+it("rejects copied source mutation after the artificial builder before scanning",async()=>{
+ const {root,expected,inputManifest}=await syntheticRepository();let scanned=false;const receipt=await runSdkBuildDiagnostic(root,{expected,inputManifest,builder:async(args,options)=>{const child=await runSdkDiagnosticChild(args,options);await write(options.cwd,"packages/shared/src/index.ts","synthetic post-build mutation\n");return child;},scanner:async()=>{scanned=true;throw Error("must not scan");}});expect(scanned).toBe(false);expect(receipt).toMatchObject({status:"failed",failureCode:"copied_source_changed",cleanupConfirmed:true,runtimeOutputUnchanged:true});
+});
+it("retains a separately hash-bound lock overlay while all source/config Git blobs stay frozen",async()=>{
+ const {root,expected,inputManifest}=await syntheticRepository();await write(root,"pnpm-lock.yaml","synthetic trusted target-lock overlay\n");const receipt=await runSdkBuildDiagnostic(root,{expected,inputManifest});expect(receipt).toMatchObject({status:"completed",cleanupConfirmed:true,lockSha256:hash("synthetic trusted target-lock overlay\n")});
 });

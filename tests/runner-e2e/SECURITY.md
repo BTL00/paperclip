@@ -592,6 +592,12 @@ diagnostic source also rejects every non-metadata launcher invocation before
 provider, browser, database, or result creation; this supplements protected paid
 gates and does not replace the coordinator's zero-start proof.
 
+A manifest freezes all 501 input paths at the original canary commit. Actual
+source/helper/config/package bytes must match those Git blobs, and the copied
+snapshot is verified before and after the builder. Unexpected, dirty or changed copied inputs fail closed. The
+restored lock overlay is hash-bound separately and requires the coordinator's
+authentic target-lock artifact comparison; a copied snapshot digest is retained.
+
 The unchanged certified SDK/shared builder runs only in an owned temporary
 source copy with separate writable workspace links and build cache. The child
 receives a closed environment containing synthetic credential markers, an owned

@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, lstat, readdir, readFile, realpath, rm, symlink, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, mkdtemp, lstat, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 export const SDK_DIAGNOSTIC_FILE = "packages/paperclip-runner/dist/diagnostics/source-sdk-build-validation.json";
@@ -28,12 +28,25 @@ async function treeIdentity(root) {
   try { return hash(Buffer.concat((await sdkDiagnosticTree(root)).flatMap(row => [Buffer.from(JSON.stringify([row.path,row.bytes.length])),row.bytes]))); }
   catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
-export async function prepareSdkDiagnosticCopy(repository, owned) {
-  let count = 0, bytes = 0;
+export const SDK_DIAGNOSTIC_INPUTS_SHA256 = "e8866882871633da469cba69d6c73c3ac56e9386cd2a842e8b10d7cbf5f19777";
+export async function readSdkDiagnosticInputManifest(repository){
+ const bytes=await readFile(path.join(repository,"tests/runner-e2e/sdk-build-diagnostic-inputs.json"));if(hash(bytes)!==SDK_DIAGNOSTIC_INPUTS_SHA256)throw new Error("frozen_input_manifest_changed");const value=JSON.parse(bytes);if(value.schema!=="paperclip.sdk-diagnostic-frozen-inputs/v1"||value.frozenRevision!=="cb31ebccf0411f3e260159b1d39e6c047a39f4e9")throw new Error("frozen_input_manifest_changed");return value;
+}
+export async function prepareSdkDiagnosticCopy(repository, owned, lockSha256, frozenInputs) {
+  frozenInputs??=await readSdkDiagnosticInputManifest(repository);
+  const tracked=new Map(Object.entries(frozenInputs.inputs));
+  let count = 0, bytes = 0; const manifest=[];
   async function copy(from,to) {
     const st=await lstat(from); if(st.isSymbolicLink())throw new Error("source_symlink");
     if(st.isDirectory()){await mkdir(to,{recursive:true,mode:0o700});for(const name of await readdir(from))await copy(path.join(from,name),path.join(to,name));}
-    else {bytes+=st.size;if(!st.isFile()||++count>4096||bytes>64*1024*1024)throw new Error("source_bound");await mkdir(path.dirname(to),{recursive:true,mode:0o700});await copyFile(from,to);}
+    else {bytes+=st.size;if(!st.isFile()||++count>4096||bytes>64*1024*1024)throw new Error("source_bound");
+      const relative=path.relative(repository,from).split(path.sep).join("/"),data=await readFile(from),sha256=hash(data),gitBlobSha1=tracked.get(relative);
+      if(!gitBlobSha1)throw new Error("source_input_untracked");
+      if(relative==="pnpm-lock.yaml"){if(lockSha256&&sha256!==lockSha256)throw new Error("resolved_lock_changed");}
+      else if(createHash("sha1").update(`blob ${data.length}\0`).update(data).digest("hex")!==gitBlobSha1)throw new Error("source_input_blob_mismatch");
+      await mkdir(path.dirname(to),{recursive:true,mode:0o700});await writeFile(to,data,{flag:"wx",mode:0o600});
+      if(hash(await readFile(to))!==sha256)throw new Error("copied_source_changed");manifest.push({path:relative,bytes:data.length,sha256,gitBlobSha1,restoredLockOverlay:relative==="pnpm-lock.yaml"});
+    }
   }
   for(const file of inputs)await copy(path.join(repository,file),path.join(owned,file));
   for(const packagePath of ["", "packages/shared", "packages/plugins/sdk"]){
@@ -46,7 +59,9 @@ export async function prepareSdkDiagnosticCopy(repository, owned) {
     await mkdir(path.join(destination,"@paperclipai"),{recursive:true});await symlink(path.join(owned,"packages/shared"),path.join(destination,"@paperclipai/shared"));
   }
   for(const directory of ["home","tmp","node_modules/.cache"])await mkdir(path.join(owned,directory),{recursive:true,mode:0o700});
-  return { files:count, bytes };
+  if(manifest.length!==tracked.size)throw new Error("source_input_set_changed");
+  manifest.sort((a,b)=>a.path.localeCompare(b.path));
+  return { files:count, bytes, manifest, frozenRevision:frozenInputs.frozenRevision, expectedInputsDigest:hash(JSON.stringify(frozenInputs)), gitBlobVerifiedFiles:count-1, manifestSha256:hash(JSON.stringify(manifest)), lockAuthentication:"actual-restored-lock-hash; coordinator-must-compare-authentic-target-lock-artifact" };
 }
 export async function runSdkDiagnosticChild(args,{cwd,env,timeoutMs=120000,outputLimit=8*1024*1024}={}) {
   const child=spawn(process.execPath,args,{cwd,env,detached:true,stdio:["ignore","pipe","pipe"]}),digests=[createHash("sha256"),createHash("sha256")];let outputBytes=0,limit=false,timedOut=false;
@@ -58,7 +73,7 @@ export async function runSdkDiagnosticChild(args,{cwd,env,timeoutMs=120000,outpu
   let settled=spawnFailed&&!Number.isInteger(child.pid);for(let tries=0;!settled&&tries<40;tries++){try{process.kill(-child.pid,0);signal("SIGKILL");}catch(error){if(error.code==="ESRCH"){settled=true;break;}signalFailed=true;break;}await new Promise(resolve=>setTimeout(resolve,50));}
   return {exitCode:code,spawnFailed,timedOut,outputLimitExceeded:limit,outputBytes,stdoutSha256:digests[0].digest("hex"),stderrSha256:digests[1].digest("hex"),processGroupSettled:settled&&!signalFailed};
 }
-export async function runSdkBuildDiagnostic(repositoryRoot,{expected=SDK_DIAGNOSTIC_SOURCE,builder=runSdkDiagnosticChild,scanner=runSdkDiagnosticChild}={}) {
+export async function runSdkBuildDiagnostic(repositoryRoot,{expected=SDK_DIAGNOSTIC_SOURCE,inputManifest,builder=runSdkDiagnosticChild,scanner=runSdkDiagnosticChild}={}) {
   const repository=await realpath(repositoryRoot),git=(...args)=>execFileSync("git",args,{cwd:repository,encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim();
   const receipt={schema:"paperclip.sdk-build-only-diagnostic/v1",diagnosticOnly:true,caseResult:false,scenarioAttempts:0,providerCalls:null,sourceRevision:git("rev-parse","HEAD"),sourceIdentity:{shared:git("rev-parse","HEAD:packages/shared/src"),sdk:git("rev-parse","HEAD:packages/plugins/sdk/src"),helper:hash(await readFile(path.join(repository,"scripts/ensure-plugin-build-deps.mjs")))},lockSha256:hash(await readFile(path.join(repository,"pnpm-lock.yaml"))),status:"failed",failureCode:null,cleanupConfirmed:false};
   const output=path.join(repository,SDK_DIAGNOSTIC_FILE);let owned,settled=true;
@@ -66,14 +81,16 @@ export async function runSdkBuildDiagnostic(repositoryRoot,{expected=SDK_DIAGNOS
   const before=await Promise.all(watched.map(target=>treeIdentity(path.join(repository,target))));
   try {
     if(JSON.stringify(receipt.sourceIdentity)!==JSON.stringify(expected))throw new Error("source_identity_mismatch");
-    owned=await mkdtemp(path.join(os.tmpdir(),"paperclip-sdk-build-diagnostic-"));receipt.copy=await prepareSdkDiagnosticCopy(repository,owned);const env=sdkDiagnosticEnvironment(owned);
+    owned=await mkdtemp(path.join(os.tmpdir(),"paperclip-sdk-build-diagnostic-"));receipt.copy=await prepareSdkDiagnosticCopy(repository,owned,receipt.lockSha256,inputManifest);const env=sdkDiagnosticEnvironment(owned);
+    await verifySdkDiagnosticCopiedInputs(owned,receipt.copy);receipt.copiedSnapshotVerifiedBeforeBuilder=true;
     receipt.environmentKeys=Object.keys(env).sort();receipt.compilerPackageSha256=hash(await readFile(path.join(owned,"node_modules/typescript/package.json")));
     receipt.build=await builder([path.join(owned,"scripts/ensure-plugin-build-deps.mjs")],{cwd:owned,env});settled=receipt.build.processGroupSettled;
     if(!settled||receipt.build.exitCode!==0||receipt.build.timedOut||receipt.build.outputLimitExceeded)throw new Error("certified_build_failed");
+    await verifySdkDiagnosticCopiedInputs(owned,receipt.copy);receipt.copiedSnapshotVerifiedAfterBuilder=true;
     const scanOutput=path.join(owned,"closed-scan.json");receipt.scanProcess=await scanner(["--import",path.join(repository,"cli/node_modules/tsx/dist/loader.mjs"),await realpath(path.join(repository,"tests/runner-e2e/sdk-build-diagnostic-scan.ts")),owned,scanOutput],{cwd:owned,env});settled=receipt.scanProcess.processGroupSettled;
     if(!settled||receipt.scanProcess.exitCode!==0||receipt.scanProcess.timedOut||receipt.scanProcess.outputLimitExceeded)throw new Error("diagnostic_scan_failed");
     const scanFile=await lstat(scanOutput);if(!scanFile.isFile()||scanFile.isSymbolicLink()||scanFile.size>4*1024*1024)throw new Error("scan_metadata_invalid");const scan=JSON.parse(await readFile(scanOutput,"utf8"));validateSdkDiagnosticScan(scan);receipt.scan=scan;receipt.status="completed";
-  } catch(error) {receipt.failureCode=["source_identity_mismatch","certified_build_failed","diagnostic_scan_failed","scan_metadata_invalid","source_symlink","source_bound","invalid_tree","tree_bound"].includes(error.message)?error.message:"diagnostic_operation_failed";}
+  } catch(error) {receipt.failureCode=["source_identity_mismatch","frozen_input_manifest_changed","source_input_mode_invalid","source_input_untracked","source_input_blob_mismatch","source_input_set_changed","resolved_lock_changed","copied_source_changed","certified_build_failed","diagnostic_scan_failed","scan_metadata_invalid","source_symlink","source_bound","invalid_tree","tree_bound"].includes(error.message)?error.message:"diagnostic_operation_failed";}
   finally {
     if(owned&&settled){try{await rm(owned,{recursive:true,force:true});await lstat(owned);}catch(error){if(error.code==="ENOENT")receipt.cleanupConfirmed=true;}}
     receipt.runtimeOutputUnchanged=JSON.stringify(before)===JSON.stringify(await Promise.all(watched.map(target=>treeIdentity(path.join(repository,target)))));
@@ -102,4 +119,9 @@ export function validateSdkDiagnosticScan(scan){
 
 export function assertSdkDiagnosticInvocation(requested,args){
  if(requested&&(!args.some(arg=>arg==="--list"||arg==="--matrix-json")||args.some(arg=>["--installed-startup-only","--target-config","product-journeys"].includes(arg))))throw new Error("SDK diagnostic source permits catalog metadata only; scenario execution is forbidden");
+}
+
+export async function verifySdkDiagnosticCopiedInputs(owned,copy){
+ for(const row of copy.manifest){const file=path.join(owned,...row.path.split("/")),st=await lstat(file);if(!st.isFile()||st.isSymbolicLink()||st.size!==row.bytes||hash(await readFile(file))!==row.sha256)throw new Error("copied_source_changed");}
+ const actual=[];async function visit(file){const st=await lstat(file);if(st.isSymbolicLink())throw new Error("copied_source_changed");if(st.isDirectory())for(const name of await readdir(file))await visit(path.join(file,name));else actual.push(path.relative(owned,file).split(path.sep).join("/"));}for(const relative of inputs)await visit(path.join(owned,relative));if(JSON.stringify(actual.sort())!==JSON.stringify(copy.manifest.map(row=>row.path).sort()))throw new Error("source_input_set_changed");
 }
