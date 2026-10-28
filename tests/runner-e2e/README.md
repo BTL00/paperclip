@@ -11,7 +11,16 @@ Configure `PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL` with an exact account model,
 `PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO` with an owned disposable HTTPS repository,
 optional `PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REF`, and `CURSOR_API_KEY`.
 Set `PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT` to a dedicated free loopback port and
-point an HTTPS tunnel at **that port only**. Set `PAPERCLIP_PUBLIC_URL` to the
+point an HTTPS tunnel at **that port only**. After approving unpriced provider
+spend for these disposable tests, set
+`PAPERCLIP_CURSOR_CLOUD_ALLOW_UNPRICED_QUALIFICATION=1`. Missing opt-in blocks
+before credential loading or fixture creation. Each fresh Cursor Cloud fixture
+sets and reads back only its company and agent monthly billed-cost policies:
+1,000 cents, active hard stops, and `unpricedUsagePolicy: allow`. A failed or
+mismatched readback blocks task dispatch. The verified policy receipt is retained
+in `fixtures.json`. These limits still stop known billed costs; they do not cap
+unpriced usage. Provider cost remains unavailable, never inferred as zero.
+Set `PAPERCLIP_PUBLIC_URL` to the
 tunnel's origin. The E2E wrapper exposes only POST `/mcp/native-runs/:runId`
 through this listener; it rejects the UI and `/api/` paths. Public ingress is
 checked before fixtures or provider work. Never tunnel the local operator app.

@@ -44,9 +44,10 @@ describe("Cursor Cloud Product E2E registration", () => {
   });
   it("setup-blocks missing prerequisites before credential loading and accepts an explicitly configured local profile", () => {
     expect(() => assertRunnerE2EPrerequisites(cells, {})).toThrow("setup-blocked");
-    const environment = { PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL: "explicit-model", PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO: "https://github.com/owned/disposable", PAPERCLIP_PUBLIC_URL: "https://callback.example.test", PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT: "43121" };
+    const environment = { PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL: "explicit-model", PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO: "https://github.com/owned/disposable", PAPERCLIP_PUBLIC_URL: "https://callback.example.test", PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT: "43121", PAPERCLIP_CURSOR_CLOUD_ALLOW_UNPRICED_QUALIFICATION: "1" };
     const configured = cells.map(cell => ({ ...cell, profile: { ...cell.profile, model: "explicit-model" } }));
     expect(() => assertRunnerE2EPrerequisites(configured, environment)).not.toThrow();
+    expect(() => assertRunnerE2EPrerequisites(configured, { ...environment, PAPERCLIP_CURSOR_CLOUD_ALLOW_UNPRICED_QUALIFICATION: undefined })).toThrow("ALLOW_UNPRICED_QUALIFICATION");
     expect(() => assertRunnerE2EPrerequisites(configured, { ...environment, PAPERCLIP_PUBLIC_URL: "http://localhost" })).toThrow("setup-blocked");
     expect(() => assertRunnerE2EPrerequisites(configured, { ...environment, PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO: "https://user:secret@example.test/repo" })).toThrow("setup-blocked");
     expect(() => assertRunnerE2EPrerequisites(cells, environment)).toThrow("exact configured model");

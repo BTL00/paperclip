@@ -1,4 +1,5 @@
 import type { MatrixExecution } from "./types.js";
+import { assertCursorCloudQualificationBudgetOptIn } from "./cursor-cloud-budget.js";
 
 /** Explicit-only profiles blocked until complete identity/auth/session/billing qualification. */
 export const PENDING_PROFILE_PREREQUISITES = {
@@ -27,6 +28,9 @@ export function assertRunnerE2EPrerequisites(
   executions: readonly MatrixExecution[],
   environment: NodeJS.ProcessEnv = process.env,
 ): void {
+  if (executions.some(execution => execution.suite.id === "cursor-cloud" && execution.profile.provider === "cursor_cloud")) {
+    assertCursorCloudQualificationBudgetOptIn(environment);
+  }
   if (executions.some(execution => execution.profile.provider === "cursor_cloud")) {
     const required = ["PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL", "PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO", "PAPERCLIP_PUBLIC_URL", "PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT"];
     const missing = required.filter(name => !environment[name]?.trim());
