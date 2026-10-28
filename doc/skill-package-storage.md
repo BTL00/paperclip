@@ -9,8 +9,8 @@ locally authored/edited packages and unproven legacy packages keep a durable cop
 
 ## Automatic upgrade
 
-No data-migration command is required. The normal schema upgrade applies migrations
-0398/0399. External writes and automatic conversion are enabled by default. Startup
+No data-migration command is required. The normal schema upgrade applies migration
+0400 (`0400_gifted_ezekiel_stane.sql`). External writes and automatic conversion are enabled by default. Startup
 restores pending work from indexed `migration_at` / `maintenance_at` columns. The
 shared delivery coordinator converts four snapshots and four versions per batch,
 reading one legacy body at a time. It verifies the hash, uploads, reads the objects
@@ -56,6 +56,11 @@ A source/version change schedules another eligibility check; packages held by a 
 pin are also reconsidered on restart. This is conservative retention, not an immediate
 promise to purge on unassignment. Legacy packages without a provable recipe and authored
 or edited copies retain their durable bytes as long as a version references them.
+A shared package remains durable when any referencing version lacks its own immutable
+repository reference. This also conservatively retains per-skill Git imports without
+repository projections. Authored preparation permanently marks the storage receipt as
+durable, including when it joins a concurrent Git upload. Expiry checks that marker in
+its update, so a later Git import cannot weaken an authored version's retention.
 
 Native runtime assets expire after 30 days without use. An hourly coalesced filesystem
 access lease protects preparation through durable run pinning. Cleanup shares the

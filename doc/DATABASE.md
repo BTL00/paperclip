@@ -1256,18 +1256,21 @@ transaction boundary.
 
 `company_skill_repository_snapshots` retains its identity and company/content-hash
 uniqueness. Despite its historical name, it can also hold editable skill packages.
-Migration 0398 adds `storage` (archive/manifest receipts) and `upload` (a bounded
+Migration 0400 (`0400_gifted_ezekiel_stane.sql`) adds `storage` (archive/manifest receipts) and `upload` (a bounded
 pending attempt). `file_inventory` remains the legacy payload, defaulting to `[]`.
 `company_skill_versions.package_snapshot_id` and `package_file_map` preserve the
 public version file inventory without storing its contents again. Existing repository
 snapshot/entrypoint references and version IDs remain unchanged. Reference indexes
 support bounded orphan checks; restrictive FKs protect retained version packages.
+Version mappings preserve kinds and encodings when identical bytes share a package.
+Authored saves mark the storage receipt `durable`; retirement atomically respects that
+marker even when the save joins a concurrent Git upload.
 
 `skill_package_deletions` is a durable object-deletion outbox populated by snapshot
 update/delete triggers. Its company ID deliberately has no cascading company FK:
 cleanup must retain exact object keys after company deletion. Upload promotion skips
 retirement; replacing a pending token retires only the old attempt's unique keys.
-Migration 0399 adds exact-commit restore recipes and indexed conversion/maintenance
+The same migration adds exact-commit restore recipes and indexed conversion/maintenance
 deadlines. A bounded coordinator worker automatically converts and clears verified
 legacy payloads; no migration command is required. Warm reads exclude recipe manifests.
 See [package storage](skill-package-storage.md) for acquisition, retention, compatibility

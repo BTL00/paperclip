@@ -1,6 +1,6 @@
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
 import { verifyFileManifest } from "./file-manifest-cache.js";
-import { skillPackageStorageEnabled, skillPackageStore, skillVersionMetadataColumns, withSkillPackageReadScope, type StoredSkillVersion } from "./skill-package-store.js";
+import { skillPackageStorageEnabled, skillPackageStore, skillVersionFileMap, skillVersionMetadataColumns, withSkillPackageReadScope, type StoredSkillVersion } from "./skill-package-store.js";
 import { skillPackageRuntime } from "./skill-package-runtime.js";
 import type { SkillPackageFileMapping } from "@paperclipai/db";
 import { ensureSkillCacheDirectory, touchSkillVersionCache, withSkillVersionCacheLock } from "./skill-version-cache.js";
@@ -3710,9 +3710,20 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     const previousVersion = options.fileInventory === undefined ? await getCurrentVersion(skill) : null;
     // Shipped release rows retain their existing validation contract. All user
     // snapshots use the package store; source imports prepare before their transaction.
+    let packageFileMap = options.packageFileMap ?? null;
+    const preparePackage = async (store: ReturnType<typeof skillPackageStore>) => {
+      const id = await store.prepare(companyId, fileInventory);
+      packageFileMap = skillVersionFileMap(fileInventory, await store.manifest(companyId, id));
+      return id;
+    };
     const packageSnapshotId = options.packageSnapshotId ?? (options.release || !skillPackageStorageEnabled() ? null : options.database
-      ? await withDedicatedDbConnection(packageDb, connection => skillPackageStore(connection).prepare(companyId, fileInventory))
-      : await packages.prepare(companyId, fileInventory));
+      ? await withDedicatedDbConnection(packageDb, connection => preparePackage(skillPackageStore(connection)))
+      : await preparePackage(packages));
+    if (options.packageSnapshotId) {
+      const metadata = new Map(fileInventory.map(file => [file.path, file]));
+      packageFileMap = (packageFileMap ?? fileInventory.map(file => ({ path: file.path, kind: file.kind, sourcePath: file.path })))
+        .map(file => ({ ...file, encoding: metadata.get(file.path)?.encoding ?? "utf8" }));
+    }
     const persist = async (tx: DbOrTransaction) => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
       await tx.execute(sql`
@@ -3737,7 +3748,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
           repositorySkillPath: options.repositorySkillPath ?? previousVersion?.repositorySkillPath ?? null,
           packageSnapshotId,
           migrationAt: packageSnapshotId || options.release ? null : new Date(),
-          packageFileMap: options.packageFileMap ?? null,
+          packageFileMap,
           revisionNumber: Number(nextRevision ?? 1),
           label: input.label?.trim() || null,
           releaseId: options.release?.id ?? null,
@@ -4440,8 +4451,9 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
         if (mapping) file = await packages.withPackage(skill.companyId, version.packageSnapshotId, async (root, manifest) => {
           const entry = manifest.files.find(file => file.path === mapping.sourcePath);
           if (!entry) return null;
-          return { path: mapping.path, kind: mapping.kind, content: (await fs.readFile(path.join(root, entry.path))).toString(entry.encoding),
-            encoding: entry.encoding, executable: entry.executable };
+          const encoding = mapping.encoding ?? entry.encoding;
+          return { path: mapping.path, kind: mapping.kind, content: (await fs.readFile(path.join(root, entry.path))).toString(encoding),
+            encoding, executable: entry.executable };
         });
         else if (!version.repositorySnapshotId) file = await packageRuntime.readFile(version, normalizedPath);
       } else if (version) file = (await packages.versionFiles(version)).find(file => file.path === normalizedPath);

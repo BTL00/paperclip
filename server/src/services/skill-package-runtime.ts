@@ -32,7 +32,7 @@ function originalFiles(version: StoredSkillVersion, manifest: SkillPackageManife
     assertSkillSnapshotPath(mapping.sourcePath);
     const file = byPath.get(mapping.sourcePath);
     if (!file) throw new Error("Skill version references a missing package file");
-    return { ...file, ...mapping };
+    return { ...file, ...mapping, encoding: mapping.encoding ?? file.encoding };
   });
 }
 export function skillPackageRuntime(db: Db) {

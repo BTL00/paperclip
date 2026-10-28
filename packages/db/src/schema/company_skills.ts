@@ -71,6 +71,7 @@ export type CompanySkillVersionFileInventoryEntry = CompanySkillFileInventoryEnt
 };
 
 export type SkillPackageStorageReceipt = {
+  durable?: boolean;
   format: "tar-gzip-v1";
   provider: "local_disk" | "s3";
   archiveKey: string;
@@ -109,7 +110,7 @@ export type SkillPackageRestoreRecipe = {
   };
 };
 
-export type SkillPackageFileMapping = CompanySkillFileInventoryEntry & { sourcePath: string };
+export type SkillPackageFileMapping = CompanySkillFileInventoryEntry & { sourcePath: string; encoding?: "utf8" | "base64" };
 
 /** Durable deletion receipts survive company/snapshot deletion until storage confirms removal. */
 export const skillPackageDeletions = pgTable("skill_package_deletions", {

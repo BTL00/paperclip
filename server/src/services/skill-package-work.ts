@@ -4,6 +4,7 @@ import { and, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { companySkillRepositorySnapshots as snapshots, companySkillVersions as versions,
   skillPackageDeletions, agents, type Db } from "@paperclipai/db";
 import { getStorageService, type StorageService } from "../storage/index.js";
+import { storageFailureDiagnosticsFor } from "../storage/failure-diagnostics.js";
 import { logger } from "../middleware/logger.js";
 import { DELIVERY_QUEUES } from "./delivery-work-notifications.js";
 import type { createDeliveryWorkCoordinator } from "./delivery-work-coordinator.js";
@@ -15,6 +16,26 @@ import { ensureSkillCacheDirectory, protectedVersions, SkillCacheBusy, withSkill
 export const SKILL_PACKAGE_RETENTION_MS = 30 * 24 * 60 * 60_000;
 const RETRY_MS = 60 * 60_000;
 const PAGE_SIZE = 4;
+
+function failureDetails(error: unknown) {
+  const storage = storageFailureDiagnosticsFor(error);
+  if (storage) return { reason: "storage_failure", ...storage };
+  const own = (key: string) => error && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, key)?.value : undefined;
+  const message = own("message");
+  const code = own("code") ?? own("name");
+  const reasons = [
+    ["Legacy package hash mismatch", "legacy_hash_mismatch"],
+    ["Legacy version differs", "legacy_version_mismatch"],
+    ["Package verification failed", "verification_failed"],
+    ["Skill package file checksum mismatch", "checksum_mismatch"],
+    ["Skill package archive checksum mismatch", "checksum_mismatch"],
+    ["Invalid skill restore recipe", "invalid_restore_recipe"],
+    ["Object not found", "object_missing"],
+    ["Storage did not confirm package deletion", "deletion_unconfirmed"],
+  ] as const;
+  return { reason: reasons.find(([prefix]) => typeof message === "string" && message.startsWith(prefix))?.[1] ?? "operation_failed",
+    errorCode: typeof code === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(code) ? code : "unknown" };
+}
 
 /** A finite upgrade plus persisted cleanup deadlines. No work is added to turn
  * preparation; completed history has no recurring SQL/network obligation. */
@@ -44,7 +65,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
     const orphanAt = row.createdAt.getTime() + 24 * 60 * 60_000;
     let next: Date | null = orphanAt > Date.now() ? new Date(orphanAt) : null;
     if (row.upload) next = new Date(Math.max(Date.now() + RETRY_MS, new Date(row.upload.expiresAt).getTime(), row.createdAt.getTime() + 24 * 60 * 60_000));
-    else if (row.restore && row.storage) {
+    else if (row.restore && row.storage && !row.storage.durable) {
       const expires = row.createdAt.getTime() + SKILL_PACKAGE_RETENTION_MS;
       if (expires > Date.now()) next = new Date(expires);
       else if (!row.migrationAt) {
@@ -52,8 +73,9 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
         if (row.restore.version !== 1 || manifest.contentHash !== row.contentHash
           || packageSha256(skillPackageManifestBytes(manifest)) !== row.storage.manifestSha256) throw new Error("Invalid skill restore recipe; keep durable bytes");
         await withSkillVersionCacheLock(db, row.companyId, async () => {
-          const referenced = await db.select({ id: versions.id }).from(versions).where(and(eq(versions.companyId, row.companyId),
+          const referenced = await db.select({ id: versions.id, repositorySnapshotId: versions.repositorySnapshotId }).from(versions).where(and(eq(versions.companyId, row.companyId),
             sql`(${versions.repositorySnapshotId} = ${id} or ${versions.packageSnapshotId} = ${id})`));
+          if (referenced.some(version => version.repositorySnapshotId !== id)) return;
           const [current] = await db.execute(sql`select 1 from company_skills s where s.company_id = ${row.companyId}
             and s.current_version_id in (select id from company_skill_versions where repository_snapshot_id = ${id} or package_snapshot_id = ${id})
             union all select 1 from company_skill_test_runs t where t.company_id = ${row.companyId}
@@ -69,8 +91,9 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
           signal.throwIfAborted();
           // Metadata/recipe remain. Triggered deletion receipts retain the old
           // object keys through the rollback grace; future reads reacquire the SHA.
-          await db.update(snapshots).set({ storage: null }).where(and(eq(snapshots.id, id), isNull(snapshots.upload)));
-          await removeLocal();
+          const retired = await db.update(snapshots).set({ storage: null }).where(and(eq(snapshots.id, id), isNull(snapshots.upload),
+            sql`${snapshots.storage}->>'durable' is distinct from 'true'`)).returning({ id: snapshots.id });
+          if (retired.length) await removeLocal();
         }, true);
       }
     }
@@ -92,7 +115,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
         } catch (error) {
           signal.throwIfAborted();
           await db.update(table).set({ migrationAt: new Date(Date.now() + RETRY_MS) }).where(and(eq(table.id, row.id), isNotNull(table.migrationAt)));
-          logger.warn({ packageId: row.id }, "Skill package conversion deferred; original contents retained");
+          logger.warn({ packageId: row.id, failure: failureDetails(error) }, "Skill package conversion deferred; original contents retained");
         }
       }
     }
@@ -102,7 +125,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
       catch (error) {
         signal.throwIfAborted();
         await db.update(snapshots).set({ maintenanceAt: new Date(Date.now() + (error instanceof SkillCacheBusy ? 60_000 : RETRY_MS)) }).where(and(eq(snapshots.id, id), lte(snapshots.maintenanceAt, new Date())));
-        if (!(error instanceof SkillCacheBusy)) logger.warn({ packageId: id }, "Skill package cleanup deferred");
+        if (!(error instanceof SkillCacheBusy)) logger.warn({ packageId: id, failure: failureDetails(error) }, "Skill package cleanup deferred");
       }
     }
     const deletions = await db.select({ id: skillPackageDeletions.id }).from(skillPackageDeletions).where(and(
@@ -112,7 +135,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
       catch (error) {
         signal.throwIfAborted();
         await db.update(skillPackageDeletions).set({ deleteAfter: new Date(Date.now() + RETRY_MS) }).where(eq(skillPackageDeletions.id, id));
-        logger.warn({ deletionId: id }, "Skill package object deletion deferred");
+        logger.warn({ deletionId: id, failure: failureDetails(error) }, "Skill package object deletion deferred");
       }
     }
   }
@@ -139,6 +162,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
           // Reconsider it once on restart, not on an idle polling interval.
           await db.update(snapshots).set({ maintenanceAt: new Date() }).where(and(isNull(snapshots.maintenanceAt),
             sql`${snapshots.storage} is not null and ${snapshots.restore} is not null`,
+            sql`${snapshots.storage}->>'durable' is distinct from 'true'`,
             lte(snapshots.createdAt, new Date(Date.now() - SKILL_PACKAGE_RETENTION_MS))));
           recovered = true;
         }

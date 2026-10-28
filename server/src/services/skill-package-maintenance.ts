@@ -3,7 +3,7 @@ import { and, asc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import { companySkillRepositorySnapshots as snapshots, companySkillVersions as versions,
   skillPackageDeletions, type Db } from "@paperclipai/db";
 import { getStorageService, type StorageService } from "../storage/index.js";
-import { skillPackageStore, skillVersionMetadataColumns } from "./skill-package-store.js";
+import { skillPackageStore, skillVersionFileMap, skillVersionMetadataColumns } from "./skill-package-store.js";
 import { packageSha256 } from "./skill-package-files.js";
 import { skillFileBytes, skillSnapshotHash } from "./skill-snapshot.js";
 
@@ -61,7 +61,7 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
       if (!packageId && row.repositorySnapshotId && row.repositorySkillPath) {
         const manifest = await store.manifest(row.companyId, row.repositorySnapshotId);
         const byPath = new Map(manifest.files.map(file => [file.path, file]));
-        const mappings = files.map(file => ({ path: file.path, kind: file.kind,
+        const mappings = files.map(file => ({ path: file.path, kind: file.kind, encoding: file.encoding ?? "utf8" as const,
           sourcePath: file.path === "SKILL.md" ? row.repositorySkillPath! : path.posix.join(path.posix.dirname(row.repositorySkillPath!), file.path) }));
         if (files.every((file, index) => {
           const source = byPath.get(mappings[index]!.sourcePath);
@@ -69,6 +69,9 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
         })) { packageId = row.repositorySnapshotId; fileMap = mappings; }
       }
       packageId ??= await store.prepare(row.companyId, files, true, options.signal);
+      const legacyMetadata = new Map(files.map(file => [file.path, file]));
+      fileMap = fileMap ? fileMap.map(file => ({ ...file, kind: legacyMetadata.get(file.path)?.kind ?? file.kind,
+        encoding: legacyMetadata.get(file.path)?.encoding ?? "utf8" })) : skillVersionFileMap(files, await store.manifest(row.companyId, packageId));
       const receipt = await store.descriptor(row.companyId, packageId);
       if (!receipt.storage || !await store.verifyDurable(row.companyId, packageId, options.signal)) throw new Error(`Package must be migrated and verified first: ${packageId}`);
       await db.update(versions).set({ packageSnapshotId: packageId, packageFileMap: fileMap, ...(options.clearLegacy ? { fileInventory: [], migrationAt: null } : {}) })
@@ -80,18 +83,19 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
 
   async function collectOrphans(options: PageOptions = {}) {
     const unused = sql`not exists (select 1 from ${versions} where ${versions.repositorySnapshotId} = ${snapshots.id} or ${versions.packageSnapshotId} = ${snapshots.id})`;
+    const expired = sql`(${snapshots.upload} is null or (${snapshots.upload}->>'expiresAt')::timestamptz < now())`;
     const rows = await db.select({ id: snapshots.id }).from(snapshots).where(and(
       options.companyId ? eq(snapshots.companyId, options.companyId) : undefined,
       options.id ? eq(snapshots.id, options.id) : undefined,
         options.after ? gt(snapshots.id, options.after) : undefined,
       sql`${snapshots.createdAt} < now() - interval '1 day'`,
-      sql`(${snapshots.upload} is null or (${snapshots.upload}->>'expiresAt')::timestamptz < now())`, unused,
+      expired, unused,
     )).orderBy(asc(snapshots.id)).limit(pageSize(options));
     let removed = 0;
     if (options.apply) for (const row of rows) {
       // FK locking wins against a concurrent publication. The trigger persists
       // deletion receipts in the same transaction, including company cascades.
-      const deleted = await db.delete(snapshots).where(and(eq(snapshots.id, row.id), unused)).returning({ id: snapshots.id });
+      const deleted = await db.delete(snapshots).where(and(eq(snapshots.id, row.id), expired, unused)).returning({ id: snapshots.id });
       removed += deleted.length;
     }
     return { inspected: rows.length, removed, after: rows.at(-1)?.id ?? null };

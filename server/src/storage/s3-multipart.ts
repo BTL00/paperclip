@@ -2,6 +2,7 @@ import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMult
 import { Readable } from "node:stream";
 import type { PutObjectInput } from "./types.js";
 import { withS3FailureDiagnostics } from "./s3-failure.js";
+import { cleanupStorageFailure } from "./failure-cleanup.js";
 
 /** Each part is streamed too: multipart must not become another whole-file
  * buffer or a fixed part-count ceiling below the storage provider's limits. */
@@ -44,10 +45,10 @@ export async function putS3Multipart(client: S3Client, bucket: string, key: stri
     if (pending.length || !(await iterator.next()).done) throw new Error("S3 upload source exceeds its declared size");
     await withS3FailureDiagnostics("complete_multipart_upload", () => client.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } }), { abortSignal: input.signal }));
   } catch (error) {
-    if (uploadId) await client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId })).catch(() => {});
+    if (uploadId) await cleanupStorageFailure(signal => client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }), { abortSignal: signal }));
     throw error;
   } finally {
     source.destroy();
-    await iterator.return?.();
+    await cleanupStorageFailure(async () => iterator.return?.());
   }
 }

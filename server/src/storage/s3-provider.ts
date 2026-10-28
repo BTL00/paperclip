@@ -159,6 +159,7 @@ export function createS3StorageProvider(config: S3ProviderConfig): StorageProvid
           Bucket: bucket,
           Key: key,
         }),
+        { abortSignal: input.signal },
       ));
     },
   };

@@ -14,6 +14,7 @@ import { skillSnapshotHash } from "./skill-snapshot.js";
 import { createDeliveryWorkCoordinator } from "./delivery-work-coordinator.js";
 import { idleWorkSnapshot } from "./task-admission.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
+import { logger } from "../middleware/logger.js";
 
 const support = await getEmbeddedPostgresTestSupport();
 describe.skipIf(!support.supported)("automatic skill package work", () => {
@@ -98,5 +99,14 @@ describe.skipIf(!support.supported)("automatic skill package work", () => {
     expect(saved!.fileInventory).toEqual([]);
     expect(saved!.migrationAt).toBeNull();
     expect(await skillPackageStore(db, storage).files(companyId, row!.id)).toEqual(files);
+  });
+  it("reports a safe conversion failure reason without logging the legacy payload", async () => {
+    const companyId = await company();
+    const legacy = [{ ...files[0]!, content: "private payload" }];
+    const [row] = await db.insert(snapshots).values({ companyId, contentHash: skillSnapshotHash(files), fileInventory: legacy }).returning();
+    const warning = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    await skillPackageWork(db, storage).tick(new AbortController().signal);
+    expect(warning).toHaveBeenCalledWith({ packageId: row!.id, failure: { reason: "legacy_hash_mismatch", errorCode: "unknown" } }, expect.any(String));
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private payload");
   });
 });

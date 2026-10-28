@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS "company_skill_versions_repository_snapshot_idx" ON "
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION paperclip_queue_skill_package_deletion() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.storage IS NOT NULL AND (TG_OP = 'DELETE' OR OLD.storage IS DISTINCT FROM NEW.storage) THEN
+  IF OLD.storage IS NOT NULL AND (TG_OP = 'DELETE' OR OLD.storage->>'archiveKey' IS DISTINCT FROM NEW.storage->>'archiveKey') THEN
     INSERT INTO skill_package_deletions(company_id, provider, archive_key, manifest_key, delete_after)
     VALUES (OLD.company_id, OLD.storage->>'provider', OLD.storage->>'archiveKey', OLD.storage->>'manifestKey', now() + interval '30 days');
   END IF;

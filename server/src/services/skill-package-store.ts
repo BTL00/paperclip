@@ -7,7 +7,7 @@ import { constants, createReadStream, createWriteStream, promises as fs } from "
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { companySkillRepositorySnapshots as snapshots, companySkillVersions, type Db, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
+import { companySkillRepositorySnapshots as snapshots, companySkillVersions, type Db, type SkillPackageFileMapping, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
 import { getStorageService, type StorageService } from "../storage/index.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
@@ -30,6 +30,11 @@ type Descriptor = Pick<typeof snapshots.$inferSelect, "id" | "companyId" | "cont
 export const skillVersionMetadataColumns = { ...getTableColumns(companySkillVersions),
   fileInventory: sql<CompanySkillVersionFileInventoryEntry[]>`'[]'::jsonb` };
 export type StoredSkillVersion = typeof companySkillVersions.$inferSelect;
+export function skillVersionFileMap(files: CompanySkillVersionFileInventoryEntry[], manifest: SkillPackageManifest): SkillPackageFileMapping[] | null {
+  const stored = new Map(manifest.files.map(file => [file.path, file]));
+  if (files.every(file => stored.get(file.path)?.kind === file.kind && stored.get(file.path)?.encoding === (file.encoding ?? "utf8"))) return null;
+  return files.map(file => ({ path: file.path, sourcePath: file.path, kind: file.kind, encoding: file.encoding ?? "utf8" }));
+}
 type ReadScope = { db: Db; descriptors: Map<string, Promise<Descriptor>>; durable: Map<string, Promise<boolean>>; versions: Map<string, StoredSkillVersion> };
 const readScope = new AsyncLocalStorage<ReadScope>();
 export function withSkillPackageReadScope<T>(db: Db, action: () => Promise<T>): Promise<T> {
@@ -307,7 +312,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     cancellation?.throwIfAborted();
     const manifest = skillPackageManifest(files);
     if (restore && !skillPackageManifestBytes(restore.manifest).equals(skillPackageManifestBytes(manifest))) throw new Error("Restore recipe does not describe these package bytes");
-    return flight(db, `prepare:${companyId}:${manifest.contentHash}`, async () => {
+    const preparedId = await flight(db, `prepare:${companyId}:${manifest.contentHash}`, async () => {
       const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
       const token = randomUUID();
       const prefix = `${companyId}/skill-packages/${token}`;
@@ -350,7 +355,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
             contentType: "application/gzip", body: createReadStream(archivePath), byteSize: archive.bytes, sha256: archive.sha256, signal });
           await backend.putFile({ companyId, namespace: "skill-packages", objectKey: upload.manifestKey, originalFilename: "manifest.json",
             contentType: "application/json", body: manifestBuffer, signal });
-          const receipt: SkillPackageStorageReceipt = { format: "tar-gzip-v1", provider: backend.provider,
+          const receipt: SkillPackageStorageReceipt = { format: "tar-gzip-v1", provider: backend.provider, ...(!restore ? { durable: true } : {}),
             archiveKey: upload.archiveKey, archiveSha256: archive.sha256, archiveBytes: archive.bytes,
             manifestKey: upload.manifestKey, manifestSha256: packageSha256(manifestBuffer), manifestBytes: manifestBuffer.length,
             fileCount: manifest.files.length, totalBytes: manifest.totalBytes };
@@ -380,6 +385,12 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         }
       }, signal);
     });
+    if (!restore) {
+      const [retained] = await db.update(snapshots).set({ storage: sql`jsonb_set(${snapshots.storage}, '{durable}', 'true'::jsonb)` })
+        .where(and(scope(companyId, preparedId), sql`${snapshots.storage} is not null`)).returning({ id: snapshots.id });
+      if (!retained) return prepare(companyId, files, true, cancellation);
+    }
+    return preparedId;
   }
   async function verifyDurable(companyId: string, id: string, cancellation?: AbortSignal): Promise<boolean> {
     const action = async () => {
@@ -431,9 +442,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         assertSkillSnapshotPath(mapping.sourcePath);
         const file = byPath.get(mapping.sourcePath);
         if (!file) throw new Error("Skill version references a missing package file");
+        const encoding = mapping.encoding ?? file.encoding;
         result.push({ path: mapping.path, kind: mapping.kind,
-          content: (await fs.readFile(path.join(root, file.path))).toString(file.encoding),
-          ...(file.encoding === "base64" ? { encoding: file.encoding } : {}), ...(file.executable ? { executable: true } : {}) });
+          content: (await fs.readFile(path.join(root, file.path))).toString(encoding),
+          ...(encoding === "base64" ? { encoding } : {}), ...(file.executable ? { executable: true } : {}) });
       }
       return result;
     });

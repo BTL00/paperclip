@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { StorageService, StorageProvider, PutFileInput, PutFileResult } from "./types.js";
 import { badRequest, forbidden, unprocessable } from "../errors.js";
+import { cleanupStorageFailure } from "./failure-cleanup.js";
 
 const MAX_SEGMENT_LENGTH = 120;
 
@@ -110,7 +111,7 @@ export function createStorageService(provider: StorageProvider): StorageService 
           signal: input.signal,
         });
       } catch (error) {
-        await provider.deleteObject({ objectKey }).catch(() => {});
+        await cleanupStorageFailure(signal => provider.deleteObject({ objectKey, signal }));
         throw error;
       } finally {
         if (input.body instanceof Readable) input.body.destroy();
