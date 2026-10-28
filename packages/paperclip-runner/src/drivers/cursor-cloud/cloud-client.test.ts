@@ -273,9 +273,10 @@ describe("Cursor Cloud SSE wire protocol", () => {
       if (calls === 1) response.end(`event: assistant\ndata: ${"x".repeat(200)}`);
       else response.flushHeaders();
     });
-    const client = new CursorCloudClient({ apiKey: API_KEY, baseUrl, maxSseFrameBytes: 100, streamIdleTimeoutMs: 35 });
+    const client = new CursorCloudClient({ apiKey: API_KEY, baseUrl, maxSseFrameBytes: 100 });
     await expect(collect(client.streamRun(AGENT, RUN))).rejects.toMatchObject({ code: "payload_too_large" });
-    await expect(collect(client.streamRun(AGENT, RUN))).rejects.toMatchObject({ code: "timeout" });
+    const idleClient = new CursorCloudClient({ apiKey: API_KEY, baseUrl, streamIdleTimeoutMs: 35 });
+    await expect(collect(idleClient.streamRun(AGENT, RUN))).rejects.toMatchObject({ code: "timeout" });
   });
 
   it("rejects malformed JSON and preserves stream-expiry metadata without logging the body", async () => {
