@@ -1,3 +1,4 @@
+import { CHAT_NATIVE_TIMEOUT_POLICY } from "./chat-native-timeout-policy.js";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { parseDocument } from "yaml";
@@ -61,7 +62,7 @@ export function chatFeatureProfile(profile: RunnerProfileFixture): RunnerProfile
     return { ...payload, name: "CEO", title: "CEO", role: "ceo",
       capabilities: "Coordinates company work and delegates tasks to the team.",
       budgetMonthlyCents: CHAT_FEATURE_BUDGET_CENTS,
-      adapterConfig: { ...adapterConfig, timeoutSec: 120, ...(profile.provider === "codex" ? { modelReasoningEffort: "low" } : {}) },
+      adapterConfig: { ...adapterConfig, timeoutSec: CHAT_NATIVE_TIMEOUT_POLICY.savedAgentTimeoutSec, ...(profile.provider === "codex" ? { modelReasoningEffort: "low" } : {}) },
       runtimeConfig: { ...(payload.runtimeConfig as Record<string, unknown>),
         heartbeat: { enabled: false, maxConcurrentRuns: 1, maxDailyRuns: 3, maxDailyCostCents: CHAT_FEATURE_BUDGET_CENTS } },
     };
@@ -71,7 +72,7 @@ export const chatFeatureTasks: readonly RunnerTaskFixture[] = CHAT_FEATURE_CASES
   id, label: id === "create-backlog" ? "Save a task for Morgan without starting it" : "Delegate an announcement and return its saved result",
   groups: ["chat"], flow: "agent_chat", workMode: "standard",
   expectedRunCount: id === "create-backlog" ? 1 : 3,
-  automaticRetryPolicy: "single_attempt", turnTimeoutMs: 120_000,
+  automaticRetryPolicy: "single_attempt", turnTimeoutMs: CHAT_NATIVE_TIMEOUT_POLICY.effectiveNativeTurnTimeoutMs,
   attemptTimeoutMs: { local: 420_000, daytona: 420_000 },
   expectedTerminalState: { issue: "in_review", run: "succeeded" },
   buildTitle: nonce => `Chat feature ${id} ${nonce}`,
@@ -88,7 +89,7 @@ export const chatCatalogTasks: readonly RunnerTaskFixture[] = chatCatalogCases.m
     requiredCredentials: implementation.requiredCredentials,
     id: scenario.id, label: scenario.id, groups: ["chat"], flow: "agent_chat", workMode: "standard",
     expectedRunCount: implementation.expectedRunCount, minimumExpectedRunCount: implementation.minimumRunCount,
-    automaticRetryPolicy: "single_attempt", turnTimeoutMs: implementation.turnTimeoutMs,
+    automaticRetryPolicy: "single_attempt", turnTimeoutMs: CHAT_NATIVE_TIMEOUT_POLICY.effectiveNativeTurnTimeoutMs,
     attemptTimeoutMs: { local: implementation.attemptTimeoutMs, daytona: implementation.attemptTimeoutMs },
     expectedTerminalState: { issue: "in_review", run: "succeeded" },
     buildTitle: nonce => `Chat catalog ${scenario.id} ${nonce}`,

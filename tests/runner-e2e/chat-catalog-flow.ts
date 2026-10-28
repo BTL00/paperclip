@@ -1,3 +1,4 @@
+import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
@@ -103,9 +104,15 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     await input.evidence("chat-catalog-funding.json", { scopes, mode: implementation.setupPolicy?.funding ?? "standard",
       policies: funding.policies.filter(policy => scopes.some(scope => scope.scopeType === policy.scopeType && scope.scopeId === policy.scopeId)), setupProbeUsage: "unknown; production hello probes are outside heartbeat accounting" });
     if (slack && implementation.slackIngress?.setupThread === "same-agent-distractor") await prepareNativeSlackOtherThread(context,implementation,state,deadlineAt);
-    await input.evidence("chat-catalog-setup.json", { scenario, state, inventoryDigest: chatCatalogInventoryDigest,
+    const savedLead = await input.api.get<{ adapterConfig?: { timeoutSec?: unknown } }>(`/api/agents/${input.fixtures.agent.id}`);
+    const nativeTimeoutPolicy = chatNativeTimeoutEvidence({ selectedTurnTimeoutMs: input.execution.task.turnTimeoutMs,
+      authoredLegacyTurnTimeoutMs: implementation.turnTimeoutMs, attemptTimeoutMs: implementation.attemptTimeoutMs,
+      observationBudgetMs: implementation.attemptTimeoutMs - 30_000,
+      savedAgentTimeoutSec: savedLead.adapterConfig?.timeoutSec });
+    await input.evidence("chat-catalog-setup.json", { nativeTimeoutPolicy, scenario, state, inventoryDigest: chatCatalogInventoryDigest,
       oracleVersion: implementation.oracleVersion, expectedRunCount: implementation.expectedRunCount,
-      minimumRunCount: implementation.minimumRunCount, turnTimeoutMs: implementation.turnTimeoutMs,
+      minimumRunCount: implementation.minimumRunCount, effectiveNativeTurnTimeoutMs: input.execution.task.turnTimeoutMs,
+      authoredLegacyTurnTimeoutMs: implementation.turnTimeoutMs,
       attemptTimeoutMs: implementation.attemptTimeoutMs });
     if (implementation.verifySetup) {
       const setupGrade = validateChatCatalogGrade(await implementation.verifySetup(context, state));

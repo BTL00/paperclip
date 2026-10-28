@@ -1,3 +1,4 @@
+import { CHAT_NATIVE_TIMEOUT_POLICY } from "./chat-native-timeout-policy.js";
 import { CHAT_SETUP_HEALTH_SUITE, chatSetupHealthTask, chatSetupHealthDigest } from "./chat-setup-health.js";
 import { CHAT_OPENCODE_MODEL, CHAT_OPENCODE_PROFILE } from "./chat-runtime-profile.js";
 import { FEEDBACK_PERSISTENCE_SUITE, feedbackPersistenceTask, feedbackPersistenceDigest } from "./feedback-persistence.js";
@@ -1626,7 +1627,7 @@ export const runnerSuites: readonly RunnerSuiteFixture[] = [
     groups: ["chat", "native"],
     profiles: [chatFeatureExecutionProfile],
     environments: [localEnvironment], tasks: [...chatFeatureTasks, ...chatCatalogTasks], expectedMatrixSize: 2 + chatCatalogTasks.length,
-    definitionMetadata: { version: 2, definitionDigest: chatFeatureDefinitionDigest, inventoryDigest: chatCatalogInventoryDigest, frozenScenarioCount: 244, scheduling: "explicit-only",
+    definitionMetadata: { version: 3, nativeTimeoutPolicy: CHAT_NATIVE_TIMEOUT_POLICY, authoredTurnTimeouts: "legacy-declarations-retained-separately-not-effective-native-caps", definitionDigest: chatFeatureDefinitionDigest, inventoryDigest: chatCatalogInventoryDigest, frozenScenarioCount: 244, scheduling: "explicit-only",
       instructions: "production-role-defaults", companyAndAgentBudgetCents: CHAT_FEATURE_BUDGET_CENTS,
       unpricedUsagePolicy: "allow-through-public-budget-policy", taskRunLimits: "per-case-declared; agent daily admission ceiling 3",
       maximumAttemptsPerCell: 1, setupProbeUsage: "unavailable-outside-heartbeat-accounting",

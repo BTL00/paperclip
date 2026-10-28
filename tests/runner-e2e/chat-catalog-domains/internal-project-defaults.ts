@@ -1,3 +1,4 @@
+import { CHAT_NATIVE_TIMEOUT_POLICY } from "../chat-native-timeout-policy.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { collectRunEvents } from "../run-observations.js";
@@ -11,8 +12,8 @@ interface PreparedAgent extends Entity { lifecycleState?: string; adapterConfig?
 export function gradeProjectDefaultsSetup(value: { lead: PreparedAgent; future: PreparedAgent; held: PreparedAgent; task: Entity & { executionRunId?: string }; runs: Entity[]; activeRunId: string; gateCalls: { authorized?: boolean }[] }) {
   const c = checks();
   const ready = (agent: PreparedAgent) => agent.lifecycleState === "ready" && ["idle", "active"].includes(agent.status ?? "");
-  c.add("lead-ready", ready(value.lead) && value.lead.adapterConfig?.timeoutSec === 120, "The canonical lead is independently ready with its original 120-second native timeout.");
-  c.add("future-worker-ready", ready(value.future) && value.future.adapterConfig?.timeoutSec === 120, "The future-context worker is independently ready with its original 120-second native timeout.");
+  c.add("lead-ready", ready(value.lead) && value.lead.adapterConfig?.timeoutSec === CHAT_NATIVE_TIMEOUT_POLICY.savedAgentTimeoutSec, "The canonical lead is independently ready under the production-default native timeout policy and unchanged finite scenario budget.");
+  c.add("future-worker-ready", ready(value.future) && value.future.adapterConfig?.timeoutSec === CHAT_NATIVE_TIMEOUT_POLICY.savedAgentTimeoutSec, "The future-context worker is independently ready under the production-default native timeout policy and unchanged finite scenario budget.");
   c.add("existing-work-actively-owned", value.held.lifecycleState === "ready" && value.held.status === "running" && value.held.adapterConfig?.timeoutSec === 420
     && value.task.assigneeAgentId === value.held.id && value.task.executionRunId === value.activeRunId && value.runs.some(run => run.id === value.activeRunId && run.agentId === value.held.id && run.status === "running")
     && value.gateCalls.some(call => call.authorized), "Only the deliberately waiting prerequisite has the declared 420-second timeout, spanning the subsequent bounded 150+180-second stages with exact live ownership and authorized gate proof.");

@@ -3070,7 +3070,14 @@ requests the existing owned supervisor's shutdown before further API observation
 Multiple probe receipts fail health. Setup-probe usage/cost is unavailable, never
 zero. This diagnostic cannot qualify a catalog scenario or rewrite prior results.
 
-### Model-spend readiness and operating reconciliation
+The manual `chat-features` suite uses the production default of no native active-turn
+cap (`timeoutSec: 0`). Zero describes only that per-turn cap; it does not mean zero
+cost or an unlimited cell. Existing finite scenario, Playwright, launcher watchdog,
+public cancellation and owned-process cleanup bounds remain in force. Setup evidence
+records the effective saved policy separately from authored legacy turn declarations.
+Earlier results with the 120-second cap remain unchanged historical measurements.
+
+# Model-spend readiness and operating reconciliation
 
 A reviewed operating allowance can opt into `accountingReadiness: "model_requests"`.
 This policy requires at least one model request and complete final model-cost
