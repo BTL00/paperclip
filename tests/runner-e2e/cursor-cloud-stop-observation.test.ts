@@ -65,13 +65,13 @@ it("rejects a native completion racing the final Stop recheck before its persist
 it("rejects a persisted completion even when the native observer has not received it yet", () => {
   expect(readPendingCursorCloudStopExecution([event("started", pending.callId, 1), event("completed", pending.callId, 2)], localRunId, pending)).toBeUndefined();
 });
-it.each(["owner", "schema", "source", "tool", "duplicate", "terminal"])("rejects mismatched or settled %s execution evidence", reason => {
+it.each(["owner", "schema", "source", "tool", "changed-repeat", "terminal"])("rejects mismatched or settled %s execution evidence", reason => {
   const row = event("started", pending.callId, 1), rows = [row];
   if (reason === "owner") row.runId = "foreign";
   if (reason === "schema") row.protocolSchemaVersion = 2;
   if (reason === "source") row.payload.prpEvent.sourceKind = "provider";
   if (reason === "tool") row.payload.prpEvent.payload.name = "different-tool";
-  if (reason === "duplicate") rows.push(event("started", pending.callId, 2));
+  if (reason === "changed-repeat") { const changed = event("started", pending.callId, 2); changed.payload.prpEvent.payload.name = "different-tool"; rows.push(changed); }
   if (reason === "terminal") row.payload.prpEvent.eventType = "turn.completed";
   expect(readPendingCursorCloudStopExecution(rows, localRunId, pending)).toBeUndefined();
 });
@@ -112,4 +112,25 @@ it("admits the actual Stop prompt command after substituting only its documented
   const tracker = new CursorCloudStopCommandTracker(filename, nativeRunId);
   tracker.consume(native("running", pending.callId, requested));
   expect(tracker.pending()).toEqual(pending);
+});
+
+it("matches the observed argument-free running frame followed by the same command's argument update", async () => {
+  const f = await wireObserver();
+  f.send({ event: "tool_call", data: { callId: pending.callId, name: pending.toolName, status: "running" } });
+  f.send(native("running"));
+  await vi.waitFor(() => expect(f.observer.pending()).toEqual(pending));
+  const rows = [event("started", pending.callId, 1), event("started", pending.callId, 2)];
+  expect(readPendingCursorCloudStopExecution(rows, localRunId, f.observer.pending())).toBe(pending.callId);
+});
+it("accepts a route-owned status frame without a repeated native run ID", () => {
+  const tracker = new CursorCloudStopCommandTracker(filename, nativeRunId);
+  tracker.consume({ event: "status", data: { status: "RUNNING" } });
+  tracker.consume(native("running"));
+  expect(tracker.pending()).toEqual(pending);
+});
+it("settles a route-owned result without a repeated native run ID", () => {
+  const tracker = new CursorCloudStopCommandTracker(filename, nativeRunId);
+  tracker.consume(native("running"));
+  tracker.consume({ event: "result", data: { status: "FINISHED" } });
+  expect(tracker.pending()).toBeUndefined();
 });

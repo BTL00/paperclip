@@ -12,9 +12,8 @@ export class CursorCloudStopCommandTracker {
   constructor(readonly artifactName: string, readonly runId: string) {}
   consume(event: CursorCloudSseEvent): void {
     const data = record(event.data);
-    if (["status", "result"].includes(event.event) && data.runId !== this.runId) throw new Error("Cloud Stop observer received a foreign native run");
+    if (["status", "result"].includes(event.event) && data.runId !== undefined && data.runId !== this.runId) throw new Error("Cloud Stop observer received a foreign native run");
     if (event.event === "done" || event.event === "result" || event.event === "status" && ["FINISHED", "ERROR", "CANCELLED", "EXPIRED"].includes(data.status)) {
-      if (event.event !== "done" && data.runId !== this.runId) throw new Error("Cloud Stop observer received a foreign native run");
       this.#terminal = true; this.#pending.clear(); return;
     }
     if (event.event !== "tool_call" || this.#terminal) return;
@@ -70,6 +69,6 @@ export function readPendingCursorCloudStopExecution(events: readonly Row[], runI
   if (canonical.some(event => ["turn.completed", "turn.failed", "turn.cancelled", "turn.interrupted"].includes(event.eventType))) return;
   const matches = canonical.filter(event => event.payload?.executionId === pending.callId);
   if (matches.some(event => event.eventType === "tool.execution.completed" || event.eventType === "tool.execution.progressed" && event.payload.status !== "running")) return;
-  const starts = matches.filter(event => event.eventType === "tool.execution.started" && event.payload.schema === "paperclip.tool.execution.v1" && event.payload.transport === "builtin" && event.payload.status === "running" && event.payload.name === pending.toolName);
-  return starts.length === 1 ? pending.callId : undefined;
+  const starts = matches.filter(event => event.eventType === "tool.execution.started");
+  return starts.length > 0 && starts.every(event => event.payload.schema === "paperclip.tool.execution.v1" && event.payload.transport === "builtin" && event.payload.status === "running" && event.payload.name === pending.toolName) ? pending.callId : undefined;
 }
