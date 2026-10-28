@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
+import type { OpenCodeMcpTiming } from "./mcp-timing.js";
 
 import {
   PRP_BLOCK_RESULT_PROVIDER_INPUT_SCHEMA,
@@ -29,6 +30,7 @@ export interface OpenCodeMcpBridgeOptions {
   /** Runner-owned operations callable only by a trusted harness extension and never advertised to the model. */
   privateTools?: readonly Readonly<Record<string, unknown>>[];
   handler: (call: OpenCodeMcpCall) => Promise<unknown>;
+  timing?: OpenCodeMcpTiming;
   timeoutMs?: number;
   /** Human-gated private operations may remain pending much longer than model tool calls. */
   privateToolTimeoutMs?: number;
@@ -76,6 +78,7 @@ export async function startOpenCodeMcpBridge(
       calls,
       controllers,
       handler: options.handler,
+      timing: options.timing,
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       privateToolTimeoutMs: options.privateToolTimeoutMs ?? options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       privateToolNames: new Set(privateTools.map((tool) => tool.name)),
@@ -146,6 +149,7 @@ async function handleRequest(
     calls: Map<string, { fingerprint: string; promise: Promise<unknown> }>;
     controllers: Map<string, AbortController>;
     handler: OpenCodeMcpBridgeOptions["handler"];
+    timing?: OpenCodeMcpTiming;
     timeoutMs: number;
     privateToolTimeoutMs: number;
     privateToolNames: ReadonlySet<string>;
@@ -158,6 +162,8 @@ async function handleRequest(
     response.end();
     return;
   }
+  const receivedAtMs = Date.now();
+  const receivedClock = performance.now();
   if (request.method === "GET") {
     response.statusCode = 405;
     response.setHeader("Allow", "POST, DELETE");
@@ -183,6 +189,12 @@ async function handleRequest(
   }
   const id = message.id ?? null;
   const method = typeof message.method === "string" ? message.method : "";
+  const timing: OpenCodeMcpTiming = (phase, fields) => { try { context.timing?.(phase, { rpcId: id, method, ...fields }); } catch {} };
+  timing("http_received", { receivedAtMs, bodyReadMs: performance.now() - receivedClock });
+  response.once("finish", () => timing("http_finish"));
+  response.once("close", () => timing("http_close"));
+  const sendRpc = (target: ServerResponse, responseId: unknown, result?: unknown, error?: unknown) =>
+    writeRpc(target, responseId, result, error, bytes => timing("http_write", { responseBytes: bytes }));
   if (method === "notifications/cancelled") {
     const params = isRecord(message.params) ? message.params : {};
     const requestId = params.requestId;
@@ -200,7 +212,7 @@ async function handleRequest(
   }
   if (method === "initialize") {
     response.setHeader("Mcp-Session-Id", randomBytes(16).toString("hex"));
-    writeRpc(response, id, {
+    sendRpc(response, id, {
       protocolVersion: "2025-03-26",
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "paperclip-runner", version: "1" },
@@ -208,15 +220,15 @@ async function handleRequest(
     return;
   }
   if (method === "ping") {
-    writeRpc(response, id, {});
+    sendRpc(response, id, {});
     return;
   }
   if (method === "tools/list") {
-    writeRpc(response, id, { tools: context.tools });
+    sendRpc(response, id, { tools: context.tools });
     return;
   }
   if (method !== "tools/call") {
-    writeRpc(response, id, undefined, rpcError(-32601, "Method not found"));
+    sendRpc(response, id, undefined, rpcError(-32601, "Method not found"));
     return;
   }
   const params = isRecord(message.params) ? message.params : {};
@@ -228,7 +240,7 @@ async function handleRequest(
     ? exactName
     : canonicalOpenCodeMcpToolName(exactName);
   if (!context.admittedTools.some((entry) => entry.name === tool)) {
-    writeRpc(response, id, { isError: true, content: [{ type: "text", text: "Unsupported tool." }] });
+    sendRpc(response, id, { isError: true, content: [{ type: "text", text: "Unsupported tool." }] });
     return;
   }
   const callId = typeof id === "string" || typeof id === "number" ? String(id) : randomBytes(12).toString("hex");
@@ -236,7 +248,7 @@ async function handleRequest(
   const validator = context.validators.get(tool);
   if (validator === undefined || !validator(args)) {
     const detail = validator?.errors?.map((error) => `${error.instancePath || "/"} ${error.message ?? "is invalid"}`).join("; ");
-    writeRpc(response, id, {
+    sendRpc(response, id, {
       isError: true,
       content: [{ type: "text", text: `Invalid tool input${detail ? `: ${detail}` : "."}` }],
     });
@@ -245,10 +257,11 @@ async function handleRequest(
   const fingerprint = canonicalJson({ tool, args });
   const existing = context.calls.get(callId);
   if (existing && existing.fingerprint !== fingerprint) {
-    writeRpc(response, id, { isError: true, content: [{ type: "text", text: "Duplicate call identity conflict." }] });
+    sendRpc(response, id, { isError: true, content: [{ type: "text", text: "Duplicate call identity conflict." }] });
     return;
   }
   const controller = existing === undefined ? new AbortController() : undefined;
+  timing("bridge_enqueue");
   const execution = existing?.promise ?? withCancellationAndTimeout(
     context.handler({ tool, callId, arguments: structuredClone(args), signal: controller!.signal }),
     controller!,
@@ -262,9 +275,11 @@ async function handleRequest(
   }
   try {
     const result = await execution;
-    writeRpc(response, id, { content: [{ type: "text", text: safeJson(result) }] });
+    timing("bridge_result", { status: "success" });
+    sendRpc(response, id, { content: [{ type: "text", text: safeJson(result) }] });
   } catch (error) {
-    writeRpc(response, id, { isError: true, content: [{ type: "text", text: safeError(error) }] });
+    timing("bridge_result", { status: "error" });
+    sendRpc(response, id, { isError: true, content: [{ type: "text", text: safeError(error) }] });
   }
 }
 
@@ -299,10 +314,12 @@ function parseMessage(body: string): Record<string, unknown> {
   return parsed;
 }
 
-function writeRpc(response: ServerResponse, id: unknown, result?: unknown, error?: unknown): void {
+function writeRpc(response: ServerResponse, id: unknown, result?: unknown, error?: unknown, onWrite?: (bytes: number) => void): void {
   response.statusCode = 200;
   response.setHeader("Content-Type", "application/json");
-  response.end(JSON.stringify({ jsonrpc: "2.0", id, ...(error === undefined ? { result } : { error }) }));
+  const body = JSON.stringify({ jsonrpc: "2.0", id, ...(error === undefined ? { result } : { error }) });
+  response.end(body);
+  try { onWrite?.(Buffer.byteLength(body)); } catch {}
 }
 
 function rpcError(code: number, message: string) {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createOpenCodeMcpTiming, OPENCODE_MCP_TIMING_ENV } from "./mcp-timing.js";
 import {
   PRP_BLOCK_RESULT_PROVIDER_INPUT_SCHEMA,
   PRP_BLOCK_TOOL_DESCRIPTION,
@@ -271,4 +272,35 @@ describe("OpenCode MCP bridge", () => {
       result: { isError: true, content: [{ text: "Paperclip tool call cancelled" }] },
     });
   });
+});
+
+it("correlates the actual authenticated HTTP response write and completion without retaining input or output", async () => {
+  const lines: string[] = [];
+  const timing = createOpenCodeMcpTiming({ [OPENCODE_MCP_TIMING_ENV]: "1" }, line => lines.push(line));
+  const secret = "synthetic-private-provider-output";
+  const handler = vi.fn(async () => ({ actualResult: secret }));
+  const bridge = await startOpenCodeMcpBridge({ tools: [{ name: "get_identity", inputSchema: { type: "object" } }], handler, timing });
+  bridges.push(bridge);
+  const response = await rpc(bridge, { id: 23, method: "tools/call", params: { name: "get_identity", arguments: { privateInput: secret } } });
+  const text = await response.text();
+  expect(JSON.parse(text).result.content[0].text).toBe(JSON.stringify({ actualResult: secret }));
+  expect(handler).toHaveBeenCalledTimes(1);
+  await expect.poll(() => lines.map(line => JSON.parse(line).phase)).toContain("http_finish");
+  const rows = lines.map(line => JSON.parse(line));
+  expect(rows.map(row => row.phase)).toEqual(expect.arrayContaining(["http_received", "bridge_enqueue", "bridge_result", "http_write", "http_finish"]));
+  expect(rows.every(row => row.rpcId === 23 && row.method === "tools/call")).toBe(true);
+  expect(rows.find(row => row.phase === "http_received")).toMatchObject({ receivedAtMs: expect.any(Number), bodyReadMs: expect.any(Number) });
+  expect(rows.find(row => row.phase === "http_received").receivedAtMs).toBeLessThanOrEqual(rows.find(row => row.phase === "http_write").atMs);
+  expect(rows.find(row => row.phase === "http_write").responseBytes).toBe(Buffer.byteLength(text));
+  expect(rows.findIndex(row => row.phase === "http_write")).toBeLessThan(rows.findIndex(row => row.phase === "http_finish"));
+  expect(lines.join("\n")).not.toContain(secret); expect(lines.join("\n")).not.toContain(bridge.secret);
+  const count = lines.length;
+  await rpc(bridge, { id: 24, method: "tools/list" }, "wrong-secret");
+  expect(lines).toHaveLength(count);
+});
+it("does not change a real tool outcome if the observer throws", async () => {
+  const bridge = await startOpenCodeMcpBridge({ tools: [{ name: "get_identity", inputSchema: { type: "object" } }], handler: async () => ({ ok: true }), timing: () => { throw new Error("observer failure"); } });
+  bridges.push(bridge);
+  const response = await rpc(bridge, { id: 3, method: "tools/call", params: { name: "get_identity", arguments: {} } });
+  expect((await response.json()).result.content[0].text).toBe('{"ok":true}');
 });

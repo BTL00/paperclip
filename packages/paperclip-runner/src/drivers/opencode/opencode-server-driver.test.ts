@@ -2314,9 +2314,11 @@ describe("OpenCodeServerDriver", () => {
     const workspace = await mkdtemp(join(tmpdir(), "paperclip-opencode-workspace-"));
     roots.push(root, workspace);
     const calls: string[] = [];
+    const timingLines: string[] = [];
     const operation = "paperclip_search_assigned_tools";
     const driver = new OpenCodeServerDriver({ model: "openrouter/deepseek/deepseek-v4.1-flash-1017", runtimeDirectory: root, command: fixture,
-      environment: { PATH: process.env.PATH, OPENROUTER_API_KEY: "fixture-key" },
+      environment: { PATH: process.env.PATH, OPENROUTER_API_KEY: "fixture-key", PAPERCLIP_OPENCODE_MCP_TIMING: "1" },
+      onDiagnostic: line => { if (line.startsWith("{\"code\":\"opencode_mcp_timing\"")) timingLines.push(line); },
       dynamicTools: [{ name: operation, inputSchema: { type: "object" } }],
       dynamicToolHandler: async call => { calls.push(call.tool); if (call.tool !== operation) throw new Error("unauthorized operation"); return { tools: [] }; },
     });
@@ -2325,6 +2327,12 @@ describe("OpenCodeServerDriver", () => {
       await session.startTurn({ message: { role: "user", text: "Discover assigned tools." } });
       const events = await collectTurnEvents(session.events());
       expect(calls).toEqual([operation]);
+      const timing = timingLines.map(line => JSON.parse(line));
+      const dispatch = timing.find(row => row.phase === "driver_dispatch");
+      expect(dispatch?.rpcId).toBe(3);
+      expect(timing.find(row => row.phase === "driver_result")).toMatchObject({ rpcId: dispatch.rpcId, observerId: dispatch.observerId, status: "success" });
+      expect(timing.find(row => row.phase === "http_write" && row.rpcId === dispatch.rpcId)).toBeDefined();
+      expect(timingLines.join("\n")).not.toContain("fixture-key");
       expect(events.some(event => event.eventType === "item.completed" && (event.payload as { item?: { is_error?: boolean } }).item?.is_error)).toBe(false);
     } finally { await session.close({ reason: "assigned operation identity test" }); }
   });

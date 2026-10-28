@@ -395,6 +395,16 @@ completions endpoint. The proxy and token expire when the session closes. The
 local token remains a credential and is redacted from diagnostics; this does not
 claim isolation for every child credential or persisted value.
 
+For a bounded operator diagnosis, explicitly set `PAPERCLIP_OPENCODE_MCP_TIMING=1`
+in the selected run's configured environment. The default is off. It retains at
+most 256 closed timing records in the existing process diagnostic log. Records
+contain generated correlation IDs, allowlisted protocol phases, numeric times,
+status and response byte counts. They contain no arguments, results, headers,
+tokens or endpoint URLs. Unknown string identities and methods are omitted;
+provider-generated tool identities are hashed. These diagnostics belong in the
+retained operator artifact, outside the public report. They do not prove that
+OpenCode consumed an HTTP response, and they do not change tool timeouts.
+
 OpenCode's proxy sends agent instructions once per turn through the system prompt. The
 task envelope retains task-specific constraints and the completion contract,
 without repeating the system instructions. This applies to all users of the

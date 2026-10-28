@@ -25,6 +25,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { parseOpenCodeReasoningMode, type OpenCodeReasoningMode } from "./reasoning-mode.js";
 import { startOpenCodePerformanceDiagnostics } from "./performance-diagnostics.js";
+import { createOpenCodeMcpTiming, type OpenCodeMcpTiming } from "./mcp-timing.js";
 import { PROVIDER_PERFORMANCE_ENV } from "../../contracts/provider-performance.js";
 import { annotateOmittedProviderText, parseOpenCodeSseFrames } from "./sse-frames.js";
 import { githubCredentialEnvironment } from "../../github-credential-environment.js";
@@ -206,6 +207,7 @@ export interface OpenCodeServerDriverOptions {
   /** Keep false when an outer supervisor already owns the process group. */
   isolateProcessGroup?: boolean;
   onDiagnostic?: (message: string) => void;
+  mcpTiming?: OpenCodeMcpTiming;
   fetch?: typeof globalThis.fetch;
   now?: () => Date;
 }
@@ -217,6 +219,7 @@ interface OpenCodeRuntime {
   permissionMode: "allow" | "ask" | "deny";
   process: ChildProcess;
   bridge: OpenCodeMcpBridge;
+  mcpTiming: OpenCodeMcpTiming;
   trace: ProviderTraceFileSink | null;
   sensitiveValues: readonly string[];
   performanceDiagnostics: Awaited<ReturnType<typeof startOpenCodePerformanceDiagnostics>> | null;
@@ -1146,6 +1149,7 @@ class OpenCodeHarnessSession implements HarnessSession {
     if (!this.#dynamicToolHandler)
       throw new Error("Unsupported Paperclip operation");
     try {
+      this.#runtime.mcpTiming("driver_dispatch", { rpcId: call.callId });
       const result = await this.#dynamicToolHandler({
         tool,
         callId: call.callId,
@@ -1153,6 +1157,7 @@ class OpenCodeHarnessSession implements HarnessSession {
         turnId,
         arguments: call.arguments,
       });
+      this.#runtime.mcpTiming("driver_result", { rpcId: call.callId, status: "success" });
       this.#emit(
         "item.completed",
         {
@@ -1854,6 +1859,10 @@ class OpenCodeHarnessSession implements HarnessSession {
   #emitAssistantPart(part: Record<string, unknown>, turnId: string): void {
     const partId = text(part.id, `${turnId}:part`);
     const partType = text(part.type, "unknown");
+    const providerTime = record(record(part.state).time);
+    if (["tool", "tool-call", "tool_call", "bash", "command"].includes(partType) && (providerTime.start !== undefined || providerTime.end !== undefined)) {
+      this.#runtime.mcpTiming("provider_part", { executionId: part.id, providerStartMs: providerTime.start, providerEndMs: providerTime.end });
+    }
     const messageId = text(part.messageID, text(part.messageId)) || null;
     const canonicalToolName = canonicalOpenCodeMcpToolName(
       canonicalOpenCodeDisplayToolName(
@@ -2311,7 +2320,9 @@ async function startRuntime(input: {
     await removeIsolatedHome(isolatedHome).catch(() => undefined);
     throw error;
   }
+  const mcpTiming = input.options.mcpTiming ?? createOpenCodeMcpTiming(input.options.environment, line => input.options.onDiagnostic?.(line));
   const bridge = await startOpenCodeMcpBridge({
+    timing: mcpTiming,
     tools: input.options.dynamicTools,
     handler: input.dispatch,
   }).catch(async (error) => {
@@ -2573,6 +2584,7 @@ async function startRuntime(input: {
       permissionMode: input.options.permissionMode ?? "allow",
       process: child,
       bridge,
+      mcpTiming,
       trace: input.trace,
       sensitiveValues,
       performanceDiagnostics,

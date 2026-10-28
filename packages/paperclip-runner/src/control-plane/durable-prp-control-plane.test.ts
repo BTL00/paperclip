@@ -1362,7 +1362,7 @@ it("pins the OpenCode launch profile in runner startup arguments and restarts", 
   }
 });
 
-it("preserves an explicit OpenCode permission mode at the runner spawn boundary", () => {
+it.each([undefined, "1"])("preserves explicit OpenCode permission and opt-in timing at spawn (%s)", timing => {
   const launches: RunnerProcessLaunchSpec[] = [];
   spawnRunner({
     connection: { mode: "connect", connectUrl: "ws://127.0.0.1:43127" },
@@ -1382,6 +1382,7 @@ it("preserves an explicit OpenCode permission mode at the runner spawn boundary"
       PAPERCLIP_AI_PROVIDER_KEY: "managed-provider-key",
       ANTHROPIC_AUTH_TOKEN: "managed-claude-key",
       ANTHROPIC_BASE_URL: "https://gateway.example",
+      PAPERCLIP_OPENCODE_MCP_TIMING: timing,
       PAPERCLIP_OPENCODE_PERMISSION_MODE: "deny",
       PAPERCLIP_OPENCODE_RUNTIME_DIR: "/runner/opencode",
       PAPERCLIP_NATIVE_MCP_STDIO: "[]",
@@ -1410,6 +1411,7 @@ it("preserves an explicit OpenCode permission mode at the runner spawn boundary"
   });
 
   expect(launches).toHaveLength(1);
+  expect(launches[0]!.environment.PAPERCLIP_OPENCODE_MCP_TIMING).toBe(timing);
   expect(launches[0]!.environment).toMatchObject({
     PATH: "/bin",
     PAPERCLIP_AGENT_KEY_ID: "sha256:identity",

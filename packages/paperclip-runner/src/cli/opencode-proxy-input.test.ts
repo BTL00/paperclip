@@ -83,7 +83,7 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
   const fd = process.platform === "linux" ? openSync(executable, "r") : undefined;
   const runtime = join(root, "runtime");
   const child = spawn(process.execPath, [proxy, "--paperclip-trusted-opencode-executable", fd === undefined ? executable : "/proc/self/fd/3"], {
-    env: { ...process.env, PAPERCLIP_OPENCODE_RUNTIME_DIR: runtime, OPENROUTER_API_KEY: "fixture-key" },
+    env: { ...process.env, PAPERCLIP_OPENCODE_RUNTIME_DIR: runtime, OPENROUTER_API_KEY: "fixture-key", PAPERCLIP_OPENCODE_MCP_TIMING: "1" },
     stdio: fd === undefined ? ["pipe", "pipe", "pipe"] : ["pipe", "pipe", "pipe", fd],
     detached: process.platform !== "win32",
   });
@@ -91,7 +91,9 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
   const messages: Array<{ id?: string | number; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown }> = [];
   const input = createInterface({ input: child.stdout! });
   input.on("line", line => messages.push(JSON.parse(line)));
-  child.stderr!.resume();
+  const timings: Array<Record<string, unknown>> = [];
+  const errors = createInterface({ input: child.stderr! });
+  errors.on("line", line => { try { const value = JSON.parse(line); if (value.code === "opencode_mcp_timing") timings.push(value); } catch {} });
   let exited = false;
   const exit = new Promise<void>(resolve => child.once("exit", () => { exited = true; resolve(); }));
   const send = (message: unknown) => child.stdin!.write(`${JSON.stringify(message)}\n`);
@@ -128,6 +130,12 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
     }
     expect(await response(4)).toBe(true);
     if (respond) {
+      const requested = timings.find(row => row.phase === "controller_request" && row.controllerRequestId === call.id);
+      expect(requested).toBeDefined();
+      expect(requested?.rpcId).toBe(Number(call.params!.callId));
+      await expect.poll(() => timings.find(row => row.phase === "controller_response" && row.controllerRequestId === call.id)).toMatchObject({ rpcId: requested!.rpcId, observerId: requested!.observerId, status: "success" });
+      expect(JSON.stringify(timings)).not.toContain("fixture-key");
+      expect(JSON.stringify(timings)).not.toContain(feedback);
       const sessions = (await readdir(runtime, { withFileTypes: true })).filter(entry => entry.isDirectory());
       await expect.poll(async () => JSON.parse(await readFile(join(runtime, sessions[0]!.name, "data/fake-completion-feedback.json"), "utf8"))).toMatchObject([
         { result: { content: [{ text: expect.stringContaining(feedback) }] } },
@@ -145,6 +153,7 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
       await exit;
     }
     input.close();
+    errors.close();
     await rm(root, { recursive: true, force: true });
   }
 }, 30_000);

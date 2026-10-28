@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createOpenCodeMcpTiming } from "../drivers/opencode/mcp-timing.js";
 import { parseOpenCodeReasoningMode } from "../drivers/opencode/reasoning-mode.js";
 import { createInterface } from "node:readline";
 import { readFileSync } from "node:fs";
@@ -40,10 +41,11 @@ type RpcMessage = {
   error?: unknown;
 };
 
+const mcpTiming = createOpenCodeMcpTiming(process.env, line => { process.stderr.write(`${line}\n`); });
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 const pending = new Map<
   string,
-  { resolve(value: unknown): void; reject(error: Error): void; retainEnvelope: boolean }
+  { resolve(value: unknown): void; reject(error: Error): void; retainEnvelope: boolean; timingRpcId: unknown; timingMethod: string }
 >();
 let controllerInputClosed = false;
 let nextServerRequestId = 1;
@@ -64,9 +66,10 @@ function send(value: unknown): void {
 function requestController(method: string, params: unknown, retainEnvelope = false): Promise<unknown> {
   if (controllerInputClosed) return Promise.reject(new Error("OpenCode controller input is closed"));
   const id = `opencode-${nextServerRequestId++}`;
+  mcpTiming("controller_request", { rpcId: record(params).callId, controllerRequestId: id, method });
   send({ id, method, params });
   return new Promise((resolveValue, reject) =>
-    pending.set(id, { resolve: resolveValue, reject, retainEnvelope }),
+    pending.set(id, { resolve: resolveValue, reject, retainEnvelope, timingRpcId: record(params).callId, timingMethod: method }),
   );
 }
 
@@ -111,6 +114,7 @@ async function open(
       )
     : null;
   driver = new OpenCodeServerDriver({
+    mcpTiming,
     model,
     permissionMode: parseOpenCodeProxyPermissionMode(
       process.env.PAPERCLIP_OPENCODE_PERMISSION_MODE,
@@ -331,6 +335,7 @@ async function handle(message: RpcMessage): Promise<void> {
     const waiter = pending.get(String(message.id));
     if (!waiter) return;
     pending.delete(String(message.id));
+    mcpTiming("controller_response", { rpcId: waiter.timingRpcId, method: waiter.timingMethod, controllerRequestId: message.id, status: message.error === undefined ? "success" : "error" });
     if (message.error !== undefined)
       waiter.reject(new Error(JSON.stringify(message.error)));
     else {
