@@ -2143,7 +2143,7 @@ it("preserves OpenCode runtime bindings when a durable runner is respawned", () 
       environment: {
         PATH: "/bin",
         OPENROUTER_API_KEY: "test-provider-key",
-        ...configuredEnvironmentProjection({ PAPERCLIP_OPENCODE_PERFORMANCE_DIAGNOSTICS: "1" }),
+        ...configuredEnvironmentProjection({ PAPERCLIP_OPENCODE_PERFORMANCE_DIAGNOSTICS: "1", PAPERCLIP_OPENCODE_MCP_TIMING: "1" }),
         OTEL_EXPORTER_OTLP_ENDPOINT: "https://must-not-reach-opencode.invalid",
         OTEL_EXPORTER_OTLP_HEADERS: "Authorization=private",
         HOME: "/host/home",
@@ -2176,6 +2176,7 @@ it("preserves OpenCode runtime bindings when a durable runner is respawned", () 
     PAPERCLIP_NATIVE_RUNTIME_CONTEXT_PATH: "/isolated/runtime-context.json",
     OPENROUTER_API_KEY: "test-provider-key",
     PAPERCLIP_OPENCODE_PERFORMANCE_DIAGNOSTICS: "1",
+    PAPERCLIP_OPENCODE_MCP_TIMING: "1",
   });
   expect(environment.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
   expect(environment.OTEL_EXPORTER_OTLP_HEADERS).toBeUndefined();
