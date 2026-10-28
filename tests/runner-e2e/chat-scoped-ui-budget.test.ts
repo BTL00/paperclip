@@ -2,10 +2,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const visibility = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@playwright/test", async importOriginal => ({ ...await importOriginal<object>(), expect: () => ({ toBeVisible: visibility }) }));
 import { sendChatMessage } from "./chat-flow.js";
+import { submitTaskReply } from "./user-actions.js";
 import { verifyInternalResult } from "./chat-catalog-domains/internal-support.js";
 const remaining = () => { const value = 390_000 - Date.now(); if (value <= 0) throw new Error("original budget exhausted"); return value; };
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 describe("optional original-clock callbacks reach the real shared UI helpers", () => {
+  it("task continuation cannot send after slow composer work exhausts the original clock", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(389_000);
+    const fill = vi.fn(async () => { vi.setSystemTime(391_000); }); const click = vi.fn();
+    const node: any = { last: () => node, first: () => node, locator: () => node, fill, click };
+    await expect(submitTaskReply({ getByTestId: () => node } as never, "Continue the same task.", remaining)).rejects.toThrow(/exhausted/);
+    expect(fill).toHaveBeenCalledExactlyOnceWith("Continue the same task.", { timeout: 1000 }); expect(click).not.toHaveBeenCalled();
+  });
+  it.each([0, -1, NaN, Infinity])("task continuation rejects invalid remaining budget %s before UI work", async budget => {
+    const node: any = { last: () => node }; const prior = visibility.mock.calls.length;
+    await expect(submitTaskReply({ getByTestId: () => node } as never, "Continue.", () => budget)).rejects.toThrow(/exhausted/);
+    expect(visibility.mock.calls.length).toBe(prior);
+  });
+  it("ordinary task reply callers retain existing UI defaults", async () => {
+    const fill = vi.fn(); const click = vi.fn(); const node: any = { last: () => node, first: () => node, locator: () => node, fill, click };
+    await submitTaskReply({ getByTestId: () => node } as never, "Continue.");
+    expect(visibility).toHaveBeenCalledWith({ timeout: 30_000 }); expect(fill).toHaveBeenCalledExactlyOnceWith("Continue."); expect(click).toHaveBeenCalledExactlyOnceWith();
+  });
   it("slow composer work cannot send a human message after the original deadline", async () => {
     vi.useFakeTimers(); vi.setSystemTime(389_000);
     const fill = vi.fn(async () => { vi.setSystemTime(391_000); }); const click = vi.fn();

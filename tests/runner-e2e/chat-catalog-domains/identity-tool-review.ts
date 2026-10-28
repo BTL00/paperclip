@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { randomBytes } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { startReviewProvider } from "../../fixtures/connection-review-provider.js";
@@ -105,19 +106,21 @@ export const toolReviewIdentityCases = ["approve-tool-once", "decline-tool"].map
     state.beforeDecisionCalls = calls(provider).length;
     const review = await openIdentityToolReview(ctx.input.page, card, String(state.connectionId)); state.reviewVisible = true;
     state.beforeDecisionCommentIds = (await comments(ctx)).map(row => row.id);
+    chatCatalogNativePhaseRemainingBudget(ctx)?.();
     await review.getByRole("button", { name: id === "decline-tool" ? "Decline" : "Approve & run", exact: true }).click();
     if (id === "approve-tool-once") {
-      await pollUntil({ label: "first approved synthetic read completed", deadlineAt: Date.now() + 150_000,
+      await pollUntil({ label: "first approved synthetic read completed", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
         load: async () => { await ctx.refreshIssue(); const rows = await ctx.input.api.get<Interaction[]>(`/api/issues/${ctx.issue()!.id}/interactions`);
           return { rows, runs: await ctx.allRuns(), source: ctx.issue(), comments: await comments(ctx) }; },
-        accept: value => value.rows.some(row => row.id === card.id && row.result?.toolAction?.status === "executed")
+        accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.rows.some(row => row.id === card.id && row.result?.toolAction?.status === "executed")
           && value.source?.conversationState === "waiting" && value.runs.every(run => run.status === "succeeded")
           && value.comments.some(row => row.authorAgentId === ctx.input.fixtures.agent.id && row.body.includes(String(state.marker))) });
       state.firstReply = (await comments(ctx)).filter(row => row.authorAgentId === ctx.input.fixtures.agent.id).map(row => row.body).join("\n");
-      await sendChatMessage(ctx.input.page, "Read the launch notes again using the app's diagnostic query value fail, so we can check its unavailable-service response.");
+      await sendChatMessage(ctx.input.page, "Read the launch notes again using the app's diagnostic query value fail, so we can check its unavailable-service response.", chatCatalogNativePhaseRemainingBudget(ctx));
       const second = await pendingReview(ctx, state, provider, 1); state.secondDecisionId = second.id; state.beforeSecondDecisionCalls = calls(provider).length;
       const secondReview = await openIdentityToolReview(ctx.input.page, second, String(state.connectionId)); state.secondReviewVisible = true;
       state.beforeDecisionCommentIds = (await comments(ctx)).map(row => row.id);
+      chatCatalogNativePhaseRemainingBudget(ctx)?.();
       await secondReview.getByRole("button", { name: "Approve & run", exact: true }).click();
     }
   },
@@ -141,9 +144,9 @@ export const toolReviewIdentityCases = ["approve-tool-once", "decline-tool"].map
 }));
 async function comments(ctx: ChatCatalogContext) { return ctx.input.api.get<Array<{ id: string; authorAgentId?: string; body: string }>>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`); }
 async function pendingReview(ctx: ChatCatalogContext, state: Record<string, unknown>, provider: Provider, previousCalls = 0) {
-  const rows = await pollUntil({ label: "scoped synthetic service tool review", deadlineAt: Date.now() + 150_000,
+  const rows = await pollUntil({ label: "scoped synthetic service tool review", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
     load: async () => { await ctx.refreshIssue(); return ctx.issue() ? ctx.input.api.get<Interaction[]>(`/api/issues/${ctx.issue()!.id}/interactions`) : []; },
-    accept: rows => rows.some(row => row.status === "pending" && row.payload.toolAction?.connectionId === state.connectionId),
+    accept: rows => chatCatalogNativePhaseIsTimely(ctx) && rows.some(row => row.status === "pending" && row.payload.toolAction?.connectionId === state.connectionId),
     reject: () => calls(provider).length > previousCalls ? "Synthetic provider was called before this action's approval" : undefined });
   return pendingStoryDecision(rows, { kind: "tool", connectionId: String(state.connectionId) });
 }

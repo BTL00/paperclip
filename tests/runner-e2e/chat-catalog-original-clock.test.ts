@@ -11,7 +11,7 @@ function context(scenarioId = "cli-operations.owned-dev-instance", deadline = 87
 }
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 describe("selected native phases share the once-created original flow clock", () => {
-  it.each(["cli-operations.owned-dev-instance", "recovery.controller-restart", "routines.run-now", "task-coordination.independent-review", "steering.edit-queued-message", "tasks.website-without-project", "inbox-search.archive-partial-failure"])("%s uses absolute remaining outer budget rather than resetting its shorter cap", scenario => {
+  it.each(["cli-operations.owned-dev-instance", "recovery.controller-restart", "routines.run-now", "task-coordination.independent-review", "steering.edit-queued-message", "tasks.website-without-project", "inbox-search.archive-partial-failure", "questions-and-approvals.approve-tool-once", "runs-adapters.reset-session"])("%s uses absolute remaining outer budget rather than resetting its shorter cap", scenario => {
     vi.useFakeTimers(); vi.setSystemTime(800_000); const ctx = context(scenario);
     expect(chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000)).toBe(870_000);
     vi.setSystemTime(850_000); expect(chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000)).toBe(870_000);

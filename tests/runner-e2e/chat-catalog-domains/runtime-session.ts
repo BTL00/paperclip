@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "../api.js";
 import { submitTaskReply } from "../user-actions.js";
@@ -44,9 +45,9 @@ export const runtimeSessionCases = [runtimeDefinition("runs-adapters.reset-sessi
   sourceFiles: ["chat-catalog-domains/runtime-session.ts", "chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/runs-adapters.yaml", "../../ui/src/components/AgentActionButtons.tsx", "../../ui/src/pages/AgentDetail.tsx"],
   expectedRunCount: 3, attemptTimeoutMs: 720_000,
   async act(ctx, state) {
-    await pollUntil({ label: "Canonical session guidance settled", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Canonical session guidance settled", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 2 && value.runs.every(run => run.status === "succeeded") });
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.length === 2 && value.runs.every(run => run.status === "succeeded") });
     const worker = state.worker as RuntimeAgent; const task = state.task as Entity;
     const query = await observeRuntime(ctx, state); state.queryReply = query.reply;
     state.agentResetStatus = await probeAgentPermission(ctx, `/api/agents/${worker.id}/runtime-state/reset-session`, "POST", {});
@@ -55,6 +56,7 @@ export const runtimeSessionCases = [runtimeDefinition("runs-adapters.reset-sessi
     const profile = ctx.input.page.locator("#main-content");
     await expect(profile.getByRole("heading", { name: worker.name!, exact: true })).toBeVisible();
     await profile.getByRole("button", { name: `Open actions for ${worker.name}`, exact: true }).click();
+    chatCatalogNativePhaseRemainingBudget(ctx)?.();
     await ctx.input.page.getByRole("button", { name: "Reset Sessions", exact: true }).click();
     await pollUntil({ label: "Human reset clears the real task session", deadlineAt: Date.now() + 30_000,
       load: () => ctx.input.api.get<unknown[]>(`/api/agents/${worker.id}/task-sessions`), accept: rows => rows.length === 0 });
@@ -62,10 +64,10 @@ export const runtimeSessionCases = [runtimeDefinition("runs-adapters.reset-sessi
     const beforeRuns = await ctx.allRuns();
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier ?? task.id}`, { waitUntil: "domcontentloaded" });
     const followup = "Please continue this same task using your fresh runtime session. Read the existing website-fixture.txt without changing its bytes, inspect our saved task history, and add a brief task comment confirming it is still readable. Keep existing documents and attachments unchanged, then finish this task. Do not create another task.";
-    await submitTaskReply(ctx.input.page, followup);
-    const future = await pollUntil({ label: "Actual fresh-session continuation", deadlineAt: Date.now() + 180_000,
+    await submitTaskReply(ctx.input.page, followup, chatCatalogNativePhaseRemainingBudget(ctx));
+    const future = await pollUntil({ label: "Actual fresh-session continuation", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => ({ runs: await ctx.allRuns(), task: await ctx.input.api.get<Entity>(`/api/issues/${task.id}`) }),
-      accept: value => value.task.status === "done" && value.runs.length === beforeRuns.length + 1
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.task.status === "done" && value.runs.length === beforeRuns.length + 1
         && value.runs.filter(run => !beforeRuns.some(prior => prior.id === run.id)).every(run => run.status === "succeeded"),
       reject: value => value.runs.some(run => !beforeRuns.some(prior => prior.id === run.id) && ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Fresh-session continuation failed" : undefined });
     const next = future.runs.find(run => !beforeRuns.some(prior => prior.id === run.id))!;
