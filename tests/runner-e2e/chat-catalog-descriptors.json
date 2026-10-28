@@ -5057,10 +5057,9 @@
       "../../server/src/services/company-skills.ts",
       "../../packages/shared/src/validators/skill-policy.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.skill-enable.standard-config.v2",
     "coverageGaps": [
-      "Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.",
-      "Unsupported effective-use context: reserved setup probes the actual unsupported use action plus every real lifecycle action under a denied policy and the actual still-permitted board assignment, restoring policy/assignment in finally. Source runtime version selection has no use-policy principal/action. These receipts establish a prerequisite limitation, never the required model refusal: effective-use-denial outcome remains unqualifiable until a supported actual use-denial contract exists."
+      "This installed-skill/allowed-assignment positive context does not claim conditional effective-use-denial coverage. No lifecycle denial or unsupported skills.use action substitutes for a supported actual use denial."
     ],
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 1,
