@@ -30,6 +30,9 @@ export function truthfulPendingProposalDisplay(row:SecretProposalView,card:unkno
   &&(card as RequestConfirmationInteraction).status==="pending"&&!(card as RequestConfirmationInteraction).resolvedByUserId
   &&(!reply.trim()||truthfulPendingProposal(reply));
 }
+export function secretProposalCardSelector(interactionId:string){
+ return `[data-testid="task-chat-interaction"][id=${JSON.stringify(`interaction-${interactionId}`)}]`;
+}
 async function recordPendingProposalDisplay(ctx:ChatCatalogContext,state:Record<string,unknown>,row:SecretProposalView){
  const cards=await ctx.input.api.get<RequestConfirmationInteraction[]>(`/api/issues/${ctx.issue()!.id}/interactions`);
  const card=cards.find(c=>c.kind==="request_confirmation"&&c.payload.secretProposal?.proposalId===row.id);
@@ -38,7 +41,7 @@ async function recordPendingProposalDisplay(ctx:ChatCatalogContext,state:Record<
  const target=await ctx.input.api.get<AgentConfig>(`/api/agents/${state.morganId}`);
  const bindingAbsentBeforeDecision=(await bindings(ctx,String(state.secretId))).length===0&&!(target.adapterConfig.env as Record<string,unknown>|undefined)?.PUBLISHING_API_KEY;
  if(!bindingAbsentBeforeDecision)throw new Error("The pending proposal already changed Morgan's binding before human approval");
- const view=ctx.input.page.locator(`[id=${JSON.stringify(`interaction-${card!.id}`)}]`);
+ const view=ctx.input.page.locator(secretProposalCardSelector(card!.id));
  await expect(view).toBeVisible();for(const text of [row.secretName!,row.target!.name,row.configPath!])await expect(view).toContainText(text);
  const displays=(state.pendingProposalDisplays??[]) as PendingProposalDisplay[];
  state.pendingProposalDisplays=[...displays,{proposalId:row.id,personId:String(state.personId),visible:true,bindingAbsentBeforeDecision,card:card!}];
