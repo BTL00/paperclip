@@ -222,6 +222,9 @@ list or a named Cursor Cloud environment. The launch environment supplies
 `CURSOR_API_KEY` and the scoped tool relay configuration. Native Cloud supports
 per-turn Runner lifecycle only; Cursor executes tools in its hosted VM. Configure
 hosted shell secrets in the Cursor Cloud environment.
+Paperclip native tools use the injected `paperclip` MCP server with
+controller-managed authentication; they need no Paperclip REST credentials in the
+Cloud VM.
 
 Cloud v1 provides no independent acknowledgment of the effective model or exact
 instruction digest. Runner records submitted inputs and treats this support as

@@ -12,7 +12,7 @@ import type { PrpEvent } from "../../protocol/replay-contract.js";
 import { startRunnerToolBridge, type RunnerToolBridge, type RunnerToolCall } from "../runner-tool-bridge.js";
 import { semanticCanonicalJson } from "../semantic-tool-receipt.js";
 import { CursorCloudClient, CursorCloudClientError, isCursorCloudRunActive, type CursorCloudModelRef, type CursorCloudRun, type CursorCloudSseEvent } from "./cloud-client.js";
-import { parseNativeCursorCloudConfig, parseCursorCloudBinding, type NativeCursorCloudConfig, type CursorCloudBinding } from "./config.js";
+import { CURSOR_CLOUD_MCP_SERVER_NAME, parseNativeCursorCloudConfig, parseCursorCloudBinding, type NativeCursorCloudConfig, type CursorCloudBinding } from "./config.js";
 import { CursorCloudCheckpointStore, cursorCloudDigest, type CursorCloudCheckpoint, type CursorCloudTerminalDelivery } from "./checkpoint.js";
 import { cursorCloudInlineInstructions } from "./inline-assets.js";
 import { stageCursorCloudArtifact } from "./artifact-delivery.js";
@@ -20,6 +20,13 @@ import { releaseCursorCloudStaleSocket } from "./stale-socket.js";
 
 export const CURSOR_CLOUD_DRIVER_KIND = "cursor_cloud_api" as const;
 export const CURSOR_CLOUD_DRIVER_VERSION = "cursor-cloud-v1" as const;
+const CURSOR_CLOUD_CONTROL_INSTRUCTIONS = [
+  "You are executing in native Paperclip Runner, not a legacy REST adapter.",
+  `Paperclip control tools are provided by the injected MCP server "${CURSOR_CLOUD_MCP_SERVER_NAME}" with controller-managed MCP authentication; you do not need Paperclip REST credentials in the Cloud VM.`,
+  `At the start of each run, call get_mcp_tools({server:"${CURSOR_CLOUD_MCP_SERVER_NAME}"}) to discover its tools, then use the returned tool schemas for Paperclip task context and control.`,
+  "For Paperclip control, do not search unrelated inherited dashboard MCP namespaces or wait for their authentication.",
+  `When you need a human answer, use this server's offered request_human_input tool. Report completion with its offered ${PRP_COMPLETION_TOOL_NAME} tool, or a blocker with its offered ${PRP_BLOCK_TOOL_NAME} tool, following their schemas. Text alone does not submit a question, completion, or blocker.`,
+].join("\n");
 type CloudClient = Pick<CursorCloudClient, "createAgent" | "createRun" | "getAgent" | "getRun" | "cancelRun" | "streamRun" | "getUsage" | "listArtifacts" | "downloadArtifact">;
 
 export interface CursorCloudSessionHandle extends HarnessSession {
@@ -114,7 +121,7 @@ export class CursorCloudDriver implements HarnessDriver {
   async #open(input: OpenHarnessSessionInput, recovering: boolean, sessionId = input.normalizedSessionId): Promise<CursorCloudSession> {
     input.signal?.throwIfAborted();
     if (!input.runId || input.normalizedSessionId !== this.#options.binding.normalizedSessionId) throw new Error("Cursor Cloud session binding mismatch");
-    const instructions = await cursorCloudInlineInstructions(this.#options.instructions, this.#options.runtimeContext);
+    const instructions = `${await cursorCloudInlineInstructions(this.#options.instructions, this.#options.runtimeContext)}\n\n${CURSOR_CLOUD_CONTROL_INSTRUCTIONS}`;
     input.signal?.throwIfAborted();
     const store = new CursorCloudCheckpointStore(this.#options.runtimeDirectory, sessionId);
     await store.acquire();
@@ -200,9 +207,9 @@ class CursorCloudSession implements CursorCloudSessionHandle {
     if (!input.message.text.trim() || Buffer.byteLength(input.message.text) > 1_048_576) throw new Error("Cursor Cloud turn text is empty or exceeds its bound");
     const turnId = `turn-${randomUUID()}`;
     const first = this.#cp.agentId === null;
-    const prompt = first || this.#cp.instructionsRevisionPending ? `${this.#instructions}\n\nPaperclip task:\n${input.message.text}` : input.message.text;
+    const prompt = `${first || this.#cp.instructionsRevisionPending ? this.#instructions : CURSOR_CLOUD_CONTROL_INSTRUCTIONS}\n\nPaperclip task:\n${input.message.text}`;
     const request = { prompt: { text: prompt }, model: { id: this.#options.model, ...(this.#options.modelParams ? { params: this.#options.modelParams } : {}) }, mode: "agent" as const,
-      mcpServers: [{ name: "paperclip", type: "http" as const, url: this.#options.relay.url, headers: { Authorization: `Bearer ${this.#options.relay.token}` } }] };
+      mcpServers: [{ name: CURSOR_CLOUD_MCP_SERVER_NAME, type: "http" as const, url: this.#options.relay.url, headers: { Authorization: `Bearer ${this.#options.relay.token}` } }] };
     this.#cp.turnId = turnId; this.#cp.runId = null; this.#cp.phase = "creating"; this.#cp.pendingOperation = first ? "create_agent" : "create_run";
     this.#cp.requestedAgentId = first ? `bc-${randomUUID()}` : null; this.#cp.idempotencyKey = `paperclip-${randomUUID()}`;
     this.#cp.requestDigest = cursorCloudDigest(semanticCanonicalJson(request)); this.#cp.lastEventId = null; this.#cp.lastEventFingerprints = []; this.#cp.terminalStatus = null; this.#cp.acceptedCompletion = null; this.#cp.pendingTerminalDelivery = null;

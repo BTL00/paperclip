@@ -1,5 +1,7 @@
 export { parseNativeCursorCloudConfig, type NativeCursorCloudConfig } from "../../contracts/cursor-cloud.js";
 
+export const CURSOR_CLOUD_MCP_SERVER_NAME = "paperclip" as const;
+
 export interface CursorCloudBinding {
   companyId: string;
   agentId: string;
