@@ -6,6 +6,7 @@ import { forbidden } from "../errors.js";
 import { assertSkillSnapshotPath } from "./skill-snapshot.js";
 import { packageSha256, skillPackageManifest, validateSkillPackageManifest } from "./skill-package-files.js";
 import type { GitHubRead } from "./github-skill-source.js";
+import { MAX_REPOSITORY_BYTES, MAX_REPOSITORY_FILES } from "./skill-repository-package.js";
 
 /** Recheck the source's saved identity and current grant. Never search another
  * company's credentials or turn a mutable branch name into a historical commit. */
@@ -46,15 +47,27 @@ export async function recoverSkillPackage(recipe: SkillPackageRestoreRecipe, rea
       }
       return entry;
     });
-    const blobs = snapshot.readBlobs ? await snapshot.readBlobs(entries, signal) : null;
     const files: CompanySkillVersionFileInventoryEntry[] = [];
-    for (const [index, entry] of entries.entries()) {
+    for (let start = 0; start < entries.length;) {
       signal.throwIfAborted();
-      const expected = manifest.files[index]!;
-      const bytes = blobs?.get(entry.sha) ?? await snapshot.readBlob(entry, signal);
-      if (bytes.length !== expected.size || packageSha256(bytes) !== expected.sha256) throw new Error(`Restored skill file checksum mismatch: ${expected.path}`);
-      files.push({ path: expected.path, kind: expected.kind, content: bytes.toString(expected.encoding),
-        ...(expected.encoding === "base64" ? { encoding: expected.encoding } : {}), ...(expected.executable ? { executable: true } : {}) });
+      let end = start, batchBytes = 0;
+      while (end < entries.length && end - start < MAX_REPOSITORY_FILES
+        && batchBytes + manifest.files[end]!.size <= MAX_REPOSITORY_BYTES) {
+        batchBytes += manifest.files[end]!.size;
+        end++;
+      }
+      if (end === start) throw new Error("Restored skill file exceeds the Git read limit");
+      const batch = entries.slice(start, end);
+      const blobs = snapshot.readBlobs ? await snapshot.readBlobs(batch, signal) : null;
+      for (let index = start; index < end; index++) {
+        signal.throwIfAborted();
+        const entry = entries[index]!, expected = manifest.files[index]!;
+        const bytes = blobs?.get(entry.sha) ?? await snapshot.readBlob(entry, signal);
+        if (bytes.length !== expected.size || packageSha256(bytes) !== expected.sha256) throw new Error(`Restored skill file checksum mismatch: ${expected.path}`);
+        files.push({ path: expected.path, kind: expected.kind, content: bytes.toString(expected.encoding),
+          ...(expected.encoding === "base64" ? { encoding: expected.encoding } : {}), ...(expected.executable ? { executable: true } : {}) });
+      }
+      start = end;
     }
     if (skillPackageManifest(files).contentHash !== manifest.contentHash) throw new Error("Restored skill package checksum mismatch");
     return files;

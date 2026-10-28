@@ -6,10 +6,10 @@ import { pipeline } from "node:stream/promises";
 import { createGzip, createGunzip } from "node:zlib";
 import { extract, pack } from "tar-stream";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
-import { assertSkillSnapshotPath, skillFileBytes, skillSnapshotHash } from "./skill-snapshot.js";
+import { assertSkillSnapshotPath, skillFileBytes, skillSnapshotHash, MAX_SKILL_SNAPSHOT_BYTES, MAX_SKILL_SNAPSHOT_FILES } from "./skill-snapshot.js";
 
-export const MAX_SKILL_PACKAGE_BYTES = 64 * 1024 * 1024;
-export const MAX_SKILL_PACKAGE_FILES = 10_000;
+export const MAX_SKILL_PACKAGE_BYTES = MAX_SKILL_SNAPSHOT_BYTES;
+export const MAX_SKILL_PACKAGE_FILES = MAX_SKILL_SNAPSHOT_FILES;
 export const MAX_SKILL_MANIFEST_BYTES = 48 * 1024 * 1024;
 export type SkillPackageFile = {
   path: string;

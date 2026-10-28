@@ -7,6 +7,18 @@ import { cleanupStorageFailure } from "./failure-cleanup.js";
 
 const MAX_SEGMENT_LENGTH = 120;
 
+async function cancellable<T>(signal: AbortSignal | undefined, action: () => Promise<T>): Promise<T> {
+  signal?.throwIfAborted();
+  if (!signal) return action();
+  let abort: () => void = () => {};
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try { return await Promise.race([action(), cancelled]); }
+  finally { signal.removeEventListener("abort", abort); }
+}
+
 function sanitizeSegment(value: string): string {
   const cleaned = value
     .trim()
@@ -132,14 +144,14 @@ export function createStorageService(provider: StorageProvider): StorageService 
       return provider.getObject({ objectKey, range: options?.range, signal: options?.signal });
     },
 
-    async headObject(companyId: string, objectKey: string) {
+    async headObject(companyId: string, objectKey: string, options) {
       ensureCompanyPrefix(companyId, objectKey);
-      return provider.headObject({ objectKey });
+      return cancellable(options?.signal, () => provider.headObject({ objectKey, signal: options?.signal }));
     },
 
-    async deleteObject(companyId: string, objectKey: string) {
+    async deleteObject(companyId: string, objectKey: string, options) {
       ensureCompanyPrefix(companyId, objectKey);
-      await provider.deleteObject({ objectKey });
+      await cancellable(options?.signal, () => provider.deleteObject({ objectKey, signal: options?.signal }));
     },
   };
 }

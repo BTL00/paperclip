@@ -79,6 +79,8 @@ need restart reconstruction or an explicit wake. No permanent DB listener is add
 Conversion is an idle-sleep blocker while unfinished. Cache/deletion times are earliest
 eligibility, may wait until the next ingress wake, and do not claim an external Cloud
 alarm or measured host suspension.
+Each object-deletion receipt has a 30-second storage deadline. Shutdown cancels
+pending delete/existence requests; incomplete cleanup retains the receipt for retry.
 
 ## Execution and cache behavior
 
@@ -103,8 +105,10 @@ alarm or measured host suspension.
   the selected source and delivered asset on reuse. It retains no repository bodies.
   Source edits invalidate the reference; missing or corrupt copies rebuild from verified bytes.
 - Concurrent cold package I/O is limited to two operations, with a queue of at most 32.
-  Packages are bounded to 10,000 files and 64 MiB decoded bytes. Manifest memory is
-  limited to 16 MiB serialized size. Repository projection metadata is shared; generated
+  Packages share the Git scanner's limits of 10,000 files and 100 MiB decoded bytes.
+  Recovery splits reads within the Git reader's 9,990-file and 61 MiB batch limits.
+  Individual manifests are limited to 48 MiB; the manifest cache holds 16 MiB of serialized data.
+  Repository projection metadata is shared; generated
   wrappers/policies have a 16 MiB budget and 256-entry limit. The stat/digest cache holds
   at most 128,000 file records, with 24 concurrent file checks.
   Native skill asset manifests hold at most 32,000 file records and 128 entries.

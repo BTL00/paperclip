@@ -4,6 +4,7 @@ import { recoverSkillPackage } from "./skill-package-recovery.js";
 import { skillPackageManifest } from "./skill-package-files.js";
 import type { GitHubRead } from "./github-skill-source.js";
 import type { SkillPackageRestoreRecipe } from "@paperclipai/db";
+import { MAX_REPOSITORY_BYTES, MAX_REPOSITORY_FILES } from "./skill-repository-package.js";
 
 function fixture() {
   const files = [{ path: "SKILL.md", kind: "skill" as const, content: "---\nname: original\n---\nold commit" },
@@ -19,6 +20,28 @@ function fixture() {
   return { files, recipe, read, entries, readBlob, release };
 }
 describe("immutable skill package recovery", () => {
+  it.each([{ count: 9_991, bytes: 1 }, { count: 65, bytes: 1024 * 1024 }])("recovers a package across Git batch limits ($count files of $bytes bytes)", async ({ count, bytes }) => {
+    const content = "x".repeat(bytes);
+    const files = Array.from({ length: count }, (_, index) => ({ path: `file-${index}`, kind: "other" as const, content }));
+    const recipe = { ...fixture().recipe, skillPath: null, manifest: skillPackageManifest(files) };
+    const entries = recipe.manifest.files.map((file, index) => ({ path: file.path, type: "blob", mode: "100644", size: file.size,
+      sha: index.toString(16).padStart(40, "0") }));
+    const readBlobs = vi.fn(async (batch: typeof entries, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      if (batch.length > MAX_REPOSITORY_FILES || batch.reduce((sum, entry) => sum + entry.size, 0) > MAX_REPOSITORY_BYTES) throw new Error("Invalid repository file batch");
+      return new Map(batch.map(entry => [entry.sha, Buffer.from(content)]));
+    });
+    const readBlob = vi.fn(async () => { throw new Error("Unexpected individual Git read"); });
+    const release = vi.fn(async () => {});
+    const read = Object.assign(vi.fn(async () => ({ id: 123 })), {
+      openSnapshot: vi.fn(async () => ({ commitSha: recipe.commitSha, entries, readBlobs, readBlob, release })),
+    }) as unknown as GitHubRead;
+    const restored = await recoverSkillPackage(recipe, read, new AbortController().signal);
+    expect(skillPackageManifest(restored).contentHash).toBe(recipe.manifest.contentHash);
+    expect(readBlobs).toHaveBeenCalledTimes(2);
+    expect(readBlob).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  }, 30_000);
   it("reads the original manifest at the exact commit, including normalized entrypoint and modes", async () => {
     const f = fixture();
     expect(await recoverSkillPackage(f.recipe, f.read, new AbortController().signal)).toEqual(f.files);

@@ -120,10 +120,13 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
         await db.delete(skillPackageDeletions).where(eq(skillPackageDeletions.id, row.id));
         continue;
       }
+      const timeout = AbortSignal.timeout(30_000);
+      const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
       for (const key of [row.archiveKey, row.manifestKey]) {
-        await backend.deleteObject(row.companyId, key);
-        if ((await backend.headObject(row.companyId, key)).exists) throw new Error(`Storage did not confirm package deletion: ${row.id}`);
+        await backend.deleteObject(row.companyId, key, { signal });
+        if ((await backend.headObject(row.companyId, key, { signal })).exists) throw new Error(`Storage did not confirm package deletion: ${row.id}`);
       }
+      signal.throwIfAborted();
       await db.delete(skillPackageDeletions).where(eq(skillPackageDeletions.id, row.id));
       removed++;
     }

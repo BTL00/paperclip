@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { companies, companySkillRepositorySnapshots as snapshots, createDb } from "@paperclipai/db";
+import { companies, companySkillRepositorySnapshots as snapshots, skillPackageDeletions, createDb } from "@paperclipai/db";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../__tests__/helpers/embedded-postgres.js";
 import { createStorageService } from "../storage/service.js";
 import { createLocalDiskStorageProvider } from "../storage/local-disk-provider.js";
@@ -108,5 +108,34 @@ describe.skipIf(!support.supported)("automatic skill package work", () => {
     await skillPackageWork(db, storage).tick(new AbortController().signal);
     expect(warning).toHaveBeenCalledWith({ packageId: row!.id, failure: { reason: "legacy_hash_mismatch", errorCode: "unknown" } }, expect.any(String));
     expect(JSON.stringify(warning.mock.calls)).not.toContain("private payload");
+  });
+  it.each([
+    ["deleteObject", "stop"], ["headObject", "stop"], ["deleteObject", "deadline"], ["headObject", "deadline"],
+  ] as const)("releases a stalled %s on %s and retains its deletion receipt", async (method, cancellation) => {
+    const companyId = await company();
+    const [receipt] = await db.insert(skillPackageDeletions).values({ companyId, provider: "local_disk",
+      archiveKey: `${companyId}/expired/archive`, manifestKey: `${companyId}/expired/manifest`, deleteAfter: new Date(0) }).returning();
+    const provider = createLocalDiskStorageProvider(path.join(home, "objects"));
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    let pendingSignal: AbortSignal | undefined;
+    vi.spyOn(provider, method).mockImplementation(async input => {
+      pendingSignal = input.signal;
+      signalStarted();
+      return new Promise<never>(() => {});
+    });
+    const timeout = new AbortController();
+    const deadline = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+    vi.spyOn(logger, "warn").mockImplementation(() => {});
+    coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, canReconcile: () => true, onError: () => {} });
+    const work = skillPackageWork(db, createStorageService(provider)).start(coordinator);
+    await started;
+    expect(deadline).toHaveBeenCalledWith(30_000);
+    if (cancellation === "stop") await coordinator.stop();
+    else { timeout.abort(new Error("Storage deadline exceeded")); await work.ready; }
+    expect(pendingSignal?.aborted).toBe(true);
+    const [saved] = await db.select().from(skillPackageDeletions).where(eq(skillPackageDeletions.id, receipt!.id));
+    expect(saved).toBeDefined();
+    if (cancellation === "deadline") expect(saved!.deleteAfter.getTime()).toBeGreaterThan(Date.now());
   });
 });

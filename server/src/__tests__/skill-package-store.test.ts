@@ -406,9 +406,32 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     expect(() => validateSkillPackageManifest({ ...manifest, files: [{ ...manifest.files[0], path: "../escape" }] })).toThrow();
     expect(() => validateSkillPackageManifest({ ...manifest, files: [manifest.files[0], manifest.files[0]] })).toThrow();
     expect(() => validateSkillPackageManifest({ ...manifest, totalBytes: 1 })).toThrow();
+    const boundary = { ...manifest, totalBytes: 100 * 1024 * 1024,
+      files: [{ ...manifest.files[0]!, size: 100 * 1024 * 1024 }] };
+    expect(validateSkillPackageManifest(boundary).totalBytes).toBe(boundary.totalBytes);
+    expect(() => validateSkillPackageManifest({ ...boundary, totalBytes: boundary.totalBytes + 1,
+      files: [{ ...boundary.files[0]!, size: boundary.totalBytes + 1 }] })).toThrow("byte bound");
     const bad = path.join(root, "bad");
     await fs.mkdir(bad);
     await fs.truncate(archive, 20);
     await expect(extractSkillPackageArchive(archive, bad, manifest)).rejects.toThrow();
   });
+
+  it("stores and converts a saved directory package above 64 MiB without losing its history", async () => {
+    const companyId = await company();
+    const content = "x".repeat(1024 * 1024);
+    const large = [{ path: "SKILL.md", kind: "skill" as const, content: "---\nname: large\n---\nlarge skill" },
+      ...Array.from({ length: 65 }, (_, index) => ({ path: `asset-${index}`, kind: "asset" as const, content }))];
+    const store = skillPackageStore(db, storage);
+    const id = await store.prepare(companyId, large);
+    const [skill] = await db.insert(companySkills).values({ companyId, key: "large", slug: "large", name: "Large", markdown: large[0]!.content }).returning();
+    const [version] = await db.insert(companySkillVersions).values({ companyId, companySkillId: skill!.id,
+      revisionNumber: 1, fileInventory: large }).returning();
+    await skillPackageMaintenance(db, storage).migrateVersions({ id: version!.id, apply: true, clearLegacy: true });
+    const [converted] = await db.select().from(companySkillVersions).where(eq(companySkillVersions.id, version!.id));
+    expect(converted!.fileInventory).toEqual([]);
+    expect(converted!.migrationAt).toBeNull();
+    expect(converted!.packageSnapshotId).toBe(id);
+    expect(skillSnapshotHash(await store.versionFiles(converted!))).toBe(skillSnapshotHash(large));
+  }, 90_000);
 });

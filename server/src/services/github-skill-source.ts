@@ -3,7 +3,7 @@ import { MAX_REPOSITORY_BYTES, MAX_REPOSITORY_FILES, repositoryPackageInspection
 import type { CompanySkillVersionFileInventoryEntry, SkillSourceCandidate, SkillSourceDiscovery, SkillSourcePreviewRequest, SkillSourceFilePreview, SkillSourceScanUpdate, SkillSourceScanProgress } from '@paperclipai/shared';
 import { parseFrontmatterMarkdown, parseGitHubSkillRepositoryUrl } from '@paperclipai/shared';
 import { notFound, unprocessable } from '../errors.js';
-import { assertSkillSnapshotPath, snapshotFile, skillFileBytes } from './skill-snapshot.js';
+import { assertSkillSnapshotPath, snapshotFile, skillFileBytes, MAX_SKILL_SNAPSHOT_BYTES, MAX_SKILL_SNAPSHOT_FILES } from './skill-snapshot.js';
 import { indexSkillPackagePaths, inspectSkillPackage } from './skill-package-inspection.js';
 import { auditSkillSnapshot, classifyInventoryKind } from './company-skills.js';
 import { skillRepositoryDependencies } from './skill-repository-dependencies.js';
@@ -20,9 +20,9 @@ export interface GitHubRead {
 export type DiscoveredSkill = SkillSourceCandidate & { files: CompanySkillVersionFileInventoryEntry[] };
 export type ScannedSkillSource = SkillSourceDiscovery & { skills: DiscoveredSkill[]; defaultBranch: string; treeSha?: string; downloadBytes?: number; scanBytes?: number; repositoryFiles?: CompanySkillVersionFileInventoryEntry[]; repositorySubset?: boolean };
 const MAX_FILE_BYTES = 1024 * 1024;
-const MAX_SCAN_BYTES = 100 * 1024 * 1024;
+const MAX_SCAN_BYTES = MAX_SKILL_SNAPSHOT_BYTES;
 const MAX_SCAN_PACKAGES = 1_000;
-const MAX_SCAN_FILES = 10_000;
+const MAX_SCAN_FILES = MAX_SKILL_SNAPSHOT_FILES;
 
 export function parseSkillRepository(url: string) {
   const parsed = parseGitHubSkillRepositoryUrl(url);
