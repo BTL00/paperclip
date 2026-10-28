@@ -4746,7 +4746,11 @@ done
 
     #[test]
     fn does_not_forward_an_ambient_opencode_command_override() {
-        for key in ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_HEADERS", "OTEL_RESOURCE_ATTRIBUTES"] {
+        for key in [
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+            "OTEL_RESOURCE_ATTRIBUTES",
+        ] {
             assert!(OPENCODE_PROVIDER_ENVIRONMENT_KEYS.contains(&key));
         }
         assert!(!OPENCODE_PROVIDER_ENVIRONMENT_KEYS.contains(&"PAPERCLIP_OPENCODE_COMMAND"));

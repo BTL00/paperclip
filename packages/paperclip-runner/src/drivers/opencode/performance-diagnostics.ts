@@ -132,11 +132,11 @@ function openCodeTraceDestination(environment: NodeJS.ProcessEnv | undefined) {
   if (!endpoint) return null;
   const url = new URL(endpoint);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash || url.search
-    || !url.pathname.endsWith("/v1/traces") || (url.protocol === "http:" && !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) throw new Error("Invalid OpenCode trace destination");
+    || !url.pathname.endsWith("/v1/traces")) throw new Error("Invalid OpenCode trace destination");
   const headers: Record<string, string> = {};
   for (const item of (environment?.OTEL_EXPORTER_OTLP_TRACES_HEADERS ?? "").split(",").filter(Boolean)) {
     const split = item.indexOf("="); const name = item.slice(0, split); const value = decodeURIComponent(item.slice(split + 1));
-    if (split < 1 || !/^[a-zA-Z0-9-]+$/.test(name) || /[\r\n\0]/.test(value)) throw new Error("Invalid OpenCode trace headers");
+    if (split < 1 || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || /[\r\n\0]/.test(value)) throw new Error("Invalid OpenCode trace headers");
     headers[name] = value;
   }
   const attributes = [{ key: "service.name", value: { stringValue: "opencode" } }];
