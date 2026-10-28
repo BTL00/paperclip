@@ -11,6 +11,7 @@ import type {
 } from "../contracts/native-session-backend.js";
 import type { CodexAppServerTransport } from "../drivers/codex/app-server-transport.js";
 import { CodexAppServerDriver } from "../drivers/codex/codex-app-server-driver.js";
+import { CURSOR_CLOUD_TERMINAL_DRAIN_TIMEOUT_MS } from "../contracts/cursor-cloud.js";
 import { cursorCloudDriverDescriptor } from "../drivers/cursor-cloud/cursor-cloud-driver.js";
 import type { CodexWorkingDirectoryAuthority } from "../drivers/codex/codex-boundaries.js";
 import { describeRunnerdExternalBotDriver } from "../drivers/dot/runnerd-dot-driver.js";
@@ -214,6 +215,7 @@ function createTransportBackedNativeSessionBackend(
       requireProviderSessionIdentity: options.transportFactory !== undefined,
     }),
     preparedContext ? constraints : undefined,
+    input.provider.kind === "cursor_cloud" ? CURSOR_CLOUD_TERMINAL_DRAIN_TIMEOUT_MS : undefined,
   );
   if (input.provider.kind === "cursor_cloud") {
     backend.descriptor = async () => {

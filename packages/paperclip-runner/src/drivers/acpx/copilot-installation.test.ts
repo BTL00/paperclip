@@ -87,9 +87,24 @@ vi.mock("./installation-integrity.js", () => ({ verifyNativeAcpxInstallation: vi
 
 describe("Copilot build-owned installation", () => {
   it("admits the current profile with environment launch preparation", () => {
-    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(72);
+    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(73);
     expect(QUALIFIED_ACPX_PROFILES.copilot.qualificationStatus).toBeUndefined();
-    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:dc746f2f41a58f0f6af1aff15bbbd647fb0c9320b4d6302c90608429b80f61ac");
+    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:c17e9a5daa0af5a2e15f4236989ebd8285a134e8a23b8c8e3b4b434089251e13");
+  });
+
+  it("preserves v72 while binding bounded Cloud terminal observation in v73", async () => {
+    const bytes = readFileSync(new URL("../../../test/fixtures/copilot-profile-v72-identity.json", import.meta.url));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe("e119e6206f4450e7d6b79b4a1522215f9848419dbc0b46cae877d7a5ae600b69");
+    const prior = JSON.parse(bytes.toString("utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v73-identity.json", import.meta.url), "utf8"));
+    expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
+      "agentProfileVersion", "harnessBackendSourceSha256", "nativeBackendSourceSha256",
+      "nativeSessionContractSourceSha256", "nativeSessionRuntimeSourceSha256", "profileCompatibilitySourceSha256",
+    ]);
+    expect(Object.keys(current.declaration).sort()).toEqual(Object.keys(prior.declaration).sort());
+    expect(isSupportedAcpxProfileVersion("copilot", 72)).toBe(true);
+    await expect(verifyCopilotInstallation({ ...QUALIFIED_ACPX_PROFILES.copilot,
+      agentProfileVersion: 72, commandDigest: prior.commandDigest })).rejects.toThrow("exact pinned");
   });
 
   it("preserves v71 while binding the shared Cursor Cloud runtime sources in v72", async () => {

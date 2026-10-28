@@ -7964,6 +7964,68 @@ describe("executeNativeSession recovery", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it.each([
+    { name: "default", bound: undefined, limit: 15_000 },
+    { name: "not-finite", bound: Number.NaN, limit: 15_000 },
+    { name: "infinite", bound: Infinity, limit: 15_000 },
+    { name: "negative", bound: -1, limit: 15_000 },
+    { name: "nonpositive", bound: 0, limit: 15_000 },
+    { name: "oversized", bound: 30_001, limit: 15_000 },
+    { name: "fractional", bound: 30_000.5, limit: 15_000 },
+    { name: "extended-missing", bound: 30_000, limit: 30_000 },
+    { name: "short-operation", bound: 30_000, limit: 250, operationMs: 1_000 },
+    { name: "foreign-terminal", bound: 30_000, limit: 30_000, fault: "foreign" },
+    { name: "unproven-terminal", bound: 30_000, limit: 0, fault: "unproven" },
+    { name: "startup-abort", bound: 30_000, limit: 100, fault: "abort" },
+  ])("bounds governed terminal observation without finalizing an unproven wait: $name", async ({ bound, limit, operationMs, fault }) => {
+    vi.useFakeTimers();
+    try {
+      const trigger = { ...runnerEvent(1, "item.completed", { kind: "dynamicToolCall" }), turnId: "turn-waiting" };
+      const history: PrpEvent[] = [];
+      let checkpoint: PersistedNativeSession | undefined;
+      let releaseStream!: () => void;
+      const streamClosed = new Promise<void>(resolve => { releaseStream = resolve; });
+      let cancelAt = 0;
+      const cancel = vi.fn(({ signal }: { signal: AbortSignal }) => { cancelAt = Date.now(); signal.addEventListener("abort", releaseStream, { once: true }); return { cleanup: Promise.resolve(), terminalDrainTimeoutMs: bound }; });
+      const complete = vi.fn(async () => undefined);
+      const session: NativeSession = {
+        identity: () => identity,
+        async capabilities() { return { resume: true, typedEvents: true, steering: false, interruption: true, structuredResult: true }; },
+        async startTurn() { if (fault === "abort") await new Promise((_, reject) => setTimeout(() => reject(new Error("controlled startup abort")), 100)); return { turnId: trigger.turnId }; }, cancel,
+        async snapshot() { return { backendKind: "mock", sessionId: identity.sessionId, identity, activeTurnId: trigger.turnId }; },
+        async result() { return null; }, async close() { releaseStream(); },
+        async *events() {
+          yield trigger;
+          if (fault === "foreign" || fault === "unproven") yield { ...runnerEvent(2, "turn.interrupted", { providerTerminalObserved: fault !== "unproven" }), turnId: fault === "foreign" ? "foreign-turn" : trigger.turnId };
+          await streamClosed;
+        },
+      };
+      const backend: NativeSessionBackend = { async descriptor() { return { kind: "mock", name: "bounded-cancellation", version: "1", capabilities: await session.capabilities() }; }, async openSession() { return session; } };
+      const port: ControlPlanePort = {
+        async openRun() {}, completeRun: complete,
+        async checkpointSession(value) { checkpoint = structuredClone(value); },
+        async appendEvent(event) { history.push(event); return { cursor: history.length, highestContiguousSourceSeq: event.sourceSeq, disposition: "committed" }; },
+        async replayEvents(request) { return { events: history.filter(row => row.sourceInstanceId === request.sourceInstanceId && row.sourceSeq > request.afterSourceSeq), highestContiguousSourceSeq: 0 }; },
+      };
+      const execution = executeNativeSession({ input, backend, controlPlane: port, timeoutMs: operationMs ?? 120_000,
+        runnerInstanceId: "runner-recovery", controlPlaneInstanceId: "control-recovery", resolveGovernedWait: () => yieldedResult });
+      let settled = false;
+      void execution.then(() => { settled = true; }, () => { settled = true; });
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+      if (limit > 0) {
+        await vi.advanceTimersByTimeAsync(Math.max(0, limit - 1 - (Date.now() - cancelAt)));
+        expect(settled).toBe(false);
+      }
+      await vi.advanceTimersByTimeAsync(fault === "abort" ? 1_002 : 2);
+      if (fault === "abort") await expect(execution).rejects.toThrow("controlled startup abort");
+      else await expect(execution).rejects.toMatchObject({ code: "native_provider_terminal_failed" });
+      expect(checkpoint?.governedWait).toEqual({ sourceEvent: trigger, result: yieldedResult });
+      expect(complete).not.toHaveBeenCalled();
+      expect(history.some(event => event.eventType === "run.terminal")).toBe(false);
+      if (fault === "foreign") expect(history).toEqual([trigger]);
+    } finally { vi.useRealTimers(); }
+  });
+
   it.each(["interrupt_acknowledgement", "runtime_request.cancelled", "runtime_request.expired"])("retains %s in contiguous governed-wait history for recovery", async cancellationKind => {
     const trigger = { ...runnerEvent(1, "item.completed", { kind: "dynamicToolCall" }), turnId: "turn-waiting" };
     const acknowledgement: PrpEvent = { ...runnerEvent(2, cancellationKind === "interrupt_acknowledgement" ? "item.completed" : cancellationKind as "runtime_request.cancelled" | "runtime_request.expired",
