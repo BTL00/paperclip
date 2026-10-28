@@ -91,6 +91,15 @@ publish those files. Startup failure does not trigger
 a post-failure rebuild or manufacture missing output evidence. Installed-package
 checks never execute checkout build helpers.
 
+The build-only SDK AST diagnostic adds closed numeric syntax context to the
+existing private build metadata. It requires the same copied-source, compiler,
+restored-lock and output identities before describing a finding. Parser identity
+is separately pinned. Findings are never suppressed; mismatches and parser
+failures remain unresolved. Declaration files, literal types and comments retain
+normal secret scanning. This source refuses every scenario launcher invocation;
+metadata selection only reaches the existing protected build graph. No case,
+provider usage, qualification or ordinal follows from diagnostic compilation.
+
 ## Configured repository and conversion checks
 
 The explicit-only `configured-repository` and `legacy-conversion` suites each

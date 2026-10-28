@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, lstat, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { SDK_AST_TARGET, validateSdkAstContext } from "./sdk-build-ast-context.mjs";
 export const SDK_DIAGNOSTIC_FILE = "packages/paperclip-runner/dist/diagnostics/source-sdk-build-validation.json";
 export const SDK_DIAGNOSTIC_SOURCE = Object.freeze({ shared: "6226b85ea08ae62634c621ce48e8e8b33db146a1", sdk: "4568bd1d9c0138e5d125d605ea3d4c4175588828", helper: "4e8c21ea34550b5308009cbc4cebfebfa99d1c728b641600964bde5237f372ae" });
 export const SDK_DIAGNOSTIC_SYNTHETIC_SOURCES = Object.freeze({ OPENROUTER_API_KEY: "synthetic-sdk-diagnostic-token-48397526", CODEX_AUTH_JSON: JSON.stringify({ tokens: { access_token: "synthetic-sdk-diagnostic-access-52847391" }, metadata: { kind: "identity" } }) });
@@ -112,7 +113,12 @@ export async function maybeSdkBuildDiagnostic(repositoryRoot,env=process.env,run
 export function validateSdkDiagnosticScan(scan){
  const exact=(value,keys)=>value&&typeof value==="object"&&!Array.isArray(value)&&JSON.stringify(Object.keys(value).sort())===JSON.stringify([...keys].sort());
  const hex=value=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);
- if(!exact(scan,["schema","certificates","files","originalCanaryAttribution"])||scan.schema!=="paperclip.sdk-build-diagnostic-scan/v1"||scan.originalCanaryAttribution!=="unavailable-original-registry-not-inferred"||!Array.isArray(scan.files)||scan.files.length>4096||new Set(scan.files.map(row=>row.path)).size!==scan.files.length||!Array.isArray(scan.certificates)||scan.certificates.length!==2)throw new Error("scan_metadata_invalid");
+ if(!exact(scan,["schema","certificates","files","originalCanaryAttribution","astContext"])||scan.schema!=="paperclip.sdk-build-diagnostic-scan/v2"||scan.originalCanaryAttribution!=="unavailable-original-registry-not-inferred"||!Array.isArray(scan.files)||scan.files.length>4096||new Set(scan.files.map(row=>row.path)).size!==scan.files.length||!Array.isArray(scan.certificates)||scan.certificates.length!==2)throw new Error("scan_metadata_invalid");
+ validateSdkAstContext(scan.astContext);
+ if(scan.astContext.comparison==="matched"){
+  const target=scan.files.find(row=>row.path===SDK_AST_TARGET);
+  if(!target||target.sha256!==scan.astContext.binding.targetSha256||!target.findings.includes("generic-key-shape")||scan.certificates[0]?.outputs!==scan.astContext.binding.sharedOutputsSha256||scan.certificates[1]?.outputs!==scan.astContext.binding.sdkOutputsSha256)throw new Error("ast_metadata_invalid");
+ }
  for(const [index,row]of scan.certificates.entries())if(!exact(row,["target","sources","outputs","markerSha256"])||row.target!==targets[index]||![row.sources,row.outputs,row.markerSha256].every(hex))throw new Error("scan_metadata_invalid");
  for(const row of scan.files)if(!exact(row,["path","bytes","sha256","findings"])||typeof row.path!=="string"||!targets.some(target=>row.path.startsWith(target+"/"))||!/^[A-Za-z0-9._/-]{1,300}$/.test(row.path)||row.path.split("/").some(part=>part==="..")||!Number.isSafeInteger(row.bytes)||row.bytes<0||row.bytes>8*1024*1024||!hex(row.sha256)||!Array.isArray(row.findings)||row.findings.length>3||row.findings.some(kind=>!["generic-key-shape","synthetic-credential-exact-match","synthetic-nonsecret-json-exact-match"].includes(kind)))throw new Error("scan_metadata_invalid");
 }

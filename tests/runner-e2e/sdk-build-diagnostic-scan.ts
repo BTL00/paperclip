@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { findSecretLeakMatch, normalizedSecrets } from "./redaction.js";
+import { findSecretLeakMatch, normalizedSecrets, diagnosticSecretShapeRanges } from "./redaction.js";
+import { createSdkAstContext } from "./sdk-build-ast-context.mjs";
 import { sdkDiagnosticTree, SDK_DIAGNOSTIC_SYNTHETIC_SOURCES } from "./sdk-build-diagnostic.mjs";
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 const hex = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -29,7 +30,8 @@ export async function scanSdkDiagnosticOutputs(root: string) {
       files.push({ path: `${target}/${row.path}`, bytes: row.bytes.length, sha256: hash(row.bytes), findings });
     }
   }
-  return { schema: "paperclip.sdk-build-diagnostic-scan/v1", certificates, files, originalCanaryAttribution: "unavailable-original-registry-not-inferred" };
+  const astContext = await createSdkAstContext(root, certificates, diagnosticSecretShapeRanges);
+  return { schema: "paperclip.sdk-build-diagnostic-scan/v2", certificates, files, astContext, originalCanaryAttribution: "unavailable-original-registry-not-inferred" };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [root,output] = process.argv.slice(2);

@@ -13,6 +13,18 @@ const SECRET_SHAPES = [
   /\b(?:openrouter|daytona)[-_]?(?:api)?[-_]?key["'=:\s]+[A-Za-z0-9._-]{12,}\b/gi,
 ] as const;
 
+export function diagnosticSecretShapeRanges(text: string) {
+  const matches: Array<{ detector: number; start: number; end: number }> = [];
+  for (const [detector, pattern] of SECRET_SHAPES.entries()) {
+    pattern.lastIndex = 0;
+    for (const match of text.matchAll(pattern)) {
+      if (matches.length >= 32) return { bounded: false, matches: [] };
+      matches.push({ detector, start: match.index!, end: match.index! + match[0].length });
+    }
+  }
+  return { bounded: true, matches: matches.sort((a, b) => a.start - b.start || a.detector - b.detector) };
+}
+
 const SENSITIVE_JSON_KEY =
   /^(?:api[-_]?key|access[-_]?token|refresh[-_]?token|auth(?:orization)?|bearer|client[-_]?secret|cookie|password|secret|token)$/i;
 
