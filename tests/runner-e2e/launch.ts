@@ -1,4 +1,5 @@
 import { copyHealthHelloDetail } from "./chat-readiness-detail.js";
+import { copyRetainedSourceSdk } from "./source-sdk-evidence.js";
 import { prepareChatRemoteHost } from "./chat-remote-host.js";
 import { POSTGRES_ARTIFACT_ENV, POSTGRES_IMAGE_ID_ENV } from "./docker-postgres.js";
 import { prepareOwnedPublicOrigin, PublicOriginCleanupError, PUBLIC_ORIGIN_CONTROL_ENV, PUBLIC_ORIGIN_RECEIPT_ENV } from "./chat-public-origin.js";
@@ -916,6 +917,7 @@ async function runAttempt(input: {
         });
       }
       await copyHealthHelloDetail(temporaryRoot, candidate.id, uploadDir, credentials);
+      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, credentials);
       console.log(
         `${result.status === "passed" ? "PASS" : "FAIL"} ${candidate.id} attempt ${attempt} -> ${uploadDir}`,
       );
@@ -948,6 +950,7 @@ async function runAttempt(input: {
         schemaVersion: 1, executionId: candidate.id, originalResult: original,
         packaging: "failed; raw diagnostics retained privately", error: error instanceof Error ? error.message : String(error),
       }, attemptSecrets), null, 2)}\n`, { mode: 0o600 });
+      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, attemptSecrets).catch(() => {});
       if (rawCleanupResults.length < executions.length) rawCleanupResults.push({ cleanup: original.cleanup, synthetic: original === fallback, status: original.status });
       publishedResults.push(result); publishedResultPaths.set(candidate.id, resultPath);
     }

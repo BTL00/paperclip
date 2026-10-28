@@ -17,6 +17,7 @@ import { createRunnerE2EServerStopper, runnerE2EServerDetached } from "./server-
 import { runnerE2ETypeScriptProcessArgs } from "./web-server-command.js";
 import { qualifyLegacyClaudeCli } from "./legacy-claude-cli.js";
 import { prepareSourceServerDependencies } from "./source-startup.js";
+import { resolveRunnerE2ESource } from "./source.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -122,7 +123,9 @@ const definedServerEnvironment = Object.fromEntries(
   ),
 );
 
-await prepareSourceServerDependencies(repositoryRoot, definedServerEnvironment, usesInstalledCli(process.env));
+await prepareSourceServerDependencies(repositoryRoot, definedServerEnvironment, usesInstalledCli(process.env), {
+  temporaryRoot, executionIds, sourceRevision: resolveRunnerE2ESource().sha,
+});
 
 await Promise.all([
   mkdir(path.dirname(logPath), { recursive: true }),

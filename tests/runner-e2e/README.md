@@ -80,8 +80,16 @@ one attempt, two expected provider admissions, and 1,000-cent company and agent
 hard stops. Automatic infrastructure retries are disabled. Existing campaign
 reports retain failures, timings, usage, runtime costs, and source identity.
 Source-server startup prepares the existing shared/plugin SDK build dependencies
-before importing native tool authority. Installed-package checks never execute
-checkout build helpers.
+before importing native tool authority. The six source-local plugin-fixture
+journeys retain the actual certified shared/SDK outputs before server listen,
+fingerprinting, agent setup and human dispatch. Exact bytes, completion markers,
+source/lock/helper hashes remain in Actions-only `diagnostics/source-plugin-sdk`.
+The original hidden completion-marker bytes use the explicit non-hidden archival
+name `build-completion-receipt.json`, with original/retained paths and hashes
+recorded so bounded upload staging preserves them. The public report does not
+publish those files. Startup failure does not trigger
+a post-failure rebuild or manufacture missing output evidence. Installed-package
+checks never execute checkout build helpers.
 
 ## Configured repository and conversion checks
 
