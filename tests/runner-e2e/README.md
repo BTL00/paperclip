@@ -3064,6 +3064,29 @@ journals and their holds are not rewritten by changing future campaign policy.
 
 ### Selected self-addressed AgentMail inputs
 
+This is workflow delivery support for a separately reviewed target catalog. The
+default branch alone does not include these email cases or the selected private
+input loader, so it cannot select the two IDs. Its catalog gate rejects missing
+IDs before the paid job or secret delivery. This PR does not add that catalog.
+
+The compatible published target is commit
+[`0098da56f4c10f3154ed4ed96b1404fdf7a021ca`](https://github.com/paperclipai/paperclip/commit/0098da56f4c10f3154ed4ed96b1404fdf7a021ca),
+on branch `codex/chat-released-fourteen`. That revision registers both IDs in
+`chat-catalog-descriptors.json`. Its `chat-private-inputs.ts` consumes the selected
+configuration path and fixed token reference. Its `chat-private-oracle.ts` reads
+the existing owned 0600, 32-byte key and commits the actual recipient. These
+contracts were checked against the published Git blobs and 52 synthetic
+private-input, oracle, query-binding, and email fixture controls. Those checks
+prove source compatibility, not real provider access or email delivery.
+
+Use a normal manual `target_branch` only after that branch resolves to an
+independently reviewed compatible source revision. Resolve and review its exact
+source, selectors, model and case budgets before paid approval. The published
+branch is not a substitute for that check and is not email-run admission. The
+source must keep the existing private loader, both real-provider fixtures and
+their owned cleanup hooks. A different target needs its own compatibility
+review. Do not merge an unrelated catalog change into this delivery PR.
+
 The existing protected `runner-e2e-paid` job can stage private inputs only for
 `chat-features.runner-opencode.local.chat-channels.outbound-email` and
 `chat-features.runner-opencode.local.recovery.unknown-email-outcome`.
