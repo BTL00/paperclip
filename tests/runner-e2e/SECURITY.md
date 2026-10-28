@@ -581,3 +581,10 @@ qualification prerequisite. This alternative does not qualify that path, create
 an instance administrator, bypass route authorization, or change retained failed
 outcomes. Passwords and cookies remain in the existing private session registry;
 the setup receipt contains only public identity, role, grant keys and statuses.
+
+A screenshot route marker is provisional. Any original secret finding, persisted
+state secret finding, privacy-driven reporter redaction/omission, or packaged
+evidence secret finding withholds all screenshots for that attempt. The launcher
+retains a closed withholding reason and removes public markers while preserving
+original private PNG bytes and hashes. Later cleanup labels and empty sanitized
+export scans cannot clear this decision; the publisher and gallery enforce it.
