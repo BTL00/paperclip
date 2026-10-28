@@ -687,10 +687,35 @@ describe("runner API request boundary", () => {
     await expect(executeRunnerApi({ operationId: projects, responseText }, context, io(request))).rejects.toThrow("Invalid call_api arguments");
     expect(request).not.toHaveBeenCalled();
   });
-  it("does not page mutation responses by repeating the mutation", async () => {
+  it.each([
+    { operationId: createProject, body: { name: "Once" } },
+    { operationId: "PATCH /api/projects/{id}", pathParams: { id: "project-a" }, body: { name: "Once" } },
+    { operationId: "DELETE /api/projects/{id}", pathParams: { id: "project-a" } },
+  ])("explains rejected mutation text windows before dispatch: $operationId", async mutation => {
     const request = vi.fn<typeof fetch>();
-    await expect(executeRunnerApi({ operationId: createProject, body: { name: "Once" }, responseText: {} }, context, io(request))).rejects.toThrow("GET");
+    const input = { ...io(request), beforeDispatch: vi.fn(), readFile: vi.fn(), saveResponse: vi.fn() };
+    await expect(executeRunnerApi({ ...mutation, responseText: {} }, context, input)).rejects.toMatchObject({
+      status: 400,
+      message: "responseText requires a GET operation. This request was not sent. Remove responseText to submit this mutation.",
+    });
     expect(request).not.toHaveBeenCalled();
+    expect(input.beforeDispatch).not.toHaveBeenCalled();
+    expect(input.readFile).not.toHaveBeenCalled();
+    expect(input.saveResponse).not.toHaveBeenCalled();
+  });
+  it("dispatches a corrected mutation once after rejecting its text window", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ id: "project-a", name: "Once" }), {
+      status: 201, headers: { "content-type": "application/json" },
+    }));
+    const input = { ...io(request), saveResponse: vi.fn() };
+    await expect(executeRunnerApi({ operationId: createProject, body: { name: "Once" }, responseText: {} }, context, input))
+      .rejects.toThrow("Remove responseText to submit this mutation.");
+    expect(request).not.toHaveBeenCalled();
+    const result = await executeRunnerApi({ operationId: createProject, body: { name: "Once" } }, context, input);
+    expect(result).toMatchObject({ ok: true, status: 201, data: { id: "project-a", name: "Once" } });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Once" }) }));
+    expect(input.saveResponse).not.toHaveBeenCalled();
   });
   it("rejects binary, invalid UTF-8 and offsets that split text", async () => {
     for (const [body, type, offsetBytes] of [
