@@ -381,7 +381,7 @@ else if(m.id!==undefined) send({id:m.id,result:{}});
     expect(trigger.data).not.toHaveProperty("secretMaterial");
     expect(await call("webhook-trigger", triggerArgs)).toEqual(trigger);
     expect(await fixture.authority.recover({ tool: "call_api", callId: "webhook-trigger", arguments: triggerArgs })).toEqual({ result: trigger });
-    const rotateArgs = { operationId: "POST /api/routine-triggers/{id}/rotate-secret", pathParams: { id: trigger.data.trigger.id } };
+    const rotateArgs = { operationId: "POST /api/routine-triggers/{id}/rotate-secret", pathParams: { id: trigger.data.trigger.id }, body: {} };
     const rotated = await call("rotate-webhook", rotateArgs);
     expect(rotated).toMatchObject({ status: 200, data: { trigger: { id: trigger.data.trigger.id } }, secureSetup: { path: setupPath } });
     expect(rotated.data).not.toHaveProperty("secretMaterial");
@@ -411,7 +411,7 @@ else if(m.id!==undefined) send({id:m.id,result:{}});
     }
     const token = createLocalAgentJwt(fixture.agentId, fixture.companyId, "paperclip_runner", fixture.runId, fixture.responsibleUserId);
     const restoredTriggerId = trigger.data.trigger.id;
-    const rawRotate = await fetch(`${fixture.apiUrl}/api/routine-triggers/${restoredTriggerId}/rotate-secret`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const rawRotate = await fetch(`${fixture.apiUrl}/api/routine-triggers/${restoredTriggerId}/rotate-secret`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
     expect(rawRotate.status).toBe(200);
     expect(await rawRotate.json()).toMatchObject({ secretMaterial: { webhookSecret: expect.any(String) } });
     expect((await fixture.snapshot()).assets.filter(asset => asset.objectKey.includes("/runner-api/"))).toEqual([]);
