@@ -2369,7 +2369,14 @@ async function startRuntime(input: {
   let child: ChildProcess | undefined;
   // Failure to collect diagnostics must not prevent the requested work.
   const performanceDiagnostics = (input.options.environment?.[PROVIDER_PERFORMANCE_ENV] === "1" || input.options.environment?.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
-    ? await startOpenCodePerformanceDiagnostics(input.options.environment, input.options.environment?.[PROVIDER_PERFORMANCE_ENV] === "1").catch(() => null) : null;
+    ? await startOpenCodePerformanceDiagnostics(input.options.environment, input.options.environment?.[PROVIDER_PERFORMANCE_ENV] === "1", reason => {
+      try { input.options.onDiagnostic?.(`OpenCode company trace export limited: ${reason}. Agent work continues.`); } catch {}
+    }).catch(() => {
+      if (input.options.environment?.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+        try { input.options.onDiagnostic?.("OpenCode company trace export unavailable: local metadata sink could not start. Agent work continues."); } catch {}
+      }
+      return null;
+    }) : null;
   if (performanceDiagnostics) {
     const values = [performanceDiagnostics.environment.OTEL_EXPORTER_OTLP_HEADERS,
       performanceDiagnostics.environment.OTEL_EXPORTER_OTLP_HEADERS.replace("Authorization=Bearer ", "")];

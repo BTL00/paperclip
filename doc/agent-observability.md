@@ -50,8 +50,12 @@ the proxy; the actual OpenCode child receives only the loopback endpoint/token.
 This is application-level credential custody, not OS-level isolation. The local
 token remains a credential and retains normal diagnostic redaction treatment.
 Forwarding has no retries, at most two concurrent requests, a one-second request
-deadline and a bounded span count. Closing the owned runtime aborts outstanding
-exports and closes the sink. Company export and performance diagnostics share
+deadline and at most 128 recognized spans per native request. Excess batch
+spans or requests beyond the concurrent limit are dropped without blocking agent
+work. A closed diagnostic reports each limit or destination failure once per
+owned runtime; sink startup failure is also reported. These limits do not claim
+complete trace delivery. Closing the owned runtime aborts outstanding exports
+and closes the sink. Company export and performance diagnostics share
 one native exporter; enabling either does not enable the other.
 
 Other harnesses, legacy OpenCode adapters, personal Codex desktop sessions and

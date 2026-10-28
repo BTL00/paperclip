@@ -120,11 +120,12 @@ it("refuses incomplete attribution and unsafe destination URLs", async () => {
 
 it("caps outstanding export requests and closes a stalled destination without blocking native ingestion", async () => {
   let accepted = 0;
+  const diagnostics: string[] = [];
   const upstream = createServer((request, _response) => { accepted++; request.resume(); });
   await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve));
   const address = upstream.address(); if (!address || typeof address === "string") throw new Error("Missing fixture address");
   const sink = await startOpenCodePerformanceDiagnostics({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${address.port}/v1/traces`,
-    OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company,paperclip.agent.id=agent,paperclip.observability.revision=revision" }, false);
+    OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company,paperclip.agent.id=agent,paperclip.observability.revision=revision" }, false, reason => diagnostics.push(reason));
   const post = () => fetch(sink.environment.OTEL_EXPORTER_OTLP_ENDPOINT + "/v1/traces", { method: "POST",
     headers: { Authorization: sink.environment.OTEL_EXPORTER_OTLP_HEADERS.slice("Authorization=".length) },
     body: JSON.stringify(batch([span("ai.streamText", {traceId: "1".repeat(32), spanId: "2".repeat(16)})])) });
@@ -132,5 +133,26 @@ it("caps outstanding export requests and closes a stalled destination without bl
     expect((await post()).status).toBe(200); expect((await post()).status).toBe(200);
     await expect.poll(() => accepted).toBe(2);
     expect((await post()).status).toBe(200); expect(accepted).toBe(2);
+    expect(diagnostics).toEqual(["capacity"]);
   } finally { await sink.close(); await new Promise<void>(resolve => { upstream.close(() => resolve()); upstream.closeAllConnections(); }); }
 }, 5000);
+
+it("bounds each export batch without permanently exhausting later session exports", async () => {
+  const sizes: number[] = [], diagnostics: string[] = [];
+  const upstream = createServer(async (request, response) => {
+    const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const data = JSON.parse(Buffer.concat(chunks).toString());
+    sizes.push(data.resourceSpans[0].scopeSpans[0].spans.length); response.end("{}");
+  });
+  await new Promise<void>(resolve => upstream.listen(0, "127.0.0.1", resolve));
+  const address = upstream.address(); if (!address || typeof address === "string") throw new Error("Missing fixture address");
+  const sink = await startOpenCodePerformanceDiagnostics({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${address.port}/v1/traces`,
+    OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company,paperclip.agent.id=agent,paperclip.observability.revision=revision" }, false, reason => diagnostics.push(reason));
+  const post = (count: number) => fetch(sink.environment.OTEL_EXPORTER_OTLP_ENDPOINT + "/v1/traces", { method: "POST",
+    headers: { Authorization: sink.environment.OTEL_EXPORTER_OTLP_HEADERS.slice("Authorization=".length) },
+    body: JSON.stringify(batch(Array.from({length: count}, () => span("ai.streamText", {traceId: "1".repeat(32), spanId: "2".repeat(16)})))) });
+  try {
+    for (let index = 0; index < 3; index++) { expect((await post(129)).status).toBe(200); await expect.poll(() => sizes.length).toBe(index + 1); }
+    expect(sizes).toEqual([128, 128, 128]); expect(diagnostics).toEqual(["batch_limit"]);
+  } finally { await sink.close(); await new Promise<void>(resolve => { upstream.close(() => resolve()); upstream.closeAllConnections(); }); }
+});

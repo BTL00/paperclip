@@ -3002,3 +3002,22 @@ it.each([false, true])("keeps company export credentials out of the actual fake 
     expect(received).toHaveLength(1);
   } finally { await session?.close({ reason: "test" }); await new Promise<void>(resolve => { receiver.close(() => resolve()); receiver.closeAllConnections(); }); }
 });
+
+it("keeps work available and reports a closed diagnostic when requested company export cannot start", async () => {
+  await chmod(fixture, 0o755);
+  const root = await mkdtemp(join(tmpdir(), "opencode-export-unavailable-")); roots.push(root);
+  const diagnostics: string[] = [];
+  const driver = new OpenCodeServerDriver({ model: "openrouter/deepseek/deepseek-v4.1-flash-1017", runtimeDirectory: root, command: fixture,
+    onDiagnostic: message => diagnostics.push(message), environment: { PATH: process.env.PATH, OPENROUTER_API_KEY: "synthetic-provider-key",
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://collector.invalid/v1/traces", OTEL_EXPORTER_OTLP_TRACES_HEADERS: "Authorization=synthetic-private-header",
+      OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company" } });
+  let session: Awaited<ReturnType<typeof driver.openSession>> | undefined;
+  try {
+    session = await driver.openSession({ runId: "unavailable", normalizedSessionId: "unavailable", workingDirectory: root });
+    await session.startTurn({ message: { role: "user", text: "finish" } }); await collectTurnEvents(session.events());
+    const environment = await readFile(join(root, "unavailable", "data", "fake-environment.json"), "utf8");
+    expect(environment).not.toMatch(/collector.invalid|synthetic-private-header/);
+    expect(diagnostics).toContain("OpenCode company trace export unavailable: local metadata sink could not start. Agent work continues.");
+    expect(diagnostics.join("\n")).not.toMatch(/collector.invalid|synthetic-private-header|paperclip.company/);
+  } finally { await session?.close({ reason: "test" }); }
+});
