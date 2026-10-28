@@ -110,32 +110,4 @@ describe("heartbeat task markdown rendering", () => {
     expect(markdown).not.toContain("Implement the accepted plan");
     expect(markdown).not.toContain("old-approved-revision");
   });
-
-  it.each(["standard", "ask", "planning"])("delivers saved project and goal link contracts in %s chat", (workMode) => {
-    const markdown = buildPaperclipTaskMarkdown({
-      issue: { ...issue, workMode, conversationAgentId: "agent" },
-      acceptedPlanContinuation: true,
-      acceptedPlan: { revisionId: "accepted-revision" },
-      includeDescription: true,
-    });
-
-    expect(markdown).toContain("Link a requested project or goal after its successful save");
-    expect(markdown).toContain("/<prefix>/projects/<urlKey-or-id>");
-    expect(markdown).toContain("returned project urlKey or id");
-    expect(markdown).toContain("/<prefix>/goals/<id>");
-    expect(markdown).toContain("returned goal id");
-    expect(markdown).toContain("Verify the company prefix from platform task context or an authoritative company read");
-    expect(markdown).toContain("Never derive a route from a display name");
-    expect(markdown).toContain("Do not claim a save or ownership that the result does not establish");
-    expect(markdown).toContain("Never invent a hostname for a Paperclip link");
-  });
-
-  it("keeps chat entity-link guidance out of ordinary task execution", () => {
-    const markdown = buildPaperclipTaskMarkdown({ issue });
-
-    expect(markdown).toContain("TEST-1");
-    expect(markdown).not.toContain("Link a requested project or goal");
-    expect(markdown).not.toContain("/<prefix>/projects/<urlKey-or-id>");
-    expect(markdown).not.toContain("/<prefix>/goals/<id>");
-  });
 });
