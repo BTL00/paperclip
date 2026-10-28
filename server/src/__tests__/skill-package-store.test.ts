@@ -438,6 +438,22 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     expect((await f.resolve()).every(entry => entry.sourceStatus === "available")).toBe(true);
   });
 
+  it("reads verified cached versions offline while independently checking durable bytes and rejecting corrupt files", async () => {
+    const f = await fixture();
+    await f.store.files(f.companyId, f.id);
+    const read = vi.spyOn(storage, "getObject").mockRejectedValue(new Error("storage offline"));
+    const saved = f.skills[0]!;
+    expect((await f.service.getVersion(f.companyId, saved.skill.id, saved.version.id))!.fileInventory)
+      .toEqual([{ path: "SKILL.md", kind: "skill", content: files[0]!.content }]);
+    expect(await f.store.versionFiles({ ...saved.version, packageFileMap: null })).toEqual(files);
+    expect(read).not.toHaveBeenCalled();
+    await expect(f.store.verifyDurable(f.companyId, f.id)).rejects.toThrow("storage offline");
+    const target = path.join(skillPackagePaths(f.companyId, f.id).directory, files[0]!.path);
+    await fs.chmod(target, 0o600);
+    await fs.writeFile(target, "x".repeat(Buffer.byteLength(files[0]!.content)));
+    await expect(f.store.versionFiles(saved.version)).rejects.toThrow("storage offline");
+  });
+
   it("retries expired upload claims with fresh keys and only deletes the abandoned attempt", async () => {
     const companyId = await company();
     const store = skillPackageStore(db, storage);

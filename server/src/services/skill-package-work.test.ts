@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { companies, companySkillRepositorySnapshots as snapshots, skillPackageDeletions, createDb } from "@paperclipai/db";
+import { companies, companySkills, companySkillVersions as versions, companySkillRepositorySnapshots as snapshots, skillPackageDeletions, createDb } from "@paperclipai/db";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../__tests__/helpers/embedded-postgres.js";
 import { createStorageService } from "../storage/service.js";
 import { createLocalDiskStorageProvider } from "../storage/local-disk-provider.js";
@@ -103,11 +103,46 @@ describe.skipIf(!support.supported)("automatic skill package work", () => {
   it("reports a safe conversion failure reason without logging the legacy payload", async () => {
     const companyId = await company();
     const legacy = [{ ...files[0]!, content: "private payload" }];
-    const [row] = await db.insert(snapshots).values({ companyId, contentHash: skillSnapshotHash(files), fileInventory: legacy }).returning();
+    const [row] = await db.insert(snapshots).values({ companyId, contentHash: skillSnapshotHash(files), fileInventory: legacy, migrationAt: new Date(0) }).returning();
     const warning = vi.spyOn(logger, "warn").mockImplementation(() => {});
     await skillPackageWork(db, storage).tick(new AbortController().signal);
     expect(warning).toHaveBeenCalledWith({ packageId: row!.id, failure: { reason: "legacy_hash_mismatch", errorCode: "unknown" } }, expect.any(String));
     expect(JSON.stringify(warning.mock.calls)).not.toContain("private payload");
+  });
+  it.each(["manifest.json", "files.tar.gz"])("stops conversion during a stalled %s read and retains legacy bytes", async object => {
+    const companyId = await company();
+    const packageId = await skillPackageStore(db, storage).prepare(companyId, files);
+    const [skill] = await db.insert(companySkills).values({ companyId, key: "legacy", slug: "legacy", name: "Legacy", markdown: files[0]!.content }).returning();
+    const [version] = await db.insert(versions).values({ companyId, companySkillId: skill!.id, revisionNumber: 1, fileInventory: files, migrationAt: new Date(0),
+      ...(object === "manifest.json" ? { repositorySnapshotId: packageId, repositorySkillPath: "SKILL.md" } : { packageSnapshotId: packageId }) }).returning();
+    const get = storage.getObject.bind(storage);
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    let pendingSignal: AbortSignal | undefined;
+    let releasePending: () => void = () => {};
+    vi.spyOn(storage, "getObject").mockImplementation(async (companyId, key, options) => {
+      if (!key.endsWith(object)) return get(companyId, key, options);
+      pendingSignal = options?.signal;
+      signalStarted();
+      return new Promise<never>((_resolve, reject) => {
+        releasePending = () => reject(new Error("Test released stalled read"));
+        pendingSignal?.addEventListener("abort", () => reject(pendingSignal!.reason), { once: true });
+      });
+    });
+    coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, canReconcile: () => true, onError: () => {} });
+    skillPackageWork(db, storage).start(coordinator);
+    await started;
+    const stopping = coordinator.stop();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([stopping, new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Conversion did not stop promptly")), 1_000);
+      })]);
+      expect(pendingSignal?.aborted).toBe(true);
+      const [saved] = await db.select().from(versions).where(eq(versions.id, version!.id));
+      expect(saved!.fileInventory).toEqual(files);
+      expect(saved!.migrationAt).not.toBeNull();
+    } finally { clearTimeout(timeout); releasePending(); await stopping; }
   });
   it.each([
     ["deleteObject", "stop"], ["headObject", "stop"], ["deleteObject", "deadline"], ["headObject", "deadline"],

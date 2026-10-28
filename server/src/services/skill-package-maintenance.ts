@@ -57,9 +57,9 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
       if (row.repositorySnapshotId) await migrateSnapshots({ id: row.repositorySnapshotId, apply: true, clearLegacy: true, signal: options.signal });
       let packageId = row.packageSnapshotId;
       let fileMap = row.packageFileMap;
-      if (packageId && skillSnapshotHash(await store.versionFiles(row)) !== skillSnapshotHash(files)) throw new Error(`Legacy version differs from its package: ${row.id}`);
+      if (packageId && skillSnapshotHash(await store.versionFiles(row, true, options.signal)) !== skillSnapshotHash(files)) throw new Error(`Legacy version differs from its package: ${row.id}`);
       if (!packageId && row.repositorySnapshotId && row.repositorySkillPath) {
-        const manifest = await store.manifest(row.companyId, row.repositorySnapshotId);
+        const manifest = await store.manifest(row.companyId, row.repositorySnapshotId, options.signal);
         const byPath = new Map(manifest.files.map(file => [file.path, file]));
         const mappings = files.map(file => ({ path: file.path, kind: file.kind, encoding: file.encoding ?? "utf8" as const,
           sourcePath: file.path === "SKILL.md" ? row.repositorySkillPath! : path.posix.join(path.posix.dirname(row.repositorySkillPath!), file.path) }));
@@ -71,7 +71,7 @@ export function skillPackageMaintenance(db: Db, storage?: StorageService) {
       packageId ??= await store.prepare(row.companyId, files, true, options.signal);
       const legacyMetadata = new Map(files.map(file => [file.path, file]));
       fileMap = fileMap ? fileMap.map(file => ({ ...file, kind: legacyMetadata.get(file.path)?.kind ?? file.kind,
-        encoding: legacyMetadata.get(file.path)?.encoding ?? "utf8" })) : skillVersionFileMap(files, await store.manifest(row.companyId, packageId));
+        encoding: legacyMetadata.get(file.path)?.encoding ?? "utf8" })) : skillVersionFileMap(files, await store.manifest(row.companyId, packageId, options.signal));
       const receipt = await store.descriptor(row.companyId, packageId);
       if (!receipt.storage || !await store.verifyDurable(row.companyId, packageId, options.signal)) throw new Error(`Package must be migrated and verified first: ${packageId}`);
       await db.update(versions).set({ packageSnapshotId: packageId, packageFileMap: fileMap, ...(options.clearLegacy ? { fileInventory: [], migrationAt: null } : {}) })

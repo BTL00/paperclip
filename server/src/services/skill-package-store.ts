@@ -182,12 +182,14 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     if (legacy.storage) { row.storage = legacy.storage; row.upload = legacy.upload; }
     return legacy.files;
   }
-  async function manifestFor(row: Descriptor): Promise<SkillPackageManifest> {
+  async function manifestFor(row: Descriptor, cancellation?: AbortSignal): Promise<SkillPackageManifest> {
+    cancellation?.throwIfAborted();
     const paths = skillPackagePaths(row.companyId, row.id);
     const key = `${paths.manifest}:${row.storage?.manifestSha256 ?? row.contentHash}`;
     const cached = manifests.get(key);
     if (cached) return cached.manifest;
-    return flight(db, `manifest:${key}`, async () => {
+    const load = async () => {
+      const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
       await ensureSkillCacheDirectory(paths.parent, true);
       // Legacy manifests have no independently stored checksum. Derive them once
       // per process from the authoritative row until the operator migrates it.
@@ -205,12 +207,12 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
       }
       if (row.storage) {
         if (!bytes || packageSha256(bytes) !== row.storage.manifestSha256) {
-          const signal = AbortSignal.timeout(180_000);
           try {
             if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed");
             bytes = await withPackageIo(() => readBoundedObject(storage(), row.companyId, row.storage!.manifestKey,
               row.storage!.manifestBytes, row.storage!.manifestSha256, signal), signal);
           } catch (error) {
+            signal.throwIfAborted();
             const [legacy] = await db.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
             const saved = legacy?.files.length ? skillPackageManifestBytes(skillPackageManifest(legacy.files)) : null;
             if (saved && packageSha256(saved) === row.storage!.manifestSha256) bytes = saved;
@@ -222,9 +224,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
       } else if (!bytes) {
         const files = await legacyFiles(row);
-        if (row.storage) return manifestFor(row);
+        if (row.storage) return manifestFor(row, cancellation);
         bytes = skillPackageManifestBytes(skillPackageManifest(files));
       }
+      signal.throwIfAborted();
       if (bytes.length > MAX_SKILL_MANIFEST_BYTES) throw new Error("Skill manifest exceeds its byte bound");
       const manifest = validateSkillPackageManifest(JSON.parse(bytes.toString("utf8")));
       if (row.storage && (manifest.contentHash !== row.contentHash || manifest.files.length !== row.storage.fileCount
@@ -235,7 +238,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
       finally { await fs.rm(temp, { force: true }); }
       rememberManifest(key, manifest, bytes.length);
       return manifest;
-    });
+    };
+    // Optional work must neither inherit an uncancellable interactive read nor
+    // cancel a shared read that another caller still needs.
+    return cancellation ? load() : flight(db, `manifest:${key}`, load);
   }
   async function restoreInto(row: Descriptor, manifest: SkillPackageManifest, staging: string,
     archivePath: string, signal: AbortSignal, allowRecovery = true) {
@@ -279,10 +285,11 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
   // Admin reads and retention verification own a scratch directory. They never
   // wait for or hold the lock used to prepare and pin an agent's warm files.
   async function withIsolatedPackage<T>(companyId: string, id: string,
-    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true) {
+    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true, cancellation?: AbortSignal) {
+    const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
+    signal.throwIfAborted();
     const row = await descriptor(companyId, id);
-    const manifest = await manifestFor(row);
-    const signal = AbortSignal.timeout(180_000);
+    const manifest = await manifestFor(row, signal);
     return withPackageIo(async () => {
       const parent = skillPackagePaths(companyId, id).parent;
       await ensureSkillCacheDirectory(parent, true);
@@ -433,10 +440,11 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
   async function verifyDurable(companyId: string, id: string, cancellation?: AbortSignal,
     validate?: (root: string, manifest: SkillPackageManifest) => Promise<boolean>): Promise<boolean> {
     const action = async () => {
+      cancellation?.throwIfAborted();
       const row = await descriptor(companyId, id);
       if (!row.storage) {
-        await manifestFor(row);
-        if (!row.storage) return validate ? withIsolatedPackage(companyId, id, validate, false) : true;
+        await manifestFor(row, cancellation);
+        if (!row.storage) return validate ? withIsolatedPackage(companyId, id, validate, false, cancellation) : true;
       }
       if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed; migrate its objects before switching storage");
       const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
@@ -464,18 +472,41 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     };
     const context = readScope.getStore();
     const key = `${companyId}:${id}`;
-    if (context?.db !== db || validate) return action();
+    if (context?.db !== db || validate || cancellation) return action();
     if (!context.durable.has(key)) context.durable.set(key, action());
     return context.durable.get(key)!;
   }
-  async function versionFiles(version: StoredSkillVersion, allowRecovery = true): Promise<CompanySkillVersionFileInventoryEntry[]> {
+  async function readPackageFile(root: string, entry: SkillPackageManifest["files"][number], signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const filename = path.join(root, entry.path);
+    await ensureSkillCacheDirectory(path.dirname(filename));
+    const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size !== entry.size) throw new Error("Invalid cached skill file");
+      const bytes = Buffer.alloc(entry.size);
+      let offset = 0;
+      while (offset < bytes.length) {
+        signal?.throwIfAborted();
+        const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
+        if (!bytesRead) throw new Error("Invalid cached skill file");
+        offset += bytesRead;
+      }
+      if (packageSha256(bytes) !== entry.sha256) throw new Error("Invalid cached skill file");
+      return bytes;
+    } finally { await handle.close(); }
+  }
+  async function versionFiles(version: StoredSkillVersion, allowRecovery = true, cancellation?: AbortSignal): Promise<CompanySkillVersionFileInventoryEntry[]> {
+    cancellation?.throwIfAborted();
     if (!version.packageSnapshotId) {
       const [row] = await db.select({ ...skillVersionMetadataColumns, files: companySkillVersions.fileInventory }).from(companySkillVersions).where(and(
         eq(companySkillVersions.companyId, version.companyId), eq(companySkillVersions.id, version.id)));
-      if (row?.packageSnapshotId) return versionFiles(row, allowRecovery);
+      if (row?.packageSnapshotId) return versionFiles(row, allowRecovery, cancellation);
       return row?.files ?? [];
     }
-    return withIsolatedPackage(version.companyId, version.packageSnapshotId, async (root, manifest) => {
+    const id = version.packageSnapshotId;
+    const manifest = await manifestFor(await descriptor(version.companyId, id), cancellation);
+    const read = async (root: string) => {
       const byPath = new Map(manifest.files.map(file => [file.path, file]));
       const result: CompanySkillVersionFileInventoryEntry[] = [];
       for (const mapping of version.packageFileMap ?? manifest.files.map(file => ({ ...file, sourcePath: file.path }))) {
@@ -485,11 +516,22 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         if (!file) throw new Error("Skill version references a missing package file");
         const encoding = mapping.encoding ?? file.encoding;
         result.push({ path: mapping.path, kind: mapping.kind,
-          content: (await fs.readFile(path.join(root, file.path))).toString(encoding),
+          content: (await readPackageFile(root, file, cancellation)).toString(encoding),
           ...(encoding === "base64" ? { encoding } : {}), ...(file.executable ? { executable: true } : {}) });
       }
       return result;
-    }, allowRecovery);
+    };
+    // Verify bytes as they are read, without holding the warm preparation lock.
+    // A descriptor survives eviction; a missing/racing file falls back to storage.
+    const root = skillPackagePaths(version.companyId, id).directory;
+    try {
+      const result = await read(root);
+      touchSkillPackage(root);
+      return result;
+    } catch {
+      cancellation?.throwIfAborted();
+      return withIsolatedPackage(version.companyId, id, read, allowRecovery, cancellation);
+    }
   }
   async function readVersionFile(version: StoredSkillVersion, relativePath: string, allowRecovery = true) {
     assertSkillSnapshotPath(relativePath);
@@ -501,24 +543,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     const entry = manifest.files.find(file => file.path === (mapping?.sourcePath ?? relativePath));
     if (!entry) return undefined;
     const read = async (root: string) => {
-      const filename = path.join(root, entry.path);
-      await ensureSkillCacheDirectory(path.dirname(filename));
-      const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const stat = await handle.stat();
-        if (!stat.isFile() || stat.size !== entry.size) throw new Error("Invalid cached skill file");
-        const bytes = Buffer.alloc(entry.size);
-        let offset = 0;
-        while (offset < bytes.length) {
-          const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
-          if (!bytesRead) throw new Error("Invalid cached skill file");
-          offset += bytesRead;
-        }
-        if (packageSha256(bytes) !== entry.sha256) throw new Error("Invalid cached skill file");
-        const encoding = mapping?.encoding ?? entry.encoding;
-        return { path: relativePath, kind: mapping?.kind ?? entry.kind, content: bytes.toString(encoding),
-          encoding, executable: entry.executable };
-      } finally { await handle.close(); }
+      const bytes = await readPackageFile(root, entry);
+      const encoding = mapping?.encoding ?? entry.encoding;
+      return { path: relativePath, kind: mapping?.kind ?? entry.kind, content: bytes.toString(encoding),
+        encoding, executable: entry.executable };
     };
     // Immutable cache files can be read without the preparation lock. An open
     // descriptor survives eviction; missing/racing files fall back to storage.
@@ -538,5 +566,5 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     return row?.files ?? [];
   }
   return { descriptor, prepare, bindRestore, files, version, prefetch, versionFiles, versionInventory, readVersionFile, withPackage, withIsolatedPackage, verifyDurable,
-    manifest: async (companyId: string, id: string) => manifestFor(await descriptor(companyId, id)) };
+    manifest: async (companyId: string, id: string, cancellation?: AbortSignal) => manifestFor(await descriptor(companyId, id), cancellation) };
 }
