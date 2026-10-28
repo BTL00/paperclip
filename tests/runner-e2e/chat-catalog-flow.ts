@@ -143,7 +143,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       await input.evidence("chat-catalog-query-rejection.json", rejection);
       expect(rejection.passed, "Real browser/API query rejection").toBe(true);
     }
-    if (implementation.act) await implementation.act(context, state);
+    if (implementation.act) await implementation.act({ ...context, observationDeadlineAt: deadlineAt }, state);
     let settledAt: number | undefined;
     let passedAt: number | undefined;
     await pollUntil({ label: scenario.id, deadlineAt, intervalMs: 1_000, load: refresh,

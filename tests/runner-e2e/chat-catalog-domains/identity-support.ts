@@ -48,11 +48,18 @@ export function identityDefinition(scenarioId: string, setup: ChatCatalogCase["s
     },
   };
 }
-export async function waitForReply(ctx: ChatCatalogContext) {
+/** Opt-in callers consume the original flow clock, never a fresh outer budget. */
+export function remainingIdentityObservationBudget(ctx: ChatCatalogContext): number {
+  const deadline = ctx.observationDeadlineAt;
+  const now = Date.now();
+  if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original identity observation budget exhausted or missing");
+  return deadline! - now;
+}
+export async function waitForReply(ctx: ChatCatalogContext, observationDeadlineAt?: number) {
   const { pollUntil } = await import("../api.js");
-  await pollUntil({ label: "initial identity response", deadlineAt: Date.now() + 150_000, intervalMs: 500,
+  await pollUntil({ label: "initial identity response", deadlineAt: observationDeadlineAt ?? Date.now() + 150_000, intervalMs: 500,
     load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: ({ issue, runs }) => issue?.conversationState === "waiting" && runs.length === 1 && runs.every(run => run.status === "succeeded"),
+    accept: ({ issue, runs }) => (observationDeadlineAt === undefined || Date.now() < observationDeadlineAt) && issue?.conversationState === "waiting" && runs.length === 1 && runs.every(run => run.status === "succeeded"),
     reject: ({ runs }) => runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Initial response failed" : undefined });
 }
 export async function identityWorker(ctx: ChatCatalogContext, name = "Morgan") {

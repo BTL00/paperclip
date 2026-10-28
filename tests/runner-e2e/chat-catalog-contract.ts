@@ -6,6 +6,8 @@ import type { ChatScenario } from "./chat-feature-cases.js";
 export interface ChatCatalogCheck { id: string; passed: boolean; detail: string }
 export interface ChatCatalogGrade { passed: boolean; checks: ChatCatalogCheck[] }
 export interface ChatCatalogContext {
+  /** Original flow observation deadline; optional opt-in for bounded human followup acts. */
+  readonly observationDeadlineAt?: number;
   input: ChatFlowInput;
   scenario: ChatScenario;
   issue(): ChatIssue | undefined;

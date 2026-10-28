@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, entity, project, task, sameTask, type Entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, observeIdentity, readAgentResource, probeAgentPermission, waitForReply } from "./identity-support.js";
+import { identityDefinition, identityObservation, observeIdentity, readAgentResource, probeAgentPermission, waitForReply, remainingIdentityObservationBudget } from "./identity-support.js";
 
 export function gradeCompanyLifecycle(value: unknown) {
   const c = checks(); const o = identityObservation(value);
@@ -55,19 +55,23 @@ export const companyLifecycleIdentityCases: readonly ChatCatalogCase[] = [
   }, gradeCompanyLifecycle, {
     authentication: "human-session", sourceFiles: sources,
     async act(ctx, state) {
-      await waitForReply(ctx); const source = ctx.input.page.url();
-      await ctx.input.page.getByRole("button", { name: /^Open .+ (?:organization|workspace|company) switcher$/i }).click();
-      await ctx.input.page.getByRole("menuitem").filter({ hasText: /^Birch/ }).click();
+      const remaining = () => remainingIdentityObservationBudget(ctx);
+      remaining();
+      await waitForReply(ctx, ctx.observationDeadlineAt);
+      remaining();
+      const source = ctx.input.page.url();
+      await ctx.input.page.getByRole("button", { name: /^Open .+ (?:organization|workspace|company) switcher$/i }).click({ timeout: remaining() });
+      await ctx.input.page.getByRole("menuitem").filter({ hasText: /^Birch/ }).click({ timeout: remaining() });
       const prefix = String(state.foreignPrefix);
-      await expect(ctx.input.page).toHaveURL(new RegExp(`/${prefix}/`));
+      await expect(ctx.input.page).toHaveURL(new RegExp(`/${prefix}/`), { timeout: remaining() });
       state.switchedCompanyId = entity(state, "otherCompany").id;
-      await ctx.input.page.goto(`/${prefix}/projects/${entity(state, "foreignProject").id}`, { waitUntil: "domcontentloaded" });
-      await expect(ctx.input.page.getByText(entity(state, "foreignTask").title!, { exact: true }).first()).toBeVisible();
+      await ctx.input.page.goto(`/${prefix}/projects/${entity(state, "foreignProject").id}`, { waitUntil: "domcontentloaded", timeout: remaining() });
+      await expect(ctx.input.page.getByText(entity(state, "foreignTask").title!, { exact: true }).first()).toBeVisible({ timeout: remaining() });
       state.foreignTaskVisible = true; state.browserCompanyPrefix = new URL(ctx.input.page.url()).pathname.split("/")[1];
-      await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
+      await ctx.input.page.reload({ waitUntil: "domcontentloaded", timeout: remaining() });
       state.afterReloadVisible = await ctx.input.page.getByText(entity(state, "foreignTask").title!, { exact: true }).first().isVisible();
       await ctx.input.evidence("identity-human-company-switch.json", { companyId: state.switchedCompanyId, prefix: state.browserCompanyPrefix, taskId: entity(state, "foreignTask").id, afterReloadVisible: state.afterReloadVisible });
-      await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+      await ctx.input.page.goto(source, { waitUntil: "domcontentloaded", timeout: remaining() }); remaining();
     },
     async observe(ctx, state) { state.foreignAfter = await ctx.input.api.get(`/api/issues/${entity(state, "foreignTask").id}`); return observeIdentity(ctx, state); },
     async cleanup(ctx, state) { await ctx.input.api.delete(`/api/companies/${entity(state, "otherCompany").id}`, { allowNotFound: true }); },
@@ -79,24 +83,30 @@ export const companyLifecycleIdentityCases: readonly ChatCatalogCase[] = [
   }, gradeCompanyLifecycle, {
     authentication: "human-session", sourceFiles: sources,
     async act(ctx, state) {
-      await waitForReply(ctx); const root = `/api/companies/${ctx.input.fixtures.company.id}`; const source = ctx.input.page.url();
-      state.beforeHumanStatus = (await ctx.input.api.get<Entity>(root)).status;
+      const remaining = () => remainingIdentityObservationBudget(ctx);
+      remaining();
+      await waitForReply(ctx, ctx.observationDeadlineAt);
+      remaining();
+      const root = `/api/companies/${ctx.input.fixtures.company.id}`; const source = ctx.input.page.url();
+      state.beforeHumanStatus = (await ctx.input.api.get<Entity>(root, { timeout: remaining() })).status;
+      remaining();
       state.agentArchiveStatus = await probeAgentPermission(ctx, `${root}/archive`, "POST", {});
-      await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/company/settings`, { waitUntil: "domcontentloaded" });
+      remaining();
+      await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/company/settings`, { waitUntil: "domcontentloaded", timeout: remaining() });
       ctx.input.page.once("dialog", dialog => dialog.accept());
-      await ctx.input.page.getByRole("button", { name: "Archive organization", exact: true }).click();
-      state.archivedCompany = await pollUntil({ label: "human company archive persisted", deadlineAt: Date.now() + 30_000, load: () => ctx.input.api.get<Entity>(root), accept: row => row.status === "archived" });
-      state.archivedAgents = await pollUntil({ label: "archive agent gates", deadlineAt: Date.now() + 30_000,
-        load: () => ctx.input.api.get<Array<{ id: string; status: string; pauseReason: string }>>(`${root}/agents`), accept: rows => rows.length > 0 && rows.every(row => row.status === "paused" && row.pauseReason === "company_archived") });
+      await ctx.input.page.getByRole("button", { name: "Archive organization", exact: true }).click({ timeout: remaining() });
+      state.archivedCompany = await pollUntil({ label: "human company archive persisted", deadlineAt: Math.min(ctx.observationDeadlineAt!, Date.now() + 30_000), load: () => ctx.input.api.get<Entity>(root, { timeout: remaining() }), accept: row => row.status === "archived" });
+      state.archivedAgents = await pollUntil({ label: "archive agent gates", deadlineAt: Math.min(ctx.observationDeadlineAt!, Date.now() + 30_000),
+        load: () => ctx.input.api.get<Array<{ id: string; status: string; pauseReason: string }>>(`${root}/agents`, { timeout: remaining() }), accept: rows => rows.length > 0 && rows.every(row => row.status === "paused" && row.pauseReason === "company_archived") });
       state.archivedActiveRuns = (await ctx.allRuns()).filter(run => ["queued", "running"].includes(run.status)).length;
       await ctx.input.evidence("identity-company-archived.json", { company: state.archivedCompany, agents: state.archivedAgents, activeRuns: state.archivedActiveRuns });
-      await ctx.input.page.goto("/companies", { waitUntil: "domcontentloaded" });
+      await ctx.input.page.goto("/companies", { waitUntil: "domcontentloaded", timeout: remaining() });
       const company = state.archivedCompany as Entity;
       const card = ctx.input.page.getByRole("button").filter({ has: ctx.input.page.getByRole("heading", { name: company.name!, exact: true }) });
-      await card.getByRole("button").last().click();
-      await ctx.input.page.getByRole("menuitem", { name: "Unarchive", exact: true }).click();
-      await expect.poll(async () => (await ctx.input.api.get<Entity>(root)).status).toBe("active"); state.restoredViaList = true;
-      await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
+      await card.getByRole("button").last().click({ timeout: remaining() });
+      await ctx.input.page.getByRole("menuitem", { name: "Unarchive", exact: true }).click({ timeout: remaining() });
+      await expect.poll(async () => (await ctx.input.api.get<Entity>(root, { timeout: remaining() })).status, { timeout: remaining() }).toBe("active"); state.restoredViaList = true;
+      await ctx.input.page.goto(source, { waitUntil: "domcontentloaded", timeout: remaining() }); remaining();
     },
     async observe(ctx, state) { state.membersAfter = await members(ctx); return observeIdentity(ctx, state); },
   }),
