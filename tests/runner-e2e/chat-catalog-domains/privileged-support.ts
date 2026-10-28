@@ -11,8 +11,9 @@ export function privilegedDefinition(scenarioId: string, module: string, extra: 
 }
 export function remainingPrivilegedObservationBudget(ctx: ChatCatalogContext): number {
   const deadline = ctx.observationDeadlineAt;
-  if (!Number.isFinite(deadline) || deadline! <= Date.now()) throw new Error("Original privileged observation budget exhausted or missing");
-  return deadline! - Date.now();
+  const now = Date.now();
+  if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original privileged observation budget exhausted or missing");
+  return deadline! - now;
 }
 export async function settlePrivilegedChat(ctx: ChatCatalogContext, observationDeadlineAt?: number): Promise<InternalObservation> {
   return pollUntil({ label: "Canonical privileged guidance settled", deadlineAt: observationDeadlineAt ?? Date.now() + 150_000,

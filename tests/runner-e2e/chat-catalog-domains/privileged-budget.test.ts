@@ -9,7 +9,7 @@ function context(settlesAt = 180_000, deadline = 390_000): ChatCatalogContext {
   observed.load.mockImplementation(async () => ({ runs: [{ status: Date.now() >= settlesAt ? "succeeded" : "running" }], reply: Date.now() >= settlesAt ? "Use the operator experimental settings." : "" }));
   return ctx;
 }
-afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 describe("instance settings consume the original observation clock", () => {
   it("waits beyond the incidental150s only for a genuinely settled reply", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0); const ctx = context(); let done = false;
@@ -64,6 +64,11 @@ describe("instance settings consume the original observation clock", () => {
     ctx.input = { page: { url: () => "https://fixture.test/RUN/chats/ceo", goto, getByRole: () => ({ click }) }, fixtures: { company: { issuePrefix: "RUN" } }, api: { baseURL: "https://fixture.test" } } as never;
     await expect(privilegedConfigurationCases[0]!.act!(ctx, {})).rejects.toThrow(/exhausted/);
     expect(goto).toHaveBeenCalledOnce(); expect(click).not.toHaveBeenCalled();
+  });
+  it("never returns Playwright's unlimited zero timeout at the deadline boundary", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValueOnce(389_999).mockReturnValueOnce(390_000);
+    expect(remainingPrivilegedObservationBudget({ observationDeadlineAt: 390_000 } as ChatCatalogContext)).toBe(1);
+    expect(now).toHaveBeenCalledOnce();
   });
   it("missing, expired and nonfinite original deadlines fail before any UI action", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0);
