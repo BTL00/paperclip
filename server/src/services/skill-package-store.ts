@@ -7,7 +7,7 @@ import { constants, createReadStream, createWriteStream, promises as fs } from "
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { companySkillRepositorySnapshots as snapshots, companySkillVersions, companySkillSources, type Db, type SkillPackageFileMapping, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
+import { companySkillRepositorySnapshots as snapshots, companySkillVersions, companySkillSources, withDedicatedDbConnection, type Db, type SkillPackageFileMapping, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
 import { getStorageService, type StorageService } from "../storage/index.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
@@ -193,8 +193,8 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
       context.descriptors.set(`${companyId}:${row.id}`, Promise.resolve(row));
     }
   }
-  async function restoreRecipe(row: Descriptor) {
-    const [saved] = await db.select({ restore: snapshots.restore }).from(snapshots).where(scope(row.companyId, row.id));
+  async function restoreRecipe(row: Descriptor, database = db) {
+    const [saved] = await database.select({ restore: snapshots.restore }).from(snapshots).where(scope(row.companyId, row.id));
     const recipe = saved?.restore;
     if (!recipe || recipe.version !== 1) throw notFound("This skill package has no exact-commit restore recipe");
     const manifest = validateSkillPackageManifest(recipe.manifest);
@@ -203,23 +203,23 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     }
     return recipe;
   }
-  async function acquireFiles(row: Descriptor, signal: AbortSignal) {
+  async function acquireFiles(row: Descriptor, signal: AbortSignal, database = db) {
     signal.throwIfAborted();
-    const [current] = await db.select({ retryAt: snapshots.restoreRetryAt }).from(snapshots).where(scope(row.companyId, row.id));
+    const [current] = await database.select({ retryAt: snapshots.restoreRetryAt }).from(snapshots).where(scope(row.companyId, row.id));
     if (current?.retryAt && current.retryAt.getTime() > Date.now()) throw conflict("The original skill package could not be acquired. Reconnect its repository and retry after the recovery backoff.");
     try {
-      const recipe = await restoreRecipe(row);
-      const read = await skillPackageRecoveryReader(db, row.companyId, recipe);
+      const recipe = await restoreRecipe(row, database);
+      const read = await skillPackageRecoveryReader(database, row.companyId, recipe);
       const files = await recoverSkillPackage(recipe, read, signal);
-      await db.update(snapshots).set({ restoreRetryAt: null }).where(scope(row.companyId, row.id));
+      await database.update(snapshots).set({ restoreRetryAt: null }).where(scope(row.companyId, row.id));
       return files;
     } catch (error) {
-      if (!signal.aborted) await db.update(snapshots).set({ restoreRetryAt: new Date(Date.now() + 5 * 60_000) }).where(scope(row.companyId, row.id));
+      if (!signal.aborted) await database.update(snapshots).set({ restoreRetryAt: new Date(Date.now() + 5 * 60_000) }).where(scope(row.companyId, row.id));
       throw error;
     }
   }
-  async function legacyFiles(row: Descriptor) {
-    const [legacy] = await db.select({ files: snapshots.fileInventory, storage: snapshots.storage, upload: snapshots.upload })
+  async function legacyFiles(row: Descriptor, database = db) {
+    const [legacy] = await database.select({ files: snapshots.fileInventory, storage: snapshots.storage, upload: snapshots.upload })
       .from(snapshots).where(scope(row.companyId, row.id));
     if (!legacy || (!legacy.files.length && !legacy.storage)) throw notFound("Installed skill package has no saved contents");
     // A reader may have loaded its descriptor just before a migration clears
@@ -288,9 +288,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     return sharedFlight(db, `manifest:${key}`, cancellation, load);
   }
   async function restoreInto(row: Descriptor, manifest: SkillPackageManifest, staging: string,
-    archivePath: string, signal: AbortSignal, allowRecovery = true) {
-    let legacy: CompanySkillVersionFileInventoryEntry[] | null = null;
-    if (!row.storage && !row.restorable) legacy = await legacyFiles(row);
+    archivePath: string, signal: AbortSignal, allowRecovery = true, database = db,
+    initialLegacy: CompanySkillVersionFileInventoryEntry[] | null = null) {
+    let legacy = initialLegacy;
+    if (!row.storage && !row.restorable && !legacy) legacy = await legacyFiles(row, database);
     try {
       if (row.storage) {
         if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed");
@@ -305,16 +306,16 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
       signal.throwIfAborted();
       // A missing/corrupt archive must not hide a still-authoritative legacy
       // body. Only then use the saved, authorized immutable Git recipe.
-      const [saved] = await db.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
+      const [saved] = await database.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
       if (saved?.files.length && skillPackageManifest(saved.files).contentHash === row.contentHash) legacy = saved.files;
-      else if (row.restorable && allowRecovery) legacy = await acquireFiles(row, signal);
+      else if (row.restorable && allowRecovery) legacy = await acquireFiles(row, signal, database);
       else throw error;
       await fs.rm(staging, { recursive: true, force: true });
       await fs.mkdir(staging);
     }
     if (!row.storage && row.restorable && !legacy) {
       if (!allowRecovery) throw notFound("Skill package bytes are not stored");
-      legacy = await acquireFiles(row, signal);
+      legacy = await acquireFiles(row, signal, database);
     }
     if (legacy) {
       for (const file of legacy) {
@@ -332,13 +333,20 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true, cancellation?: AbortSignal, cacheRead = false) {
     const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
     signal.throwIfAborted();
-    const read = () => readIsolatedPackage(companyId, id, consume, allowRecovery, signal, cacheRead);
-    return cacheRead ? withPackageIo(read, signal, coldResponses) : read();
-  }
-  async function readIsolatedPackage<T>(companyId: string, id: string,
-    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery: boolean, signal: AbortSignal, cacheRead: boolean) {
+    // Preserve the caller's transaction view before taking an I/O permit. All
+    // later SQL uses a private connection, so a queued transaction cannot hold
+    // the ordinary pool connection needed by an active cold response.
     const row = await descriptor(companyId, id);
     const manifest = await manifestFor(row, signal);
+    const legacy = !row.storage && !row.restorable ? await legacyFiles(row) : null;
+    const read = () => withDedicatedDbConnection(cacheOwner, database =>
+      readIsolatedPackage(row, manifest, consume, allowRecovery, signal, cacheRead, database, legacy));
+    return cacheRead ? withPackageIo(read, signal, coldResponses) : read();
+  }
+  async function readIsolatedPackage<T>(row: Descriptor, manifest: SkillPackageManifest,
+    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery: boolean, signal: AbortSignal, cacheRead: boolean,
+    database: Db, legacy: CompanySkillVersionFileInventoryEntry[] | null) {
+    const { companyId, id } = row;
     let published = false;
     const result = await withPackageIo(async () => {
       const parent = skillPackagePaths(companyId, id).parent;
@@ -346,7 +354,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
       const staging = await fs.mkdtemp(path.join(parent, ".verify-"));
       const archive = `${staging}.tar.gz`;
       try {
-        await restoreInto(row, manifest, staging, archive, signal, allowRecovery);
+        await restoreInto(row, manifest, staging, archive, signal, allowRecovery, database, legacy);
         const result = await consume(staging, manifest);
         if (cacheRead) {
           // Network, extraction, hashing and response reads all happen before
@@ -373,8 +381,9 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     if (published) {
       // Verify possible eviction candidates outside both the preparation lock
       // and the storage slot used for this fill; take the lock only to remove.
-      await trimSkillPackageCache(db, companyId, skillPackagePaths(companyId, id).directory,
-        (id, signal) => verifyDurable(companyId, id, signal).catch(() => false),
+      const reader = skillPackageStore(database, storage(), cacheOwner);
+      await trimSkillPackageCache(database, companyId, skillPackagePaths(companyId, id).directory,
+        (id, signal) => reader.verifyDurable(companyId, id, signal).catch(() => false),
         async remove => {
           try { await withSkillVersionCacheLock(cacheOwner, companyId, remove, true); }
           catch (error) { if (!(error instanceof SkillCacheBusy)) throw error; }

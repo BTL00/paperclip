@@ -576,6 +576,48 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     } finally { release(); await Promise.allSettled(reads); }
   });
 
+  it("does not deadlock a transaction behind cold reads on a one-connection pool", async () => {
+    const fixtures = [await fixture(), await fixture(), await fixture()];
+    const roots = new Map(fixtures.slice(0, 2).map(f => [skillPackagePaths(f.companyId, f.id).directory, 0]));
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const lstat = fs.lstat.bind(fs);
+    const stat = vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
+      const root = String(args[0]);
+      if (roots.has(root)) {
+        roots.set(root, roots.get(root)! + 1);
+        await blocked;
+        throw Object.assign(new Error("Cold package"), { code: "ENOENT" });
+      }
+      return lstat(...args);
+    });
+    const reads = fixtures.slice(0, 2).map(f => f.store.versionFiles(f.skills[0]!.version));
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Both callers have loaded metadata but have not entered cold fallback.
+      await vi.waitFor(() => expect([...roots.values()]).toEqual([1, 1]));
+      await db.transaction(async tx => {
+        await tx.execute(sql`select 1`);
+        release();
+        // Their second cache misses now queue the cold fallback while this
+        // transaction owns the only ordinary connection.
+        await vi.waitFor(() => expect([...roots.values()]).toEqual([2, 2]));
+        const cancellation = new AbortController();
+        timeout = setTimeout(() => cancellation.abort(new Error("Cold read deadlocked the pool")), 1_000);
+        const third = fixtures[2]!;
+        expect(await skillPackageStore(tx as unknown as typeof db, storage, db)
+          .versionFiles(third.skills[0]!.version, true, cancellation.signal))
+          .toEqual([{ path: "SKILL.md", kind: "skill", content: files[0]!.content }]);
+      });
+    } finally {
+      clearTimeout(timeout);
+      release();
+      stat.mockRestore();
+      await Promise.allSettled(reads);
+    }
+    expect((await Promise.all(reads)).every(result => result[0]!.content === files[0]!.content)).toBe(true);
+  });
+
   it("bounds concurrent cached inventories while leaving warm turn preparation responsive", async () => {
     const f = await fixture();
     await f.resolve();

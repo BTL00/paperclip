@@ -114,6 +114,9 @@ pending delete/existence requests; incomplete cleanup retains the receipt for re
   reuse local bytes. Eviction verification runs outside that publication lock.
   Cold administrative responses also have a two-response, 32-waiter bound held
   through post-fill cleanup, so decoded inventories cannot accumulate behind storage work.
+  Caller-scoped metadata is read before taking that permit. Acquisition and cleanup
+  use a private database connection, so queued transaction readers cannot deadlock
+  the ordinary pool, including instances configured with one connection.
   Packages share the Git scanner's limits of 10,000 files and 100 MiB decoded bytes.
   Recovery splits reads within the Git reader's 9,990-file and 61 MiB batch limits.
   Individual manifests are limited to 48 MiB; the manifest cache holds 16 MiB of serialized data.
