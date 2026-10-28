@@ -41,6 +41,15 @@ export function gradeOpenInventory(value: unknown) {
   c.add("read-only-audit", !o.activity.some(row => row.agentId === o.leadId && row.action !== "issue.read_marked"), "Organizing the answer creates no control-plane work changes.");
   return c.result();
 }
+export function openInventoryTaskSeed(index: number, workerId: string, secondWorkerId: string) {
+  const owner = index % 3 === 0 ? workerId : index % 3 === 1 ? secondWorkerId : null;
+  return {
+    title: `Launch work ${String(index + 1).padStart(3, "0")}`,
+    status: index % 7 === 0 ? "blocked" : index % 2 === 0 && owner ? "in_progress" : "todo",
+    assigneeAgentId: owner,
+    description: "Existing launch work. This inventory fixture records current state and must not trigger execution.",
+  };
+}
 function openInventory(): ChatCatalogCase {
   const base = makeDefinition("tasks.organize-open-work", async ctx => {
     const p = await project(ctx); const other = await project(ctx, "Experiments"); const worker = await fixtureWorker(ctx);
@@ -55,11 +64,8 @@ function openInventory(): ChatCatalogCase {
     }
     const originalTasks: Entity[] = [];
     for (let index = 0; index < 501; index++) {
-      const owner = index % 3 === 0 ? worker.id : index % 3 === 1 ? secondWorker.id : null;
-      originalTasks.push(await task(ctx, `Launch work ${String(index + 1).padStart(3, "0")}`, p.id, {
-        status: index % 7 === 0 ? "blocked" : index % 2 === 0 ? "in_progress" : "todo", assigneeAgentId: owner,
-        description: "Existing launch work. This inventory fixture records current state and must not trigger execution.",
-      }));
+      const { title, ...fields } = openInventoryTaskSeed(index, worker.id, secondWorker.id);
+      originalTasks.push(await task(ctx, title, p.id, fields));
     }
     originalTasks.push(await task(ctx, "Completed launch work", p.id, { status: "done" }), await task(ctx, "Cancelled launch work", p.id, { status: "cancelled" }),
       await task(ctx, "Unrelated experiment", other.id));

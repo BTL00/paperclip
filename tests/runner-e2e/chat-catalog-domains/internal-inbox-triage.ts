@@ -89,6 +89,14 @@ export function gradeInboxTriage(value: unknown) {
   } else c.add("implemented-scenario", false, "This oracle does not implement this scenario.");
   return c.result();
 }
+export function inboxTriageControlTaskSeeds(personId: string) {
+  return [
+    { title: "Cancelled experiment", status: "cancelled" },
+    { title: "Active launch work", status: "in_progress", assigneeUserId: personId },
+    { title: "Launch review", status: "in_review" },
+    { title: "Unanswered launch decision", status: "backlog" },
+  ];
+}
 function triageCase(scenarioId: string): ChatCatalogCase {
   let other: Awaited<ReturnType<typeof createAuthenticatedPerson>> | undefined;
   let observe: (ctx: ChatCatalogContext, state: Record<string, unknown>) => Promise<TriageObservation>;
@@ -103,8 +111,8 @@ function triageCase(scenarioId: string): ChatCatalogCase {
       const p = await project(ctx); const originalTasks: Entity[] = [];
       for (let index = 0; index < (scenarioId === "inbox-search.archive-done" ? 501 : 3); index++)
         originalTasks.push(await task(ctx, `Done launch preparation ${String(index + 1).padStart(3, "0")}`, p.id, { status: "done" }));
-      for (const [title, status] of [["Cancelled experiment", "cancelled"], ["Active launch work", "in_progress"], ["Launch review", "in_review"], ["Unanswered launch decision", "backlog"]])
-        originalTasks.push(await task(ctx, title!, p.id, { status }));
+      for (const { title, ...fields } of inboxTriageControlTaskSeeds(session.user.id))
+        originalTasks.push(await task(ctx, title, p.id, fields));
       const unanswered = originalTasks.at(-1)!;
       const question = await ctx.input.api.post<Entity>(`/api/issues/${unanswered.id}/interactions`, createIssueThreadInteractionSchema.parse({
         kind: "ask_user_questions", title: "Unanswered launch decision", continuationPolicy: "none", resolverPolicy: "human_only", addresseeUserId: session.user.id,
