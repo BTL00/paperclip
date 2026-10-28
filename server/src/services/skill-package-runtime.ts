@@ -87,7 +87,7 @@ export function skillPackageRuntime(db: Db) {
     return [...files, ...generatedFiles];
   }
   async function materialize(version: StoredSkillVersion, directory: string) {
-    const files = await projection(version);
+    const files = await measureRunPhase("skills.repository.read", () => projection(version));
     const parent = path.dirname(directory);
     await ensureSkillCacheDirectory(parent, true);
     if (await measureRunPhase("skills.version.verify", () => verifySkillPackageDirectory(directory, files), { fileCount: files.length })) return directory;

@@ -78,8 +78,9 @@ describeDatabase("runtime skill observability", () => {
     return { companyId, service, options };
   }
 
-  it("parents real preparation work and ends acquisition before the consumer settles", async () => {
+  it.each([false, true])("parents preparation and releases acquisition before consumption (discovery: %s)", async discover => {
     const f = await fixture();
+    if (discover) f.options.onlyKeys.add(`company/${f.companyId}/not-installed`);
     exporter.reset();
     lifecycle.length = 0;
     const entered = deferred(), release = deferred();
@@ -97,13 +98,17 @@ describeDatabase("runtime skill observability", () => {
     await provider.forceFlush();
     const spans = exporter.getFinishedSpans();
     const span = (name: string) => { const found = spans.find(candidate => candidate.name === name); assert.ok(found, name); return found; };
-    for (const [child, parent] of [
-      ["heartbeat.prepare.configuration_skills", "task.execution_attempt"],
+    const inventoryParents = discover ? [
       ["skills.inventory", "heartbeat.prepare.configuration_skills"],
       ["skills.inventory.bundled", "skills.inventory"],
       ["skills.inventory.releases", "skills.inventory"],
       ["skills.inventory.folders", "skills.inventory"],
       ["skills.inventory.local_sources", "skills.inventory"],
+    ] : [];
+    if (!discover) expect(spans.some(value => value.name.startsWith("skills.inventory"))).toBe(false);
+    for (const [child, parent] of [
+      ["heartbeat.prepare.configuration_skills", "task.execution_attempt"],
+      ...inventoryParents,
       ["skills.cache.acquire", "heartbeat.prepare.configuration_skills"],
       ["skills.rows", "heartbeat.prepare.configuration_skills"],
       ["skills.version.read", "heartbeat.prepare.configuration_skills"],
