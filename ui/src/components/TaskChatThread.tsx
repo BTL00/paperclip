@@ -3160,6 +3160,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                                   {tailRunSource?.adapterType === "paperclip_runner" ||
                                   optimisticRunnerStartup ? (
                                     <TaskChatRunnerTurn
+                                      linkCaseReferences={props.linkCaseReferences}
                                       runId={tailRunId}
                                       execution={
                                         liveRun?.id === tailRunId
@@ -3207,6 +3208,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                                         toolSummary={tailToolSummary}
                                       />
                                       <TaskChatLiveTail
+                                        linkCaseReferences={props.linkCaseReferences}
                                         items={tailItems}
                                         emptyMessage={
                                           tailStatus === "queued"

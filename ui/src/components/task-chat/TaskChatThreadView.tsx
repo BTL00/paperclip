@@ -216,7 +216,7 @@ function renderItem(
       // same compact activity treatment. Keeping this decision at the common
       // renderer boundary also gives old persisted runs the current taxonomy,
       // alignment, one-line targets, and collapsed-by-default behavior.
-      return <TaskChatRunnerActivityGroup item={item} />;
+      return <TaskChatRunnerActivityGroup item={item} linkCaseReferences={linkCaseReferences} />;
     case "interaction":
       return renderInteraction ? renderInteraction(item) : null;
     case "plan_document":

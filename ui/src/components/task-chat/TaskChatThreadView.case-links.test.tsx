@@ -4,6 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TaskChatThreadView } from "./TaskChatThreadView";
+import { TaskChatLiveTail } from "./TaskChatLiveTail";
+import { TaskChatRunnerTurn } from "./TaskChatRunnerTurn";
 import type { TaskChatItem, TaskChatMessageItem, TaskChatTurnItem } from "./task-chat-model";
 
 vi.mock("@/context/CompanyContext", () => ({
@@ -12,7 +14,7 @@ vi.mock("@/context/CompanyContext", () => ({
 }));
 
 const reply: TaskChatMessageItem = {
-  id: "case-response", kind: "message", author: "agent",
+  id: "case-response", kind: "message", author: "agent", channel: "final",
   text: `Open customer cases for **Launch** (project):
 
 | Case | Title | Status |
@@ -22,7 +24,7 @@ const reply: TaskChatMessageItem = {
 
 RUN-C3 "Resolved image clipping" is **done**, so not included.`,
 };
-const surfaces = ["bubble", "standalone-turn", "attached-turn"] as const;
+const surfaces = ["bubble", "standalone-turn", "attached-turn", "live-tail", "live-native-turn"] as const;
 function render(enabled?: boolean, surface: typeof surfaces[number] = "bubble") {
   const turn: TaskChatTurnItem = {
     id: "native-turn", kind: "turn", items: [], settled: true, standaloneHeader: true,
@@ -35,7 +37,9 @@ function render(enabled?: boolean, surface: typeof surfaces[number] = "bubble") 
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={["/RUN/chats/ceo"]}>
         <ThemeProvider>
-          <TaskChatThreadView items={items} scroll={false} {...{ linkCaseReferences: enabled }} />
+          {surface === "live-tail" ? <TaskChatLiveTail items={[reply]} linkCaseReferences={enabled} />
+            : surface === "live-native-turn" ? <TaskChatRunnerTurn items={[reply]} status="running" startedAtMs={null} linkCaseReferences={enabled} />
+            : <TaskChatThreadView items={items} scroll={false} linkCaseReferences={enabled} />}
         </ThemeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
