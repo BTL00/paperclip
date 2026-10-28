@@ -3738,12 +3738,6 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     }
     const persist = async (tx: DbOrTransaction) => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
-      if (packageSnapshotId) {
-        const [saved] = await tx.select({ storage: companySkillRepositorySnapshots.storage })
-          .from(companySkillRepositorySnapshots).where(and(eq(companySkillRepositorySnapshots.companyId, companyId),
-            eq(companySkillRepositorySnapshots.id, packageSnapshotId))).for("update");
-        if (!saved?.storage) throw conflict("Skill package changed during publication; retry the operation.");
-      }
       await tx.execute(sql`
         select ${companySkills.id}
         from ${companySkills}
@@ -3751,6 +3745,14 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
           and ${companySkills.companyId} = ${companyId}
         for update
       `);
+      // File edits already own the skill lock when a dedicated connection saves
+      // their package. Never hold a package lock while waiting for that skill.
+      if (packageSnapshotId) {
+        const [saved] = await tx.select({ storage: companySkillRepositorySnapshots.storage })
+          .from(companySkillRepositorySnapshots).where(and(eq(companySkillRepositorySnapshots.companyId, companyId),
+            eq(companySkillRepositorySnapshots.id, packageSnapshotId))).for("update");
+        if (!saved?.storage) throw conflict("Skill package changed during publication; retry the operation.");
+      }
       const [{ nextRevision }] = await tx
         .select({
           nextRevision: sql<number>`coalesce(max(${companySkillVersions.revisionNumber}), 0) + 1`,

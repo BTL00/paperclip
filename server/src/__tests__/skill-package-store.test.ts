@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { companies, companySkills, companySkillVersions, companySkillRepositorySnapshots as snapshots,
   skillPackageDeletions, createDb, withDedicatedDbConnection } from "@paperclipai/db";
@@ -80,6 +80,44 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     const resolve = () => service.listRuntimeSkillEntries(companyId, { onlyKeys: new Set(skills.map(({ skill }) => skill.key)), snapshotLatest: true });
     return { companyId, id, store, skills, service, resolve };
   }
+
+  it("orders skill and package locks consistently with an edit's dedicated upload connection", async () => {
+    const f = await fixture();
+    const skill = f.skills[0]!.skill;
+    const options = { skill, skipInventoryRefresh: true, fileInventory: files, packageSnapshotId: f.id };
+    let waitingOnSkill!: () => void;
+    const waiting = new Promise<void>(resolve => { waitingOnSkill = resolve; });
+    const debug = db.$client.options.debug;
+    db.$client.options.debug = (_connection, query) => {
+      if (query.includes('from "company_skills"') && query.includes('for update')) waitingOnSkill();
+    };
+    let saving: Promise<unknown> | undefined;
+    try {
+      await withDedicatedDbConnection(db, connection => connection.transaction(async tx => {
+        // updateFile owns this lock before its package is prepared separately.
+        await tx.select({ id: companySkills.id }).from(companySkills).where(eq(companySkills.id, skill.id)).for("update");
+        saving = f.service.createVersion(f.companyId, skill.id, {}, null, options);
+        await waiting;
+        await withDedicatedDbConnection(db, async upload => {
+          // A regression fails promptly and releases the outer lock instead of
+          // leaving a hidden cross-connection wait cycle hanging the suite.
+          await upload.execute(sql`set statement_timeout = '3s'`);
+          expect(await skillPackageStore(upload, storage).prepare(f.companyId, files)).toBe(f.id);
+        });
+        await f.service.createVersion(f.companyId, skill.id, {}, null, { ...options, database: tx });
+      }));
+      await saving;
+      expect(await f.service.listVersions(f.companyId, skill.id)).toHaveLength(3);
+    } finally { db.$client.options.debug = debug; await saving; }
+  }, 15_000);
+
+  it("follows a package published between version metadata and summary reads", async () => {
+    const companyId = await company();
+    const [skill] = await db.insert(companySkills).values({ companyId, key: "summary", slug: "summary", name: "Summary", markdown: files[0]!.content }).returning();
+    const [stale] = await db.insert(companySkillVersions).values({ companyId, companySkillId: skill!.id, revisionNumber: 1, fileInventory: files }).returning();
+    await skillPackageMaintenance(db, storage).migrateVersions({ id: stale!.id, apply: true, clearLegacy: true });
+    expect(await skillPackageStore(db, storage).versionInventory(stale!)).toEqual(files.map(({ path, kind }) => ({ path, kind })));
+  });
 
   it("forks a packaged repository inside an outer transaction with a one-connection pool", async () => {
     const f = await fixture();

@@ -7,7 +7,7 @@ import { constants, createReadStream, createWriteStream, promises as fs } from "
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { companySkillRepositorySnapshots as snapshots, companySkillVersions, type Db, type SkillPackageFileMapping, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
+import { companySkillRepositorySnapshots as snapshots, companySkillVersions, companySkillSources, type Db, type SkillPackageFileMapping, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
 import { getStorageService, type StorageService } from "../storage/index.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
@@ -418,6 +418,18 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     }
     return preparedId;
   }
+  async function bindRestore(companyId: string, id: string, restore: SkillPackageRestoreRecipe) {
+    const manifest = validateSkillPackageManifest(restore.manifest);
+    // Called in the source publication transaction. A failed import must not
+    // leave a later successful import bound to an uncommitted source identity.
+    await db.update(snapshots).set({ restore }).where(and(scope(companyId, id),
+      eq(snapshots.contentHash, manifest.contentHash),
+      sql`${snapshots.storage}->>'manifestSha256' = ${packageSha256(skillPackageManifestBytes(manifest))}`,
+      sql`exists (select 1 from ${companySkillSources} s where s.company_id = ${companyId}
+        and s.id = ${restore.sourceId} and s.removed_at is null)`,
+      sql`not exists (select 1 from ${companySkillSources} s where s.company_id = ${companyId}
+        and s.id::text = ${snapshots.restore}->>'sourceId' and s.removed_at is null)`));
+  }
   async function verifyDurable(companyId: string, id: string, cancellation?: AbortSignal,
     validate?: (root: string, manifest: SkillPackageManifest) => Promise<boolean>): Promise<boolean> {
     const action = async () => {
@@ -513,17 +525,18 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     try { return await read(skillPackagePaths(version.companyId, id).directory); }
     catch { return withIsolatedPackage(version.companyId, id, read, allowRecovery); }
   }
-  async function versionInventory(version: StoredSkillVersion) {
+  async function versionInventory(version: StoredSkillVersion): Promise<Array<{ path: string; kind: CompanySkillVersionFileInventoryEntry["kind"] }>> {
     if (version.packageSnapshotId) {
       const index = version.packageFileMap ?? (await manifestFor(await descriptor(version.companyId, version.packageSnapshotId))).files;
       return index.map(({ path, kind }) => ({ path, kind }));
     }
-    const [row] = await db.select({ files: sql<Array<{ path: string; kind: CompanySkillVersionFileInventoryEntry["kind"] }>>`
+    const [row] = await db.select({ ...skillVersionMetadataColumns, files: sql<Array<{ path: string; kind: CompanySkillVersionFileInventoryEntry["kind"] }>>`
       coalesce((select jsonb_agg(jsonb_build_object('path', f->>'path', 'kind', f->>'kind'))
         from jsonb_array_elements(${companySkillVersions.fileInventory}) f), '[]'::jsonb)` })
       .from(companySkillVersions).where(and(eq(companySkillVersions.companyId, version.companyId), eq(companySkillVersions.id, version.id)));
+    if (row?.packageSnapshotId) return versionInventory(row);
     return row?.files ?? [];
   }
-  return { descriptor, prepare, files, version, prefetch, versionFiles, versionInventory, readVersionFile, withPackage, withIsolatedPackage, verifyDurable,
+  return { descriptor, prepare, bindRestore, files, version, prefetch, versionFiles, versionInventory, readVersionFile, withPackage, withIsolatedPackage, verifyDurable,
     manifest: async (companyId: string, id: string) => manifestFor(await descriptor(companyId, id)) };
 }

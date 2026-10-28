@@ -1,3 +1,6 @@
+import * as recovery from '../services/skill-package-recovery.js';
+import { skillPackageStore, skillPackagePaths } from '../services/skill-package-store.js';
+import { getStorageService } from '../storage/index.js';
 import { resolveExternalTestDatabaseUrl } from './helpers/external-test-database.js';
 import { applyPendingMigrations } from '@paperclipai/db';
 import { randomUUID } from 'node:crypto';
@@ -312,6 +315,34 @@ describe.skipIf(!support.supported)('skill source persistence', () => {
     expect((await skillSourceService(db).list(companyId)).some(source => source.trackingRef === 'rollback')).toBe(false);
     expect((await db.select().from(companySkillVersions).where(eq(companySkillVersions.companyId, companyId))).every(version => before.some(skill => skill.id === version.companySkillId))).toBe(true);
   });
+  it.each(['skills', 'repository'] as const)('binds %s recovery to the committed retry after an import rollback', async packageMode => {
+    const isolated = randomUUID();
+    await db.insert(companies).values({ id: isolated, name: 'Retry recovery', issuePrefix: `R${isolated.slice(0, 6)}` });
+    const original = { 'one/SKILL.md': md('recover retry'), 'one/helper.md': 'Original helper' };
+    const reader = githubFixture(original, {}, sha);
+    const input = { repositoryUrl: 'https://github.com/acme/skills', trackingRef: 'main', packageMode, commitSha: sha, selectedPaths: ['one/SKILL.md'] };
+    const service = skillSourceService(db);
+    await expect(service.create(isolated, input, { ...context, read: () => reader,
+      audit: async () => { throw new Error('failed import transaction'); } })).rejects.toThrow('failed import transaction');
+    const [abandoned] = await db.select().from(companySkillRepositorySnapshots).where(eq(companySkillRepositorySnapshots.companyId, isolated));
+    const result = await service.create(isolated, input, { ...context, read: () => reader });
+    const [saved] = await db.select().from(companySkillRepositorySnapshots).where(eq(companySkillRepositorySnapshots.id, abandoned!.id));
+    expect(saved!.restore!.sourceId).toBe(result.source.id);
+    expect(saved!.restore!.sourceId).not.toBe(abandoned!.restore!.sourceId);
+    await getStorageService().deleteObject(isolated, saved!.storage!.archiveKey);
+    await fs.rm(skillPackagePaths(isolated, saved!.id).directory, { recursive: true, force: true });
+    const authorize = vi.spyOn(recovery, 'skillPackageRecoveryReader').mockImplementation(async (database, company, recipe) => {
+      const [source] = await database.select().from(companySkillSources).where(and(eq(companySkillSources.companyId, company), eq(companySkillSources.id, recipe.sourceId)));
+      expect(source!.id).toBe(result.source.id);
+      return reader;
+    });
+    try {
+      const restored = await skillPackageStore(db).files(isolated, saved!.id);
+      expect(restored.find(file => file.path.endsWith('SKILL.md'))!.content).toBe(original['one/SKILL.md']);
+      expect(authorize).toHaveBeenCalledOnce();
+    } finally { authorize.mockRestore(); }
+  });
+
   it('retains excluded folders, reviews additions, restores removed paths and preserves pinned versions and copies', async () => {
     const service = skillSourceService(db), skills = companySkillService(db);
     files = { 'keep/SKILL.md': md('keep'), 'keep/assets/data.bin': Buffer.from([0,255]), 'keep/run.sh': '#!/bin/sh\necho original', 'declined/one/SKILL.md': md('one') }; commit = sha;
