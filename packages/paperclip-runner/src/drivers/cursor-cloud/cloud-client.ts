@@ -385,7 +385,7 @@ export class CursorCloudClient {
     try {
       const { url } = await this.getArtifactDownloadUrl(id, path, { ...options, signal: scope.signal });
       const target = new URL(url);
-      if (target.hostname !== "cloud-agent-artifacts.s3.us-east-1.amazonaws.com" || target.port || target.protocol !== "https:") invalidResponse();
+      if (target.hostname !== "agent-stores.s3.us-east-1.amazonaws.com" || target.port || target.protocol !== "https:") invalidResponse();
       if (scope.signal.aborted) throw scope.error();
       const response = await this.#fetch(url, { method: "GET", signal: scope.signal, redirect: "error" });
       if (!response.ok) {

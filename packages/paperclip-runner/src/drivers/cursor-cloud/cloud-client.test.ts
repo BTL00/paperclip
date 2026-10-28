@@ -132,20 +132,22 @@ describe("Cursor Cloud v1 HTTP client", () => {
   it("downloads only the qualified artifact host with no provider credentials and bounded binary bytes", async () => {
     const calls: Array<{ path: string; authorization?: string }> = [];
     const bytes = Buffer.from([0, 255, 0, 8, 127]);
-    let host = "cloud-agent-artifacts.s3.us-east-1.amazonaws.com";
+    let host = "agent-stores.s3.us-east-1.amazonaws.com";
     const baseUrl = await serve((request, response) => {
       calls.push({ path: request.url!, authorization: request.headers.authorization });
       if (request.url?.includes("/artifacts/download?")) return json(response, { url: `https://${host}/proof?private-signature`, expiresAt: TIME });
       response.end(bytes);
     });
     const externalHeaders: HeadersInit[] = [];
+    let unexpectedTargets = 0;
     const transport: typeof fetch = (input, init) => {
       const url = String(input);
-      if (url.startsWith("https://cloud-agent-artifacts.s3.us-east-1.amazonaws.com/")) {
+      if (url.startsWith("https://agent-stores.s3.us-east-1.amazonaws.com/")) {
         externalHeaders.push(init?.headers ?? {});
         expect(init?.redirect).toBe("error");
         return fetch(`${baseUrl}/download`, init);
       }
+      if (url.startsWith("https://")) { unexpectedTargets += 1; return Promise.reject(new TypeError("Unqualified test target")); }
       return fetch(input, init);
     };
     const client = new CursorCloudClient({ apiKey: API_KEY, baseUrl, fetch: transport });
@@ -155,9 +157,12 @@ describe("Cursor Cloud v1 HTTP client", () => {
     expect(calls[1]?.authorization).toBeUndefined();
     await expect(client.downloadArtifact(AGENT, "proof.bin", { maxBytes: 4 })).rejects.toMatchObject({ code: "payload_too_large" });
     const downloads = calls.filter(call => call.path === "/download").length;
+    host = "cloud-agent-artifacts.s3.us-east-1.amazonaws.com";
+    await expect(client.downloadArtifact(AGENT, "proof.bin")).rejects.toMatchObject({ code: "invalid_response" });
     host = "127.0.0.1";
     await expect(client.downloadArtifact(AGENT, "proof.bin")).rejects.toMatchObject({ code: "invalid_response" });
     expect(calls.filter(call => call.path === "/download")).toHaveLength(downloads);
+    expect(unexpectedTargets).toBe(0);
     await expect(client.downloadArtifact(AGENT, "../../escape")).rejects.toMatchObject({ code: "invalid_request" });
   });
 
