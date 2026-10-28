@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { cardAccountingReady, cardChecklistInstructions, cardChecklistPurpose, cardUsageComplete, genuineCardChecklistSuccess, genuineCardWorkFailure } from "./status-card-work-failure.js";
 import { notesReadResponse } from "./external-provider.js";
@@ -5,6 +6,31 @@ import { cardWorkFixture, successfulCardWorkFixture } from "./status-card-work-f
 const grade = (v: ReturnType<typeof cardWorkFixture>) => genuineCardWorkFailure(v.card, v.update, v.runId, "ceo", v.evidence);
 describe("real required-input work failure, not a provider failure", () => {
   it("accepts the exact normally completed native work, authorized read error and blocked card-generation projection", () => expect(grade(cardWorkFixture())).toBe(true));
+  it("rejects a card projection before the actual required read's completed tool receipt", () => {
+    const v = cardWorkFixture(), invocation = v.evidence.decisions.decisions[0]!.invocation;
+    for (const finishedAt of [v.evidence.runs.find(r => r.id === v.runId)!.startedAt!, new Date(v.evidence.calls[0]!.respondedAt!).toISOString(), new Date(new Date(invocation.completedAt!).getTime() - 1).toISOString()]) {
+      v.update.finishedAt = finishedAt; expect(grade(v)).toBe(false);
+    }
+  });
+  it("accepts exact same-millisecond causal completion for Date and serialized receipt fields", () => {
+    for (const asDate of [false, true]) {
+      const v = cardWorkFixture(), invocation = v.evidence.decisions.decisions[0]!.invocation;
+      v.update.finishedAt = new Date(invocation.completedAt!).toISOString();
+      if (asDate) { invocation.startedAt = new Date(invocation.startedAt!); invocation.completedAt = new Date(invocation.completedAt!); }
+      expect(grade(v)).toBe(true);
+    }
+  });
+  it("keeps the original causal failure when a separately bound later read also fails", () => {
+    const v = cardWorkFixture(), first = v.evidence.decisions.decisions[0]!;
+    const next = structuredClone(first); next.invocation.id = "later-invocation";
+    next.invocation.startedAt = new Date("2026-10-28T12:00:26Z"); next.invocation.completedAt = new Date("2026-10-28T12:00:28Z");
+    next.auditEvents[0]!.invocationId = next.invocation.id;
+    ((next.auditEvents[0]!.metadata!.execution as {request:{requestId:string}}).request).requestId = "later-request";
+    v.evidence.decisions.decisions.push(next);
+    v.evidence.calls.push({ ...v.evidence.calls[0]!, sequence: 5, receivedAt: Date.parse("2026-10-28T12:00:26Z"), respondedAt: Date.parse("2026-10-28T12:00:27Z"), requestIdSha256: createHash("sha256").update("later-request").digest("hex") });
+    expect(grade(v)).toBe(true);
+    v.update.finishedAt = "2026-10-28T12:00:20Z"; expect(grade(v)).toBe(false);
+  });
   for (const key of ["companyId", "agentId", "id"] as const) it(`rejects foreign actual run ${key}`, () => {
     const v = cardWorkFixture(); Object.assign(v.evidence.runs.find(r => r.id === v.runId)!, { [key]: "foreign" }); expect(grade(v)).toBe(false);
   });

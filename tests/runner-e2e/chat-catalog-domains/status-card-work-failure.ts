@@ -53,25 +53,29 @@ export function cardAccountingReady(companyId: string, workerId: string, leadId:
 function generationPayload(task: Entity) {
   try { return JSON.parse(task.description?.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "null") as Record<string, unknown> | null; } catch { return null; }
 }
-export function boundCardChecklistRead(recipe: CardRecipe, run: CardWorkRun, decisions: ToolRunDecisionLookup, calls: ProviderCall[], failed: boolean, source: Entity) {
+export function boundCardChecklistRead(recipe: CardRecipe, run: CardWorkRun, decisions: ToolRunDecisionLookup, calls: ProviderCall[], failed: boolean, source: Entity, failedProjectionAt?: unknown) {
   const relevant = calls.filter(call => call.method === "tools/call" && call.name === "launch_read" && typeof call.receivedAt === "number" && typeof call.respondedAt === "number"
     && Number.isFinite(call.receivedAt) && Number.isFinite(call.respondedAt) && call.receivedAt <= call.respondedAt
     && call.receivedAt >= millis(run.startedAt!) && call.respondedAt <= millis(run.finishedAt!));
   if (source.companyId !== recipe.companyId || !source.id || !relevant.length || !relevant.every(call => call.authorized && call.responseHttpStatus === 200 && call.toolError === failed
     && call.responseSha256 === hash(JSON.stringify(notesReadResponse(cardChecklistSourceData(source), failed))))) return false;
-  return decisions.runId === run.id && relevant.every(call => decisions.decisions.some(({ invocation: v, auditEvents }) => v.companyId === recipe.companyId && v.agentId === recipe.workerId
+  let causalReadCompleted = false;
+  const bound = decisions.runId === run.id && relevant.every(call => decisions.decisions.some(({ invocation: v, auditEvents }) => v.companyId === recipe.companyId && v.agentId === recipe.workerId
     && v.issueId === run.contextSnapshot?.issueId && v.runId === run.id && v.connectionId === recipe.connectionId && v.catalogEntryId === recipe.readEntryId
     && v.policyDecision === "allow" && v.status === (failed ? "failed" : "succeeded") && v.errorCode === (failed ? "tool_error" : null)
     && time(v.startedAt) && time(v.completedAt) && !!v.argumentsHash && (failed || !!v.resultHash)
     && auditEvents.some(a => {
       const e = record(record(a.metadata).execution), request = record(e.request), response = record(e.response);
-      return a.invocationId === v.id && a.companyId === recipe.companyId && a.agentId === recipe.workerId && a.issueId === v.issueId && a.runId === run.id
+      const matched = a.invocationId === v.id && a.companyId === recipe.companyId && a.agentId === recipe.workerId && a.issueId === v.issueId && a.runId === run.id
         && a.connectionId === recipe.connectionId && a.catalogEntryId === recipe.readEntryId && a.outcome === (failed ? "failure" : "success")
         && a.decision === (failed ? "deny" : "allow") && a.reasonCode === (failed ? "tool_error" : "tool_completed")
         && e.transport === "mcp_remote" && request.dispatched === true && request.upstreamToolName === "launch_read" && request.mcpMethod === "tools/call" && response.httpStatus === 200
         && typeof request.requestId === "string" && call.requestIdSha256 === hash(request.requestId)
         && call.receivedAt! >= millis(v.startedAt!) && call.respondedAt! <= millis(v.completedAt!);
+      if (matched && time(failedProjectionAt) && millis(failedProjectionAt) >= millis(v.completedAt) && millis(failedProjectionAt) >= call.respondedAt!) causalReadCompleted = true;
+      return matched;
     })));
+  return bound && (!failed || causalReadCompleted);
 }
 export function genuineCardWorkFailure(card: StatusCard, update: StatusCardUpdate, runId: string, leadId: string, evidence: CardWorkEvidence | undefined) {
   if (!evidence) return false;
@@ -84,7 +88,7 @@ export function genuineCardWorkFailure(card: StatusCard, update: StatusCardUpdat
     || update.cardId !== card.id || update.status !== "failed" || !update.error || !time(update.finishedAt) || !time(update.startedAt)
     || millis(update.startedAt) > millis(run.startedAt) || millis(update.finishedAt!) < millis(run.startedAt)
     || run.companyId !== recipe.companyId || run.agentId !== recipe.workerId || run.contextSnapshot?.issueId !== generation.id
-    || !boundCardChecklistRead(recipe, run, decisions, calls, true, evidence.checklistSource) || !cardAccountingReady(recipe.companyId, recipe.workerId, leadId, runs, evidence.overview)) return false;
+    || !boundCardChecklistRead(recipe, run, decisions, calls, true, evidence.checklistSource, update.finishedAt) || !cardAccountingReady(recipe.companyId, recipe.workerId, leadId, runs, evidence.overview)) return false;
   return comments.some(c => c.companyId === recipe.companyId && c.issueId === generation.id && c.authorAgentId === recipe.workerId && c.createdByRunId === run.id
     && /checklist|source/i.test(c.body ?? "") && /unavailable|could not|couldn't|fail|error|blocked/i.test(c.body ?? ""))
     && activity.some(a => a.companyId === recipe.companyId && a.entityId === generation.id && a.runId === run.id && a.action === "issue.updated"
