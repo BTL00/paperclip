@@ -142,4 +142,6 @@ const invokedPath = process.argv[1]
   : null;
 if (invokedPath === import.meta.url) {
   await bundleVerifiedProviderEntrypoints();
+  const { maybeSdkBuildDiagnostic } = await import("../../../tests/runner-e2e/sdk-build-diagnostic.mjs");
+  await maybeSdkBuildDiagnostic(resolve(packageRoot, "../.."));
 }

@@ -581,3 +581,28 @@ qualification prerequisite. This alternative does not qualify that path, create
 an instance administrator, bypass route authorization, or change retained failed
 outcomes. Passwords and cookies remain in the existing private session registry;
 the setup receipt contains only public identity, role, grant keys and statuses.
+
+## SDK build-only privacy diagnosis
+
+The isolated `sdk-build-diagnostic` source branch uses the existing trusted AWS
+`build_runner_artifacts` job. Its main-only verified-entrypoint build hook checks
+both the exact GitHub job identity and the committed diagnostic request. It
+never runs from module imports, ordinary local builds, or paid case jobs.
+
+The unchanged certified SDK/shared builder runs only in an owned temporary
+source copy with separate writable workspace links and build cache. The child
+receives a closed environment containing synthetic credential markers, an owned
+home and temporary directory. Actual provider, GitHub, AWS, auth configuration,
+and `NODE_OPTIONS` values are not inherited. Compiler and scanner output is
+bounded and retained only as hashes. All owned child processes must settle
+before deletion; cleanup and unchanged runtime SDK/cache state are explicit.
+
+Only closed finding categories, allowlisted file names, sizes, hashes, actual
+certificate hashes, process outcomes and cleanup status enter the existing
+private runner build archive. SDK bytes, registry values and raw logs do not.
+This is build validation: no browser, database, provider action, case result or
+scenario ordinal. The coordinator must independently prove zero paid starts,
+retain the authenticated build metadata and cancel the remaining workflow.
+Synthetic diagnostic findings cannot identify the unavailable original registry
+or retrospectively qualify the failed canary. The normal SDK authenticity and
+privacy gates remain unchanged.
