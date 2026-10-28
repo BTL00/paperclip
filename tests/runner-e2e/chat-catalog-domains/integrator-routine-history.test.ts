@@ -19,6 +19,23 @@ describe("routine invocation and native failure distinction", () => {
     const missing = valid(); missing.state.failedEvents = [];
     expect(gradeIntegratorRoutineHistory(missing).passed).toBe(false);
   });
+  it("accepts actual OpenCode failure history instead of defaulting its provider to Codex", () => {
+    const o = valid();
+    o.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "opencode";
+    o.runs[0] = structuredClone(o.state.failedRun);
+    expect(gradeIntegratorRoutineHistory(o).passed).toBe(true);
+    const wrongProvider = structuredClone(o);
+    wrongProvider.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "codex";
+    expect(gradeIntegratorRoutineHistory(wrongProvider).passed).toBe(false);
+    const missingProvider = structuredClone(o);
+    missingProvider.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "";
+    expect(gradeIntegratorRoutineHistory(missingProvider).passed).toBe(false);
+    const wrongModel = structuredClone(o);
+    wrongModel.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.model = "supported-model";
+    expect(gradeIntegratorRoutineHistory(wrongModel).passed).toBe(false);
+    const noTerminal = structuredClone(o); noTerminal.state.failedEvents = [];
+    expect(gradeIntegratorRoutineHistory(noTerminal).passed).toBe(false);
+  });
   it("rejects preflight or cancellation substituted for an admitted native failure", () => {
     const cancelled = valid(); cancelled.runs[0]!.status = "cancelled";
     expect(gradeIntegratorRoutineHistory(cancelled).passed).toBe(false);
