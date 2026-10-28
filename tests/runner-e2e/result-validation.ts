@@ -1,3 +1,4 @@
+import { SCREENSHOT_PRIVACY_REASONS } from "./screenshot-privacy.js";
 import { POSTGRES_IMAGE, POSTGRES_IMAGE_ID, POSTGRES_AMD64_IMAGE, POSTGRES_AMD64_IMAGE_IDS, reviewedPostgresReceiptIdentity } from "./docker-postgres.js";
 import { validateWorkerTiming } from "./worker-timing.js";
 import { connectionCheckpoints, connectionEvidencePasses, connectionRunSignals } from "./connection-evidence.js";
@@ -332,6 +333,7 @@ const fields = {
   matcherResults: optional(
     array(shape({ matcher, passed: boolean, detail: string })),
   ),
+  screenshotPrivacy: optional(closedShape({ withheld: (value, at) => { if (value !== true) invalid(at); }, reasons: (value, at) => { array(oneOf(...SCREENSHOT_PRIVACY_REASONS))(value, at); if (!(value as unknown[]).length) invalid(at); } })),
   screenshots: optional(
     array(
       shape({

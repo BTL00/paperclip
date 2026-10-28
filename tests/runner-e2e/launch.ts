@@ -1,3 +1,4 @@
+import { withholdPrivateScreenshots } from "./screenshot-privacy.js";
 import { copyHealthHelloDetail } from "./chat-readiness-detail.js";
 import { copyRetainedSourceSdk } from "./source-sdk-evidence.js";
 import { prepareChatRemoteHost } from "./chat-remote-host.js";
@@ -793,7 +794,7 @@ async function runAttempt(input: {
     const reporterPrivacy = await sanitizePrivateReporterArtifacts(privateDir, credentials);
     if (processResult.privateDiagnosticLeak) reporterPrivacy.push({ file: "playwright process stdout/stderr", disposition: "redacted", reason: "credential detected before diagnostic emission" });
     for (const [index, candidate] of executions.entries()) {
-      let result = {
+      let result: RunnerE2EResult = {
         ...results[index],
         accountingIdentity: { campaignId: accountingCampaignId, attemptId: accountingAttemptId },
       };
@@ -880,6 +881,10 @@ async function runAttempt(input: {
           originalResult: { status: original.status, failureClass: original.failureClass, error: original.error },
         }, credentials), null, 2)}\n`, { mode: 0o600 });
       }
+      result = withholdPrivateScreenshots(result, {
+        persistedStateSecretFinding: !!persistedStateFinding && persistenceCheckedExecutions.includes(candidate),
+        reporterEvidenceWithheld: reporterPrivacy.length > 0,
+      });
       await writeFile(
         resultPath,
         `${JSON.stringify(sanitizeJson(result, credentials), null, 2)}\n`,
@@ -892,6 +897,7 @@ async function runAttempt(input: {
         expectPassScreenshot: result.status === "passed",
       });
       if (evidence.leaks.length > 0 || evidence.missing.length > 0) {
+        result = withholdPrivateScreenshots(result, { packagedEvidenceSecretFinding: evidence.leaks.length > 0 });
         result = {
           ...result,
           status: "failed",

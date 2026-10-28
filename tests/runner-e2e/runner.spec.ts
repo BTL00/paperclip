@@ -1,3 +1,4 @@
+import { withholdPrivateScreenshots } from "./screenshot-privacy.js";
 import { ordinaryChatCapture } from "./chat-screenshot-capture.js";
 import { checkSetupHealthCredential } from "./chat-setup-credential.js";
 import { SetupHealthAbort, runChatSetupHealth, captureSetupHealthProfile } from "./chat-setup-health.js";
@@ -703,6 +704,7 @@ for (const execution of executions) {
     const screenshots: NonNullable<RunnerE2EResult["screenshots"]> = [];
     let primaryError: unknown;
     let failureClassOverride: FailureClass | undefined;
+    let innerSecretFinding = false;
     let cleanup: RunnerE2EResult["cleanup"] = "not_started";
     const cleanupAssertions: CleanupAssertion[] = [];
     const beforeEnvironmentTeardownAssertions: CleanupAssertion[] = [];
@@ -3157,6 +3159,7 @@ for (const execution of executions) {
       }
     } catch (error) {
       primaryError = error;
+      innerSecretFinding ||= classifyFailure(error) === "secret_leak";
       if (execution.task.flow === "first_task" && !firstTaskEvidence && classifyFailure(error) === "candidate_failure") {
         failureClassOverride = "permanent_infrastructure";
       }
@@ -3165,6 +3168,7 @@ for (const execution of executions) {
       } catch (captureError) {
         const failureClass = classifyFailure(captureError);
         if (failureClass === "secret_leak") {
+          innerSecretFinding = true;
           failureClassOverride = "secret_leak";
           primaryError = new AggregateError(
             [primaryError, captureError],
@@ -3216,6 +3220,7 @@ for (const execution of executions) {
           `Browser diagnostics contained unsafe data: ${error instanceof Error ? error.message : String(error)}`,
         );
         failureClassOverride = "secret_leak";
+        innerSecretFinding = true;
       }
       browserBootstrap.dispose();
       if (healthAbort) { cleanup = "failed"; failureClassOverride = "cleanup_failure"; }
@@ -3290,6 +3295,7 @@ for (const execution of executions) {
             ? classifyFailure(primaryError)
             : undefined;
           const cleanupFailureClass = classifyFailure(error);
+          innerSecretFinding ||= priorFailureClass === "secret_leak" || cleanupFailureClass === "secret_leak";
           failureClassOverride =
             priorFailureClass === "secret_leak"
               ? priorFailureClass
@@ -3426,10 +3432,10 @@ for (const execution of executions) {
         screenshots,
         cleanup,
       };
-      const result: RunnerE2EResult = {
+      const result: RunnerE2EResult = withholdPrivateScreenshots({
         ...resultWithoutBilling,
         billing: summarizeExecutionBilling(resultWithoutBilling),
-      };
+      }, { innerSecretFinding });
       if (firstTaskEvidence) {
         await writeSanitizedJson(snapshotsDir, "first-task-result-private.json", result, secrets);
       }

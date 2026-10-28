@@ -356,6 +356,7 @@ export interface RunnerE2EResult {
     passed: boolean;
     detail: string;
   }>;
+  screenshotPrivacy?: import("./screenshot-privacy.js").ScreenshotPrivacy;
   screenshots?: Array<{
     id: string;
     label: string;

@@ -1,3 +1,4 @@
+import { screenshotWithholdingNotice } from "./screenshot-privacy.js";
 import { campaignAttemptTimeLabel, campaignTimingScope, renderWorkerPhaseTiming, summarizeCampaignTiming, summarizeWorkerPhaseTiming } from "./campaign-timing.js";
 import { html, durationLabel, tokenLabel, llmCostLabel, usdLabel } from "./report-format.js";
 import { renderReportShell, reportNavigationStyles, reportShellScript } from "./report-navigation.js";
@@ -83,6 +84,7 @@ function compactJson(value: unknown) {
 function resolveScreenshots(
   entry: RunnerDashboardEntry | undefined,
 ): ResolvedScreenshot[] {
+  if (entry && screenshotWithholdingNotice(entry.result)) return [];
   const declaredScreenshots = entry?.result.screenshots?.length
     ? entry.result.screenshots
     : entry
@@ -244,7 +246,8 @@ function renderCase(
     ${STARTUP_REUSE_LAYERS.map(layer => `<td>${html(reuse.layers[layer].state)} (${html(reuse.layers[layer].reason)})</td>`).join("")}
     <td>${html(reuse.providerLaunchCount === null ? "unknown" : reuse.providerLaunchCount)}</td>
   </tr>`).join("");
-  const gallery = screenshots.length
+  const withholdingNotice = entry ? screenshotWithholdingNotice(entry.result) : null;
+  const gallery = withholdingNotice ? `<p class="muted">${html(withholdingNotice)}</p>` : screenshots.length
     ? `<div class="gallery" aria-label="Screenshots for ${html(execution.id)}">${screenshots
         .map(
           (item) => `<button
