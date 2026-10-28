@@ -75,6 +75,7 @@ interface TaskChatThreadViewProps {
   /** When false, render the list without the scroll container (e.g. previews). */
   scroll?: boolean;
   attachments?: IssueAttachment[];
+  linkCaseReferences?: boolean;
   onOpenSkill?: (skillId: string, name: string) => void;
   onOpenBrowser?: (browserId: string) => void;
 }
@@ -99,6 +100,7 @@ function renderItem(
   attachments: IssueAttachment[] = [],
   onOpenSkill?: (skillId: string, name: string) => void,
   onOpenBrowser?: (browserId: string) => void,
+  linkCaseReferences = false,
 ) {
   switch (item.kind) {
     case "browser": return <TaskBrowserActivity browser={item.browser} label={item.label} onOpen={onOpenBrowser} />;
@@ -144,6 +146,7 @@ function renderItem(
               attachments,
               onOpenSkill,
               onOpenBrowser,
+              linkCaseReferences,
             )
           }
         />
@@ -151,6 +154,7 @@ function renderItem(
       return (
         <TaskChatBubble
           item={item}
+          linkCaseReferences={linkCaseReferences}
           // Hydration and live-to-durable reconciliation may move a logical
           // message between parents. Mounting must never replay a fade.
           animateEntry={false}
@@ -249,6 +253,7 @@ function renderItem(
               attachments,
               onOpenSkill,
               onOpenBrowser,
+              linkCaseReferences,
             )
           }
         />
@@ -314,6 +319,7 @@ export function TaskChatThreadView({
   className,
   scroll = true,
   attachments = EMPTY_ATTACHMENTS,
+  linkCaseReferences = false,
   onOpenSkill,
   onOpenBrowser,
 }: TaskChatThreadViewProps) {
@@ -344,7 +350,7 @@ export function TaskChatThreadView({
         renderQueuedAction, onRuntimeRequestDecision, "classic",
         runRetry ?? onTryAgainNoLiveExecutionPath,
         runRetry ? retryFailedRunId === runId : tryAgainNoLiveExecutionPathPending,
-        retryableMarkerId, onRetryFailedRun, retryFailedRunId, attachments, onOpenSkill, onOpenBrowser,
+        retryableMarkerId, onRetryFailedRun, retryFailedRunId, attachments, onOpenSkill, onOpenBrowser, linkCaseReferences,
       );
     };
     const renderedItems = streamlined
@@ -401,7 +407,7 @@ export function TaskChatThreadView({
     visibleItems, retryMarkers, streamlined, onApprovalDecision, onRuntimeRequestDecision,
     renderInteraction, renderBrief, renderMessageActions, renderQueuedAction,
     onTryAgainNoLiveExecutionPath, tryAgainNoLiveExecutionPathPending,
-    retryableMarkerId, onRetryFailedRun, retryFailedRunId, attachments, onOpenSkill, onOpenBrowser,
+    retryableMarkerId, onRetryFailedRun, retryFailedRunId, attachments, onOpenSkill, onOpenBrowser, linkCaseReferences,
   ]);
   const body = (
     <div

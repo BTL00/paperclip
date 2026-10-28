@@ -3126,6 +3126,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                       <TaskChatThreadView
                         items={items}
                         attachments={attachments}
+                        linkCaseReferences={props.linkCaseReferences}
                         header={<>{threadHeaderWithBlockers}{!issueBrief ? historyControl : null}</>}
                         renderInteraction={renderInteraction}
                         renderBrief={renderBrief}
