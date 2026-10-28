@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { nativeRunMcpRoutes } from "../../server/src/routes/native-run-mcp.js";
 import { createRemoteMcpRelayToken, registerRemoteMcpRelay } from "../../server/src/services/native-runtime/remote-mcp-relay.js";
@@ -21,7 +22,7 @@ const listen = async (server: Server) => {
 const close = (server: Server) => new Promise<void>((accept, reject) => { server.closeAllConnections(); server.close(error => error ? reject(error) : accept()); });
 
 it("serves the strict MCP SDK through the Cloud callback with isolated sessions and fenced tools", async () => {
-  const root = await mkdtemp("/private/tmp/cloud-sdk-");
+  const root = await mkdtemp(join(process.platform === "darwin" ? "/tmp" : tmpdir(), "cloud-sdk-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const token = createRemoteMcpRelayToken();
   const runId = "00000000-0000-4000-8000-000000000762";

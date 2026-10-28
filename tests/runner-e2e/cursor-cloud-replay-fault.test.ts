@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CursorCloudClient } from "../../packages/paperclip-runner/src/drivers/cursor-cloud/cloud-client.js";
@@ -14,7 +15,7 @@ const digest = (value: string | Uint8Array) => createHash("sha256").update(value
 const expected = [{ agentIdSha256: digest(agent), runIdSha256: digest(run) }];
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function root() { const directory = await mkdtemp("/private/tmp/cc-replay-"); roots.push(directory); return directory; }
+async function root() { const directory = await mkdtemp(join(process.platform === "darwin" ? "/tmp" : tmpdir(), "cc-replay-")); roots.push(directory); return directory; }
 function bytes(parts: readonly Uint8Array[], onCancel = vi.fn()) {
   let index = 0;
   return new Response(new ReadableStream<Uint8Array>({ pull(controller) { if (index < parts.length) controller.enqueue(parts[index++]!); else controller.close(); }, cancel: onCancel }, { highWaterMark: 0 }), { headers: { "content-type": "text/event-stream" } });
