@@ -1,3 +1,4 @@
+import {chatCatalogNativePhaseDeadline,chatCatalogNativePhaseIsTimely,chatCatalogNativePhaseRemainingBudget} from "../chat-catalog-contract.js";
 import {randomBytes} from "node:crypto";
 import {expect} from "@playwright/test";
 import type {RequestConfirmationInteraction} from "../../../packages/shared/src/types/issue.js";
@@ -74,14 +75,18 @@ export function gradeSecretProposal(value:unknown){
  c.add("phase-specific-truthful-outcomes",o.phaseReplies.some(reply=>reply.runId===o.state.denialReplyRunId&&truthfulProposalPhase(reply.body,false))&&o.phaseReplies.some(reply=>reply.runId===o.state.approvalReplyRunId&&truthfulProposalPhase(reply.body,true)),"Denial and approval explanations belong to their own actual successful continuation runs, rather than an aggregate transcript rescuing the wrong phase.");
  c.add("secret-identity-and-private-bytes-preserved",sameSecretIdentity(o.state.secretBefore as CompanySecret,o.state.secretAfter as CompanySecret)&&o.state.secretScanComplete===true&&o.state.secretLeaked===false,"Value identity/version is unchanged and private scans include actual documents/revisions/artifacts and raw native events before redaction.");return c.result();
 }
-async function settled(ctx:ChatCatalogContext,count:number){return pollUntil({label:"actual proposal phase native settlement",deadlineAt:Date.now()+150000,intervalMs:500,load:async()=>{await ctx.refreshIssue();return ctx.allRuns();},accept:runs=>runs.length===count&&runs.every(run=>run.status==="succeeded")&&ctx.issue()?.conversationState==="waiting",reject:runs=>runs.length>count||runs.some(run=>["failed","cancelled","timed_out"].includes(run.status))?"Proposal phase admitted extra or unsuccessful native work":undefined});}
+async function settled(ctx:ChatCatalogContext,count:number){return pollUntil({label:"actual proposal phase native settlement",deadlineAt:chatCatalogNativePhaseDeadline(ctx,Date.now()+150000),intervalMs:500,load:async()=>{await ctx.refreshIssue();return ctx.allRuns();},accept:runs=>chatCatalogNativePhaseIsTimely(ctx)&&runs.length===count&&runs.every(run=>run.status==="succeeded")&&ctx.issue()?.conversationState==="waiting",reject:runs=>runs.length>count||runs.some(run=>["failed","cancelled","timed_out"].includes(run.status))?"Proposal phase admitted extra or unsuccessful native work":undefined});}
+export function secretProposalDecisionClickOptions(ctx:ChatCatalogContext){
+ const remaining=chatCatalogNativePhaseRemainingBudget(ctx);
+ return remaining?{timeout:Math.min(30_000,remaining())}:undefined;
+}
 async function review(ctx:ChatCatalogContext,row:SecretProposalView,approve:boolean){
  const source=ctx.input.page.url();await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/secrets`,{waitUntil:"domcontentloaded"});await ctx.input.page.getByRole("tab",{name:/^Proposals/}).click();
  await expect(ctx.input.page.getByText("PUBLISHING_API_KEY",{exact:true})).toBeVisible();await expect(ctx.input.page.getByText("Deployment publishing key",{exact:true}).first()).toBeVisible();
  const pending=(await proposals(ctx)).filter(item=>item.status==="pending");if(pending.length!==1||pending[0]!.id!==row.id||!pending[0]!.viewerCanApprove)throw new Error("Actual human cannot review the sole intended pending binding proposal");
  await ctx.input.page.getByRole("button",{name:approve?"Approve":"Reject",exact:true}).click();const dialog=ctx.input.page.getByRole("dialog");
- if(approve){await expect(dialog.getByRole("heading",{name:"Approve binding",exact:true})).toBeVisible();await expect(dialog).toContainText("PUBLISHING_API_KEY");await dialog.getByRole("button",{name:"Approve binding",exact:true}).click();}
- else{await expect(dialog.getByRole("heading",{name:"Reject proposal",exact:true})).toBeVisible();await dialog.getByRole("textbox",{name:"Reason",exact:true}).fill("Do not grant this publishing binding yet.");await dialog.getByRole("button",{name:"Reject",exact:true}).click();}
+ if(approve){await expect(dialog.getByRole("heading",{name:"Approve binding",exact:true})).toBeVisible();await expect(dialog).toContainText("PUBLISHING_API_KEY");await dialog.getByRole("button",{name:"Approve binding",exact:true}).click(secretProposalDecisionClickOptions(ctx));}
+ else{await expect(dialog.getByRole("heading",{name:"Reject proposal",exact:true})).toBeVisible();await dialog.getByRole("textbox",{name:"Reason",exact:true}).fill("Do not grant this publishing binding yet.");await dialog.getByRole("button",{name:"Reject",exact:true}).click(secretProposalDecisionClickOptions(ctx));}
  await expect(dialog).not.toBeVisible();await ctx.input.page.goto(source,{waitUntil:"domcontentloaded"});
 }
 export const secretProposalExternalCases=[definition("secrets.secret-proposal",async ctx=>{
@@ -99,7 +104,7 @@ export const secretProposalExternalCases=[definition("secrets.secret-proposal",a
   await review(ctx,first,false);state.firstReviewVisible=true;const denial=await settled(ctx,2);state.denialReplyRunId=denial.find(run=>run.id!==first.originRunId)!.id;
   state.first=(await proposals(ctx)).find(row=>row.id===first.id);state.denialBindingCount=(await bindings(ctx,String(state.secretId))).length;const deniedAgent=await ctx.input.api.get<AgentConfig>(`/api/agents/${state.morganId}`);state.denialConfigAbsent=!(deniedAgent.adapterConfig.env as Record<string,unknown>|undefined)?.PUBLISHING_API_KEY;
   if((await proposals(ctx)).length!==1||state.denialBindingCount!==0||state.denialConfigAbsent!==true)throw new Error("Denial spawned another proposal or changed the consumer binding");
-  await sendChatMessage(ctx.input.page,ctx.scenario.query);const repeated=await settled(ctx,3),secondPending=(await proposals(ctx)).filter(row=>row.status==="pending");if(secondPending.length!==1||!requested(secondPending[0]!,state,ctx.issue()!.id)||secondPending[0]!.id===first.id||denial.some(run=>run.id===secondPending[0]!.originRunId))throw new Error("Explicit repeated human request did not produce one new intended proposal");
+  await sendChatMessage(ctx.input.page,ctx.scenario.query,chatCatalogNativePhaseRemainingBudget(ctx));const repeated=await settled(ctx,3),secondPending=(await proposals(ctx)).filter(row=>row.status==="pending");if(secondPending.length!==1||!requested(secondPending[0]!,state,ctx.issue()!.id)||secondPending[0]!.id===first.id||denial.some(run=>run.id===secondPending[0]!.originRunId))throw new Error("Explicit repeated human request did not produce one new intended proposal");
   const second=secondPending[0]!;await recordPendingProposalDisplay(ctx,state,second);await review(ctx,second,true);state.correctHumanReviewed=true;const approved=await settled(ctx,4);state.approvalReplyRunId=approved.find(run=>!repeated.some(prior=>prior.id===run.id))!.id;state.second=(await proposals(ctx)).find(row=>row.id===second.id);
  },
  async observe(ctx,state){
