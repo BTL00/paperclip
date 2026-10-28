@@ -3077,7 +3077,7 @@ public cancellation and owned-process cleanup bounds remain in force. Setup evid
 records the effective saved policy separately from authored legacy turn declarations.
 Earlier results with the 120-second cap remain unchanged historical measurements.
 
-# Model-spend readiness and operating reconciliation
+### Model-spend readiness and operating reconciliation
 
 A reviewed operating allowance can opt into `accountingReadiness: "model_requests"`.
 This policy requires at least one model request and complete final model-cost
