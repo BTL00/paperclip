@@ -454,6 +454,72 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     await expect(f.store.versionFiles(saved.version)).rejects.toThrow("storage offline");
   });
 
+  it("bounds concurrent cached inventories while leaving warm turn preparation responsive", async () => {
+    const f = await fixture();
+    await f.resolve();
+    const target = path.join(skillPackagePaths(f.companyId, f.id).directory, files[0]!.path);
+    const open = fs.open.bind(fs);
+    let entered = 0;
+    let bothEntered!: () => void;
+    const started = new Promise<void>(resolve => { bothEntered = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+      if (args[0] === target) {
+        if (++entered === 2) bothEntered();
+        await blocked;
+      }
+      return open(...args);
+    });
+    const version = { ...f.skills[0]!.version, packageFileMap: null };
+    const storageRead = vi.spyOn(storage, "getObject");
+    const reads = [f.store.versionFiles(version), f.store.versionFiles(version)];
+    let preview: ReturnType<typeof f.store.readVersionFile> | undefined;
+    try {
+      await started;
+      reads.push(f.store.versionFiles(version));
+      preview = f.store.readVersionFile(version, files[0]!.path);
+      reads.push(...Array.from({ length: 30 }, () => f.store.versionFiles(version)));
+      // These queries share the one-connection pool, so the third inventory has
+      // loaded its descriptor by the time preparation finishes. Its byte read
+      // must still be queued behind the two active readers.
+      expect((await f.resolve()).every(entry => entry.sourceStatus === "available")).toBe(true);
+      expect(entered).toBe(2);
+      await expect(f.store.versionFiles(version)).rejects.toThrow("busy");
+      expect(storageRead).not.toHaveBeenCalled();
+      release();
+      expect(await Promise.all(reads)).toEqual(reads.map(() => files));
+      expect(await preview).toMatchObject(files[0]!);
+    } finally { release(); await Promise.allSettled([...reads, preview]); }
+  });
+
+  it("reads cached versions while both storage operations are stalled", async () => {
+    const f = await fixture();
+    await f.resolve();
+    const get = storage.getObject.bind(storage);
+    let entered = 0;
+    let bothEntered!: () => void;
+    const started = new Promise<void>(resolve => { bothEntered = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(storage, "getObject").mockImplementation(async (...args) => {
+      if (++entered === 2) bothEntered();
+      await blocked;
+      return get(...args);
+    });
+    const pending = [f.store.withIsolatedPackage(f.companyId, f.id, async () => null),
+      f.store.withIsolatedPackage(f.companyId, f.id, async () => null)];
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await started;
+      const reading = db.transaction(tx => skillPackageStore(tx as unknown as typeof db, storage)
+        .versionFiles({ ...f.skills[0]!.version, packageFileMap: null }));
+      expect(await Promise.race([reading, new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Cached read waited for storage")), 1_000);
+      })])).toEqual(files);
+    } finally { clearTimeout(timeout); release(); await Promise.allSettled(pending); }
+  });
+
   it("retries expired upload claims with fresh keys and only deletes the abandoned attempt", async () => {
     const companyId = await company();
     const store = skillPackageStore(db, storage);

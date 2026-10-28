@@ -106,6 +106,9 @@ pending delete/existence requests; incomplete cleanup retains the receipt for re
   the selected source and delivered asset on reuse. It retains no repository bodies.
   Source edits invalidate the reference; missing or corrupt copies rebuild from verified bytes.
 - Concurrent cold package I/O is limited to two operations, with a queue of at most 32.
+  Cached version inventories and file previews have a separate two-reader, 32-waiter
+  bound, so slow storage cannot prevent verified local reads. Both queues honor deadlines
+  and cancellation; an overloaded local-read queue does not trigger a storage download.
   Packages share the Git scanner's limits of 10,000 files and 100 MiB decoded bytes.
   Recovery splits reads within the Git reader's 9,990-file and 61 MiB batch limits.
   Individual manifests are limited to 48 MiB; the manifest cache holds 16 MiB of serialized data.

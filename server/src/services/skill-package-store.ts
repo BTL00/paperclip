@@ -50,25 +50,28 @@ function flight<T>(db: Db, key: string, action: () => Promise<T>): Promise<T> {
   pending.set(key, work);
   return work;
 }
-let activeIo = 0;
-const waitingIo: Array<() => void> = [];
-async function withPackageIo<T>(action: () => Promise<T>, signal: AbortSignal): Promise<T> {
+type PackageIoQueue = { active: number; waiting: Array<() => void> };
+const storageIo: PackageIoQueue = { active: 0, waiting: [] };
+// Bound local response buffers independently so stalled storage does not prevent
+// verified cached reads, including reads inside an existing DB transaction.
+const inventoryIo: PackageIoQueue = { active: 0, waiting: [] };
+async function withPackageIo<T>(action: () => Promise<T>, signal: AbortSignal, queue = storageIo): Promise<T> {
   signal.throwIfAborted();
-  if (activeIo >= 2) {
-    if (waitingIo.length >= 32) throw conflict("Skill package storage is busy; retry shortly.");
+  if (queue.active >= 2) {
+    if (queue.waiting.length >= 32) throw conflict("Skill package storage is busy; retry shortly.");
     await new Promise<void>((resolve, reject) => {
       const ready = () => { signal.removeEventListener("abort", aborted); resolve(); };
       const aborted = () => {
-        const index = waitingIo.indexOf(ready);
-        if (index >= 0) waitingIo.splice(index, 1);
+        const index = queue.waiting.indexOf(ready);
+        if (index >= 0) queue.waiting.splice(index, 1);
         reject(signal.reason);
       };
-      waitingIo.push(ready);
+      queue.waiting.push(ready);
       signal.addEventListener("abort", aborted, { once: true });
     });
-  } else activeIo++;
+  } else queue.active++;
   try { signal.throwIfAborted(); return await action(); }
-  finally { const next = waitingIo.shift(); if (next) next(); else activeIo--; }
+  finally { const next = queue.waiting.shift(); if (next) next(); else queue.active--; }
 }
 const manifests = new Map<string, { manifest: SkillPackageManifest; bytes: number }>();
 let manifestBytes = 0;
@@ -497,15 +500,16 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     } finally { await handle.close(); }
   }
   async function versionFiles(version: StoredSkillVersion, allowRecovery = true, cancellation?: AbortSignal): Promise<CompanySkillVersionFileInventoryEntry[]> {
-    cancellation?.throwIfAborted();
+    const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
+    signal.throwIfAborted();
     if (!version.packageSnapshotId) {
       const [row] = await db.select({ ...skillVersionMetadataColumns, files: companySkillVersions.fileInventory }).from(companySkillVersions).where(and(
         eq(companySkillVersions.companyId, version.companyId), eq(companySkillVersions.id, version.id)));
-      if (row?.packageSnapshotId) return versionFiles(row, allowRecovery, cancellation);
+      if (row?.packageSnapshotId) return versionFiles(row, allowRecovery, signal);
       return row?.files ?? [];
     }
     const id = version.packageSnapshotId;
-    const manifest = await manifestFor(await descriptor(version.companyId, id), cancellation);
+    const manifest = await manifestFor(await descriptor(version.companyId, id), signal);
     const read = async (root: string) => {
       const byPath = new Map(manifest.files.map(file => [file.path, file]));
       const result: CompanySkillVersionFileInventoryEntry[] = [];
@@ -516,7 +520,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         if (!file) throw new Error("Skill version references a missing package file");
         const encoding = mapping.encoding ?? file.encoding;
         result.push({ path: mapping.path, kind: mapping.kind,
-          content: (await readPackageFile(root, file, cancellation)).toString(encoding),
+          content: (await readPackageFile(root, file, signal)).toString(encoding),
           ...(encoding === "base64" ? { encoding } : {}), ...(file.executable ? { executable: true } : {}) });
       }
       return result;
@@ -524,14 +528,13 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     // Verify bytes as they are read, without holding the warm preparation lock.
     // A descriptor survives eviction; a missing/racing file falls back to storage.
     const root = skillPackagePaths(version.companyId, id).directory;
-    try {
-      const result = await read(root);
+    const result = await withPackageIo(() => read(root).catch(() => null), signal, inventoryIo);
+    if (result) {
       touchSkillPackage(root);
       return result;
-    } catch {
-      cancellation?.throwIfAborted();
-      return withIsolatedPackage(version.companyId, id, read, allowRecovery, cancellation);
     }
+    signal.throwIfAborted();
+    return withIsolatedPackage(version.companyId, id, read, allowRecovery, signal);
   }
   async function readVersionFile(version: StoredSkillVersion, relativePath: string, allowRecovery = true) {
     assertSkillSnapshotPath(relativePath);
@@ -542,16 +545,19 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     if (version.packageFileMap && !mapping) return undefined;
     const entry = manifest.files.find(file => file.path === (mapping?.sourcePath ?? relativePath));
     if (!entry) return undefined;
+    const signal = AbortSignal.timeout(180_000);
     const read = async (root: string) => {
-      const bytes = await readPackageFile(root, entry);
+      const bytes = await readPackageFile(root, entry, signal);
       const encoding = mapping?.encoding ?? entry.encoding;
       return { path: relativePath, kind: mapping?.kind ?? entry.kind, content: bytes.toString(encoding),
         encoding, executable: entry.executable };
     };
     // Immutable cache files can be read without the preparation lock. An open
     // descriptor survives eviction; missing/racing files fall back to storage.
-    try { return await read(skillPackagePaths(version.companyId, id).directory); }
-    catch { return withIsolatedPackage(version.companyId, id, read, allowRecovery); }
+    const cached = await withPackageIo(() => read(skillPackagePaths(version.companyId, id).directory).catch(() => null), signal, inventoryIo);
+    if (cached) return cached;
+    signal.throwIfAborted();
+    return withIsolatedPackage(version.companyId, id, read, allowRecovery, signal);
   }
   async function versionInventory(version: StoredSkillVersion): Promise<Array<{ path: string; kind: CompanySkillVersionFileInventoryEntry["kind"] }>> {
     if (version.packageSnapshotId) {
