@@ -32,9 +32,7 @@ export function grade_documents_artifacts(value: unknown) {
       const target = entity(o.state, "pricingThread"); const sibling = entity(o.state, "siblingThread");
       const annotation = o.annotations?.find(row => row.id === target.id); const unrelated = o.annotations?.find(row => row.id === sibling.id);
       const plan = o.documents.find(row => row.key === "plan");
-      c.add("substantive-pricing-fix", !!plan && /\$19/.test(plan.body ?? "") && /\b(?:monthly|month)\b/i.test(plan.body ?? "")
-        && /\bteam\b/i.test(plan.body ?? "") && /\b(?:total|entire|whole|per team|for the team)\b/i.test(plan.body ?? "")
-        && !/\b(?:per|each)\s+(?:user|person|seat)\b/i.test(plan.body ?? "") && (plan.body ?? "").includes(String(o.state.supportText)),
+      c.add("substantive-pricing-fix", !!plan && monthlyTeamPricing(plan.body ?? "") && (plan.body ?? "").includes(String(o.state.supportText)),
         "The actual current document unambiguously preserves $19 monthly total for the team and unrelated support content.");
       c.add("correct-thread-resolved", annotation?.status === "resolved" && annotation.resolvedByAgentId === o.leadId
         && unrelated?.status === "open" && annotation.documentId === plan?.id && annotation.originalRevisionId === o.state.originalRevisionId,
@@ -148,4 +146,23 @@ export function meaningfulOrchidPlan(body: string): boolean {
   if (/\bwithout\s+(?:(?:any|the)\s+)?(?:signup|registration|accessibility|labels?|responsive(?:ness)?|keyboard|mobile)\b/i.test(body)) return false;
   return !clauses.some(clause => /\b(?:multi[- ]page|multiple\s+pages|separate\s+pages)\b/i.test(clause)
     && !negativeDirective.test(clause) && !/\b(?:not|no|without|avoid)\s+(?:a\s+)?(?:multi[- ]page|multiple\s+pages|separate\s+pages)\b/i.test(clause));
+}
+
+export function monthlyTeamPricing(body: string): boolean {
+  const pricingClauses = body.split(/(?<=[.!?])\s+|[\n;]|\bbut\b/i);
+  if (!pricingClauses.some(clause => /\$19(?:\.00)?(?![\d.])/.test(clause) && /\b(?:monthly|month)\b/i.test(clause)
+    && /\bteam\b/i.test(clause) && /\b(?:total|entire|whole|per team|for the team)\b/i.test(clause))) return false;
+  const negated = (index: number) => /\b(?:not|never|no|rather than|instead of)(?:\s+(?:charged|billed|priced|calculated|applied))?(?:\s+(?:a|an|the))?(?:\s+\$[\d,.]+)?\s*$/i.test(body.slice(Math.max(0, index - 80), index));
+  for (const amount of body.matchAll(/\$([\d,]+(?:\.\d+)?)/g)) {
+    if (Number(amount[1]!.replaceAll(",", "")) !== 19 && !negated(amount.index!)) return false;
+    if (Number(amount[1]!.replaceAll(",", "")) === 19 && negated(amount.index!)
+      && !/\bper[- ](?:user|person|seat)\b/i.test(body.slice(amount.index! + amount[0].length).split(/[.;\n]/)[0]!)) return false;
+  }
+  for (const scope of body.matchAll(/\b(?:per[- ]|each\s+|every\s+)(?:user|person|seat)\b/gi)) {
+    const suffix = body.slice(scope.index! + scope[0].length);
+    const deniedAfter = /^\s+(?:(?:pricing|billing|charge)\s+)?(?:is|would be)\s+(?:wrong|incorrect|not (?:correct|applicable|required))\b/i.test(suffix);
+    if (!negated(scope.index!) && !deniedAfter) return false;
+  }
+  for (const cadence of body.matchAll(/\b(?:yearly|annually|annual|per year|one[- ]time)\b/gi)) if (!negated(cadence.index!)) return false;
+  return !/\b(?:not|never|no)\s+(?:monthly|per month|(?:the\s+)?total|(?:(?:for|per)\s+(?:the\s+)?)?(?:(?:entire|whole)\s+)?team)\b/i.test(body);
 }
