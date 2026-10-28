@@ -7,6 +7,7 @@ import type { RunnerE2ECampaignAccounting, RunnerE2EResult } from "./types.js";
 import { DEPENDABLE_CELLS } from "./dependable-qualification.js";
 import { validateOnboardingConnectEvidence } from "./product-journeys/onboarding-connect.js";
 import { validateOnboardingArtifact } from "./product-journeys/artifact-evidence.js";
+import { validateOnboardingPreAcceptanceEvidence } from "./product-journeys/onboarding-pre-acceptance.js";
 
 type Rule = (value: unknown, at: string) => void;
 const invalid = (at: string): never => {
@@ -355,6 +356,7 @@ const fields = {
     targetId: optional(string),
     campaignId: optional(string), attemptId: optional(string),
     onboardingConnect: optional((value, at) => { try { validateOnboardingConnectEvidence(value); } catch { invalid(at); } }),
+    onboardingPreAcceptance: optional((value, at) => { try { validateOnboardingPreAcceptanceEvidence(value); } catch { invalid(at); } }),
     artifact: optional((value, at) => { try { validateOnboardingArtifact(value); } catch { invalid(at); } }),
     operations: optional(closedShape({ campaignId: string, attemptId: string, modelCostUsd: nullable(number), setupCostUsd: nullable(number), requestCount: integer,
       feedback: closedShape({ collection: oneOf("complete", "partial", "unavailable"), complaints: integer, suggestions: integer }), traceIds: array(string) })),
@@ -414,6 +416,9 @@ export function validateRetainedRunnerResult(
   const checked = value as RunnerE2EResult;
   if (checked.databaseIdentity && checked.status === "passed" && (!checked.databaseIdentity.artifactVerified || !checked.databaseIdentity.contextSha256 || !checked.databaseIdentity.engineSha256 || !checked.databaseIdentity.containerId || !checked.databaseIdentity.cluster || !["ready", "removed"].includes(checked.databaseIdentity.status))) invalid("result.databaseIdentity");
   const artifact = checked.productJourney?.artifact;
+  if (checked.productJourney?.onboardingPreAcceptance && (checked.suiteId !== "product-journeys" || checked.caseId !== "cloud-onboarding" ||
+    checked.status !== "failed" || checked.productJourney.outcome !== "failed" ||
+    checked.error !== "onboarding_work_before_acceptance")) invalid("result.productJourney.onboardingPreAcceptance");
   if (artifact && (checked.suiteId !== "product-journeys" || checked.caseId !== "cloud-onboarding" ||
     checked.runIds && !checked.runIds.includes(artifact.originatingRunId))) invalid("result.productJourney.artifact");
   if (checked.workerTiming !== undefined) {
