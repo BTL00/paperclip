@@ -445,3 +445,13 @@ timer remains; an empty buffer performs no database work. Existing Muse durable
 sleep blockers, external worker stop evidence, and ingress requirements remain
 unchanged. This change establishes database quiet for inactive Muse, not host
 sleep eligibility for a configured Muse connection.
+
+## Skill package maintenance
+
+The package delivery worker automatically converts legacy snapshots and versions.
+Unfinished `migration_at` rows block idle sleep until their durable contents are
+verified and conversion finishes. Package/object/native-asset retention timestamps
+are earliest cleanup eligibility, not promised delivery deadlines; optional cleanup
+may wait for the next ingress wake. Workers reconstruct persisted rows and filesystem
+access leases on startup, and use the existing coordinator's drain/standby/shutdown
+controls. No external Cloud alarm or provider suspension is established by these tests.

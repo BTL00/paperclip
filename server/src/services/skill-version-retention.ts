@@ -1,3 +1,4 @@
+import { withSkillPackageReadScope } from "./skill-package-store.js";
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -417,7 +418,7 @@ export function skillVersionRetentionService(db: Db, defaults: SkillVersionPrune
   async function pruneCompany(companyId: string, options: SkillVersionPruneOptions & { cursor?: CompanyCursor | null } = {}) {
     if (scanning.has(companyId)) return { ...emptyResult(), checked: 1, skipped: { scan_busy: 1 } };
     scanning.add(companyId);
-    try { return await pruneCompanyPage(companyId, options); }
+    try { return await withSkillPackageReadScope(db, () => pruneCompanyPage(companyId, options)); }
     finally { scanning.delete(companyId); }
   }
 

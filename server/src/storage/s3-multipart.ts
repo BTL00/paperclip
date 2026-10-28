@@ -13,7 +13,7 @@ export async function putS3Multipart(client: S3Client, bucket: string, key: stri
   // Scale part sizes to the S3 part-count limit while retaining stream backpressure.
   const partSize = Math.max(8 * 1024 * 1024, Math.ceil(input.contentLength / 10_000));
   try {
-    uploadId = (await withS3FailureDiagnostics("create_multipart_upload", () => client.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: input.contentType })))).UploadId;
+    uploadId = (await withS3FailureDiagnostics("create_multipart_upload", () => client.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: input.contentType }), { abortSignal: input.signal }))).UploadId;
     if (!uploadId) throw new Error("S3 did not return a multipart upload id");
     const parts: { ETag: string; PartNumber: number }[] = [];
     for (let offset = 0; offset < input.contentLength;) {
@@ -35,14 +35,14 @@ export async function putS3Multipart(client: S3Client, bucket: string, key: stri
         }
       })());
       try {
-        const result = await withS3FailureDiagnostics("upload_part", () => client.send(new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: parts.length + 1, Body: body, ContentLength: length })));
+        const result = await withS3FailureDiagnostics("upload_part", () => client.send(new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: parts.length + 1, Body: body, ContentLength: length }), { abortSignal: input.signal }));
         if (remaining || !result.ETag) throw new Error("S3 upload part is incomplete");
         parts.push({ ETag: result.ETag, PartNumber: parts.length + 1 });
       } finally { body.destroy(); }
       offset += length;
     }
     if (pending.length || !(await iterator.next()).done) throw new Error("S3 upload source exceeds its declared size");
-    await withS3FailureDiagnostics("complete_multipart_upload", () => client.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } })));
+    await withS3FailureDiagnostics("complete_multipart_upload", () => client.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } }), { abortSignal: input.signal }));
   } catch (error) {
     if (uploadId) await client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId })).catch(() => {});
     throw error;

@@ -81,6 +81,14 @@ version pins. The [concurrency regression](../../server/src/__tests__/company-sk
 checks shared work and separate actor access; the cache tests check that cleanup
 cannot remove a snapshot before the run stores its pins.
 
+The [package storage regression](../../server/src/__tests__/skill-package-store.test.ts)
+covers external snapshots, automatic legacy conversion and exact-commit recovery. A warm selected-repository
+check must perform no object reads or repository-content SQL. Source/library
+reconciliation remains available for discovery and mutable sources. The native context
+regression checks that warm asset packaging reuses verified files, repairs missing/corrupt copies,
+and notices source edits. Verify both writer-switch states during rollout; see
+[package storage](../../doc/skill-package-storage.md).
+
 ## Gotchas
 
 - The release picker requires `enableBetaSkills`. Do not invent an Instructions

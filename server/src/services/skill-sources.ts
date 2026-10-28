@@ -1,3 +1,5 @@
+import { skillPackageManifest } from "./skill-package-files.js";
+import { skillPackageStorageEnabled, skillPackageStore } from "./skill-package-store.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from './delivery-work-notifications.js';
 import { reserveAutomaticSkillWork, settleAutomaticSkillWork } from './skill-source-refresh-budget.js';
 import { skillSourceRepairAction } from './skill-source-problems.js';
@@ -20,6 +22,7 @@ import { skillSnapshotHash } from './skill-snapshot.js';
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type SourceRow = typeof sources.$inferSelect;
 export type SkillSourceContext = {
+  signal?: AbortSignal;
   actor: { type: 'user' | 'agent' | 'system'; userId?: string | null; agentId?: string | null };
   setup?: { userId: string | null; agentId?: string | null; localTrusted: boolean; grantId?: string | null };
   projectBindingId?: string;
@@ -33,6 +36,27 @@ const scope = (companyId: string, id: string) => and(eq(sources.companyId, compa
 
 export function skillSourceService(db: Db) {
   const skills = companySkillService(db);
+  const packages = skillPackageStore(db);
+  async function preparePackages(companyId: string, scan: ScannedSkillSource, selected: string[], sourceId: string, signal?: AbortSignal) {
+    if (!skillPackageStorageEnabled()) return new Map<string, string>();
+    const candidates = scan.skills.filter(candidate => selected.includes(candidate.path) && !candidate.error);
+    const prepared = new Map<string, string>();
+    if (!candidates.length) return prepared;
+    if (scan.packageMode === 'repository') {
+      if (scan.repositoryPackage?.error || !scan.repositoryFiles?.length) throw unprocessable(scan.repositoryPackage?.error ?? 'Repository package has no files.');
+      const id = await packages.prepare(companyId, scan.repositoryFiles, true, signal, {
+        version: 1, sourceId, repositoryId: scan.repositoryId, repositoryUrl: scan.repositoryUrl,
+        commitSha: scan.commitSha, skillPath: null, manifest: skillPackageManifest(scan.repositoryFiles),
+      });
+      for (const candidate of candidates) prepared.set(candidate.path, id);
+    } else {
+      for (const candidate of candidates) prepared.set(candidate.path, await packages.prepare(companyId, candidate.files, true, signal, {
+        version: 1, sourceId, repositoryId: scan.repositoryId, repositoryUrl: scan.repositoryUrl,
+        commitSha: scan.commitSha, skillPath: candidate.path, manifest: skillPackageManifest(candidate.files),
+      }));
+    }
+    return prepared;
+  }
   async function row(companyId: string, id: string, database: Db | Tx = db) {
     const [source] = await database.select().from(sources).where(scope(companyId, id));
     if (!source || source.removedAt) throw notFound('Skill source not found.');
@@ -98,20 +122,23 @@ export function skillSourceService(db: Db) {
     const identity = createHash('sha256').update(`${scan.repositoryId}:${sourceId}${revision ? `:${revision}` : ''}:${skillPath}`).digest('hex').slice(0, 16);
     return `github/${scan.repositoryId}/${identity}/${normalizeAgentUrlKey(name) || 'skill'}`;
   }
-  async function publish(tx: Tx, source: SourceRow, scan: ScannedSkillSource, selectedPaths: string[], excludedFolders: string[], context: SkillSourceContext, selectionReviewed: boolean): Promise<Omit<SkillSourceRefreshResult, 'source'>> {
+  async function publish(tx: Tx, source: SourceRow, scan: ScannedSkillSource, selectedPaths: string[], excludedFolders: string[], context: SkillSourceContext, selectionReviewed: boolean, prepared: Map<string, string>): Promise<Omit<SkillSourceRefreshResult, 'source'>> {
     await tx.execute(sql`SET CONSTRAINTS paperclip_skill_runtime_changed DEFERRED`);
     const mode = scan.packageMode ?? 'skills';
     if (mode === 'repository' && scan.skills.length > 0 && (scan.repositoryPackage?.error || !scan.repositoryFiles?.length)) {
       throw unprocessable(scan.repositoryPackage?.error ?? 'Repository package has no files. Scan it again before importing.');
     }
-    let repositorySnapshotId: string | undefined;
-    const repositoryHash = mode === 'repository' && scan.repositoryFiles?.length && !scan.repositoryPackage?.error ? skillSnapshotHash(scan.repositoryFiles) : null;
-    if (repositoryHash) {
-      await tx.insert(companySkillRepositorySnapshots).values({ companyId: source.companyId, contentHash: repositoryHash, fileInventory: scan.repositoryFiles! })
-        .onConflictDoNothing();
-      const [snapshot] = await tx.select({ id: companySkillRepositorySnapshots.id }).from(companySkillRepositorySnapshots).where(and(
-        eq(companySkillRepositorySnapshots.companyId, source.companyId), eq(companySkillRepositorySnapshots.contentHash, repositoryHash)));
-      repositorySnapshotId = snapshot!.id;
+    let repositorySnapshotId = mode === 'repository' ? prepared.values().next().value : undefined;
+    const hasSelected = scan.skills.some(candidate => selectedPaths.includes(candidate.path) && !candidate.error);
+    const repositoryHash = mode === 'repository' && hasSelected ? skillSnapshotHash(scan.repositoryFiles!) : null;
+    if (repositoryHash && !repositorySnapshotId) {
+      // Compatibility writer for a rolling deployment. Never save an otherwise
+      // unused repository when no valid skill is selected.
+      const [saved] = await tx.insert(companySkillRepositorySnapshots).values({ companyId: source.companyId,
+        contentHash: repositoryHash, fileInventory: scan.repositoryFiles! }).onConflictDoNothing().returning({ id: companySkillRepositorySnapshots.id });
+      repositorySnapshotId = saved?.id ?? (await tx.select({ id: companySkillRepositorySnapshots.id })
+        .from(companySkillRepositorySnapshots).where(and(eq(companySkillRepositorySnapshots.companyId, source.companyId),
+          eq(companySkillRepositorySnapshots.contentHash, repositoryHash))))[0]!.id;
     }
     const previous = await tx.select().from(entries).where(and(eq(entries.companyId, source.companyId), eq(entries.sourceId, source.id)));
     const imported: CompanySkill[] = [], updated: CompanySkill[] = [];
@@ -157,6 +184,9 @@ export function skillSourceService(db: Db) {
         if (changed) {
           const version = await skills.createVersion(source.companyId, skillId!, { label: `GitHub ${scan.commitSha.slice(0, 8)}` }, context.actor, {
             database: tx, skipInventoryRefresh: true, skill: installed, fileInventory: candidate.files,
+            packageSnapshotId: prepared.get(candidate.path),
+            packageFileMap: repositorySnapshotId && prepared.has(candidate.path) ? candidate.files.map(file => ({ path: file.path, kind: file.kind,
+              sourcePath: file.path === 'SKILL.md' ? candidate.path : path.posix.join(path.posix.dirname(candidate.path), file.path) })) : null,
             ...(repositorySnapshotId ? { repositorySnapshotId, repositorySkillPath: candidate.path } : {}),
           });
           installed.currentVersionId = version.id;
@@ -203,8 +233,11 @@ export function skillSourceService(db: Db) {
       await context.authorize('skills.import', { sourceType: 'git', sourceLocator: scan.repositoryUrl,
         skillKey: newSkillKey(scan, candidate.path, candidate.name, id) });
     }
+    const prepared = await preparePackages(companyId, scan, input.selectedPaths, id, context.signal);
+    context.signal?.throwIfAborted();
     const published = await db.transaction(async tx => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillSourceSync);
+      await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
       const [source] = await tx.insert(sources).values({ id, companyId, repositoryId: scan.repositoryId, repositoryUrl: scan.repositoryUrl, fullName: scan.fullName,
         packageMode: scan.packageMode ?? 'skills', trackingRef: context.projectBindingId && input.trackingRef === 'HEAD' ? 'HEAD' : scan.trackingRef, connectionId: scan.connectionId ?? input.connectionId ?? null, lastAttemptAt: new Date(),
         accessScope: context.projectBindingId ? 'projects' : 'company', importNewSkills: Boolean(context.projectBindingId),
@@ -215,7 +248,7 @@ export function skillSourceService(db: Db) {
         if (!binding?.active || (context.projectBindingLeaseToken && binding.leaseToken !== context.projectBindingLeaseToken)) throw conflict('Project repository changed during import.');
         await tx.update(projectSkillSources).set({ sourceId: source.id, status: 'ready', lastError: null }).where(eq(projectSkillSources.id, binding.id));
       }
-      const result = await publish(tx, source, scan, input.selectedPaths, input.excludedFolders ?? [], context, true);
+      const result = await publish(tx, source, scan, input.selectedPaths, input.excludedFolders ?? [], context, true, prepared);
       return { ...result, source: await detail(companyId, id, tx) };
     });
     context.publishCommittedActivity?.();
@@ -289,11 +322,14 @@ export function skillSourceService(db: Db) {
         }
       }
       await authorizeScan(source, scan, selectedPaths, context);
+      const prepared = await preparePackages(companyId, scan, selectedPaths, id, options.signal ?? context.signal);
+      (options.signal ?? context.signal)?.throwIfAborted();
       const published = await db.transaction(async tx => {
         if (!options.automatic) await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillSourceSync);
+        await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
         const [locked] = await tx.select().from(sources).where(scope(companyId, id)).for('update');
         if (!locked || locked.leaseToken !== token || locked.revision !== source.revision || locked.leaseExpiresAt! < new Date()) throw conflict('Source refresh expired or changed. Try again.');
-        const result = await publish(tx, locked, scan, selectedPaths, selection?.excludedFolders ?? source.excludedFolders, context, Boolean(selection));
+        const result = await publish(tx, locked, scan, selectedPaths, selection?.excludedFolders ?? source.excludedFolders, context, Boolean(selection), prepared);
         if (selection || scan.connectionId !== undefined) await tx.update(sources).set({ ...(selection ? { enabled: true } : {}), connectionId: scan.connectionId ?? connectionId,
           ...(source.refreshGrantId === null && reader.grantId ? { refreshGrantId: reader.grantId } : {}),
           ...(selection?.connectionId !== undefined || (!source.refreshUserId && !source.refreshLocalTrusted && context.setup) ? { refreshUserId: context.setup?.userId, refreshAgentId: context.setup?.agentId ?? null, refreshLocalTrusted: context.setup?.localTrusted ?? false, refreshGrantId: reader.grantId ?? null } : {}) }).where(scope(companyId, id));
@@ -383,6 +419,7 @@ export function skillSourceService(db: Db) {
     }
     async function remove(tx: Tx, copiedCount: number, deletedCount: number) {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillSourceSync);
+      await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
       // Stop both pending attachments and an in-flight refresh before removing tracking.
       await tx.update(projectSkillSources).set({ active: false, leaseToken: null, leaseExpiresAt: null })
         .where(and(eq(projectSkillSources.companyId, companyId), eq(projectSkillSources.sourceId, id)));

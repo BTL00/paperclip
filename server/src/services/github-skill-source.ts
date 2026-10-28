@@ -105,6 +105,12 @@ async function scanRepository(input: SkillScanInput, providerRead: GitHubRead, o
     }
     const repositoryPaths = indexSkillPackagePaths(entries.map(entry => entry.path));
     const roots = entries.filter(e => e.type === 'blob' && /(^|\/)skill\.md$/i.test(e.path) && ['100644', '100755'].includes(e.mode));
+    if (!roots.length) {
+      return { treeSha: snapshot.treeSha, downloadBytes: snapshot.downloadBytes, scanBytes: 0,
+        packageMode: input.packageMode, connectionId: providerRead.connectionId ?? null,
+        repositoryId: String(repo.id), repositoryUrl: canonical.repositoryUrl, fullName: repo.full_name,
+        trackingRef, commitSha: commit.sha, defaultBranch: repo.default_branch, candidates: [], warnings: [], skills: [] };
+    }
     const rootsByDirectory = new Map<string, TreeEntry[]>();
     for (const root of roots) {
       const dir = path.posix.dirname(root.path);

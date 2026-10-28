@@ -1,0 +1,443 @@
+import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
+import { recoverSkillPackage, skillPackageRecoveryReader } from "./skill-package-recovery.js";
+import { touchSkillPackage, trimSkillPackageCache } from "./skill-package-cache.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+import { constants, createReadStream, createWriteStream, promises as fs } from "node:fs";
+import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { companySkillRepositorySnapshots as snapshots, companySkillVersions, type Db, type SkillPackageStorageReceipt, type SkillPackageRestoreRecipe } from "@paperclipai/db";
+import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
+import { getStorageService, type StorageService } from "../storage/index.js";
+import { resolvePaperclipInstanceRoot } from "../home-paths.js";
+import { conflict, notFound } from "../errors.js";
+import { assertSkillSnapshotPath, skillFileBytes } from "./skill-snapshot.js";
+import { ensureSkillCacheDirectory, withSkillVersionCacheLock } from "./skill-version-cache.js";
+import { boundedHashStream, extractSkillPackageArchive, MAX_SKILL_MANIFEST_BYTES, packageSha256,
+  skillPackageManifest, skillPackageManifestBytes, validateSkillPackageManifest, verifySkillPackageDirectory, relocateSkillPackageVerification, writeSkillPackageArchive,
+  type SkillPackageManifest } from "./skill-package-files.js";
+
+/** External storage is the default; false is an explicit rolling-upgrade escape hatch. */
+export function skillPackageStorageEnabled() {
+  return process.env.PAPERCLIP_SKILL_PACKAGE_STORAGE_ENABLED !== "false";
+}
+
+const descriptorColumns = { id: snapshots.id, companyId: snapshots.companyId, contentHash: snapshots.contentHash,
+  storage: snapshots.storage, upload: snapshots.upload, createdAt: snapshots.createdAt,
+  restorable: sql<boolean>`${snapshots.restore} is not null`, restoreRetryAt: snapshots.restoreRetryAt };
+type Descriptor = Pick<typeof snapshots.$inferSelect, "id" | "companyId" | "contentHash" | "storage" | "upload" | "createdAt" | "restoreRetryAt"> & { restorable: boolean };
+export const skillVersionMetadataColumns = { ...getTableColumns(companySkillVersions),
+  fileInventory: sql<CompanySkillVersionFileInventoryEntry[]>`'[]'::jsonb` };
+export type StoredSkillVersion = typeof companySkillVersions.$inferSelect;
+type ReadScope = { db: Db; descriptors: Map<string, Promise<Descriptor>>; durable: Map<string, Promise<boolean>>; versions: Map<string, StoredSkillVersion> };
+const readScope = new AsyncLocalStorage<ReadScope>();
+export function withSkillPackageReadScope<T>(db: Db, action: () => Promise<T>): Promise<T> {
+  return readScope.getStore()?.db === db ? action() : readScope.run({ db, descriptors: new Map(), durable: new Map(), versions: new Map() }, action);
+}
+const flights = new WeakMap<Db, Map<string, Promise<unknown>>>();
+function flight<T>(db: Db, key: string, action: () => Promise<T>): Promise<T> {
+  let pending = flights.get(db);
+  if (!pending) { pending = new Map(); flights.set(db, pending); }
+  const existing = pending.get(key);
+  if (existing) return existing as Promise<T>;
+  const work = action().finally(() => pending!.delete(key));
+  pending.set(key, work);
+  return work;
+}
+let activeIo = 0;
+const waitingIo: Array<() => void> = [];
+async function withPackageIo<T>(action: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  if (activeIo >= 2) {
+    if (waitingIo.length >= 32) throw conflict("Skill package storage is busy; retry shortly.");
+    await new Promise<void>((resolve, reject) => {
+      const ready = () => { signal.removeEventListener("abort", aborted); resolve(); };
+      const aborted = () => {
+        const index = waitingIo.indexOf(ready);
+        if (index >= 0) waitingIo.splice(index, 1);
+        reject(signal.reason);
+      };
+      waitingIo.push(ready);
+      signal.addEventListener("abort", aborted, { once: true });
+    });
+  } else activeIo++;
+  try { signal.throwIfAborted(); return await action(); }
+  finally { const next = waitingIo.shift(); if (next) next(); else activeIo--; }
+}
+const manifests = new Map<string, { manifest: SkillPackageManifest; bytes: number }>();
+let manifestBytes = 0;
+const MAX_MANIFEST_CACHE = 16 * 1024 * 1024;
+function rememberManifest(key: string, manifest: SkillPackageManifest, bytes: number) {
+  if (bytes > MAX_MANIFEST_CACHE) return;
+  const previous = manifests.get(key);
+  if (previous) manifestBytes -= previous.bytes;
+  manifests.delete(key);
+  while (manifests.size && manifestBytes + bytes > MAX_MANIFEST_CACHE) {
+    const first = manifests.keys().next().value!;
+    manifestBytes -= manifests.get(first)!.bytes;
+    manifests.delete(first);
+  }
+  manifests.set(key, { manifest, bytes });
+  manifestBytes += bytes;
+}
+export function skillPackagePaths(companyId: string, snapshotId: string) {
+  if (![companyId, snapshotId].every(id => /^[a-f0-9-]{36}$/i.test(id))) throw new Error("Invalid skill package identity");
+  const parent = path.join(resolvePaperclipInstanceRoot(), "skills", companyId, "__packages__");
+  return { parent, directory: path.join(parent, snapshotId), manifest: path.join(parent, `${snapshotId}.json`) };
+}
+async function readBoundedObject(storage: StorageService, companyId: string, key: string, length: number, hash: string, signal: AbortSignal) {
+  if (!Number.isSafeInteger(length) || length < 0 || length > MAX_SKILL_MANIFEST_BYTES) throw new Error("Invalid skill manifest size");
+  const object = await storage.getObject(companyId, key, { signal });
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  try {
+    for await (const chunk of object.stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > length) throw new Error("Skill manifest exceeds its recorded size");
+      chunks.push(buffer);
+    }
+  } finally { object.stream.destroy(); }
+  const result = Buffer.concat(chunks);
+  if (bytes !== length || packageSha256(result) !== hash) throw new Error("Skill manifest checksum mismatch");
+  return result;
+}
+
+/** Owns immutable package storage. Authorization belongs to the referencing
+ * skill/source, and must be checked even when package bytes are already cached. */
+export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
+  const storage = () => suppliedStorage ?? getStorageService();
+  const scope = (companyId: string, id: string) => and(eq(snapshots.companyId, companyId), eq(snapshots.id, id));
+  async function descriptor(companyId: string, id: string): Promise<Descriptor> {
+    const load = async () => {
+      const [row] = await db.select(descriptorColumns).from(snapshots).where(scope(companyId, id));
+      if (!row || (!row.storage && !row.restorable && row.upload && !row.upload.legacy)) throw notFound("Installed skill package is unavailable");
+      return row;
+    };
+    const context = readScope.getStore();
+    if (context?.db !== db) return load();
+    const key = `${companyId}:${id}`;
+    if (!context.descriptors.has(key)) context.descriptors.set(key, load());
+    return context.descriptors.get(key)!;
+  }
+  async function version(companyId: string, skillId: string, id: string): Promise<StoredSkillVersion | null> {
+    const context = readScope.getStore();
+    const cached = context?.db === db ? context.versions.get(`${companyId}:${id}`) : null;
+    if (cached) return cached.companySkillId === skillId ? cached : null;
+    const [row] = await db.select(skillVersionMetadataColumns).from(companySkillVersions).where(and(
+      eq(companySkillVersions.companyId, companyId), eq(companySkillVersions.companySkillId, skillId), eq(companySkillVersions.id, id)));
+    return row ?? null;
+  }
+  async function prefetch(companyId: string, versionIds: string[]) {
+    const context = readScope.getStore();
+    if (context?.db !== db || versionIds.length < 2) return;
+    const rows = await db.select(skillVersionMetadataColumns).from(companySkillVersions).where(and(
+      eq(companySkillVersions.companyId, companyId), inArray(companySkillVersions.id, [...new Set(versionIds)])));
+    for (const row of rows) context.versions.set(`${companyId}:${row.id}`, row);
+    const ids = [...new Set(rows.flatMap(row => [row.repositorySnapshotId, row.packageSnapshotId]).filter((id): id is string => Boolean(id)))];
+    if (!ids.length) return;
+    const packages = await db.select(descriptorColumns).from(snapshots).where(and(eq(snapshots.companyId, companyId), inArray(snapshots.id, ids)));
+    for (const row of packages) if (row.storage || row.restorable || !row.upload || row.upload.legacy) {
+      context.descriptors.set(`${companyId}:${row.id}`, Promise.resolve(row));
+    }
+  }
+  async function restoreRecipe(row: Descriptor) {
+    const [saved] = await db.select({ restore: snapshots.restore }).from(snapshots).where(scope(row.companyId, row.id));
+    const recipe = saved?.restore;
+    if (!recipe || recipe.version !== 1) throw notFound("This skill package has no exact-commit restore recipe");
+    const manifest = validateSkillPackageManifest(recipe.manifest);
+    if (manifest.contentHash !== row.contentHash || (row.storage && packageSha256(skillPackageManifestBytes(manifest)) !== row.storage.manifestSha256)) {
+      throw new Error("Skill package restore recipe does not match its receipt");
+    }
+    return recipe;
+  }
+  async function acquireFiles(row: Descriptor, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const [current] = await db.select({ retryAt: snapshots.restoreRetryAt }).from(snapshots).where(scope(row.companyId, row.id));
+    if (current?.retryAt && current.retryAt.getTime() > Date.now()) throw conflict("The original skill package could not be acquired. Reconnect its repository and retry after the recovery backoff.");
+    try {
+      const recipe = await restoreRecipe(row);
+      const read = await skillPackageRecoveryReader(db, row.companyId, recipe);
+      const files = await recoverSkillPackage(recipe, read, signal);
+      await db.update(snapshots).set({ restoreRetryAt: null }).where(scope(row.companyId, row.id));
+      return files;
+    } catch (error) {
+      if (!signal.aborted) await db.update(snapshots).set({ restoreRetryAt: new Date(Date.now() + 5 * 60_000) }).where(scope(row.companyId, row.id));
+      throw error;
+    }
+  }
+  async function legacyFiles(row: Descriptor) {
+    const [legacy] = await db.select({ files: snapshots.fileInventory, storage: snapshots.storage, upload: snapshots.upload })
+      .from(snapshots).where(scope(row.companyId, row.id));
+    if (!legacy || (!legacy.files.length && !legacy.storage)) throw notFound("Installed skill package has no saved contents");
+    // A reader may have loaded its descriptor just before a migration clears
+    // the legacy payload. Upgrade this request's descriptor to the published
+    // receipt instead of reporting a missing historical version.
+    if (legacy.storage) { row.storage = legacy.storage; row.upload = legacy.upload; }
+    return legacy.files;
+  }
+  async function manifestFor(row: Descriptor): Promise<SkillPackageManifest> {
+    const paths = skillPackagePaths(row.companyId, row.id);
+    const key = `${paths.manifest}:${row.storage?.manifestSha256 ?? row.contentHash}`;
+    const cached = manifests.get(key);
+    if (cached) return cached.manifest;
+    return flight(db, `manifest:${key}`, async () => {
+      await ensureSkillCacheDirectory(paths.parent, true);
+      // Legacy manifests have no independently stored checksum. Derive them once
+      // per process from the authoritative row until the operator migrates it.
+      let bytes: Buffer | null = null;
+      if (row.storage) {
+        try {
+          const file = await fs.open(paths.manifest, constants.O_RDONLY | constants.O_NOFOLLOW);
+          try {
+            const stat = await file.stat();
+            if (stat.isFile() && stat.size <= MAX_SKILL_MANIFEST_BYTES) bytes = await file.readFile();
+          } finally { await file.close(); }
+        } catch (error) {
+          if (!["ENOENT", "ELOOP", "EISDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+        }
+      }
+      if (row.storage) {
+        if (!bytes || packageSha256(bytes) !== row.storage.manifestSha256) {
+          const signal = AbortSignal.timeout(180_000);
+          try {
+            if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed");
+            bytes = await withPackageIo(() => readBoundedObject(storage(), row.companyId, row.storage!.manifestKey,
+              row.storage!.manifestBytes, row.storage!.manifestSha256, signal), signal);
+          } catch (error) {
+            const [legacy] = await db.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
+            const saved = legacy?.files.length ? skillPackageManifestBytes(skillPackageManifest(legacy.files)) : null;
+            if (saved && packageSha256(saved) === row.storage!.manifestSha256) bytes = saved;
+            else if (row.restorable) bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
+            else throw error;
+          }
+        }
+      } else if (row.restorable) {
+        bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
+      } else if (!bytes) {
+        const files = await legacyFiles(row);
+        if (row.storage) return manifestFor(row);
+        bytes = skillPackageManifestBytes(skillPackageManifest(files));
+      }
+      if (bytes.length > MAX_SKILL_MANIFEST_BYTES) throw new Error("Skill manifest exceeds its byte bound");
+      const manifest = validateSkillPackageManifest(JSON.parse(bytes.toString("utf8")));
+      if (row.storage && (manifest.contentHash !== row.contentHash || manifest.files.length !== row.storage.fileCount
+        || manifest.totalBytes !== row.storage.totalBytes)) throw new Error("Skill package receipt does not match its manifest");
+      await ensureSkillCacheDirectory(paths.parent, true);
+      const temp = `${paths.manifest}.${randomUUID()}`;
+      try { await fs.writeFile(temp, bytes, { flag: "wx", mode: 0o600 }); await fs.rename(temp, paths.manifest); }
+      finally { await fs.rm(temp, { force: true }); }
+      rememberManifest(key, manifest, bytes.length);
+      return manifest;
+    });
+  }
+  async function materialize(row: Descriptor, manifest: SkillPackageManifest) {
+    const paths = skillPackagePaths(row.companyId, row.id);
+    return flight(db, `files:${paths.directory}`, async () => {
+      await ensureSkillCacheDirectory(paths.parent, true);
+      if (await verifySkillPackageDirectory(paths.directory, manifest.files)) return { directory: paths.directory, created: false };
+      const signal = AbortSignal.timeout(180_000);
+      return withPackageIo(async () => {
+        const staging = await fs.mkdtemp(path.join(paths.parent, ".package-"));
+        const archivePath = `${staging}.tar.gz`;
+        try {
+          let legacy: CompanySkillVersionFileInventoryEntry[] | null = null;
+          if (!row.storage && !row.restorable) legacy = await legacyFiles(row);
+          try {
+            if (row.storage) {
+              if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed");
+              const object = await storage().getObject(row.companyId, row.storage.archiveKey, { signal });
+              const digest = boundedHashStream(row.storage.archiveBytes);
+              await pipeline(object.stream, digest.stream, createWriteStream(archivePath, { flags: "wx", mode: 0o600 }), { signal });
+              const actual = digest.result();
+              if (actual.bytes !== row.storage.archiveBytes || actual.sha256 !== row.storage.archiveSha256) throw new Error("Skill package archive checksum mismatch");
+              await extractSkillPackageArchive(archivePath, staging, manifest, signal);
+            }
+          } catch (error) {
+            signal.throwIfAborted();
+            // A missing/corrupt archive must not hide a still-authoritative legacy
+            // body. Only then use the saved, authorized immutable Git recipe.
+            const [saved] = await db.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
+            if (saved?.files.length && skillPackageManifest(saved.files).contentHash === row.contentHash) legacy = saved.files;
+            else if (row.restorable) legacy = await acquireFiles(row, signal);
+            else throw error;
+            await fs.rm(staging, { recursive: true, force: true });
+            await fs.mkdir(staging);
+          }
+          if (!row.storage && row.restorable && !legacy) legacy = await acquireFiles(row, signal);
+          if (legacy) {
+            for (const file of legacy) {
+              signal.throwIfAborted();
+              const target = path.join(staging, assertSkillSnapshotPath(file.path));
+              await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+              await fs.writeFile(target, skillFileBytes(file), { flag: "wx", mode: file.executable ? 0o555 : 0o444 });
+            }
+          }
+          if (!await verifySkillPackageDirectory(staging, manifest.files)) throw new Error("Restored skill package does not match its manifest");
+          // All consumers hold the company cache lock, including processes sharing a volume.
+          await fs.rm(paths.directory, { recursive: true, force: true });
+          await fs.rename(staging, paths.directory);
+          relocateSkillPackageVerification(staging, paths.directory, manifest.files);
+          return { directory: paths.directory, created: true };
+        } finally { await fs.rm(staging, { recursive: true, force: true }); await fs.rm(archivePath, { force: true }); }
+      }, signal);
+    });
+  }
+  async function withPackage<T>(companyId: string, id: string, consume: (root: string, manifest: SkillPackageManifest) => Promise<T>) {
+    const row = await descriptor(companyId, id);
+    const manifest = await manifestFor(row);
+    return withSkillVersionCacheLock(db, companyId, async () => {
+      const restored = await materialize(row, manifest);
+      touchSkillPackage(restored.directory);
+      if (restored.created) await trimSkillPackageCache(db, companyId, restored.directory,
+        (id, signal) => verifyDurable(companyId, id, signal).catch(() => false));
+      return consume(restored.directory, manifest);
+    });
+  }
+  async function files(companyId: string, id: string): Promise<CompanySkillVersionFileInventoryEntry[]> {
+    return withPackage(companyId, id, async (root, manifest) => {
+      const result: CompanySkillVersionFileInventoryEntry[] = [];
+      for (const entry of manifest.files) result.push({ path: entry.path, kind: entry.kind, content: (await fs.readFile(path.join(root, entry.path))).toString(entry.encoding),
+        ...(entry.encoding === "base64" ? { encoding: entry.encoding } : {}), ...(entry.executable ? { executable: true } : {}) });
+      return result;
+    });
+  }
+  async function prepare(companyId: string, files: CompanySkillVersionFileInventoryEntry[], migrateLegacy = false, cancellation?: AbortSignal, restore?: SkillPackageRestoreRecipe): Promise<string> {
+    cancellation?.throwIfAborted();
+    const manifest = skillPackageManifest(files);
+    if (restore && !skillPackageManifestBytes(restore.manifest).equals(skillPackageManifestBytes(manifest))) throw new Error("Restore recipe does not describe these package bytes");
+    return flight(db, `prepare:${companyId}:${manifest.contentHash}`, async () => {
+      const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
+      const token = randomUUID();
+      const prefix = `${companyId}/skill-packages/${token}`;
+      const upload = { token, legacy: false, provider: storage().provider, archiveKey: `${prefix}/files.tar.gz`, manifestKey: `${prefix}/manifest.json`, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() };
+      const [created] = await db.transaction(async tx => {
+        await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+        return tx.insert(snapshots).values({ companyId, contentHash: manifest.contentHash, upload, restore,
+          migrationAt: null, maintenanceAt: new Date(Date.now() + 24 * 60 * 60_000) }).onConflictDoNothing().returning(descriptorColumns);
+      });
+      let existing = created ?? (await db.select(descriptorColumns).from(snapshots).where(and(eq(snapshots.companyId, companyId), eq(snapshots.contentHash, manifest.contentHash))))[0]!;
+      if (!created) {
+        if (existing.storage || (!existing.upload && !migrateLegacy && !existing.restorable)) {
+          // Content deduplication must not attach a recipe with different kind or
+          // encoding metadata to an already published manifest.
+          if (restore && !existing.restorable && existing.storage?.manifestSha256 === packageSha256(skillPackageManifestBytes(manifest))) {
+            await db.update(snapshots).set({ restore }).where(and(scope(companyId, existing.id), sql`${snapshots.restore} is null`));
+          }
+          return existing.id;
+        }
+        // A stale claim is replaced atomically; the DB trigger retains its exact
+        // keys in the deletion outbox. Never reuse keys from another attempt.
+        upload.legacy = !existing.upload || Boolean(existing.upload.legacy);
+        const [claimed] = await db.update(snapshots).set({ upload }).where(and(scope(companyId, existing.id),
+          sql`${snapshots.storage} is null`,
+          sql`(${snapshots.upload} is null or (${snapshots.upload}->>'expiresAt')::timestamptz <= now())`)).returning(descriptorColumns);
+        if (!claimed) throw conflict("This skill package is being saved. Retry after its upload settles.");
+        existing = claimed;
+      }
+      return withPackageIo(async () => {
+        const root = skillPackagePaths(companyId, existing.id).parent;
+        await ensureSkillCacheDirectory(root, true);
+        const staging = await fs.mkdtemp(path.join(root, ".upload-"));
+        const archivePath = path.join(staging, "files.tar.gz");
+        const manifestBuffer = skillPackageManifestBytes(manifest);
+        if (manifestBuffer.length > MAX_SKILL_MANIFEST_BYTES) throw new Error("Skill manifest exceeds its byte bound");
+        const backend = storage();
+        try {
+          const archive = await writeSkillPackageArchive(archivePath, files, signal);
+          await backend.putFile({ companyId, namespace: "skill-packages", objectKey: upload.archiveKey, originalFilename: "files.tar.gz",
+            contentType: "application/gzip", body: createReadStream(archivePath), byteSize: archive.bytes, sha256: archive.sha256, signal });
+          await backend.putFile({ companyId, namespace: "skill-packages", objectKey: upload.manifestKey, originalFilename: "manifest.json",
+            contentType: "application/json", body: manifestBuffer, signal });
+          const receipt: SkillPackageStorageReceipt = { format: "tar-gzip-v1", provider: backend.provider,
+            archiveKey: upload.archiveKey, archiveSha256: archive.sha256, archiveBytes: archive.bytes,
+            manifestKey: upload.manifestKey, manifestSha256: packageSha256(manifestBuffer), manifestBytes: manifestBuffer.length,
+            fileCount: manifest.files.length, totalBytes: manifest.totalBytes };
+          // A complete read verifies storage independently before publishing any reference.
+          await readBoundedObject(backend, companyId, receipt.manifestKey, receipt.manifestBytes, receipt.manifestSha256, signal);
+          const verify = await backend.getObject(companyId, receipt.archiveKey, { signal });
+          const digest = boundedHashStream(receipt.archiveBytes);
+          const downloaded = path.join(staging, "verified.tar.gz");
+          await pipeline(verify.stream, digest.stream, createWriteStream(downloaded, { flags: "wx", mode: 0o600 }), { signal });
+          const actual = digest.result();
+          if (actual.bytes !== receipt.archiveBytes || actual.sha256 !== receipt.archiveSha256) throw new Error("Uploaded skill package checksum mismatch");
+          const restored = path.join(staging, "restored");
+          await fs.mkdir(restored);
+          await extractSkillPackageArchive(downloaded, restored, manifest, signal);
+          signal.throwIfAborted();
+          const [saved] = await db.transaction(async tx => {
+            await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+            return tx.update(snapshots).set({ storage: receipt, upload: null, ...(restore ? { restore } : {}) })
+              .where(and(scope(companyId, existing.id), sql`${snapshots.upload}->>'token' = ${token}`)).returning({ id: snapshots.id });
+          });
+          if (!saved) throw conflict("Skill package upload ownership changed");
+          return saved.id;
+        } finally {
+          // Failed/ambiguous uploads retain their durable claim. Maintenance reconciles
+          // exact owned keys; never delete a successful object on an uncertain SQL result.
+          await fs.rm(staging, { recursive: true, force: true });
+        }
+      }, signal);
+    });
+  }
+  async function verifyDurable(companyId: string, id: string, cancellation?: AbortSignal): Promise<boolean> {
+    const action = async () => {
+      const row = await descriptor(companyId, id);
+      if (!row.storage) { await manifestFor(row); if (!row.storage) return true; }
+      if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed; migrate its objects before switching storage");
+      const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
+      return withPackageIo(async () => {
+        const receipt = row.storage!;
+        const bytes = await readBoundedObject(storage(), companyId, receipt.manifestKey, receipt.manifestBytes, receipt.manifestSha256, signal);
+        const manifest = validateSkillPackageManifest(JSON.parse(bytes.toString("utf8")));
+        if (manifest.contentHash !== row.contentHash) return false;
+        const parent = skillPackagePaths(companyId, id).parent;
+        await ensureSkillCacheDirectory(parent, true);
+        const staging = await fs.mkdtemp(path.join(parent, ".verify-"));
+        try {
+          const object = await storage().getObject(companyId, receipt.archiveKey, { signal });
+          const digest = boundedHashStream(receipt.archiveBytes);
+          const archive = path.join(staging, "files.tar.gz");
+          await pipeline(object.stream, digest.stream, createWriteStream(archive, { flags: "wx", mode: 0o600 }), { signal });
+          const actual = digest.result();
+          if (actual.bytes !== receipt.archiveBytes || actual.sha256 !== receipt.archiveSha256) return false;
+          const restored = path.join(staging, "files");
+          await fs.mkdir(restored);
+          await extractSkillPackageArchive(archive, restored, manifest, signal);
+          return true;
+        } finally { await fs.rm(staging, { recursive: true, force: true }); }
+      }, signal);
+    };
+    const context = readScope.getStore();
+    const key = `${companyId}:${id}`;
+    if (context?.db !== db) return action();
+    if (!context.durable.has(key)) context.durable.set(key, action());
+    return context.durable.get(key)!;
+  }
+  async function versionFiles(version: StoredSkillVersion): Promise<CompanySkillVersionFileInventoryEntry[]> {
+    if (!version.packageSnapshotId) {
+      const [row] = await db.select({ ...skillVersionMetadataColumns, files: companySkillVersions.fileInventory }).from(companySkillVersions).where(and(
+        eq(companySkillVersions.companyId, version.companyId), eq(companySkillVersions.id, version.id)));
+      if (row?.packageSnapshotId) return versionFiles(row);
+      return row?.files ?? [];
+    }
+    if (!version.packageFileMap) return files(version.companyId, version.packageSnapshotId);
+    return withPackage(version.companyId, version.packageSnapshotId, async (root, manifest) => {
+      const byPath = new Map(manifest.files.map(file => [file.path, file]));
+      const result: CompanySkillVersionFileInventoryEntry[] = [];
+      for (const mapping of version.packageFileMap!) {
+        assertSkillSnapshotPath(mapping.path);
+        assertSkillSnapshotPath(mapping.sourcePath);
+        const file = byPath.get(mapping.sourcePath);
+        if (!file) throw new Error("Skill version references a missing package file");
+        result.push({ path: mapping.path, kind: mapping.kind,
+          content: (await fs.readFile(path.join(root, file.path))).toString(file.encoding),
+          ...(file.encoding === "base64" ? { encoding: file.encoding } : {}), ...(file.executable ? { executable: true } : {}) });
+      }
+      return result;
+    });
+  }
+  return { descriptor, prepare, files, version, prefetch, versionFiles, withPackage, verifyDurable,
+    manifest: async (companyId: string, id: string) => manifestFor(await descriptor(companyId, id)) };
+}

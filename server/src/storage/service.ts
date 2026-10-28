@@ -107,6 +107,7 @@ export function createStorageService(provider: StorageProvider): StorageService 
           body: input.body,
           contentType,
           contentLength: byteSize,
+          signal: input.signal,
         });
       } catch (error) {
         await provider.deleteObject({ objectKey }).catch(() => {});
@@ -127,7 +128,7 @@ export function createStorageService(provider: StorageProvider): StorageService 
 
     async getObject(companyId: string, objectKey: string, options) {
       ensureCompanyPrefix(companyId, objectKey);
-      return provider.getObject({ objectKey, range: options?.range });
+      return provider.getObject({ objectKey, range: options?.range, signal: options?.signal });
     },
 
     async headObject(companyId: string, objectKey: string) {

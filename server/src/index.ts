@@ -21,6 +21,8 @@ import { registerEnvironmentCleanupWork } from "./services/environment-cleanup-w
 import { loginCleanupSchedule } from "./services/login-cleanup-state.js";
 import { registerLoginCleanupWork } from "./services/login-cleanup-work.js";
 import { timeStartupRecovery } from "./startup-recovery-timing.js";
+import { runtimeAssetRetention } from "./services/native-runtime/runtime-asset-retention.js";
+import { skillPackageWork } from "./services/skill-package-work.js";
 import { skillSourceSyncService } from "./services/skill-source-sync.js";
 import {
   SKILL_VERSION_RETENTION_INTERVAL_MS,
@@ -1396,6 +1398,9 @@ async function startServerWithDatabaseTeardown(
   const accountingWorker = registerCostAccountingWork(db, deliveryWork, accountingHeartbeat.reconcileCostAccounting);
   server.on("close", accountingWorker.stop);
   skillSourceSync.start(deliveryWork);
+  skillPackageWork(db).start(deliveryWork);
+  const runtimeAssetCleanup = runtimeAssetRetention(db).start(deliveryWork);
+  server.on("close", () => { void runtimeAssetCleanup.stop(); });
   const caseHandoffDeliveries = caseHandoffDeliveryService(db as any, { heartbeat: environmentLeaseCleanupHeartbeat });
   deliveryWork.register(DELIVERY_QUEUES.caseHandoffs, {
     retryMs: 5_000,

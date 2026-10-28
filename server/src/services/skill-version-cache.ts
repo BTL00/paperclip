@@ -1,9 +1,10 @@
+import { skillPackageStore, skillVersionMetadataColumns } from "./skill-package-store.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { constants, promises as fs } from "node:fs";
 import path from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { companySkillVersions, companySkillRepositorySnapshots, heartbeatRuns,
+import { companySkillVersions, heartbeatRuns,
   nativeRunFinalizations, environmentLeases, withDedicatedDbConnection, type Db } from "@paperclipai/db";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
 import { assertSkillSnapshotPath } from "./skill-snapshot.js";
@@ -16,11 +17,6 @@ export const SKILL_VERSION_CACHE_IDLE_MS = 60 * 60 * 1000;
 const locks = new AsyncLocalStorage<Array<{ db: Db; companyId: string }>>();
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export class SkillCacheBusy extends Error {}
-// Repository snapshots are immutable and referenced with restrictive foreign
-// keys. Cache only validated entrypoint names, never large file contents, so an
-// hourly sweep does not transfer the same repository for each skill/version.
-const verifiedSnapshots = new WeakMap<Db, Map<string, ReadonlySet<string>>>();
-
 /** Hold through publication AND durable run pinning, not just file creation. */
 export async function withSkillVersionCacheLock<T>(db: Db, companyId: string, action: () => Promise<T>, tryOnly = false): Promise<T> {
   const held = locks.getStore() ?? [];
@@ -95,18 +91,8 @@ export async function lastUsedAt(filename: string): Promise<number | null> {
   }
 }
 
-// A terminal run can still own provider execution or recovery. Only fully settled
-// runs release their pins; resume preparation reacquires the same cache lock.
-export async function protectedVersions(db: Db, companyId: string): Promise<Set<string> | null> {
-  const rows = await db.select({
-    id: heartbeatRuns.id, agentId: heartbeatRuns.agentId, nativeIssueId: heartbeatRuns.nativeIssueId,
-    pins: sql<unknown>`${heartbeatRuns.contextSnapshot}->'skillVersions'`,
-    // Avoid loading large execution inputs for runs with the modern pin map.
-    legacyInput: sql<unknown>`case when ${heartbeatRuns.runtimeMode} = 'native'
-      and not coalesce(${heartbeatRuns.contextSnapshot} ? 'skillVersions', false)
-      then ${heartbeatRuns.runnerProfileJson}->'nativeExecutionInput' end`,
-  })
-    .from(heartbeatRuns).where(and(eq(heartbeatRuns.companyId, companyId), sql`(
+export function skillRunNeedsFilesSql() {
+  return sql`(
       ${heartbeatRuns.status} not in ('succeeded', 'failed', 'timed_out', 'cancelled', 'interrupted')
       or ${heartbeatRuns.finishedAt} is null
       or ${heartbeatRuns.controllerLeaseExpiresAt} > now()
@@ -119,7 +105,21 @@ export async function protectedVersions(db: Db, companyId: string): Promise<Set<
           or l.metadata ? 'nativeWorkspaceExportResume'
           or (l.released_at is null and not coalesce(l.status = 'retained'
             and l.lease_policy = 'reuse_by_environment' and l.cleanup_status = 'success', false))))
-    )`));
+    )`;
+}
+
+// A terminal run can still own provider execution or recovery. Only fully settled
+// runs release their pins; resume preparation reacquires the same cache lock.
+export async function protectedVersions(db: Db, companyId: string): Promise<Set<string> | null> {
+  const rows = await db.select({
+    id: heartbeatRuns.id, agentId: heartbeatRuns.agentId, nativeIssueId: heartbeatRuns.nativeIssueId,
+    pins: sql<unknown>`${heartbeatRuns.contextSnapshot}->'skillVersions'`,
+    // Avoid loading large execution inputs for runs with the modern pin map.
+    legacyInput: sql<unknown>`case when ${heartbeatRuns.runtimeMode} = 'native'
+      and not coalesce(${heartbeatRuns.contextSnapshot} ? 'skillVersions', false)
+      then ${heartbeatRuns.runnerProfileJson}->'nativeExecutionInput' end`,
+  })
+    .from(heartbeatRuns).where(and(eq(heartbeatRuns.companyId, companyId), skillRunNeedsFilesSql()));
   const versions = new Set<string>();
   for (const { pins, legacyInput, id, agentId, nativeIssueId } of rows) {
     if (legacyInput != null) {
@@ -163,27 +163,27 @@ function validateInventory(inventory: CompanySkillVersionFileInventoryEntry[]) {
 }
 
 export async function hasRestorableSnapshot(db: Db, companyId: string, versionId: string) {
-  const [version] = await db.select().from(companySkillVersions).where(and(
+  const [version] = await db.select(skillVersionMetadataColumns).from(companySkillVersions).where(and(
     eq(companySkillVersions.companyId, companyId), eq(companySkillVersions.id, versionId)));
   if (!version) return false;
-  if (version.repositorySnapshotId) {
-    if (!version.repositorySkillPath) return false;
-    let cache = verifiedSnapshots.get(db);
-    if (!cache) { cache = new Map(); verifiedSnapshots.set(db, cache); }
-    const key = `${companyId}:${version.repositorySnapshotId}`;
-    const verified = cache.get(key);
-    if (verified) return verified.has(version.repositorySkillPath);
-    const [snapshot] = await db.select({ inventory: companySkillRepositorySnapshots.fileInventory })
-      .from(companySkillRepositorySnapshots).where(and(eq(companySkillRepositorySnapshots.companyId, companyId),
-        eq(companySkillRepositorySnapshots.id, version.repositorySnapshotId)));
-    if (!snapshot || !validateInventory(snapshot.inventory)) return false;
-    const entrypoints = new Set(snapshot.inventory.filter(file => file.encoding !== "base64"
-      && repositorySkillFrontmatter(file.content)).map(file => file.path));
-    if (cache.size >= 128) cache.delete(cache.keys().next().value!);
-    cache.set(key, entrypoints);
-    return entrypoints.has(version.repositorySkillPath);
+  const packageId = version.repositorySnapshotId ?? version.packageSnapshotId;
+  const store = skillPackageStore(db);
+  if (packageId) {
+    if (version.repositorySnapshotId && !version.repositorySkillPath) return false;
+    const manifest = await store.manifest(companyId, packageId);
+    const entrypoint = version.repositorySkillPath ?? version.packageFileMap?.find(file => file.path === "SKILL.md")?.sourcePath ?? "SKILL.md";
+    const entry = manifest.files.find(file => file.path === entrypoint);
+    if (!entry) return false;
+    // Git packages intentionally permit byte eviction. Their immutable recipe,
+    // not a network probe during cleanup, is the restoration contract.
+    if ((await store.descriptor(companyId, packageId)).restorable) return true;
+    if (version.repositorySnapshotId && (entry.encoding === "base64" || !await store.withPackage(companyId, packageId,
+      async root => repositorySkillFrontmatter(await fs.readFile(path.join(root, entrypoint), "utf8"))))) return false;
+    // Never evict the only known-good bytes based on a permanent process cache.
+    return store.verifyDurable(companyId, packageId);
   }
-  return validateInventory(version.fileInventory) && version.fileInventory.some(file => file.path === "SKILL.md");
+  const files = await store.versionFiles(version);
+  return validateInventory(files) && files.some(file => file.path === "SKILL.md");
 }
 
 // Counts allocated bytes without following links, matching what df can reclaim.

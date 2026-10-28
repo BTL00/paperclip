@@ -74,6 +74,8 @@ export const DELIVERY_QUEUES = {
   dotEvents: "dot-events",
   grokDispatch: "grok-dispatch",
   skillSourceSync: "skill-source-sync",
+  skillPackages: "skill-packages",
+  runtimeAssetRetention: "runtime-asset-retention",
   fastResponse: "fast-responses",
   feedback: "feedback-exports",
   chatCompletion: "chat-completions",
