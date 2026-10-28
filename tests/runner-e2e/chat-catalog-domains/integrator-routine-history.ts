@@ -8,11 +8,11 @@ import { fixtureWorker } from "./internal-definition.js";
 import { unavailableNativeModelFailure, admittedModelFailure } from "./runtime-native-failure.js";
 import type { RuntimeAgent } from "./runtime-support.js";
 import { groundedStatement, integratorDefinition, inspectResult, observeInternal } from "./integrator-support.js";
-interface HistoryObservation extends InternalObservation { routine: RoutineDetail; executions: RoutineRunSummary[] }
+interface HistoryObservation extends InternalObservation { expectedProvider: string; routine: RoutineDetail; executions: RoutineRunSummary[] }
 const root = (ctx: ChatCatalogContext) => `/api/companies/${ctx.input.fixtures.company.id}`;
 async function observeHistory(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<HistoryObservation> {
   const base = await observeInternal(ctx, state); const routine = state.routine as RoutineDetail;
-  return { ...base, routine: await ctx.input.api.get<RoutineDetail>(`/api/routines/${routine.id}`), executions: await ctx.input.api.get<RoutineRunSummary[]>(`/api/routines/${routine.id}/runs`) };
+  return { ...base, expectedProvider: ctx.input.execution.profile.provider, routine: await ctx.input.api.get<RoutineDetail>(`/api/routines/${routine.id}`), executions: await ctx.input.api.get<RoutineRunSummary[]>(`/api/routines/${routine.id}/runs`) };
 }
 function historyObservation(value: unknown): HistoryObservation | undefined {
   const o = value as HistoryObservation;
@@ -27,9 +27,10 @@ export function gradeIntegratorRoutineHistory(value: unknown) {
   const failedInvocation = o.executions.find(run => run.id === o.state.failedInvocationId); const completedInvocation = o.executions.find(run => run.id === o.state.completedInvocationId);
   const failed = o.runs.find(run => run.id === (o.state.failedRun as { id?: string } | undefined)?.id);
   const failureEvidence = o.state.failedRun as Parameters<typeof admittedModelFailure>[0]["run"];
-  const provider = (failed as typeof failureEvidence)?.runnerProfileJson?.nativeExecutionInput?.provider?.kind;
+  const provider = o.expectedProvider;
+  const observedProvider = (failed as typeof failureEvidence)?.runnerProfileJson?.nativeExecutionInput?.provider?.kind;
   c.add("genuine-task-bound-native-failure", !!failedTask && failed?.status === "failed" && failed.runtimeMode === "native" && !!failedInvocation && failedInvocation.linkedIssueId === failedTask.id
-    && (provider === "codex" || provider === "opencode") && admittedModelFailure({ provider, run: failureEvidence, events: o.state.failedEvents as Parameters<typeof admittedModelFailure>[0]["events"] ?? [], companyId: o.companyId, agentId: (o.state.worker as Entity | undefined)?.id ?? "", issueId: failedTask.id, model: String(o.state.failedModel) }), "The failure is a genuinely admitted task-bound unavailable-model native execution, never a rejected HTTP request or a patched/cancelled status.");
+    && (provider === "codex" || provider === "opencode") && observedProvider === provider && admittedModelFailure({ provider, run: failureEvidence, events: o.state.failedEvents as Parameters<typeof admittedModelFailure>[0]["events"] ?? [], companyId: o.companyId, agentId: (o.state.worker as Entity | undefined)?.id ?? "", issueId: failedTask.id, model: String(o.state.failedModel) }), "The failure is a genuinely admitted task-bound unavailable-model native execution, never a rejected HTTP request or a patched/cancelled status.");
   c.add("separate-real-successful-invocation", !!completedTask && completedTask.status === "done" && completedInvocation?.status === "completed" && completedInvocation.linkedIssueId === completedTask.id
     && completedTask.id !== failedTask?.id && o.runs.some(run => run.id === o.state.completedNativeRunId && run.status === "succeeded" && run.runtimeMode === "native" && run.contextSnapshot?.issueId === completedTask.id), "A second independently invoked routine actually completed its normal task under a successful native run.");
   const start = Number(o.state.weekStart), end = Number(o.state.weekEnd);

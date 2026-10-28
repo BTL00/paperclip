@@ -4,7 +4,7 @@ function valid() {
   const first = { id: "failed-task", identifier: "ACORN-1", title: "Morning Launch summary", status: "in_progress" };
   const second = { id: "completed-task", identifier: "ACORN-2", title: "Morning Launch summary", status: "done" };
   const failure = { id: "failed-native", companyId: "company", agentId: "morgan", runtimeMode: "native", status: "failed", startedAt: "2026-10-26T12:00:00Z", errorCode: "provider_error", error: "Unavailable model", contextSnapshot: { issueId: first.id }, runnerProfileJson: { nativeExecutionInput: { provider: { kind: "codex", model: "unavailable-test" } } } };
-  return { scenarioId: "routines.read-history", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { worker: { id: "morgan" }, failedIssueId: first.id, completedIssueId: second.id,
+  return { expectedProvider: "codex", scenarioId: "routines.read-history", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { worker: { id: "morgan" }, failedIssueId: first.id, completedIssueId: second.id,
     failedInvocationId: "invocation-one", completedInvocationId: "invocation-two", failedRun: structuredClone(failure), failedModel: "unavailable-test", failedEvents: [{ eventType: "run.terminal" }], completedNativeRunId: "completed-native", weekStart: Date.parse("2026-10-26T00:00:00Z"), weekEnd: Date.parse("2026-11-02T00:00:00Z") },
     tasks: [first, second], projects: [], goals: [], comments: [], documents: [], revisions: [], humanQueries: [], activity: [], links: ["/ACORN/issues/ACORN-1", "/ACORN/issues/ACORN-2"],
     runs: [failure, { id: "completed-native", companyId: "company", agentId: "morgan", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: second.id } }],
@@ -20,10 +20,16 @@ describe("routine invocation and native failure distinction", () => {
     expect(gradeIntegratorRoutineHistory(missing).passed).toBe(false);
   });
   it("accepts actual OpenCode failure history instead of defaulting its provider to Codex", () => {
-    const o = valid();
+    const o = valid(); o.expectedProvider = "opencode";
     o.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "opencode";
     o.runs[0] = structuredClone(o.state.failedRun);
     expect(gradeIntegratorRoutineHistory(o).passed).toBe(true);
+    const wrongBoth = structuredClone(o);
+    wrongBoth.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "codex";
+    wrongBoth.runs[0] = structuredClone(wrongBoth.state.failedRun);
+    expect(gradeIntegratorRoutineHistory(wrongBoth).passed).toBe(false);
+    const missingExpected = structuredClone(o); missingExpected.expectedProvider = "";
+    expect(gradeIntegratorRoutineHistory(missingExpected).passed).toBe(false);
     const wrongProvider = structuredClone(o);
     wrongProvider.state.failedRun.runnerProfileJson.nativeExecutionInput.provider.kind = "codex";
     expect(gradeIntegratorRoutineHistory(wrongProvider).passed).toBe(false);
