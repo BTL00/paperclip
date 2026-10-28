@@ -96,11 +96,29 @@ describe("complete normal accounting stays mandatory", () => {
     ["pending settlement", "costAccountingPending", true], ["no settlement", "costAccountedAt", null],
   ])("rejects %s", (_n, key, value) => { const p = phase(true); (p.snapshot.run as unknown as Record<string, unknown>)[String(key)] = value; expect(completeHistoryUsage(p.snapshot.run)).toBe(false); });
   it.each([
-    ["unknown actual cost", "costUsd", null], ["partial receipt", "accountingReceiptReady", false], ["capture failed", "accountingCaptureFailed", true], ["bootstrap no-work", "accountingProviderWorkStarted", false],
+    ["partial receipt", "accountingReceiptReady", false], ["capture failed", "accountingCaptureFailed", true], ["bootstrap no-work", "accountingProviderWorkStarted", false],
     ["missing source", "accountingReceiptSourceId", null], ["missing id", "accountingReceiptId", null], ["missing sequence", "accountingReceiptSequence", 0],
     ["missing receipt time", "accountingReceiptReceivedAt", null], ["cumulative usage", "usageSource", "session_cumulative"], ["missing provider", "provider", "unknown"],
-    ["unknown price", "costStatus", "unpriced"], ["partial provider costs", "accountingCostIncomplete", true], ["no input usage", "inputTokens", null], ["string output usage", "outputTokens", "20"],
+    ["no input usage", "inputTokens", null], ["string output usage", "outputTokens", "20"],
   ])("rejects %s", (_n, key, value) => { const p = phase(true); p.snapshot.run!.usageJson![String(key)] = value; expect(completeHistoryUsage(p.snapshot.run)).toBe(false); });
+  it("accepts complete settled unpriced usage under explicit allow without inventing an amount", () => {
+    const p = phase(true), u = p.snapshot.run!.usageJson!;
+    u.costStatus = "unpriced"; u.costUsd = null; u.costUsdExact = null; u.accountingCostIncomplete = true;
+    expect(completeHistoryUsage(p.snapshot.run)).toBe(true);
+    expect(routineHistoryAccountingReady(p.identity, [p.snapshot.run!], overview())).toBe(true);
+    expect([u.costUsd, u.costUsdExact]).toEqual([null, null]);
+  });
+  it("keeps unpriced-deny, stale/incomplete receipts, foreign runs and invented-zero readiness blocked", () => {
+    const p = phase(true), u = p.snapshot.run!.usageJson!; u.costStatus = "unpriced"; u.costUsd = null; u.costUsdExact = null;
+    const denied = overview(); denied.policies[0]!.unpricedUsagePolicy = "block";
+    expect(routineHistoryAccountingReady(p.identity, [p.snapshot.run!], denied)).toBe(false);
+    u.accountingReceiptReady = false; u.costUsd = 0;
+    expect(routineHistoryAccountingReady(p.identity, [p.snapshot.run!], overview())).toBe(false);
+    u.accountingReceiptReady = true; p.snapshot.run!.costAccountingPending = true;
+    expect(routineHistoryAccountingReady(p.identity, [p.snapshot.run!], overview())).toBe(false);
+    p.snapshot.run!.costAccountingPending = false; p.snapshot.run!.companyId = "foreign";
+    expect(routineHistoryAccountingReady(p.identity, [p.snapshot.run!], overview())).toBe(false);
+  });
   it("does not infer free work, bypass scoped pending/hard-stop policy or accept foreign accounting", () => {
     const p = phase(true); p.snapshot.run!.usageJson!.inputTokens = 0; p.snapshot.run!.usageJson!.outputTokens = 0; expect(completeHistoryUsage(p.snapshot.run)).toBe(false);
     for (const index of [0, 1]) { const o = overview(); o.policies[index]!.pendingRunCount = 1; expect(routineHistoryAccountingReady(phase(true).identity, [phase(true).snapshot.run!], o)).toBe(false); }

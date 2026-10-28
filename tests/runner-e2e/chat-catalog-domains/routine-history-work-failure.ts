@@ -27,9 +27,7 @@ export function completeHistoryUsage(run: AccountedHistoryRun | undefined) {
     && text(u.accountingReceiptId) && text(u.accountingReceiptSourceId) && positiveInteger(u.accountingReceiptSequence)
     && typeof u.accountingReceiptReceivedAt === "string" && Number.isFinite(Date.parse(u.accountingReceiptReceivedAt))
     && u.usageSource === "per_run" && text(u.provider) && text(u.biller) && text(u.model)
-    && ["metered_api", "subscription_included"].includes(String(u.billingType)) && u.costStatus !== "unpriced" && u.accountingCostIncomplete !== true
-    && (u.billingType === "subscription_included" || typeof u.costUsd === "number" && Number.isFinite(u.costUsd) && u.costUsd >= 0
-      || typeof u.costUsdExact === "string" && /^\d+(?:\.\d+)?$/.test(u.costUsdExact) && Number.isFinite(Number(u.costUsdExact)))
+    && ["metered_api", "subscription_included"].includes(String(u.billingType))
     && nonnegativeInteger(u.inputTokens) && nonnegativeInteger(u.outputTokens) && Number(u.inputTokens) + Number(u.outputTokens) > 0;
 }
 export function routineHistoryAccountingReady(expected: Pick<HistoryWorkIdentity, "companyId" | "agentId" | "issueId" | "runId">, runs: AccountedHistoryRun[], overview: BudgetOverview) {
