@@ -28,7 +28,7 @@ export async function observerPerson(ctx: ChatCatalogContext) {
 export async function personRead(person: Person, path: string) {
   const response = await person.request(path);
   const body = response.ok ? await response.text() : "";
-  await response.body?.cancel();
+  if (!response.ok) await response.body?.cancel();
   return { status: response.status, body };
 }
 const privacyProbeKeys = new WeakMap<ChatCatalogContext, Map<string, Promise<{ id: string; token: string }>>>();
