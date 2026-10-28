@@ -13,6 +13,29 @@ function valid() {
 }
 describe("migrated historical website artifact calibration", () => {
   it("accepts preserved original last-week delivery and actual later import", () => expect(gradeArtifactSearch(valid()).passed).toBe(true));
+  it.each([
+    "This is the final approved website delivered on October 21, 2026; today was only its import.",
+    "The final website was delivered 21 October 2026.",
+    "The approved final was delivered Oct 21.",
+    "The final was delivered 2026-10-21 and imported October 26, 2026.",
+  ])("accepts correct source dates without a literal last-week phrase: %s", reply => {
+    const o = valid(); o.reply = reply; expect(gradeArtifactSearch(o).passed).toBe(true);
+  });
+  it.each([
+    "The final approved website was delivered October 22, 2026.",
+    "The final approved website was delivered October 21, 2025.",
+    "The final approved website was delivered last week, on October 26, 2026.",
+    "The final approved website was not delivered last week.",
+    "The final approved website was not delivered on October 21, 2026.",
+  ])("rejects wrong or contradicted delivery dates: %s", reply => {
+    const o = valid(); o.reply = reply; expect(gradeArtifactSearch(o).passed).toBe(false);
+  });
+  it("does not let natural-date wording rescue wrong final bytes or source", () => {
+    const bytes = valid(); bytes.reply = "Final website delivered October 21, 2026."; bytes.downloadedHash = "b".repeat(64);
+    expect(gradeArtifactSearch(bytes).passed).toBe(false);
+    const source = valid(); source.reply = bytes.reply; source.finalAttachment.issueId = "draft-task";
+    expect(gradeArtifactSearch(source).passed).toBe(false);
+  });
   it("builds real inline migration files with SHA-bound bytes and comment linkage", () => { const bundle = buildHistoricalWebsiteImport("2026-10-21T12:00:00.000Z", "ORCHID"); const yaml = parse(bundle.files[".paperclip.yaml"] as string); expect(yaml.schemaVersion).toBe(7); for (const row of bundle.receipts) { expect(bundle.files[`blobs/${row.sha256}`]).toMatchObject({ encoding: "base64" }); expect(yaml.tasks[row.slug].attachments[0]).toMatchObject({ sha256: row.sha256, commentIndex: 0 }); } expect(yaml.tasks["final-website"].completedAt).toBe("2026-10-21T12:00:00.000Z"); });
   it("passes the actual production portability parser with all original dates/comments/attachments and no database access", async () => {
     const bundle = buildHistoricalWebsiteImport("2026-10-21T12:00:00.000Z", "ORCHID");
