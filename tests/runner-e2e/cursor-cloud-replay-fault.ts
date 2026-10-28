@@ -7,8 +7,10 @@ const SCHEMA = "paperclip.cursor-cloud.replay-fault.v1";
 const MAX_FRAME_BYTES = 1_048_576;
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 type Cut = { agentIdSha256: string; runIdSha256: string; eventIdSha256: string; frameSha256: string; frameBytes: number; event: string };
+type Identity = Pick<Cut, "agentIdSha256" | "runIdSha256">;
 export interface CursorCloudReplayFaultProof {
   schema: typeof SCHEMA;
+  identity: Identity | null;
   streamRequests: number;
   cutCount: number;
   cut: Cut | null;
@@ -19,14 +21,21 @@ export interface CursorCloudReplayFaultManifest {
   treatmentId: string;
   originalProxySha256: string;
   instrumentedProxySha256: string;
+  reservationFile: string;
+}
+export interface CursorCloudReplayFaultReservation extends Identity {
+  schema: "paperclip.cursor-cloud.replay-reservation.v1";
+  treatmentId: string;
+  processId: number;
 }
 
 export function createCursorCloudReplayFaultFetch(input: {
   fetch: typeof fetch;
   digest(value: string | Uint8Array): string;
   record(proof: CursorCloudReplayFaultProof): void;
+  reserve?(identity: Identity): boolean;
 }): typeof fetch {
-  const proof: CursorCloudReplayFaultProof = { schema: "paperclip.cursor-cloud.replay-fault.v1", streamRequests: 0, cutCount: 0, cut: null, reconnect: null };
+  const proof: CursorCloudReplayFaultProof = { schema: "paperclip.cursor-cloud.replay-fault.v1", identity: null, streamRequests: 0, cutCount: 0, cut: null, reconnect: null };
   let armed = false;
   const save = () => input.record(structuredClone(proof));
   const nativeRoute = /^\/v1\/agents\/(bc-[a-f0-9-]{36})\/runs\/(run-[a-f0-9-]{36})\/stream$/iu;
@@ -68,6 +77,9 @@ export function createCursorCloudReplayFaultFetch(input: {
       if (method.toUpperCase() === "GET" && url.origin === "https://api.cursor.com" && !url.search && !url.hash) route = nativeRoute.exec(url.pathname);
     } catch {  }
     if (!route) return input.fetch(resource, init);
+    const identity = { agentIdSha256: input.digest(route[1]!), runIdSha256: input.digest(route[2]!) };
+    if (proof.identity && (proof.identity.agentIdSha256 !== identity.agentIdSha256 || proof.identity.runIdSha256 !== identity.runIdSha256)) throw new Error("Cursor replay proof cannot combine different native runs in one process");
+    proof.identity = identity;
     if (proof.streamRequests >= 32) throw new Error("Cursor replay fault exceeded its bounded stream request count");
     proof.streamRequests += 1;
     const reconnect = proof.cutCount === 1 && proof.reconnect === null;
@@ -99,7 +111,7 @@ export function createCursorCloudReplayFaultFetch(input: {
             if (end > limit) { controller.error(new Error("Cursor replay fault frame exceeded its bound")); void reader.cancel().catch(() => {}); return; }
             const frame = pending.slice(0, end); pending = pending.slice(end);
             const found = identify(frame);
-            if (found) {
+            if (found && (input.reserve?.(identity) ?? true)) {
               proof.cut = { agentIdSha256: input.digest(route![1]!), runIdSha256: input.digest(route![2]!), eventIdSha256: input.digest(found.id), frameSha256: input.digest(frame), frameBytes: frame.length, event: found.event };
               cutNextRead = true;
             }
@@ -127,9 +139,22 @@ function prelude(evidenceDirectory: string, treatmentId: string): string {
   const stat = fs.lstatSync(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Cursor replay evidence directory must be owned and private");
   const target = path.join(directory, ${JSON.stringify(`replay-${treatmentId}-`)} + process.pid + ".json");
+  const reservation = path.join(directory, ${JSON.stringify(`reservation-${treatmentId}.json`)});
+  let reserved;
   globalThis.fetch = (${createCursorCloudReplayFaultFetch.toString()})({
     fetch: globalThis.fetch.bind(globalThis),
     digest: value => crypto.createHash("sha256").update(value).digest("hex"),
+    reserve: identity => {
+      if (reserved !== undefined) return reserved;
+      let fd;
+      try { fd = fs.openSync(reservation, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600); }
+      catch (error) { if (error.code === "EEXIST") return reserved = false; throw error; }
+      try {
+        fs.writeFileSync(fd, JSON.stringify({ schema: "paperclip.cursor-cloud.replay-reservation.v1", treatmentId: ${JSON.stringify(treatmentId)}, processId: process.pid, ...identity }));
+        fs.fsyncSync(fd);
+      } finally { fs.closeSync(fd); }
+      return reserved = true;
+    },
     record: proof => {
       const temporary = target + "." + crypto.randomUUID() + ".tmp";
       fs.writeFileSync(temporary, JSON.stringify(proof), { mode: 0o600, flag: "wx" });
@@ -156,7 +181,7 @@ export async function installCursorCloudReplayFault(input: { bundlePath: string;
   const newline = original.indexOf(10), shebangEnd = original.subarray(0, 2).toString() === "#!" ? (newline < 0 ? original.length : newline + 1) : 0;
   const head = original.subarray(0, shebangEnd), separator = shebangEnd && newline < 0 ? Buffer.from("\n") : Buffer.alloc(0);
   const instrumented = Buffer.concat([head, separator, Buffer.from(prelude(input.evidenceDirectory, treatmentId)), original.subarray(shebangEnd)]);
-  const manifest: CursorCloudReplayFaultManifest = { schema: "paperclip.cursor-cloud.replay-instrumentation.v1", treatmentId, originalProxySha256: sha256(original), instrumentedProxySha256: sha256(instrumented) };
+  const manifest: CursorCloudReplayFaultManifest = { schema: "paperclip.cursor-cloud.replay-instrumentation.v1", treatmentId, originalProxySha256: sha256(original), instrumentedProxySha256: sha256(instrumented), reservationFile: `reservation-${treatmentId}.json` };
   const replace = async (bytes: Buffer) => {
     const temporary = `${input.bundlePath}.${treatmentId}.tmp`;
     await writeFile(temporary, bytes, { flag: "wx", mode });
@@ -188,22 +213,44 @@ export async function readCursorCloudReplayFaultProofs(evidenceDirectory: string
   }));
 }
 
+export async function readCursorCloudReplayFaultReservation(evidenceDirectory: string, manifest: CursorCloudReplayFaultManifest): Promise<CursorCloudReplayFaultReservation> {
+  if (manifest.reservationFile !== `reservation-${manifest.treatmentId}.json`) throw new Error("Cursor replay reservation does not match its treatment");
+  const handle = await open(join(evidenceDirectory, manifest.reservationFile), constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size > 4_096 || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Cursor replay reservation file is unsafe");
+    const value = JSON.parse(await handle.readFile("utf8")) as CursorCloudReplayFaultReservation;
+    if (value.schema !== "paperclip.cursor-cloud.replay-reservation.v1" || value.treatmentId !== manifest.treatmentId || !Number.isInteger(value.processId) || value.processId < 1
+      || !/^[a-f0-9]{64}$/u.test(value.agentIdSha256) || !/^[a-f0-9]{64}$/u.test(value.runIdSha256)
+      || Object.keys(value).length !== 5) throw new Error("Cursor replay reservation evidence is invalid");
+    return value;
+  } finally { await handle.close(); }
+}
+
 export function gradeCursorCloudReplayFault(proofs: readonly unknown[], expected: readonly { agentIdSha256: string; runIdSha256: string }[]) {
   const digest = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
   const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const exact = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key));
   const valid = proofs.length > 0 && proofs.length <= 16 && expected.length > 0 && expected.length <= 16
     && expected.every(identity => digest(identity.agentIdSha256) && digest(identity.runIdSha256)) && proofs.every(value => {
-    const proof = record(value), cut = record(proof.cut), resume = record(proof.reconnect);
-    return exact(proof, ["schema", "streamRequests", "cutCount", "cut", "reconnect"]) && proof.schema === SCHEMA && proof.cutCount === 1
-      && Number.isInteger(proof.streamRequests) && Number(proof.streamRequests) >= 2 && Number(proof.streamRequests) <= 32
+    const proof = record(value), identity = record(proof.identity), cut = record(proof.cut), resume = record(proof.reconnect);
+    if (!exact(proof, ["schema", "identity", "streamRequests", "cutCount", "cut", "reconnect"]) || proof.schema !== SCHEMA
+      || !exact(identity, ["agentIdSha256", "runIdSha256"]) || ![identity.agentIdSha256, identity.runIdSha256].every(digest)
+      || !expected.some(owned => owned.agentIdSha256 === identity.agentIdSha256 && owned.runIdSha256 === identity.runIdSha256)
+      || !Number.isInteger(proof.streamRequests) || Number(proof.streamRequests) < 1 || Number(proof.streamRequests) > 32) return false;
+    if (proof.cutCount === 0) return proof.cut === null && proof.reconnect === null;
+    return proof.cutCount === 1 && Number(proof.streamRequests) >= 2
       && exact(cut, ["agentIdSha256", "runIdSha256", "eventIdSha256", "frameSha256", "frameBytes", "event"])
       && [cut.agentIdSha256, cut.runIdSha256, cut.eventIdSha256, cut.frameSha256].every(digest)
+      && cut.agentIdSha256 === identity.agentIdSha256 && cut.runIdSha256 === identity.runIdSha256
       && Number.isInteger(cut.frameBytes) && Number(cut.frameBytes) > 0 && Number(cut.frameBytes) <= MAX_FRAME_BYTES && ["assistant", "thinking", "tool_call"].includes(String(cut.event))
       && exact(resume, ["agentIdSha256", "runIdSha256", "lastEventIdSha256", "cursorMatches", "httpStatus", "sseReady"])
       && resume.agentIdSha256 === cut.agentIdSha256 && resume.runIdSha256 === cut.runIdSha256 && resume.lastEventIdSha256 === cut.eventIdSha256
       && resume.cursorMatches === true && resume.sseReady === true && Number.isInteger(resume.httpStatus) && Number(resume.httpStatus) >= 200 && Number(resume.httpStatus) < 300
       && expected.some(identity => identity.agentIdSha256 === cut.agentIdSha256 && identity.runIdSha256 === cut.runIdSha256);
-  }) && expected.every(identity => proofs.some(value => { const cut = record(record(value).cut); return identity.agentIdSha256 === cut.agentIdSha256 && identity.runIdSha256 === cut.runIdSha256; }));
-  return { id: "cloud-live-sse-replay", passed: valid, detail: valid ? `Observed ${proofs.length} injected stream cut(s), same-run cursor reconnect and successful SSE response; workflow settlement is graded separately` : "Missing or inconsistent owned SSE cut/reconnect proof" };
+  }) && proofs.filter(value => record(value).cutCount === 1).length === 1
+    && proofs.length === expected.length
+    && new Set(proofs.map(value => { const identity = record(record(value).identity); return `${identity.agentIdSha256}/${identity.runIdSha256}`; })).size === proofs.length
+    && expected.every(identity => proofs.some(value => { const observed = record(record(value).identity); return identity.agentIdSha256 === observed.agentIdSha256 && identity.runIdSha256 === observed.runIdSha256; }));
+  return { id: "cloud-live-sse-replay", passed: valid, detail: valid ? `Observed one injected stream cut, same-run cursor reconnect and successful SSE response across ${expected.length} owned run(s); workflow settlement is graded separately` : "Missing or inconsistent owned SSE cut/reconnect proof" };
 }

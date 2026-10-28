@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CursorCloudClient } from "../../packages/paperclip-runner/src/drivers/cursor-cloud/cloud-client.js";
 import { CursorCloudDriver } from "../../packages/paperclip-runner/src/drivers/cursor-cloud/cursor-cloud-driver.js";
 import type { PrpEvent } from "../../packages/paperclip-runner/src/protocol/replay-contract.js";
-import { createCursorCloudReplayFaultFetch, gradeCursorCloudReplayFault, installCursorCloudReplayFault, readCursorCloudReplayFaultProofs, withCursorCloudReplayFault, type CursorCloudReplayFaultProof } from "./cursor-cloud-replay-fault.js";
+import { createCursorCloudReplayFaultFetch, gradeCursorCloudReplayFault, installCursorCloudReplayFault, readCursorCloudReplayFaultProofs, readCursorCloudReplayFaultReservation, withCursorCloudReplayFault, type CursorCloudReplayFaultProof } from "./cursor-cloud-replay-fault.js";
 
 const agent = "bc-11111111-1111-4111-8111-111111111111", run = "run-22222222-2222-4222-8222-222222222222";
 const url = `https://api.cursor.com/v1/agents/${agent}/runs/${run}/stream`;
@@ -112,9 +112,58 @@ describe("Cursor Cloud replay evidence calibration", () => {
       : reason === "missing-owned" ? [...expected, { agentIdSha256: digest("other"), runIdSha256: digest("other") }] : expected;
     expect(gradeCursorCloudReplayFault(reason === "missing" ? [] : [proof], identities).passed).toBe(false);
   });
+  it("requires one cut total and distinct owned observations for every turn", async () => {
+    const selected = await goodProof(), other = { agentIdSha256: digest(agent), runIdSha256: digest("other-owned-run") };
+    const untouched = { schema: selected.schema, identity: other, streamRequests: 1, cutCount: 0, cut: null, reconnect: null };
+    const owned = [...expected, other];
+    expect(gradeCursorCloudReplayFault([selected, untouched], owned).passed).toBe(true);
+    const secondCut = structuredClone(selected);
+    secondCut.identity = other; Object.assign(secondCut.cut!, other); Object.assign(secondCut.reconnect!, other);
+    expect(gradeCursorCloudReplayFault([selected, secondCut], owned).passed).toBe(false);
+    expect(gradeCursorCloudReplayFault([selected, { ...untouched, identity: selected.identity }], owned).passed).toBe(false);
+    expect(gradeCursorCloudReplayFault([selected, { ...untouched, identity: { ...other, runIdSha256: digest("foreign-run") } }], owned).passed).toBe(false);
+    expect(gradeCursorCloudReplayFault([selected], owned).passed).toBe(false);
+  });
 });
 
 describe("Cursor Cloud replay bundle treatment", () => {
+  it("reserves exactly one cut across two real per-turn Node processes", async () => {
+    const directory = await root(), bundlePath = join(directory, "proxy.cjs"), peerPath = join(directory, "peer.cjs"), evidenceDirectory = join(directory, "evidence");
+    const secondRun = "run-33333333-3333-4333-8333-333333333333";
+    await writeFile(peerPath, `globalThis.fetch = async (_input, init) => {
+      globalThis.streamRequests = (globalThis.streamRequests ?? 0) + 1;
+      if (init?.headers && new Headers(init.headers).get("Last-Event-ID") !== "shared-cursor") throw new Error("wrong resume cursor");
+      return new Response('event: assistant\\nid: shared-cursor\\ndata: {"text":"private native content"}\\n\\nevent: result\\nid: terminal\\ndata: {}\\n\\n', {headers: {"content-type": "text/event-stream"}});
+    };\n`);
+    const original = Buffer.from(`#!/usr/bin/env node\n;(async () => {
+      const target = "https://api.cursor.com/v1/agents/${agent}/runs/" + process.argv[2] + "/stream";
+      let cut = false;
+      try { await (await fetch(target)).text(); } catch { cut = true; }
+      if (cut) await (await fetch(target, {headers: {"Last-Event-ID": "shared-cursor"}})).text();
+      process.stdout.write(JSON.stringify({pid: process.pid, cut, requests: globalThis.streamRequests}));
+    })().catch(error => { process.stderr.write(String(error)); process.exitCode = 1; });\n`);
+    await writeFile(bundlePath, original, { mode: 0o600 });
+    await withCursorCloudReplayFault({ bundlePath, evidenceDirectory }, async manifest => {
+      const execute = (runId: string) => new Promise<{ code: number | null; output: string }>((resolve, reject) => {
+        const child = spawn(process.execPath, ["--require", peerPath, bundlePath, runId], { stdio: ["ignore", "pipe", "pipe"], env: { PATH: process.env.PATH } });
+        let output = ""; child.stdout.on("data", value => { output += value; }); child.stderr.on("data", value => { output += value; }); child.once("error", reject); child.once("exit", code => resolve({ code, output }));
+      });
+      const outcomes = await Promise.all([execute(run), execute(secondRun)]);
+      expect(outcomes.map(outcome => outcome.code)).toEqual([0, 0]);
+      const turns = outcomes.map(outcome => JSON.parse(outcome.output));
+      expect(new Set(turns.map(turn => turn.pid)).size).toBe(2);
+      expect(turns.filter(turn => turn.cut)).toHaveLength(1);
+      expect(turns.map(turn => turn.requests).sort()).toEqual([1, 2]);
+      const proofs = await readCursorCloudReplayFaultProofs(evidenceDirectory, manifest);
+      expect(proofs).toHaveLength(2);
+      const reservation = await readCursorCloudReplayFaultReservation(evidenceDirectory, manifest);
+      const selected = (proofs as CursorCloudReplayFaultProof[]).find(proof => proof.cutCount === 1)!;
+      expect(reservation).toMatchObject({ treatmentId: manifest.treatmentId, processId: turns.find(turn => turn.cut).pid, ...selected.identity });
+      expect(gradeCursorCloudReplayFault(proofs, [...expected, { agentIdSha256: digest(agent), runIdSha256: digest(secondRun) }]).passed).toBe(true);
+      expect(JSON.stringify(proofs)).not.toContain("private native content");
+    });
+    expect(await readFile(bundlePath)).toEqual(original);
+  });
   it("runs a self-contained generated prelude, preserves shebang and restores exact bytes on failure", async () => {
     const directory = await root(), bundlePath = join(directory, "proxy.cjs"), evidenceDirectory = join(directory, "evidence");
     const original = Buffer.from(`#!/usr/bin/env node\nconst oldFetch = globalThis.fetch;\nif (oldFetch === undefined) throw new Error("missing fetch");\nprocess.stdout.write("proxy body ran");\n`);
