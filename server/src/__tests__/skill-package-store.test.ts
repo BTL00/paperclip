@@ -10,6 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { companies, companySkills, companySkillVersions, companySkillRepositorySnapshots as snapshots,
   skillPackageDeletions, createDb, withDedicatedDbConnection } from "@paperclipai/db";
+import * as dbModule from "@paperclipai/db";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
 import * as storageModule from "../storage/index.js";
@@ -575,6 +576,62 @@ describe.skipIf(!support.supported)("external skill packages", () => {
       expect(trim).toHaveBeenCalledTimes(3);
     } finally { release(); await Promise.allSettled(reads); }
   });
+
+  it.each(["manifest", "files"] as const)("does not load queued legacy bodies for %s reads", async kind => {
+    const f = await fixture();
+    const companyId = await company();
+    const rows = await db.insert(snapshots).values(Array.from({ length: 33 }, (_, index) => {
+      const inventory = files.map((file, i) => i ? file : { ...file, content: `${file.content}${index}` });
+      return { companyId, contentHash: skillSnapshotHash(inventory), fileInventory: inventory };
+    })).returning({ id: snapshots.id });
+    const store = skillPackageStore(db, storage);
+    if (kind === "files") for (const row of rows) await store.manifest(companyId, row.id);
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let active = 0;
+    const occupying = Array.from({ length: 2 }, () => f.store.withIsolatedPackage(f.companyId, f.id, async () => {
+      active++;
+      await blocked;
+    }));
+    await vi.waitFor(() => expect(active).toBe(2));
+    let bodies = 0;
+    const observe = (_connection: number, query: string) => {
+      if (query.includes('"file_inventory"') && query.includes('"company_skill_repository_snapshots"')) bodies++;
+    };
+    const debug = db.$client.options.debug;
+    db.$client.options.debug = observe;
+    const dedicated = dbModule.withDedicatedDbConnection;
+    let ready = 0;
+    vi.spyOn(dbModule, "withDedicatedDbConnection").mockImplementation((owner, action) => dedicated(owner, connection => {
+      connection.$client.options.debug = observe;
+      if (kind === "files") ready++;
+      return action(connection);
+    }));
+    if (kind === "manifest") {
+      const parent = skillPackagePaths(companyId, rows[0]!.id).parent;
+      const lstat = fs.lstat.bind(fs);
+      vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
+        const result = await lstat(...args);
+        if (args[0] === parent) ready++;
+        return result;
+      });
+    }
+    const read = (id: string) => kind === "files" ? store.files(companyId, id, true) : store.manifest(companyId, id);
+    const queued = rows.slice(0, 32).map(row => read(row.id));
+    try {
+      await vi.waitFor(() => expect(ready).toBe(32));
+      // The final reader observes the full queue only after all earlier readers
+      // have reached admission. None may preload repository bodies while waiting.
+      await expect(read(rows[32]!.id)).rejects.toThrow("busy");
+      expect(bodies).toBe(0);
+      release();
+      expect(await Promise.all(queued)).toHaveLength(32);
+    } finally {
+      release();
+      await Promise.allSettled([...occupying, ...queued]);
+      db.$client.options.debug = debug;
+    }
+  }, 15_000);
 
   it("does not deadlock a transaction behind cold reads on a one-connection pool", async () => {
     const fixtures = [await fixture(), await fixture(), await fixture()];

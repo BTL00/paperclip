@@ -259,8 +259,10 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
               row.storage!.manifestBytes, row.storage!.manifestSha256, signal), signal);
           } catch (error) {
             signal.throwIfAborted();
-            const [legacy] = await db.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
-            const saved = legacy?.files.length ? skillPackageManifestBytes(skillPackageManifest(legacy.files)) : null;
+            const saved = await withPackageIo(() => withDedicatedDbConnection(cacheOwner, async database => {
+              const [legacy] = await database.select({ files: snapshots.fileInventory }).from(snapshots).where(scope(row.companyId, row.id));
+              return legacy?.files.length ? skillPackageManifestBytes(skillPackageManifest(legacy.files)) : null;
+            }), signal);
             if (saved && packageSha256(saved) === row.storage!.manifestSha256) bytes = saved;
             else if (row.restorable) bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
             else throw error;
@@ -269,9 +271,11 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
       } else if (row.restorable) {
         bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
       } else if (!bytes) {
-        const files = await legacyFiles(row);
-        if (row.storage) return manifestFor(row, signal);
-        bytes = skillPackageManifestBytes(skillPackageManifest(files));
+        bytes = await withPackageIo(() => withDedicatedDbConnection(cacheOwner, async database => {
+          const files = await legacyFiles(row, database);
+          return row.storage ? null : skillPackageManifestBytes(skillPackageManifest(files));
+        }), signal);
+        if (!bytes) return manifestFor(row, signal);
       }
       signal.throwIfAborted();
       if (bytes.length > MAX_SKILL_MANIFEST_BYTES) throw new Error("Skill manifest exceeds its byte bound");
@@ -288,10 +292,9 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     return sharedFlight(db, `manifest:${key}`, cancellation, load);
   }
   async function restoreInto(row: Descriptor, manifest: SkillPackageManifest, staging: string,
-    archivePath: string, signal: AbortSignal, allowRecovery = true, database = db,
-    initialLegacy: CompanySkillVersionFileInventoryEntry[] | null = null) {
-    let legacy = initialLegacy;
-    if (!row.storage && !row.restorable && !legacy) legacy = await legacyFiles(row, database);
+    archivePath: string, signal: AbortSignal, allowRecovery = true, database = db) {
+    let legacy: CompanySkillVersionFileInventoryEntry[] | null = null;
+    if (!row.storage && !row.restorable) legacy = await legacyFiles(row, database);
     try {
       if (row.storage) {
         if (row.storage.provider !== storage().provider) throw new Error("Skill package storage provider changed");
@@ -338,14 +341,13 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     // the ordinary pool connection needed by an active cold response.
     const row = await descriptor(companyId, id);
     const manifest = await manifestFor(row, signal);
-    const legacy = !row.storage && !row.restorable ? await legacyFiles(row) : null;
     const read = () => withDedicatedDbConnection(cacheOwner, database =>
-      readIsolatedPackage(row, manifest, consume, allowRecovery, signal, cacheRead, database, legacy));
+      readIsolatedPackage(row, manifest, consume, allowRecovery, signal, cacheRead, database));
     return cacheRead ? withPackageIo(read, signal, coldResponses) : read();
   }
   async function readIsolatedPackage<T>(row: Descriptor, manifest: SkillPackageManifest,
     consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery: boolean, signal: AbortSignal, cacheRead: boolean,
-    database: Db, legacy: CompanySkillVersionFileInventoryEntry[] | null) {
+    database: Db) {
     const { companyId, id } = row;
     let published = false;
     const result = await withPackageIo(async () => {
@@ -354,7 +356,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
       const staging = await fs.mkdtemp(path.join(parent, ".verify-"));
       const archive = `${staging}.tar.gz`;
       try {
-        await restoreInto(row, manifest, staging, archive, signal, allowRecovery, database, legacy);
+        await restoreInto(row, manifest, staging, archive, signal, allowRecovery, database);
         const result = await consume(staging, manifest);
         if (cacheRead) {
           // Network, extraction, hashing and response reads all happen before
