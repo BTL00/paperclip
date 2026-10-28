@@ -55,6 +55,36 @@ export function historicalWebsitePreviewMatches(value: unknown, bundle: ReturnTy
 function fileLink(o: InternalObservation, file: IssueAttachment) {
   return o.links.find(href => { try { const url = new URL(href, o.origin); return url.origin === o.origin && url.pathname === file.contentPath; } catch { return false; } });
 }
+/** Compare stated delivery dates with the preserved source date, not today's import date. */
+export function describesHistoricalDelivery(reply: string, deliveredAt: string) {
+  const expected = new Date(deliveredAt);
+  if (!Number.isFinite(expected.getTime())) return false;
+  const day = expected.toISOString().slice(0, 10);
+  const months = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+  const dates = new RegExp(`\\b(?:\\d{4}-\\d{2}-\\d{2}|${months}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${months}(?:,?\\s+\\d{4})?)\\b`, "gi");
+  let matched = false;
+  for (const part of reply.split(/\n+|;|(?<=[.!?])\s+/)) {
+    // Qualified older history may have a different date; it is not the selected final.
+    if (/\b(?:older|earlier|previous|superseded|outside)\b/i.test(part)) continue;
+    if (/\blast\s+week\b/i.test(part)) {
+      if (/\b(?:not|never)\s+(?:(?:actually|delivered|from|during|in|the)\s+){0,3}last\s+week\b/i.test(part)) return false;
+      matched = true;
+    }
+    for (const date of part.matchAll(dates)) {
+      const prefix = part.slice(0, date.index);
+      const anchors = [...prefix.matchAll(/\b(deliver(?:ed|y)?|completed|import(?:ed)?|upload(?:ed)?)\b/gi)];
+      // A separately identified import/upload time must not rewrite delivery time.
+      if (/^(?:import|upload)/i.test(anchors.at(-1)?.[1] ?? "")) continue;
+      if (/\b(?:not|never)\s+(?:(?:actually|deliver(?:ed)?|completed|dated|on|from|during)\s+){0,3}$/i.test(prefix)) return false;
+      let text = date[0].replace(/(\d)(?:st|nd|rd|th)\b/gi, "$1").replace(/\bof\s+/gi, "");
+      if (!/\d{4}/.test(text)) text += ` ${expected.getUTCFullYear()}`;
+      const parsed = new Date(`${text} UTC`);
+      if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) return false;
+      matched = true;
+    }
+  }
+  return matched;
+}
 export function gradeArtifactSearch(value: unknown) {
   const c = checks(); const o = observation(value) as SearchObservation | undefined;
   c.add("real-imported-artifact-history", !!o && !!o.finalAttachment && Array.isArray(o.deliveryComments) && Array.isArray(o.searchResults) && !!o.currentSource, "Public migration receipts, original source dates and actual imported attachment/download evidence are required.");
@@ -69,7 +99,7 @@ export function gradeArtifactSearch(value: unknown) {
     "The final belongs to the requested prior week through preserved completion and attachment-bound source-comment dates; the actual attachment import happened later.");
   c.add("exact-accessible-final-and-download", o.finalAttachment.id === file.id && o.finalAttachment.issueId === target.id && o.finalAttachment.sha256 === o.state.finalHash
     && o.downloadedHash === o.state.finalHash && hasLink(o, "issues", target) && !!fileLink(o, o.finalAttachment)
-    && /\b(?:final|approved|delivered)\b/i.test(o.reply) && (/\blast week\b/i.test(o.reply) || o.reply.includes(String(o.state.deliveryAt).slice(0, 10))),
+    && /\b(?:final|approved|delivered)\b/i.test(o.reply) && describesHistoricalDelivery(o.reply, String(o.state.deliveryAt)),
     "The answer selects the actual final from the requested source time, with both exact source and usable verified download links.");
   const distractors = o.state.distractors as Entity[] | undefined;
   c.add("draft-older-final-and-private-snippets-excluded", !!distractors && distractors.every(row => !hasLink(o, "issues", row) || row.id !== hidden.id && o.reply.split(/\n/).some(part => [row.id, row.identifier, row.title].filter(Boolean).some(name => part.includes(name!))
