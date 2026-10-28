@@ -114,6 +114,7 @@ function valid() {
         ],
       },
       task: {
+        executionWorkspaceId: "workspace",
         id: "task",
         companyId: "company",
         assigneeAgentId: "morgan",
@@ -127,6 +128,9 @@ function valid() {
           agentId: "morgan",
           companyId: "company",
           tokenRunMatched: true,
+          taskId: "task",
+          workspaceId: "workspace",
+          taskWorkspaceMatched: true,
           identityStatus: 200,
           catalogStatus: 200,
           catalogKeys: ["deployment-api-key"],
@@ -187,6 +191,15 @@ it("rejects wrong owner/run/reference/custody, overgrant, missing delivery and l
     },
     (o: ReturnType<typeof valid>) => {
       o.state.task.parentId = "wrong-source";
+    },
+    (o: ReturnType<typeof valid>) => {
+      o.state.scopeReceipts[0]!.taskId = "source";
+    },
+    (o: ReturnType<typeof valid>) => {
+      o.state.scopeReceipts[0]!.taskWorkspaceMatched = false;
+    },
+    (o: ReturnType<typeof valid>) => {
+      o.state.scopeReceipts[0]!.workspaceId = "foreign";
     },
     (o: ReturnType<typeof valid>) => {
       o.state.scopeReceipts[0]!.runId = "source-first";

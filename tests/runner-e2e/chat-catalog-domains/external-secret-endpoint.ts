@@ -26,6 +26,9 @@ export interface SecretScopeReceipt {
   instanceKey: string;
   companyDeniedStatus: number;
   instanceDeniedStatus: number;
+  taskId?: string;
+  workspaceId?: string;
+  taskWorkspaceMatched?: boolean;
 }
 export function validSecretScopeReceipt(
   value: unknown,
@@ -35,6 +38,8 @@ export function validSecretScopeReceipt(
     companyId: string;
     boundSecretId: string;
     boundKey: string;
+    taskId?: string;
+    workspaceId?: string;
   },
 ) {
   const receipt = value as Partial<SecretScopeReceipt> | undefined;
@@ -55,8 +60,26 @@ export function validSecretScopeReceipt(
     receipt.companyKey === "unrelated-company-key" &&
     receipt.instanceKey === "custody_probe" &&
     receipt.companyDeniedStatus === 403 &&
-    receipt.instanceDeniedStatus === 403
+    receipt.instanceDeniedStatus === 403 &&
+    (expected.taskId === undefined || receipt.taskId === expected.taskId && receipt.taskWorkspaceMatched === true && typeof receipt.workspaceId === "string" && receipt.workspaceId.length > 0 && receipt.workspaceId === expected.workspaceId)
   );
+}
+
+export async function readSecretEndpointTaskBinding(ctx: ChatCatalogContext, agentId: string, runId: string, taskId: string, cwd: string) {
+  const temporary = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT;
+  if (!temporary || !taskId || !cwd || !ctx.issue()?.id) throw new Error("Actual secret consumer task context unavailable");
+  const run = await ctx.input.api.get<{ id: string; companyId: string; agentId: string; status: string; startedAt: string | null; contextSnapshot: { issueId?: string } | null }>(`/api/heartbeat-runs/${runId}`, { timeout: 4000 });
+  if (run.id !== runId || run.companyId !== ctx.input.fixtures.company.id || run.agentId !== agentId || run.status !== "running" || !run.startedAt || !Number.isFinite(Date.parse(run.startedAt)) || run.contextSnapshot?.issueId !== taskId)
+    throw new Error("Secret consumer is not the actual active assigned run");
+  const [task, view] = await Promise.all([
+    ctx.input.api.get<{ id: string; companyId: string; assigneeAgentId: string | null; parentId: string | null; executionWorkspaceId: string | null }>(`/api/issues/${taskId}`, { timeout: 4000 }),
+    ctx.input.api.get<{ workspace: { id: string; companyId: string; cwd: string } }>(`/api/issues/${taskId}/workspace`, { timeout: 4000 }),
+  ]);
+  if (task.id !== taskId || task.companyId !== run.companyId || task.assigneeAgentId !== agentId || task.parentId !== ctx.issue()!.id || !task.executionWorkspaceId || view.workspace.id !== task.executionWorkspaceId || view.workspace.companyId !== run.companyId)
+    throw new Error("Secret consumer task workspace binding mismatch");
+  const [owned, actual, reported] = await Promise.all([realpath(temporary), realpath(view.workspace.cwd), realpath(cwd)]);
+  if (!actual.startsWith(owned + path.sep) || reported !== actual) throw new Error("Secret consumer is outside its actual owned task cwd");
+  return { taskId: task.id, workspaceId: view.workspace.id, taskWorkspaceMatched: true as const };
 }
 
 /** Owned loopback publishing check. Credential bytes stay in the server closure;
@@ -67,7 +90,7 @@ export async function secretTestEndpoint(
   value: string,
   envKey: "PUBLISHING_API_KEY" | "DEPLOYMENT_API_KEY",
   scopeProbe?: SecretScopeProbe,
-  options?: { forbidAwsRuntimeAuthority: true },
+  options?: { forbidAwsRuntimeAuthority?: true; taskBound?: true },
 ) {
   if (ctx.input.execution.environment.id !== "local")
     throw new Error(
@@ -76,18 +99,17 @@ export async function secretTestEndpoint(
   const temporary = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT;
   if (!temporary)
     throw new Error("Secret endpoint requires its isolated attempt root");
-  const root = await realpath(temporary),
-    candidate = path.resolve(resolveDefaultAgentWorkspaceDir(agentId));
-  if (!candidate.startsWith(root + path.sep))
-    throw new Error(
-      "Secret endpoint worker workspace escaped the disposable root",
-    );
-  await mkdir(candidate, { recursive: true });
-  const home = await realpath(candidate);
-  if (!home.startsWith(root + path.sep))
-    throw new Error(
-      "Secret endpoint worker path resolved outside the disposable root",
-    );
+  const root = await realpath(temporary);
+  let home: string | undefined;
+  if (options?.taskBound) {
+    if (ctx.scenario.id !== "secrets.least-scope-delivery" || !scopeProbe) throw new Error("Task-bound secret helper is restricted to the scoped delivery fixture");
+  } else {
+    const candidate = path.resolve(resolveDefaultAgentWorkspaceDir(agentId));
+    if (!candidate.startsWith(root + path.sep)) throw new Error("Secret endpoint worker workspace escaped the disposable root");
+    await mkdir(candidate, { recursive: true });
+    home = await realpath(candidate);
+    if (!home.startsWith(root + path.sep)) throw new Error("Secret endpoint worker path resolved outside the disposable root");
+  }
   const calls: Array<{
     authorized: boolean;
     agentId: string;
@@ -180,6 +202,7 @@ export async function secretTestEndpoint(
           listed.secrets.length > 20
         )
           throw new Error("Scoped run authority could not be verified");
+        const taskBinding = options?.taskBound ? await readSecretEndpointTaskBinding(ctx, agentId, record.runId, String(request.headers["x-paperclip-task"] ?? ""), String(request.headers["x-paperclip-cwd"] ?? "")) : undefined;
         const denied = await Promise.all(
           [scopeProbe.unrelatedCompanyKey, scopeProbe.instanceKey].map((key) =>
             call(
@@ -189,6 +212,7 @@ export async function secretTestEndpoint(
           ),
         );
         const receipt: SecretScopeReceipt = {
+          ...taskBinding,
           runId: record.runId,
           agentId,
           companyId: who.companyId,
@@ -205,11 +229,13 @@ export async function secretTestEndpoint(
         await Promise.all(denied.map((result) => result.body?.cancel()));
         scopeReceipts.push(receipt);
         ok = validSecretScopeReceipt(receipt, {
+          ...taskBinding,
           runId: record.runId,
           agentId,
           companyId: ctx.input.fixtures.company.id,
           boundSecretId: scopeProbe.boundSecretId,
           boundKey: "deployment-api-key",
+          ...(taskBinding ? { taskId: taskBinding.taskId, workspaceId: taskBinding.workspaceId } : {}),
         });
       } catch {
         ok = false;
@@ -225,19 +251,15 @@ export async function secretTestEndpoint(
     );
   });
   const port = await listenOnFetchAllowedPort(server),
-    scriptPath = path.join(
-      home,
-      `secret-endpoint-check-${ctx.input.nonce}.mjs`,
-    ),
+    scriptPath = home ? path.join(home, `secret-endpoint-check-${ctx.input.nonce}.mjs`) : "",
     url = `http://127.0.0.1:${port}/publishing-check`;
-  await writeFile(
-    scriptPath,
-    `const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??'',...${scopeProbe ? "{'x-paperclip-runtime':process.env.PAPERCLIP_API_KEY??''}" : "{}"},...${options?.forbidAwsRuntimeAuthority ? "{'x-paperclip-no-aws':String(!Object.keys(process.env).some(key=>key.startsWith('AWS_')||key.startsWith('PAPERCLIP_SECRETS_AWS_')))}" : "{}"}}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`,
-    { mode: 0o600 },
-  );
+  const script = `const credential=process.env[${JSON.stringify(envKey)}];if(!credential){process.stdout.write(JSON.stringify({ok:false,reason:'credential unavailable'}));process.exitCode=1;}else{try{const response=await fetch(${JSON.stringify(url)},{method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+credential,'x-paperclip-agent':process.env.PAPERCLIP_AGENT_ID??'','x-paperclip-run':process.env.PAPERCLIP_RUN_ID??'',...${options?.taskBound ? "{'x-paperclip-task':process.env.PAPERCLIP_TASK_ID??'','x-paperclip-cwd':process.cwd()}" : "{}"},...${scopeProbe ? "{'x-paperclip-runtime':process.env.PAPERCLIP_API_KEY??''}" : "{}"},...${options?.forbidAwsRuntimeAuthority ? "{'x-paperclip-no-aws':String(!Object.keys(process.env).some(key=>key.startsWith('AWS_')||key.startsWith('PAPERCLIP_SECRETS_AWS_')))}" : "{}"}}});const result=await response.json();process.stdout.write(JSON.stringify({ok:result.ok===true,status:response.status,check:'publishing endpoint'}));if(!response.ok)process.exitCode=1;}catch{process.stdout.write(JSON.stringify({ok:false,reason:'endpoint check failed'}));process.exitCode=1;}}\n`;
+  if (scriptPath) await writeFile(scriptPath, script, { mode: 0o600 });
+  const command = scriptPath ? `node ${JSON.stringify(scriptPath)}` : `node --input-type=module -e '${script.replace(/'/g, "'\\''")}'`;
   return {
     url,
     scriptPath,
+    command,
     calls,
     scopeReceipts,
     async scanPrivateRuntimeOutputs(issueIds: string[], raw: unknown) {
@@ -253,7 +275,7 @@ export async function secretTestEndpoint(
     },
     async close() {
       try {
-        await rm(scriptPath, { force: true });
+        if (scriptPath) await rm(scriptPath, { force: true });
       } finally {
         privateRuntimeValues.clear();
         await new Promise<void>((resolve) => server.close(() => resolve()));
