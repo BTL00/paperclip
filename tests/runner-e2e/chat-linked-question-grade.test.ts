@@ -14,7 +14,7 @@ it("accepts the actual public modern-question contract and its compatibility sto
 });
 it("preserves original no-early-write, exact person selection, mutation actor and final link checks", () => {
   const input = valid(), binding = linkedQuestionBinding(input)!;
-  const evidence = { text: binding.prompt, links: binding.links.map(link => link.href) };
+  const evidence = { text: binding.prompt, links: ["/RUN/issues/RUN-1", "/RUN/issues/experiment-task"] };
   const first = { ...input.observation, reply: evidence.text, links: evidence.links };
   const final = { ...structuredClone(input.observation), state: { ...input.observation.state, clarification: first },
     tasks: [{ ...input.observation.tasks[0]!, priority: "high" }, structuredClone(input.observation.tasks[1]!)],

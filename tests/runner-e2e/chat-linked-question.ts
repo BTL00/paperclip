@@ -5,7 +5,7 @@ import type { ChatCatalogContext } from "./chat-catalog-contract.js";
 import type { InternalObservation, Entity } from "./chat-catalog-domains/internal-support.js";
 
 interface QuestionInput {
-  origin: string; companyPrefix: string; sourceId: string; leadId: string; query: string;
+  origin: string; pageUrl: string; companyPrefix: string; sourceId: string; leadId: string; query: string;
   observation: InternalObservation & { runs: Array<InternalObservation["runs"][number] & { finishedAt?: string | null }> };
   comments: Entity[]; interactions: AskUserQuestionsInteraction[]; tasks: Entity[];
 }
@@ -34,19 +34,9 @@ export function linkedQuestionBinding(input: QuestionInput) {
   if (candidates.length !== 1) return;
   const card = candidates[0]!, set = card.payload.questionSet, question = set?.questions[0];
   if (set?.schema !== "paperclip.question_set.v1" || !set.description || !question?.id || !question.prompt) return;
-  const hrefs = [...set.description.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].map(match => match[1]!);
-  const links = hrefs.map(href => {
-    try {
-      const url = new URL(href, input.origin), parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-      if (url.origin !== new URL(input.origin).origin || url.search || url.hash || parts.length !== 3 || parts[0] !== input.companyPrefix || parts[1] !== "issues") return;
-      const task = input.tasks.find(task => [task.id, task.identifier].includes(parts[2]));
-      return task ? { href, taskId: task.id } : undefined;
-    } catch { return; }
-  });
-  if (!links.length || links.some(link => !link) || new Set(links.map(link => link!.taskId)).size !== 2) return;
-  return { origin: input.origin, sourceId: input.sourceId, anchorCommentId: human.id, interactionId: card.id, questionId: question.id,
+  return { origin: input.origin, pageUrl: input.pageUrl, companyPrefix: input.companyPrefix, tasks: input.tasks.map(task => ({ id: task.id, identifier: task.identifier })), sourceId: input.sourceId, anchorCommentId: human.id, interactionId: card.id, questionId: question.id,
     prompt: question.prompt, sourceRunId: run.id, leadId: input.leadId,
-    payloadDigest: createHash("sha256").update(JSON.stringify(card.payload)).digest("hex"), links: links as Array<{ href: string; taskId: string }> };
+    payloadDigest: createHash("sha256").update(JSON.stringify(card.payload)).digest("hex") };
 }
 export function readLinkedQuestionDom(input: NonNullable<ReturnType<typeof linkedQuestionBinding>>) {
   const visible = (element: Element) => {
@@ -72,9 +62,20 @@ export function readLinkedQuestionDom(input: NonNullable<ReturnType<typeof linke
   const contexts = Array.from(takeover.querySelectorAll('[role="region"][aria-label="Question context"]')).filter(node => visible(node) && same(node));
   if (prompts.length !== 1 || contexts.length !== 1) return;
   const links = Array.from(contexts[0]!.querySelectorAll("a[href]")).filter(node => visible(node) && same(node)).map(node => node.getAttribute("href")!);
-  if (!links.length || links.some(href => !input.links.some(link => link.href === href))
-    || new Set(input.links.filter(link => links.includes(link.href)).map(link => link.taskId)).size !== 2) return;
-  return { ...input, links: [...new Set(links)], text: prompts[0]!.textContent ?? "" };
+  const qualified = links.flatMap(href => {
+    try {
+      const url = new URL(href, input.origin), page = new URL(input.pageUrl);
+      const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+      const unprefixed = parts.length === 2 && parts[0] === "issues";
+      if (url.origin !== new URL(input.origin).origin || url.search || url.hash
+        || !(parts.length === 3 && parts[0] === input.companyPrefix && parts[1] === "issues" || unprefixed
+          && page.origin === url.origin && page.pathname.split("/").filter(Boolean)[0] === input.companyPrefix)) return [];
+      const id = parts[unprefixed ? 1 : 2], task = input.tasks.find(task => [task.id, task.identifier].includes(id));
+      return task ? [{ href, taskId: task.id }] : [];
+    } catch { return []; }
+  });
+  if (new Set(qualified.map(link => link.taskId)).size !== 2) return;
+  return { ...input, links: [...new Set(qualified.map(link => link.href))], text: prompts[0]!.textContent ?? "" };
 }
 export type LinkedQuestionEvidence = NonNullable<ReturnType<typeof readLinkedQuestionDom>>;
 export type ClarificationObservation = InternalObservation & { linkedQuestionEvidence?: LinkedQuestionEvidence };
@@ -85,7 +86,7 @@ export async function observeLinkedTaskQuestion(ctx: ChatCatalogContext, state: 
     ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`),
     ctx.input.api.get<AskUserQuestionsInteraction[]>(`/api/issues/${source.id}/interactions`),
   ]);
-  const binding = linkedQuestionBinding({ origin: observation.origin, companyPrefix: prefix, sourceId: source.id, leadId: observation.leadId,
+  const binding = linkedQuestionBinding({ origin: observation.origin, pageUrl: ctx.input.page.url(), companyPrefix: prefix, sourceId: source.id, leadId: observation.leadId,
     query: ctx.scenario.query, observation, comments, interactions, tasks: [state.task as Entity, state.otherTask as Entity] });
   if (!binding) return observation;
   const evidence = await ctx.input.page.evaluate(readLinkedQuestionDom, binding);

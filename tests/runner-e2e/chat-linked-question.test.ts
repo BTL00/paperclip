@@ -13,6 +13,24 @@ it("collects an actual production question takeover's two visible saved-task lin
   expect(evidence?.text).toBe("Which Landing page task should be High priority?");
   expect(evidence).toMatchObject({ interactionId: "question", questionId: "which-task", anchorCommentId: "human", sourceRunId: "run", leadId: "ceo" });
 });
+it("keeps supported unprefixed issue hrefs with exact saved identities and current company page binding", () => {
+  const input = valid();
+  input.interactions[0]!.payload.questionSet!.description = "Choose [Launch](/issues/launch-task) or [Experiments](/issues/experiment-task).";
+  const anchors = document.querySelectorAll("a");
+  anchors[0]!.setAttribute("href", "/issues/launch-task"); anchors[1]!.setAttribute("href", "/issues/experiment-task");
+  expect(collect(input)?.links).toEqual(["/issues/launch-task", "/issues/experiment-task"]);
+  for (const pageUrl of ["https://fixture.test/OTHER/chats/ceo", "https://foreign.test/RUN/chats/ceo", "https://fixture.test/chats/ceo"]) {
+    input.pageUrl = pageUrl; expect(collect(input)).toBeUndefined();
+  }
+});
+it.each([
+  "Choose [Launch][launch] or [Experiments][experiments].\n\n[launch]: /RUN/issues/RUN-1\n[experiments]: /RUN/issues/experiment-task",
+  "Choose [Launch](/RUN/issues/RUN-1) or [Experiments](/RUN/issues/experiment-task). Context: [Launch project](/RUN/projects/launch).",
+])("reads actual rendered task hrefs without a second Markdown spelling or context policy: %s", description => {
+  const input = valid(); input.interactions[0]!.payload.questionSet!.description = description;
+  document.querySelector('[aria-label="Question context"]')!.insertAdjacentHTML("beforeend", '<a href="/RUN/projects/launch">Launch project</a><a href="https://docs.example.test/context">Context</a>');
+  expect(collect(input)?.links).toEqual(["/RUN/issues/RUN-1", "/RUN/issues/experiment-task"]);
+});
 it.each([
   ["wrong company", (v: Input) => { v.interactions[0]!.companyId = "foreign"; }],
   ["wrong conversation", (v: Input) => { v.interactions[0]!.issueId = "other-source"; }],
@@ -43,7 +61,7 @@ it.each([
   ["duplicate saved task", (v: Input) => { v.tasks[1] = v.tasks[0]!; }],
   ["old human request", (v: Input) => { v.comments[0]!.body = "another query"; }],
   ["nonhuman original request", (v: Input) => { v.comments[0]!.authorAgentId = "ceo"; }],
-  ["missing linked context", (v: Input) => { v.interactions[0]!.payload.questionSet!.description = "Choose a task."; }],
+  ["missing linked context", (v: Input) => { v.interactions[0]!.payload.questionSet!.description = ""; }],
   ["another native action", (v: Input) => { v.interactions.push(structuredClone(v.interactions[0]!)); }],
 ] as const)("rejects %s metadata rather than any question-card presence", (_, change) => {
   const input = valid(); change(input); expect(collect(input)).toBeUndefined();
@@ -53,6 +71,7 @@ it.each([
   ["task search", "/RUN/issues?search=RUN-1"], ["fragment", "/RUN/issues/RUN-1#unrelated"],
 ] as const)("rejects %s saved question link", (_, href) => {
   const input = valid(); input.interactions[0]!.payload.questionSet!.description = input.interactions[0]!.payload.questionSet!.description!.replace("/RUN/issues/RUN-1", href);
+  document.querySelector("a")!.setAttribute("href", href);
   expect(collect(input)).toBeUndefined();
 });
 const domNegatives: Array<[string, () => void]> = [
@@ -62,6 +81,7 @@ const domNegatives: Array<[string, () => void]> = [
   ["hidden takeover", () => document.querySelector("section")!.hidden = true],
   ["hidden prompt", () => document.querySelector("p")!.setAttribute("aria-hidden", "true")],
   ["hidden linked task", () => document.querySelector("a")!.setAttribute("style", "display:none")],
+  ["no actual context links", () => document.querySelectorAll("a").forEach(node => node.remove())],
   ["wrong DOM link", () => document.querySelector("a")!.setAttribute("href", "/RUN/issues/wrong")],
   ["sidebar link only", () => document.body.append(document.querySelector("a")!)],
   ["unrelated conversation", () => document.querySelector("main")!.querySelector("#comment-human")!.remove()],

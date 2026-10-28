@@ -4,7 +4,7 @@ export function valid(): Input {
   const task = { id: "launch-task", identifier: "RUN-1", companyId: "company", title: "Landing page", priority: "medium", projectId: "launch" };
   const other = { ...task, id: "experiment-task", identifier: "RUN-2", projectId: "experiments" };
   const query = "Mark the landing-page task as high priority.";
-  return { origin: "https://fixture.test", companyPrefix: "RUN", sourceId: "source", leadId: "ceo", query, tasks: [task, other],
+  return { origin: "https://fixture.test", pageUrl: "https://fixture.test/RUN/chats/ceo", companyPrefix: "RUN", sourceId: "source", leadId: "ceo", query, tasks: [task, other],
     comments: [{ id: "human", companyId: "company", issueId: "source", body: query, authorUserId: "person", authorAgentId: null }],
     observation: { scenarioId: "tasks.ambiguous-task", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { task, otherTask: other },
       tasks: [structuredClone(task), structuredClone(other)], projects: [], goals: [], comments: [], documents: [], revisions: [], links: [], reply: "", humanQueries: [query],
