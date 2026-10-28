@@ -1,4 +1,4 @@
-import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { pollUntil } from "../api.js";
@@ -94,7 +94,7 @@ export const runtimeHandoffCases = [runtimeDefinition("agent-chat.track-delegate
     state.queryLinks = links; state.workerStatusAtQueryReply = phase.runs.find(run => run.id === state.workerRunId)!.status;
     await writeFile((state.gate as { gate: string }).gate, `The real website brief: use a blue page with concise copy. Save a short task delivery document that includes exactly ${state.marker}, then complete this existing Website task.`, "utf8");
     const delivered = await observeCompletionUpdate({ page: ctx.input.page, api: ctx.input.api, sourceId: String(state.sourceId), workerId: (state.task as Entity).id,
-      marker: String(state.marker), fixtureRequest: String(state.prompt), allRuns: () => ctx.allRuns(), evidence: ctx.input.evidence, capture: ctx.input.capture });
+      marker: String(state.marker), fixtureRequest: String(state.prompt), originalObservationDeadlineAt: chatCatalogOriginalPhaseDeadline(ctx), allRuns: () => ctx.allRuns(), evidence: ctx.input.evidence, capture: ctx.input.capture });
     const delivery = completionDelivery(delivered); state.delivery = delivery; state.completionDelivered = !!delivery.response;
   },
   async observe(ctx, state) {
