@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { makeDefinition } from "./internal-definition.js";
@@ -106,10 +107,10 @@ function archivePartial(): ChatCatalogCase {
   };
   return { ...base, coverageGaps: [], authentication: "human-session", expectedRunCount: 2, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 480000,
     sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-archive-partial.ts", "chat-catalog-domains/internal-archive-transport.ts", "../e2e/fetch-allowed-port.ts", "chat-archive-fault-control.ts"],
-    async act(ctx, state) { const first = await pollUntil({ label: "Real initial partial archive turn settles", deadlineAt: Date.now() + 150000, load: () => observe(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });
+    async act(ctx, state) { const first = await pollUntil({ label: "Real initial partial archive turn settles", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150000), load: () => observe(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });
       state.firstPartial = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-catalog-before-partial-archive-retry.json", state.firstPartial);
       if (!firstIsValid(first)) throw new Error("Initial partial archive evidence failed before declared retry");
-      await transport(ctx)!.releaseForExplicitRetry(); const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, ctx.scenario.query); },
+      await transport(ctx)!.releaseForExplicitRetry(); const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, ctx.scenario.query, chatCatalogNativePhaseRemainingBudget(ctx)); },
     observe,
     async verifyResult(ctx, state) { const source = ctx.input.page.url(); try { await ctx.input.page.goto(new URL(`/${ctx.input.fixtures.company.issuePrefix}/issues/${entity(state, "task").identifier}`, ctx.input.api.baseURL).href); await expect(ctx.input.page.getByRole("heading", { name: entity(state, "task").title!, exact: true }).first()).toBeVisible(); } finally { await ctx.input.page.goto(source); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); } },
     // Launcher owns the pre-bootstrap transport lifetime; it closes only after server shutdown.

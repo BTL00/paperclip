@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { verifyDistinctTaskFixtures } from "./internal-distinct-fixtures.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { ChatRun, ChatIssue } from "../chat-flow.js";
@@ -118,8 +119,8 @@ function creationDefinition(scenarioId: string): ChatCatalogCase {
       if (scenarioId !== "tasks.website-without-project") return;
       if (!interception) throw new Error("Lost acknowledgement fixture was not armed");
       const sent = await interception.committed;
-      const first = await pollUntil({ label: "Committed project and task before lost-ack replay", deadlineAt: Date.now() + 150_000,
-        load: () => observeCreation(ctx, state), accept: o => newTasks(o).length === 1 && o.projects.filter(row => row.name === "Launch").length === 1
+      const first = await pollUntil({ label: "Committed project and task before lost-ack replay", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
+        load: () => observeCreation(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && newTasks(o).length === 1 && o.projects.filter(row => row.name === "Launch").length === 1
           && ctx.issue()?.conversationState === "waiting" });
       await interception.dispose();
       const replay = await ctx.input.api.post<{ id: string }>(sent.path, sent.data);
