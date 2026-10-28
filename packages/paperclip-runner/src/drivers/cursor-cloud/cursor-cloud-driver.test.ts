@@ -55,7 +55,7 @@ class Peer {
 }
 
 async function fixture(peer = new Peer(), extra: Partial<CursorCloudDriverOptions> = {}) {
-  const root = await mkdtemp("/private/tmp/cc-"); roots.push(root);
+  const root = await mkdtemp("/tmp/cc-"); roots.push(root);
   const handler = vi.fn(async () => ({ success: true, contentItems: [{ type: "inputText", text: "accepted" }] }));
   const options: CursorCloudDriverOptions = { model: "explicit-model", config: { schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/example/repo", startingRef: "main" }] },
     binding: { companyId: "company", agentId: "agent", issueId: "issue", normalizedSessionId: "session" }, runtimeDirectory: root,

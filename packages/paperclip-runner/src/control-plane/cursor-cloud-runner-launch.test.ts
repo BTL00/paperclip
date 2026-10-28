@@ -8,7 +8,7 @@ import type { DurablePrpControlPlane } from "./durable-prp-control-plane.js";
 import { createRunnerdCodexTransport, defaultCapabilityRunnerdBinary } from "../live/runnerd-codex-transport.js";
 
 it("opens and closes the real Cloud facade without a provider prompt", async () => {
-  const root = await mkdtemp("/private/tmp/cc-runner-launch-");
+  const root = await mkdtemp("/tmp/cc-runner-launch-");
   const runtime = join(root, "cloud");
   const configPath = join(runtime, "config.json");
   const socketPath = join(root, "mcp.sock");
@@ -61,7 +61,7 @@ it("opens and closes the real Cloud facade without a provider prompt", async () 
 }, 30_000);
 
 it("preserves native Cloud tool identity and redacted output through the real Rust facade", async () => {
-  const root = await mkdtemp("/private/tmp/cc-tool-facade-");
+  const root = await mkdtemp("/tmp/cc-tool-facade-");
   const runtime = join(root, "cloud");
   const configPath = join(runtime, "config.json");
   const socketPath = join(root, "mcp.sock");

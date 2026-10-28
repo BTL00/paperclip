@@ -9,7 +9,7 @@ const roots: string[] = [];
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function asset(files: Record<string, string | Buffer>): Promise<NativeRuntimeAssetReference> {
-  const root = await mkdtemp("/private/tmp/cc-assets-"); roots.push(root);
+  const root = await mkdtemp("/tmp/cc-assets-"); roots.push(root);
   const manifestFiles = [];
   for (const [path, content] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
     const target = join(root, path); await mkdir(join(target, ".."), { recursive: true }); await writeFile(target, content); await chmod(target, 0o444);

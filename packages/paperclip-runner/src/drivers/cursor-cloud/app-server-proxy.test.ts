@@ -13,7 +13,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 async function peer() {
-  const root = await mkdtemp("/private/tmp/cc-proxy-"); roots.push(root);
+  const root = await mkdtemp("/tmp/cc-proxy-"); roots.push(root);
   const configPath = join(root, "config.json");
   await writeFile(configPath, JSON.stringify({ schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/example/repo" }], binding: { companyId: "company", agentId: "agent", issueId: "issue", normalizedSessionId: "session" } }), { mode: 0o600 });
   const input = new PassThrough(); const output = new PassThrough(); const diagnostic = new PassThrough();
