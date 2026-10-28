@@ -32,6 +32,7 @@ export async function stageCursorCloudArtifact(input: {
     const stat = await lstat(root);
     if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Cursor Cloud artifact staging directory must be owned and private");
   }
+  const contentRef = join(args.sha256, args.filename);
   const target = join(directory, args.filename);
   let handle;
   try { handle = await open(target, "wx", 0o600); }
@@ -42,8 +43,8 @@ export async function stageCursorCloudArtifact(input: {
       const stat = await existing.stat();
       if (!stat.isFile() || stat.size !== bytes.length || (stat.mode & 0o077) !== 0 || createHash("sha256").update(await existing.readFile()).digest("hex") !== args.sha256) throw new Error("Cursor Cloud artifact staging identity conflict");
     } finally { await existing.close(); }
-    return { ...args, contentRef: target };
+    return { ...args, contentRef };
   }
   try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
-  return { ...args, contentRef: target };
+  return { ...args, contentRef };
 }
