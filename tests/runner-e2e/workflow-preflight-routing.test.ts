@@ -10,7 +10,7 @@ const requiredJobs = ["authorize", "target_lock", "catalog", "daytona_image", "b
 function permits(job: string, { remote = "false", pack = "skipped", cadence = "", cancelled = false, failedJob = "", result = "failure", wrongSource = false, wrongRef = false } = {}) {
   const needs = Object.fromEntries(requiredJobs.map(name => [name, { result: name === failedJob ? result : "success", outputs: {} }]));
   needs.authorize!.outputs = { target_sha: wrongSource ? "other-source" : "reviewed-source" };
-  needs.catalog!.outputs = { needs_remote_provider_pack: remote, operations_cadence: cadence };
+  needs.catalog!.outputs = { needs_remote_provider_pack: remote.toLowerCase(), operations_cadence: cadence };
   needs.build_remote_provider_pack = { result: pack, outputs: {} };
   const condition = jobs[job].if.trim().replace(/^\$\{\{\s*|\s*\}\}$/gu, "");
   if (!/\b(?:always|cancelled|failure|success)\(/u.test(condition) && jobs[job].needs.some((name: string) => needs[name]?.result !== "success")) return false;
@@ -37,7 +37,8 @@ describe("trusted campaign preparation placement", () => {
 
   it("does not allocate the remote-pack runner for local or unknown requirements", () => {
     expect(permits("build_remote_provider_pack", { remote: "true" })).toBe(true);
-    for (const remote of ["false", "", "unknown", "TRUE"]) {
+    expect(permits("build_remote_provider_pack", { remote: "TRUE" })).toBe(true);
+    for (const remote of ["false", "", "unknown", "not-a-boolean"]) {
       expect(permits("build_remote_provider_pack", { remote }), remote).toBe(false);
     }
     expect(jobs.build_remote_provider_pack.steps.some((step: { name?: string }) => step.name === "No remote provider pack needed")).toBe(false);
