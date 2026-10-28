@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ probe: vi.fn(), binary: vi.fn(), sourceHome: v
 vi.mock("@paperclipai/adapter-codex-local", () => ({ CODEX_CHATGPT_MODEL_REJECTION_RE: /never-match/, codexChatGptRetirementHint: () => null }));
 vi.mock("@paperclipai/adapter-codex-local/server", () => ({ copyBackCodexAuth: mocks.copyBack }));
 vi.mock("../../vendor/paperclip-runner/index.js", async () => ({ probeNativeRunnerEnvironment: mocks.probe, resolveSourceCodexHome: mocks.sourceHome,
-  configuredEnvironmentProjection: (await import("../../../../packages/paperclip-runner/src/configured-environment.js")).configuredEnvironmentProjection }));
+  configuredEnvironmentProjection: (await import(new URL("../../../../packages/paperclip-runner/src/configured-environment.ts", import.meta.url).href)).configuredEnvironmentProjection }));
 vi.mock("./native-codex-runner.js", () => ({ resolvePaperclipRunnerBinary: mocks.binary, resolveRemotePaperclipRunnerBinary: vi.fn() }));
 vi.mock("../local-ai-credential-file.js", () => ({ readLocalAiCredentialFile: mocks.readCredential }));
 vi.mock("./native-ssh-command-runner.js", () => ({ createNativeSshCommandRunner: vi.fn() }));
@@ -13,8 +13,8 @@ vi.mock("@paperclipai/adapter-utils/runner-connectivity", () => ({ resolvePaperc
 vi.mock("./native-runner-execution-driver.js", () => ({ createNativeRunnerExecutionDriver: vi.fn() }));
 vi.mock("./native-session-executor.js", () => ({ buildNativeProviderEnvironment: (environment: Record<string, string>) => environment }));
 import { testNativeRunnerAuthentication } from "./setup-readiness.js";
-import { createCapabilityRunnerdProviderEnvironment } from "../../../../packages/paperclip-runner/src/live/runnerd-codex-transport.js";
-function providerEnvironment(environment: NodeJS.ProcessEnv) {
+const { createCapabilityRunnerdProviderEnvironment } = await import(new URL("../../../../packages/paperclip-runner/src/live/runnerd-codex-transport.ts", import.meta.url).href);
+function providerEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return createCapabilityRunnerdProviderEnvironment({ provider: "opencode", options: { environment },
     identity: { runnerInstanceId: "probe", environmentLeaseId: "lease", runId: "run", normalizedSessionId: "session", turnId: "turn", itemId: "item" },
     codexHome: "/synthetic/codex", runtimeContextPath: "/synthetic/context", hasRuntimeContext: false });
