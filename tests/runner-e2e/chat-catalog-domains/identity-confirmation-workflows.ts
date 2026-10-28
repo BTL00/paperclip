@@ -5,11 +5,29 @@ import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contra
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { checks, entity, hasLink, verifyInternalResult, type Entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, waitForReply, remainingIdentityObservationBudget, type Interaction } from "./identity-support.js";
+import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, waitForReply, remainingIdentityObservationBudget, type IdentityObservation, type Interaction } from "./identity-support.js";
 
 interface SourceComment extends Entity { authorType?: string }
 const tabs = new WeakMap<ChatCatalogContext, Page>();
 const sources = ["chat-catalog-domains/identity-confirmation-workflows.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"];
+export function answerContinuationCompleted(o: IdentityObservation): boolean {
+  const original = o.state.original as Interaction | undefined;
+  const current = o.interactions.find(row => row.id === original?.id);
+  const resolvedAt = Date.parse(current?.resolvedAt ?? "");
+  const continuations = o.runs.filter(run => run.contextSnapshot?.interactionId === original?.id);
+  const continuation = continuations[0];
+  return !!original && typeof o.state.sourceIssueId === "string" && typeof o.state.canonicalCommentId === "string" && o.state.sourceConversationState === "waiting"
+    && continuations.length === 1 && !!continuation && continuation.companyId === o.companyId && continuation.agentId === o.leadId
+    && continuation.contextSnapshot?.issueId === o.state.sourceIssueId && continuation.status === "succeeded"
+    && Number.isFinite(resolvedAt) && Number.isFinite(Date.parse(continuation.startedAt ?? ""))
+    && Date.parse(continuation.startedAt!) >= resolvedAt
+    && o.runs.some(run => run.id !== continuation.id && run.companyId === o.companyId && run.agentId === o.leadId
+      && run.status === "succeeded" && !!run.startedAt && run.contextSnapshot?.issueId === o.state.sourceIssueId
+      && run.contextSnapshot?.commentId === o.state.canonicalCommentId)
+    && o.activity.some(row => row.action === "issue.question_response_delivered" && row.entityId === o.state.sourceIssueId
+      && row.actorType === "system" && row.actorId === "question-response-delivery" && row.details?.interactionId === original.id
+      && row.details.targetRunId === continuation.id && ["delivered", "fallback_queued"].includes(String(row.details.deliveryStatus)));
+}
 export function gradeConfirmationWorkflow(value: unknown) {
   const c = checks(); const o = identityObservation(value);
   c.add("complete-confirmation-workflow", !!o, "Persisted request version, real human events, native run identities and actual output records are independently required."); if (!o) return c.result();
@@ -37,14 +55,22 @@ export function gradeConfirmationWorkflow(value: unknown) {
       && o.state.noTaskBeforeAnswers === true && o.state.bothTabsResolved === true,
       "Both actual visible submit controls race, yielding one accepted response and one real conflict; both views converge on the same saved receipt.");
     c.add("single-answer-delivery", o.activity.filter(row => row.action === "issue.thread_interaction_answered" && row.details?.interactionId === original?.id && row.actorType === "user").length === 1
-      && o.runs.filter(run => run.contextSnapshot?.interactionId === original?.id).length === 1,
+      && answerContinuationCompleted(o),
       "Exactly one answer audit and one interaction-bound continuation are observed; the losing tab cannot add a run or a new human chat comment.");
-    c.add("one-actual-answer-artifact", o.tasks.length === 1 && o.tasks[0]?.companyId === o.companyId && hasLink(o, "issues", o.tasks[0])
-      && o.documents.length === 1 && (o.documents[0]?.body ?? "").includes("Acorn") && !!o.documents[0]?.latestRevisionId
-      && o.activity.some(row => row.action === "issue.document_created" && row.entityId === o.tasks[0]?.id && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(row.agentId ?? ""))
-      && o.revisions.some(revision => revision.id === o.documents[0]?.latestRevisionId && revision.documentId === o.documents[0]?.id
-        && o.runs.some(run => run.id === revision.createdByRunId && run.agentId === revision.createdByAgentId && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(run.agentId))),
-      "The one continuation produces one linked ordinary draft task and one real saved introduction document using Acorn; an empty task or a prose promise is insufficient.");
+    const introductions = o.documents.filter(document => document.key !== "plan");
+    const introduction = introductions[0];
+    const authored = (document: Entity) => document.issueId === o.tasks[0]?.id && !!document.latestRevisionId
+      && o.revisions.some(revision => revision.id === document.latestRevisionId && revision.documentId === document.id
+        && o.runs.some(run => run.id === revision.createdByRunId && run.status === "succeeded" && !!run.startedAt
+          && run.companyId === o.companyId && run.agentId === revision.createdByAgentId
+          && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(run.agentId)));
+    c.add("one-actual-answer-artifact", o.tasks.length === 1 && o.tasks[0]?.companyId === o.companyId && o.tasks[0]?.status === "done" && hasLink(o, "issues", o.tasks[0])
+      && introductions.length === 1 && !!introduction && (introduction.body ?? "").includes("Acorn") && authored(introduction)
+      && o.documents.filter(document => document.key === "plan").length <= 1 && o.documents.every(authored)
+      && o.activity.some(row => row.action === "issue.document_created" && row.entityId === o.tasks[0]?.id
+        && row.details?.documentId === introduction?.id && row.details.key === introduction?.key
+        && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(row.agentId ?? "")),
+      "One linked completed task has one attributed saved introduction using Acorn; its separately keyed platform plan is not another introduction.");
   } else c.add("known-workflow", false, "This workflow has no independent oracle.");
   return c.result();
 }
@@ -52,6 +78,9 @@ async function sourceComments(ctx: ChatCatalogContext) { return ctx.input.api.ge
 async function observeWorkflow(ctx: ChatCatalogContext, state: Record<string, unknown>) {
   const o = await observeIdentity(ctx, state);
   const comments = await sourceComments(ctx);
+  if (ctx.scenario.id === "questions-and-approvals.duplicate-answer") {
+    state.sourceIssueId = ctx.issue()?.id; state.sourceConversationState = ctx.issue()?.conversationState;
+  }
   state.canonicalCommentId = comments.find(row => row.authorUserId && !row.createdByRunId && row.body?.trim() === ctx.scenario.query)?.id;
   if (ctx.scenario.id === "questions-and-approvals.accept-one-proposal") state.afterRepeatResolvedCommentId = o.interactions.find(row => row.id === entity(state, "original").id)?.result?.commentId;
   if (ctx.scenario.id === "questions-and-approvals.duplicate-answer" && o.tasks.length === 1) {
@@ -62,6 +91,12 @@ async function observeWorkflow(ctx: ChatCatalogContext, state: Record<string, un
     o.revisions = revisions.map(row => ({ id: row.id, documentId: row.documentId, createdByRunId: row.createdByRunId, createdByAgentId: row.createdByAgentId }));
   }
   return o;
+}
+export async function waitForAnswerContinuation(ctx: ChatCatalogContext, state: Record<string, unknown>) {
+  remainingIdentityObservationBudget(ctx);
+  await pollUntil({ label: "One answer-race continuation completed", deadlineAt: ctx.observationDeadlineAt!,
+    load: () => observeWorkflow(ctx, state),
+    accept: value => Date.now() < ctx.observationDeadlineAt! && answerContinuationCompleted(value) });
 }
 export const confirmationWorkflowIdentityCases: readonly ChatCatalogCase[] = [
   identityDefinition("questions-and-approvals.accept-one-proposal", async ctx => {
@@ -113,16 +148,18 @@ export const confirmationWorkflowIdentityCases: readonly ChatCatalogCase[] = [
     observe: observeWorkflow,
     async act(ctx, state) {
       const other = tabs.get(ctx); if (!other) throw new Error("The second real browser tab is missing");
-      await pollUntil({ label: "Canonical name reply has an admitted native run", deadlineAt: Date.now() + 120_000,
+      remainingIdentityObservationBudget(ctx);
+      await pollUntil({ label: "Canonical name reply has an admitted native run", deadlineAt: ctx.observationDeadlineAt!,
         load: () => ctx.allRuns(), accept: runs => runs.some(run => run.agentId === ctx.input.fixtures.agent.id && ["running", "succeeded"].includes(run.status)) });
+      remainingIdentityObservationBudget(ctx);
       const pending = await ctx.input.api.get<Interaction[]>(`/api/issues/${ctx.issue()!.id}/interactions`);
       if (pending.find(row => row.id === entity(state, "original").id)?.status !== "pending") throw new Error("The original human-only question is not pending before the two-tab answer race");
       const before = await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true`); state.noTaskBeforeAnswers = before.filter(row => row.id !== ctx.issue()!.id).length === 0;
       if (!state.noTaskBeforeAnswers) throw new Error("Work started before the protected human question was actually answered");
       for (const page of [ctx.input.page, other]) {
         const form = page.getByTestId("task-chat-composer-takeover");
-        if (!(await form.isVisible())) await page.locator(`#interaction-${entity(state, "original").id}`).click();
-        await expect(form).toBeVisible(); await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first().fill("Acorn");
+        if (!(await form.isVisible())) await page.locator(`#interaction-${entity(state, "original").id}`).click({ timeout: remainingIdentityObservationBudget(ctx) });
+        await expect(form).toBeVisible({ timeout: remainingIdentityObservationBudget(ctx) }); await form.getByTestId("question-text-answer-composer").locator('[contenteditable="true"],textarea').first().fill("Acorn", { timeout: remainingIdentityObservationBudget(ctx) });
       }
       const endpoint = `/api/issues/${ctx.issue()!.id}/interactions/${entity(state, "original").id}/respond`;
       let release!: () => void; const bothActualRequests = new Promise<void>(resolve => { release = resolve; }); let submitted = 0;
@@ -132,24 +169,21 @@ export const confirmationWorkflowIdentityCases: readonly ChatCatalogCase[] = [
         await bothActualRequests; await route.continue();
       };
       const url = ctx.input.api.baseURL + endpoint; const context = ctx.input.page.context(); await context.route(url, handler);
-      const timer = setTimeout(release, 30_000);
+      const timer = setTimeout(release, Math.min(30_000, remainingIdentityObservationBudget(ctx)));
       try {
         // Hold only transport admission until both genuine visible buttons have
         // submitted. Both unmodified requests then reach the real public route;
         // no response is fulfilled, replayed, or manufactured by this barrier.
-        const responses = [ctx.input.page, other].map(page => page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === endpoint));
-        await Promise.all([ctx.input.page, other].map(page => page.getByTestId("task-chat-composer-takeover").getByRole("button", { name: "Submit answers", exact: true }).click()));
+        const responses = [ctx.input.page, other].map(page => page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === endpoint, { timeout: remainingIdentityObservationBudget(ctx) }));
+        await Promise.all([ctx.input.page, other].map(page => page.getByTestId("task-chat-composer-takeover").getByRole("button", { name: "Submit answers", exact: true }).click({ timeout: remainingIdentityObservationBudget(ctx) })));
         state.submitStatuses = (await Promise.all(responses)).map(response => response.status()); state.actualSubmitRequests = submitted;
       } finally { release(); clearTimeout(timer); await context.unroute(url, handler); }
-      await pollUntil({ label: "One answer-race continuation completed", deadlineAt: Date.now() + 180_000,
-        load: async () => { await ctx.refreshIssue(); return { runs: await ctx.allRuns(), source: ctx.issue() }; },
-        accept: value => value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).length >= 2
-          && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).every(run => run.status === "succeeded") && value.source?.conversationState === "waiting" });
+      await waitForAnswerContinuation(ctx, state);
       for (const page of [ctx.input.page, other]) {
-        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.reload({ waitUntil: "domcontentloaded", timeout: remainingIdentityObservationBudget(ctx) });
         const receipt = page.locator(`#interaction-${entity(state, "original").id}`).getByTestId("task-chat-answered-questions-receipt");
-        await expect(receipt).toBeVisible(); await receipt.locator("summary").click(); await expect(receipt).toContainText("Acorn");
-        await expect(page.locator(`#interaction-${entity(state, "original").id}`).getByTestId("task-chat-unanswered-question")).toHaveCount(0);
+        await expect(receipt).toBeVisible({ timeout: remainingIdentityObservationBudget(ctx) }); await receipt.locator("summary").click({ timeout: remainingIdentityObservationBudget(ctx) }); await expect(receipt).toContainText("Acorn", { timeout: remainingIdentityObservationBudget(ctx) });
+        await expect(page.locator(`#interaction-${entity(state, "original").id}`).getByTestId("task-chat-unanswered-question")).toHaveCount(0, { timeout: remainingIdentityObservationBudget(ctx) });
       }
       state.bothTabsResolved = true;
       await ctx.input.evidence("identity-simultaneous-question-answer.json", { questionId: entity(state, "original").id, userId: state.humanId, submitStatuses: state.submitStatuses, bothTabsResolved: true });
