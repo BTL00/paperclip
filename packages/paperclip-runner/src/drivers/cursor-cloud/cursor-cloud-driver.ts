@@ -6,7 +6,7 @@ import type { HarnessDriver, HarnessDriverDescriptor, HarnessSession, HarnessSes
 import { HarnessCapabilityUnavailableError, HarnessReconciliationError, HarnessStaleTurnError } from "../../contracts/harness-driver.js";
 import type { NativeRuntimeContextSnapshot } from "../../contracts/runtime-context.js";
 import type { NativeUserMessage } from "../../contracts/types.js";
-import { CURSOR_CLOUD_DEFAULT_TIMEOUT_MS } from "../../contracts/cursor-cloud.js";
+import { CURSOR_CLOUD_CANCEL_TIMEOUT_MS, CURSOR_CLOUD_DEFAULT_TIMEOUT_MS } from "../../contracts/cursor-cloud.js";
 import { PRP_BLOCK_TOOL_NAME, PRP_COMPLETION_TOOL_NAME } from "../../contracts/completion-result.js";
 import type { PrpEvent } from "../../protocol/replay-contract.js";
 import { startRunnerToolBridge, type RunnerToolBridge, type RunnerToolCall } from "../runner-tool-bridge.js";
@@ -173,7 +173,7 @@ class CursorCloudSession implements CursorCloudSessionHandle {
   constructor(options: CursorCloudDriverOptions, input: OpenHarnessSessionInput, instructions: string, checkpoint: CursorCloudCheckpoint, store: CursorCloudCheckpointStore) {
     this.#options = options; this.#input = input; this.#instructions = instructions; this.#cp = checkpoint; this.#store = store;
     this.#client = options.client ?? new CursorCloudClient({ apiKey: options.environment?.CURSOR_API_KEY ?? "" });
-    this.#cancelTimeoutMs = boundedPositive(options.cancelTimeoutMs, 20_000);
+    this.#cancelTimeoutMs = boundedPositive(options.cancelTimeoutMs, CURSOR_CLOUD_CANCEL_TIMEOUT_MS);
   }
   async initialize(): Promise<void> {
     const socketDirectory = await lstat(dirname(this.#options.relay.socketPath));
