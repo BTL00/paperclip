@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import type { Readable, Writable } from "node:stream";
 import type { HarnessSession, PersistedHarnessSession } from "../contracts/harness-driver.js";
 import { parseNativeRuntimeContext } from "../contracts/runtime-context.js";
-import { CursorCloudDriver, CURSOR_CLOUD_DRIVER_KIND, CURSOR_CLOUD_DRIVER_VERSION } from "../drivers/cursor-cloud/cursor-cloud-driver.js";
+import { CursorCloudDriver, CURSOR_CLOUD_DRIVER_KIND, CURSOR_CLOUD_DRIVER_VERSION, type CursorCloudSessionHandle } from "../drivers/cursor-cloud/cursor-cloud-driver.js";
 import { cursorCloudRecord, parseCursorCloudBinding, parseNativeCursorCloudConfig } from "../drivers/cursor-cloud/config.js";
 import { enqueueSerialInput } from "./serial-input-queue.js";
 
@@ -39,7 +39,7 @@ export function startCursorCloudAppServerProxy(options: {
   const env = options.environment ?? process.env;
   const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
   let sequence = 0;
-  let session: HarnessSession | null = null;
+  let session: CursorCloudSessionHandle | null = null;
   let cwd = "";
   let model = "";
   let closed = false;
@@ -112,7 +112,7 @@ export function startCursorCloudAppServerProxy(options: {
           threadId, turnId, itemId: event.itemId, ...payload, item,
           ...(event.eventType === "item.delta" && assistant ? { delta: payload.text } : {}),
         } });
-      } else if (["turn.completed", "turn.failed", "turn.interrupted"].includes(event.eventType)) send({ method: event.eventType.replace(".", "/"), params: { threadId, turnId, turn: { id: turnId, status: event.eventType.slice(5), ...(payload.error ? { error: payload.error } : {}) } } });
+      } else if (["turn.completed", "turn.failed", "turn.interrupted"].includes(event.eventType)) send({ method: event.eventType.replace(".", "/"), params: { threadId, turnId, ...(payload.cursorCloudTerminalDelivery ? { cursorCloudTerminalDelivery: payload.cursorCloudTerminalDelivery } : {}), turn: { id: turnId, status: event.eventType.slice(5), ...(payload.error ? { error: payload.error } : {}) } } });
       else if (event.eventType === "harness.diagnostic") send({ method: "warning", params: { threadId, turnId, code: payload.code, message: payload.message ?? payload.code } });
     }
   }
@@ -153,8 +153,13 @@ export function startCursorCloudAppServerProxy(options: {
       case "thread/read": {
         if (!session) throw new Error("Cursor Cloud thread is not open");
         const snapshot = await session.snapshot();
-        result = { thread: { id: session.ids().driverSessionId, cwd, turns: snapshot.activeTurnId ? [{ id: snapshot.activeTurnId, status: "inProgress" }] : [] }, transcript: await session.read?.() }; break;
+        const state = await session.read();
+        result = { cursorCloudTerminalDelivery: state.pendingTerminalDelivery, thread: { id: session.ids().driverSessionId, cwd, turns: snapshot.activeTurnId ? [{ id: snapshot.activeTurnId, status: "inProgress" }] : [] }, transcript: state }; break;
       }
+      case "paperclip/ackTerminal":
+        if (!session || typeof params.turnId !== "string" || typeof params.receiptId !== "string") throw new Error("Cursor Cloud terminal receipt is missing");
+        await session.acknowledgeTerminalDelivery({ turnId: params.turnId, receiptId: params.receiptId });
+        result = { turnId: params.turnId, receiptId: params.receiptId, acknowledged: true }; break;
       case "paperclip/shutdown": result = await stopReceipt(); break;
       default: throw new Error("Unsupported Cursor Cloud proxy method");
     }

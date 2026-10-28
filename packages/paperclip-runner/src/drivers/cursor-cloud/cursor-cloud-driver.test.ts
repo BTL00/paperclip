@@ -8,7 +8,7 @@ import type { HarnessSession } from "../../contracts/harness-driver.js";
 import type { PrpEvent } from "../../protocol/replay-contract.js";
 import type { CursorCloudCreateInput, CursorCloudFollowupInput, CursorCloudRun, CursorCloudSseEvent } from "./cloud-client.js";
 import { CursorCloudClientError } from "./cloud-client.js";
-import { CursorCloudDriver, cursorCloudDriverDescriptor, type CursorCloudDriverOptions } from "./cursor-cloud-driver.js";
+import { CursorCloudDriver, cursorCloudDriverDescriptor, type CursorCloudDriverOptions, type CursorCloudSessionHandle } from "./cursor-cloud-driver.js";
 
 const roots: string[] = [];
 const sessions: HarnessSession[] = [];
@@ -71,6 +71,11 @@ async function fixture(peer = new Peer(), extra: Partial<CursorCloudDriverOption
 
 async function waitFor(check: () => boolean) { await vi.waitFor(() => expect(check()).toBe(true), { timeout: 2_000, interval: 5 }); }
 
+async function acknowledgeTerminal(session: CursorCloudSessionHandle) {
+  const pending = (await session.read?.())?.pendingTerminalDelivery as { turnId: string; receiptId: string };
+  await session.acknowledgeTerminalDelivery(pending);
+}
+
 async function rpc(path: string, body: unknown, token = "private-relay-token", session?: string): Promise<{ status: number; value: any; session?: string }> {
   return new Promise((accept, reject) => {
     const req = request({ socketPath: path, path: "/mcp", method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json", ...(session ? { "Mcp-Session-Id": session } : {}) } }, response => {
@@ -113,6 +118,7 @@ describe("Cursor Cloud native driver", () => {
     const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
     const revised = { ...f.options, instructions: "Updated assigned instructions and skill bundle." };
     const restored = (await new CursorCloudDriver(revised).recoverSession(snapshot)).session!; sessions.push(restored);
+    await acknowledgeTerminal(restored);
     await restored.startTurn({ message: { role: "user", text: "Follow up" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 1);
     expect(f.peer.request?.prompt.text).toBe("Updated assigned instructions and skill bundle.\n\nPaperclip task:\nFollow up");
@@ -121,6 +127,7 @@ describe("Cursor Cloud native driver", () => {
     await expect(new CursorCloudDriver(f.options).recoverSession(activeSnapshot)).rejects.toThrow("instructions changed");
     const final = (await new CursorCloudDriver(revised).recoverSession(activeSnapshot)).session!; sessions.push(final);
     await final.interrupt!();
+    await acknowledgeTerminal(final);
     await final.startTurn({ message: { role: "user", text: "One more task" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 2);
     expect(f.peer.request?.prompt.text).toBe("One more task");
@@ -142,6 +149,7 @@ describe("Cursor Cloud native driver", () => {
     f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
     await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
     expect(f.events.some(event => event.eventType === "run.result.proposed")).toBe(false);
+    await acknowledgeTerminal(f.session);
     await f.session.startTurn({ message: { role: "user", text: "Task two" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 1);
     expect(f.peer.request?.prompt.text).toBe("Task two"); expect(f.peer.createAgent).toHaveBeenCalledTimes(1);
@@ -210,6 +218,7 @@ describe("Cursor Cloud native driver", () => {
     expect(f.handler.mock.calls[0]![0].callId).not.toBe(f.handler.mock.calls[1]![0].callId);
     f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
     await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
+    await acknowledgeTerminal(f.session);
     await f.session.startTurn({ message: { role: "user", text: "Next turn" } });
     const third = await rpc(path, { id: 0, method: "initialize" });
     expect((await rpc(path, call, undefined, first.session)).status).toBe(404);
@@ -300,6 +309,31 @@ describe("Cursor Cloud native driver", () => {
     await writeFile(f.options.relay.socketPath, "unowned file", { mode: 0o600 });
     await expect(new CursorCloudDriver(f.options).recoverSession(snapshot)).rejects.toThrow("without safe dead-owner");
     expect(await readFile(f.options.relay.socketPath, "utf8")).toBe("unowned file");
+  });
+
+  it("retains the exact terminal delivery across restart until its receipt is acknowledged", async () => {
+    const f = await fixture();
+    const started = await f.session.startTurn({ message: { role: "user", text: "Retain the final result" } }); await f.peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    f.peer.native!.result = "Recovered final private-cursor-key private-relay-token";
+    f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
+    await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    expect(JSON.parse(await readFile(checkpointPath, "utf8")).sourceSequence).toBe(f.events.find(event => event.eventType === "turn.completed")!.sourceSeq);
+    const pending = (await f.session.read?.())?.pendingTerminalDelivery as Record<string, unknown>;
+    expect(pending).toMatchObject({ schema: "paperclip.cursor-cloud.terminal-delivery.v1", threadId: "session", turnId: started.turnId, providerRunId: runId, status: "FINISHED", interrupted: false, result: "Recovered final [redacted] [redacted]", receiptId: expect.any(String) });
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    expect((await restored.read?.())?.pendingTerminalDelivery).toEqual(pending);
+    await expect(restored.startTurn({ message: { role: "user", text: "Must not replace the pending receipt" } })).rejects.toThrow("terminal delivery");
+    await expect(restored.acknowledgeTerminalDelivery({ turnId: started.turnId, receiptId: "wrong" })).rejects.toThrow("receipt");
+    expect((await restored.read?.())?.pendingTerminalDelivery).toEqual(pending);
+    await restored.acknowledgeTerminalDelivery({ turnId: started.turnId, receiptId: pending.receiptId as string });
+    expect((await restored.read?.())?.pendingTerminalDelivery).toBeNull();
+    const acknowledged = await restored.snapshot(); await restored.detachControllerForRestart!();
+    const final = (await new CursorCloudDriver(f.options).recoverSession(acknowledged)).session!; sessions.push(final);
+    expect((await final.read?.())?.pendingTerminalDelivery).toBeNull();
+    expect(f.peer.createAgent).toHaveBeenCalledTimes(1); expect(f.peer.createRun).not.toHaveBeenCalled();
   });
 
   it.each(["agent", "run"])("retries a transient recovery %s read without replacing work or extending its deadline", async read => {

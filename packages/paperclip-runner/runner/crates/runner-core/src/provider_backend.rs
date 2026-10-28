@@ -1000,6 +1000,8 @@ struct CodexProviderState {
     cursor_cloud_launch_profile_digest: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     provider_termination_receipt: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cursor_cloud_terminal_receipt: Option<Value>,
     #[serde(default)]
     completion_contract: Option<CompletionContractBinding>,
     #[serde(default)]
@@ -1106,6 +1108,7 @@ impl CodexProviderState {
             opencode_launch_profile_digest: None,
             cursor_cloud_launch_profile_digest: None,
             provider_termination_receipt: None,
+            cursor_cloud_terminal_receipt: None,
             completion_contract,
             tool_bridge,
             thread_id,
@@ -1137,6 +1140,104 @@ impl CodexProviderState {
         }
     }
 
+    fn retain_cursor_cloud_terminal_delivery(
+        &mut self,
+        delivery: &crate::cursor_cloud_proxy::TerminalDelivery,
+        identity: Option<&ProviderEventIdentity>,
+        process_generation: u64,
+    ) -> Result<(), DurableRunnerError> {
+        let invalid = || {
+            DurableRunnerError::invalid(
+                "Cursor Cloud terminal delivery conflicts with durable ownership",
+            )
+        };
+        if self.config.provider != "cursor_cloud"
+            || self.thread_id.as_deref() != Some(delivery.thread_id.as_str())
+        {
+            return Err(invalid());
+        }
+        let receipt = delivery.receipt();
+        if self
+            .cursor_cloud_terminal_receipt
+            .as_ref()
+            .is_some_and(|saved| {
+                saved.get("turnId").and_then(Value::as_str) == Some(delivery.turn_id.as_str())
+            })
+        {
+            if self.cursor_cloud_terminal_receipt.as_ref() != Some(&receipt)
+                || self.active_provider_turn_id.as_deref() == Some(delivery.turn_id.as_str())
+                || !settled_provider_turn_contains(
+                    &self.settled_provider_turn_ids,
+                    &self.settled_provider_turn_filter,
+                    &delivery.turn_id,
+                )
+            {
+                return Err(invalid());
+            }
+            return Ok(());
+        }
+        if self.active_provider_turn_id.as_deref() != Some(delivery.turn_id.as_str())
+            || settled_provider_turn_contains(
+                &self.settled_provider_turn_ids,
+                &self.settled_provider_turn_filter,
+                &delivery.turn_id,
+            )
+            || self
+                .last_agent_message
+                .as_ref()
+                .is_some_and(|text| delivery.result.as_ref() != Some(text))
+        {
+            return Err(invalid());
+        }
+        if self.last_agent_message.is_none() {
+            if let Some(text) = &delivery.result {
+                let events = normalize_provider_notification(
+                    self,
+                    "item/completed",
+                    &delivery.final_params(),
+                )?;
+                self.extend_terminal_events(events)?;
+                self.last_agent_message = Some(text.clone());
+            }
+        }
+        let normalized =
+            normalize_provider_notification(self, delivery.method(), &delivery.terminal_params())?;
+        self.settle_active_provider_turn_identity()?;
+        let settled = self
+            .tool_bridge
+            .settle_turn("provider_turn_terminated")
+            .map_err(|error| DurableRunnerError::invalid(error.to_string()))?;
+        for result in settled {
+            let identity = identity.ok_or_else(|| {
+                DurableRunnerError::invalid(
+                    "Cursor Cloud terminal tool settlement has no durable identity",
+                )
+            })?;
+            self.push_terminal_event(semantic_result_event(identity, &result))?;
+        }
+        self.active_provider_turn_id = None;
+        self.ambiguous_turn_start_pending = false;
+        self.completed_turn_authoritative = delivery.method() == "turn/completed"
+            || self.active_provider_result_fingerprint.is_some();
+        self.completed_turn_process_generation = self
+            .completed_turn_authoritative
+            .then_some(process_generation);
+        self.completed_provider_turn_id = self
+            .completed_turn_authoritative
+            .then(|| delivery.turn_id.clone());
+        self.receipt_limit_diagnostic_emitted = false;
+        self.receipt_limit_interrupt_pending = false;
+        self.receipt_limit_interrupt_accepted = false;
+        self.receipt_limit_interrupt_attempts = 0;
+        self.receipt_limit_interrupt_deadline_unix_ms = None;
+        self.lifecycle = "session_open".to_owned();
+        let event_type = delivery.method().replace('/', ".");
+        let outcome = terminal_events(self, &event_type, None);
+        self.extend_terminal_events(with_terminal_outcome(normalized, outcome))?;
+        self.cursor_cloud_terminal_receipt = Some(receipt);
+        Ok(())
+    }
+
     fn validate(&self) -> Result<(), DurableRunnerError> {
         if let Some(attempt) = &self.startup_attempt {
             attempt.validate()?;
@@ -1147,6 +1248,38 @@ impl CodexProviderState {
         self.tool_bridge.validate_recovered().map_err(|error| {
             DurableRunnerError::invalid(format!("Codex semantic tool state is invalid: {error}"))
         })?;
+        if let Some(receipt) = &self.cursor_cloud_terminal_receipt {
+            let turn_id = receipt
+                .get("turnId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let receipt_id = receipt
+                .get("receiptId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let digest = receipt
+                .get("batchDigest")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if self.config.provider != "cursor_cloud"
+                || turn_id.is_empty()
+                || turn_id.len() > 240
+                || receipt_id.is_empty()
+                || receipt_id.len() > 240
+                || !digest.strip_prefix("sha256:").is_some_and(|digest| {
+                    digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+                || !settled_provider_turn_contains(
+                    &self.settled_provider_turn_ids,
+                    &self.settled_provider_turn_filter,
+                    turn_id,
+                )
+            {
+                return Err(DurableRunnerError::invalid(
+                    "Cursor Cloud retained terminal receipt is invalid",
+                ));
+            }
+        }
         let mut pending_event_ids = HashSet::new();
         if self.descendant_thread_ids.len() > crate::codex_provider::MAX_DESCENDANT_THREAD_IDS
             || self
@@ -1938,6 +2071,41 @@ impl CodexCommandExecutor {
                         "failed to restore local provider turn identities: {error}"
                     ))
                 })?;
+            if let Some(delivery) = provider
+                .cursor_cloud_terminal_delivery()
+                .map_err(|error| DurableRunnerError::invalid(error.to_string()))?
+            {
+                if provider.active_provider_turn_id().is_some() {
+                    return Err(DurableRunnerError::invalid(
+                        "Cursor Cloud terminal delivery also reports active remote work",
+                    ));
+                }
+                let identity = self.event_identity.clone();
+                let state = self.state.as_mut().expect("provider state remains loaded");
+                state.provider_process_generation = process_generation;
+                state.provider_session_id = provider.provider_session_id().map(str::to_owned);
+                state.retain_cursor_cloud_terminal_delivery(
+                    &delivery,
+                    identity.as_ref(),
+                    process_generation,
+                )?;
+                provider
+                    .restore_settled_turn_identities(
+                        state.settled_provider_turn_ids.iter().cloned(),
+                        state.settled_provider_turn_filter.clone(),
+                    )
+                    .map_err(|error| DurableRunnerError::invalid(error.to_string()))?;
+                provider
+                    .restore_completed_turn_authority(
+                        state.completed_turn_authoritative,
+                        state.completed_turn_process_generation,
+                        state.completed_provider_turn_id.as_deref(),
+                    )
+                    .map_err(|error| DurableRunnerError::invalid(error.to_string()))?;
+                self.commit_startup_admission()?;
+                let _ = provider.acknowledge_cursor_cloud_terminal(&delivery);
+                return Ok(());
+            }
             let recovered_active_turn_id = provider.active_provider_turn_id().map(str::to_owned);
             let recovered_turn_ended_with_result = active_provider_result_authoritative
                 && previous_active_turn_id.is_some()
@@ -4300,6 +4468,26 @@ impl CodexCommandExecutor {
                     };
                     let normalized_terminal_type =
                         normalized_codex_terminal_event_type(&method, &params);
+                    let cursor_cloud_delivery = if self
+                        .state
+                        .as_ref()
+                        .is_some_and(|state| state.config.provider == "cursor_cloud")
+                        && normalized_terminal_type.is_some()
+                    {
+                        params.get("cursorCloudTerminalDelivery").map(|value| {
+                            let state = self.state.as_ref().expect("provider state remains loaded");
+                            let delivery = crate::cursor_cloud_proxy::TerminalDelivery::parse(value, state.thread_id.as_deref().unwrap_or_default())
+                                .map_err(|error| DurableRunnerError::invalid(error.to_string()))?;
+                            if state.active_provider_turn_id.as_deref() != Some(delivery.turn_id.as_str())
+                                || delivery.method() != method
+                                || state.last_agent_message.as_ref() != delivery.result.as_ref() {
+                                return Err(DurableRunnerError::invalid("Cursor Cloud terminal notification changed its retained delivery"));
+                            }
+                            Ok(delivery)
+                        }).transpose()?
+                    } else {
+                        None
+                    };
                     let result_authoritative = normalized_terminal_type.is_some()
                         && self.state.as_ref().is_some_and(|state| {
                             state.active_provider_result_fingerprint.is_some()
@@ -4509,6 +4697,9 @@ impl CodexCommandExecutor {
                     } else {
                         state.extend_events(normalized)?;
                     }
+                    if let Some(delivery) = &cursor_cloud_delivery {
+                        state.cursor_cloud_terminal_receipt = Some(delivery.receipt());
+                    }
                     let trace_last_event_sequence = state.next_provider_event_seq;
                     let trace_emitted_event_ids = identity
                         .as_ref()
@@ -4520,6 +4711,11 @@ impl CodexCommandExecutor {
                         })
                         .unwrap_or_default();
                     self.save_state()?;
+                    if let (Some(delivery), Some(provider)) =
+                        (cursor_cloud_delivery.as_ref(), self.provider.as_mut())
+                    {
+                        let _ = provider.acknowledge_cursor_cloud_terminal(delivery);
+                    }
                     if let (Some(frame_id), Some(provider)) =
                         (trace_frame_id, self.provider.as_mut())
                     {
@@ -5283,6 +5479,39 @@ mod tests {
     }
 
     #[test]
+    fn cursor_cloud_terminal_receipts_reject_unowned_and_changed_delivery() {
+        let batch = json!({"schema":"paperclip.cursor-cloud.terminal-delivery.v1", "threadId":"thread-1", "turnId":"turn-1", "providerRunId":"run-provider", "receiptId":"receipt-1", "status":"FINISHED", "interrupted":false, "result":"Durable final"});
+        let delivery =
+            crate::cursor_cloud_proxy::TerminalDelivery::parse(&batch, "thread-1").unwrap();
+        let mut state = cursor_cloud_result_state();
+        state
+            .retain_cursor_cloud_terminal_delivery(&delivery, None, 1)
+            .unwrap();
+        let events = state.pending_events.clone();
+        state
+            .retain_cursor_cloud_terminal_delivery(&delivery, None, 2)
+            .unwrap();
+        assert_eq!(state.pending_events, events);
+        let mut changed = batch.clone();
+        changed["result"] = json!("Conflicting final");
+        let changed =
+            crate::cursor_cloud_proxy::TerminalDelivery::parse(&changed, "thread-1").unwrap();
+        assert!(state
+            .retain_cursor_cloud_terminal_delivery(&changed, None, 2)
+            .is_err());
+        let mut unowned = cursor_cloud_result_state();
+        unowned.active_provider_turn_id = None;
+        assert!(unowned
+            .retain_cursor_cloud_terminal_delivery(&delivery, None, 1)
+            .is_err());
+        let mut partial = cursor_cloud_result_state();
+        partial.last_agent_message = Some("Different persisted final".to_owned());
+        assert!(partial
+            .retain_cursor_cloud_terminal_delivery(&delivery, None, 1)
+            .is_err());
+    }
+
+    #[test]
     fn cursor_cloud_native_completion_without_semantic_acceptance_requires_review() {
         let state = cursor_cloud_result_state();
         let events = terminal_events(&state, "turn.completed", None);
@@ -5802,6 +6031,7 @@ mod tests {
             opencode_launch_profile_digest: None,
             cursor_cloud_launch_profile_digest: None,
             provider_termination_receipt: None,
+            cursor_cloud_terminal_receipt: None,
             completion_contract: None,
             tool_bridge: ProviderToolBridge::default(),
             thread_id: Some("thread-1".to_owned()),

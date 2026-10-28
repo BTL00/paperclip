@@ -93,6 +93,13 @@ describe("Cursor Cloud bounded stdio proxy", () => {
       expect(JSON.parse(tools[2].params.item.output)).toEqual({ omitted: true, reason: "payload_limit" });
       expect(JSON.stringify(tools)).not.toContain("private-key");
       expect(JSON.stringify(tools)).not.toContain("private-relay-token");
+      const retained = await f.rpc(4, "thread/read");
+      expect(retained.result.thread.turns).toEqual([]);
+      expect(retained.result.cursorCloudTerminalDelivery).toMatchObject({ status: "FINISHED", receiptId: expect.any(String) });
+      const receipt = retained.result.cursorCloudTerminalDelivery;
+      expect(await f.rpc(5, "paperclip/ackTerminal", { turnId: receipt.turnId, receiptId: "wrong" })).toHaveProperty("error");
+      expect(await f.rpc(6, "paperclip/ackTerminal", { turnId: receipt.turnId, receiptId: receipt.receiptId })).toMatchObject({ result: { acknowledged: true } });
+      expect((await f.rpc(7, "thread/read")).result.cursorCloudTerminalDelivery).toBeNull();
       expect(nativeFetch.mock.calls.filter(([url, init]) => new URL(String(url)).pathname === "/v1/agents" && init?.method === "POST")).toHaveLength(1);
     } finally { f.input.end(); await f.proxy.done; }
   });

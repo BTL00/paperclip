@@ -1614,6 +1614,109 @@ fn cursor_cloud_facade_keeps_provider_labels_and_requires_semantic_completion() 
 }
 
 #[test]
+fn cursor_cloud_replays_a_durable_terminal_batch_after_proxy_loss_and_a_lost_ack() {
+    for partial in [false, true] {
+        let directory = temporary_directory("cursor-cloud-terminal-replay");
+        let delivery_path = directory.join("terminal.json");
+        let hold_ack = directory.join("terminal.json.hold-ack");
+        let config = cursor_cloud_config_with_args(
+            &directory,
+            &format!(
+                "--hold-turn --cursor-cloud-terminal-file '{}' {}",
+                delivery_path.display(),
+                if partial { "--held-final-message" } else { "" },
+            ),
+        );
+        let mut first = NativeProviderCommandExecutor::with_runner_config(&directory, &config);
+        first
+            .execute(&command(
+                1,
+                "run.prepare",
+                cursor_cloud_prepare_payload(&directory),
+            ))
+            .unwrap();
+        first
+            .execute(&command(2, "session.open", json!({})))
+            .unwrap();
+        first
+            .execute(&command(
+                3,
+                "turn.start",
+                json!({"text":"Retain terminal delivery"}),
+            ))
+            .unwrap();
+        let mut observed = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let events = first.poll_events().unwrap();
+            let count = events.len();
+            observed.extend(events);
+            first.acknowledge_events(count).unwrap();
+            if observed.iter().any(|event| {
+                event.event_type
+                    == if partial {
+                        "item.completed"
+                    } else {
+                        "turn.started"
+                    }
+            }) {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        drop(first);
+        let state_path = directory.join("codex-provider-state.json");
+        let saved: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+        fs::write(&delivery_path, serde_json::to_vec(&json!({
+            "schema":"paperclip.cursor-cloud.terminal-delivery.v1", "threadId":saved["threadId"],
+            "turnId":saved["activeProviderTurnId"], "providerRunId":"run-terminal-fixture",
+            "receiptId":"00000000-0000-4000-8000-000000000001", "status":"FINISHED", "interrupted":false,
+            "result":"Durable Cloud final",
+        })).unwrap()).unwrap();
+        fs::write(&hold_ack, b"hold").unwrap();
+        let mut resumed = NativeProviderCommandExecutor::with_runner_config(&directory, &config);
+        let recovered = resumed.poll_events().unwrap();
+        assert!(
+            recovered
+                .iter()
+                .any(|event| event.event_type == "turn.completed"),
+            "{recovered:?}"
+        );
+        assert!(!recovered
+            .iter()
+            .any(|event| event.event_type == "turn.failed"));
+        observed.extend(recovered.clone());
+        assert_eq!(
+            observed
+                .iter()
+                .filter(|event| event.event_type == "item.completed"
+                    && event.payload.to_string().contains("Durable Cloud final"))
+                .count(),
+            1
+        );
+        assert!(recovered
+            .iter()
+            .any(|event| event.event_type == "run.terminal"
+                && event.payload["runTerminalState"] == "failed"));
+        resumed.acknowledge_events(recovered.len()).unwrap();
+        assert!(delivery_path.exists());
+        drop(resumed);
+        fs::remove_file(&hold_ack).unwrap();
+        let mut again = NativeProviderCommandExecutor::with_runner_config(&directory, &config);
+        let replay = again.poll_events().unwrap();
+        assert!(!replay.iter().any(|event| matches!(
+            event.event_type.as_str(),
+            "item.completed" | "turn.completed" | "turn.failed" | "run.terminal"
+        )));
+        assert!(!delivery_path.exists());
+        again.acknowledge_events(replay.len()).unwrap();
+        again.shutdown().unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
 fn cursor_cloud_run_attachment_reopens_the_same_thread_in_a_fresh_sidecar() {
     let directory = temporary_directory("cursor-cloud-cold-attachment");
     let config = cursor_cloud_config(&directory);

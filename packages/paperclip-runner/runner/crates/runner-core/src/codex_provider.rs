@@ -2065,6 +2065,50 @@ impl CodexProvider {
         )
     }
 
+    pub(crate) fn cursor_cloud_terminal_delivery(
+        &mut self,
+    ) -> Result<Option<crate::cursor_cloud_proxy::TerminalDelivery>, LocalRunnerError> {
+        if self.config.provider != "cursor_cloud" {
+            return Ok(None);
+        }
+        let snapshot = self.read_thread()?;
+        if snapshot.pointer("/thread/id").and_then(Value::as_str) != Some(self.thread_id.as_str()) {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal snapshot changed its thread",
+            ));
+        }
+        snapshot
+            .get("cursorCloudTerminalDelivery")
+            .filter(|value| !value.is_null())
+            .map(|value| crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id))
+            .transpose()
+    }
+
+    pub(crate) fn acknowledge_cursor_cloud_terminal(
+        &mut self,
+        delivery: &crate::cursor_cloud_proxy::TerminalDelivery,
+    ) -> Result<(), LocalRunnerError> {
+        if self.config.provider != "cursor_cloud" || delivery.thread_id != self.thread_id {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal receipt changed its provider",
+            ));
+        }
+        let response = self.request(
+            "paperclip/ackTerminal",
+            json!({"turnId":delivery.turn_id,"receiptId":delivery.receipt_id}),
+        )?;
+        if response.get("acknowledged") != Some(&Value::Bool(true))
+            || response.get("turnId").and_then(Value::as_str) != Some(delivery.turn_id.as_str())
+            || response.get("receiptId").and_then(Value::as_str)
+                != Some(delivery.receipt_id.as_str())
+        {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal receipt was not acknowledged",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn read_thread(&mut self) -> Result<Value, LocalRunnerError> {
         // Probing provider state does not supersede an authoritative terminal.
         // A later replacement turn must still establish its own identity.
