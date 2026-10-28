@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -76,10 +77,10 @@ const performance = privilegedDefinition("developer-labs.long-thread-performance
     } finally { await page.goto(source, { waitUntil: "domcontentloaded" }); }
     // Declared operator companion step: facts only, no desired conclusion or threshold.
     const message = `Here is the report from my owned documented long-thread fixture. Please interpret the measured behavior and its limits:\n\n${JSON.stringify(report!)}`;
-    await sendChatMessage(page, message);
-    const final = await pollUntil({ label: "Actual native interpretation of the measured report", deadlineAt: Date.now() + 150_000,
+    await sendChatMessage(page, message, chatCatalogNativePhaseRemainingBudget(ctx));
+    const final = await pollUntil({ label: "Actual native interpretation of the measured report", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: o => o.issue?.conversationState === "waiting" && o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") });
+      accept: o => chatCatalogNativePhaseIsTimely(ctx) && o.issue?.conversationState === "waiting" && o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") });
     const run = final.runs.find(run => run.id !== first.runs[0]!.id)!;
     const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`);
     const human = comments.filter(comment => !comment.authorAgentId && comment.body === message);
