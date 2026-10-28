@@ -5,7 +5,7 @@ import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contra
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { checks, entity, hasLink, verifyInternalResult, type Entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, waitForReply, type Interaction } from "./identity-support.js";
+import { identityDefinition, identityObservation, identityWorker, observeIdentity, openStandingChat, waitForReply, remainingIdentityObservationBudget, type Interaction } from "./identity-support.js";
 
 interface SourceComment extends Entity { authorType?: string }
 const tabs = new WeakMap<ChatCatalogContext, Page>();
@@ -75,16 +75,26 @@ export const confirmationWorkflowIdentityCases: readonly ChatCatalogCase[] = [
     authentication: "human-session", sourceFiles: sources, expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
     observe: observeWorkflow,
     async act(ctx, state) {
-      await waitForReply(ctx);
-      const created = await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true`);
+      const remaining = () => remainingIdentityObservationBudget(ctx);
+      remaining();
+      await waitForReply(ctx, ctx.observationDeadlineAt);
+      remaining();
+      const created = await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true`, { timeout: remaining() });
       const first = created.filter(row => row.id !== ctx.issue()!.id); if (first.length !== 1 || first[0]?.title !== state.taskTitle) throw new Error("The approved named task was not actually created once");
       state.firstTask = first[0];
-      const comments = await sourceComments(ctx); state.canonicalCommentId = comments.find(row => row.authorUserId && row.body?.trim() === ctx.scenario.query)?.id;
-      await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
-      state.afterReloadTaskId = (await ctx.input.api.get<Entity>(`/api/issues/${first[0]!.id}`)).id;
-      await sendChatMessage(ctx.input.page, ctx.scenario.query);
+      const comments = await ctx.input.api.get<SourceComment[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`, { timeout: remaining() }); state.canonicalCommentId = comments.find(row => row.authorUserId && row.body?.trim() === ctx.scenario.query)?.id;
+      await ctx.input.page.reload({ waitUntil: "domcontentloaded", timeout: remaining() });
+      state.afterReloadTaskId = (await ctx.input.api.get<Entity>(`/api/issues/${first[0]!.id}`, { timeout: remaining() })).id;
+      await sendChatMessage(ctx.input.page, ctx.scenario.query, remaining);
       await ctx.input.evidence("identity-repeat-original-confirmation.json", { requestId: entity(state, "original").id, firstTaskId: first[0]!.id, canonicalCommentId: state.canonicalCommentId, repeatedOriginalReply: true });
-    }, verifyResult: verifyInternalResult,
+      remaining();
+    },
+    async verifyResult(ctx, state, value) {
+      const remaining = () => remainingIdentityObservationBudget(ctx);
+      remaining();
+      await verifyInternalResult(ctx, state, value, remaining);
+      remaining();
+    },
   }),
   identityDefinition("questions-and-approvals.duplicate-answer", async ctx => {
     const source = await openStandingChat(ctx); const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");

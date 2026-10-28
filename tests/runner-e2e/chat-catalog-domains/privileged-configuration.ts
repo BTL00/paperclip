@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { checks, observeInternal } from "./internal-support.js";
-import { privilegedDefinition, privilegedObservation, settlePrivilegedChat } from "./privileged-support.js";
+import { privilegedDefinition, privilegedObservation, settlePrivilegedChat, remainingPrivilegedObservationBudget } from "./privileged-support.js";
 const probeKeys = new WeakMap<ChatCatalogContext, { id: string; token: string }>();
 const endpoint = "/api/instance/settings/experimental";
 async function probe(ctx: ChatCatalogContext, method: "GET" | "PATCH") {
@@ -37,27 +37,35 @@ const settings = privilegedDefinition("instance-operations.instance-settings", "
     return { agentReadStatus, agentPatchStatus, gateUnchangedAfterAgent: before.enableAgentChat === after.enableAgentChat };
   },
   async act(ctx, state) {
-    await settlePrivilegedChat(ctx);
+    const remaining = () => remainingPrivilegedObservationBudget(ctx);
+    remaining();
+    await settlePrivilegedChat(ctx, ctx.observationDeadlineAt);
+    remaining();
     const page = ctx.input.page, source = page.url();
     const settingsUrl = new URL(`/${ctx.input.fixtures.company.issuePrefix}/company/settings/instance/experimental`, ctx.input.api.baseURL).href;
-    await page.goto(settingsUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(settingsUrl, { waitUntil: "domcontentloaded", timeout: remaining() });
     const toggle = page.getByRole("switch", { name: "Toggle agent chat experimental setting", exact: true });
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await toggle.click();
-    await expect.poll(async () => (await ctx.input.api.get<{ enableAgentChat: boolean }>(endpoint)).enableAgentChat).toBe(false);
+    await expect(toggle).toHaveAttribute("aria-checked", "true", { timeout: remaining() });
+    await toggle.click({ timeout: remaining() });
+    await expect.poll(async () => (await ctx.input.api.get<{ enableAgentChat: boolean }>(endpoint, { timeout: remaining() })).enableAgentChat, { timeout: remaining() }).toBe(false);
     state.savedDisabled = true;
-    await page.goto(source, { waitUntil: "domcontentloaded" });
-    await expect(page.getByText(/Agent Chat is disabled(?:\.| in Experimental settings)/).first()).toBeVisible();
+    await page.goto(source, { waitUntil: "domcontentloaded", timeout: remaining() });
+    await expect(page.getByText(/Agent Chat is disabled(?:\.| in Experimental settings)/).first()).toBeVisible({ timeout: remaining() });
     state.disabledRouteClear = true;
-    await page.goto(settingsUrl, { waitUntil: "domcontentloaded" });
-    await expect(toggle).toHaveAttribute("aria-checked", "false"); await toggle.click();
-    await expect.poll(async () => (await ctx.input.api.get<{ enableAgentChat: boolean }>(endpoint)).enableAgentChat).toBe(true);
+    await page.goto(settingsUrl, { waitUntil: "domcontentloaded", timeout: remaining() });
+    await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: remaining() }); await toggle.click({ timeout: remaining() });
+    await expect.poll(async () => (await ctx.input.api.get<{ enableAgentChat: boolean }>(endpoint, { timeout: remaining() })).enableAgentChat, { timeout: remaining() }).toBe(true);
     state.savedEnabled = true;
-    await page.goto(source, { waitUntil: "domcontentloaded" }); await expect(page.getByTestId("task-chat-composer-input")).toBeVisible();
+    await page.goto(source, { waitUntil: "domcontentloaded", timeout: remaining() }); await expect(page.getByTestId("task-chat-composer-input")).toBeVisible({ timeout: remaining() });
+    remaining();
     state.enabledRouteVisible = true;
     await ctx.input.evidence("chat-catalog-instance-gate-ui.json", { savedDisabled: true, disabledRouteClear: true, savedEnabled: true, enabledRouteVisible: true });
+    remaining();
   }, grade: gradeInstanceSettings,
-  async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); },
+  async verifyResult(ctx) {
+    await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible({ timeout: remainingPrivilegedObservationBudget(ctx) });
+    remainingPrivilegedObservationBudget(ctx);
+  },
 });
 settings.observe = async (ctx, state) => {
   const o = await observeInternal(ctx, state), key = probeKeys.get(ctx);

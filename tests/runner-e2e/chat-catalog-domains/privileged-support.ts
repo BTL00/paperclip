@@ -9,10 +9,15 @@ export function privilegedDefinition(scenarioId: string, module: string, extra: 
     sourceFiles: ["chat-catalog-domains/privileged-support.ts", `chat-catalog-domains/${module}.ts`, `chat-scenarios/${scenarioId.split(".")[0]}.yaml`],
     observe: observeInternal, ...extra };
 }
-export async function settlePrivilegedChat(ctx: ChatCatalogContext): Promise<InternalObservation> {
-  return pollUntil({ label: "Canonical privileged guidance settled", deadlineAt: Date.now() + 150_000,
+export function remainingPrivilegedObservationBudget(ctx: ChatCatalogContext): number {
+  const deadline = ctx.observationDeadlineAt;
+  if (!Number.isFinite(deadline) || deadline! <= Date.now()) throw new Error("Original privileged observation budget exhausted or missing");
+  return deadline! - Date.now();
+}
+export async function settlePrivilegedChat(ctx: ChatCatalogContext, observationDeadlineAt?: number): Promise<InternalObservation> {
+  return pollUntil({ label: "Canonical privileged guidance settled", deadlineAt: observationDeadlineAt ?? Date.now() + 150_000,
     load: () => observeInternal(ctx, {}),
-    accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && !!o.reply && ctx.issue()?.conversationState === "waiting",
+    accept: o => (observationDeadlineAt === undefined || Date.now() < observationDeadlineAt) && o.runs.length === 1 && o.runs[0]?.status === "succeeded" && !!o.reply && ctx.issue()?.conversationState === "waiting",
     reject: o => o.runs.some(run => ["failed", "timed_out", "cancelled"].includes(run.status)) ? "Canonical guidance run failed" : undefined });
 }
 export const privilegedObservation = observation;

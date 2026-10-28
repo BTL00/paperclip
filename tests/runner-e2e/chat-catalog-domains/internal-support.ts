@@ -99,7 +99,8 @@ export function sameTask(before: Entity, after: Entity | undefined, except: read
 }
 
 /** Follow the exact rendered chat links, check the real result view, and return to the source. */
-export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Record<string, unknown>, value: unknown) {
+export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Record<string, unknown>, value: unknown, remainingBudget?: () => number) {
+  const options = () => remainingBudget ? { timeout: remainingBudget() } : {};
   const o = observation(value);
   if (!o) throw new Error("Result navigation requires a complete observation");
   const sourceUrl = ctx.input.page.url();
@@ -112,15 +113,16 @@ export async function verifyInternalResult(ctx: ChatCatalogContext, _state: Reco
   for (const { kind, row } of candidates) {
     const href = o.links.find(link => hasLink({ ...o, links: [link] }, kind, row))!;
     const link = ctx.input.page.locator(`[id^="comment-"] a[href=${JSON.stringify(href)}]`).first();
-    await expect(link).toBeVisible();
-    await link.click();
+    await expect(link).toBeVisible(options());
+    await link.click(options());
     await ctx.input.page.waitForURL(url => {
       const parts = url.pathname.split("/").map(decodeURIComponent); const at = parts.indexOf(kind);
       return at >= 0 && [row.id, row.identifier, row.urlKey].includes(parts[at + 1]);
-    });
-    await expect(ctx.input.page.getByRole("heading", { name: row.title ?? row.name!, exact: true }).first()).toBeVisible();
+    }, options());
+    await expect(ctx.input.page.getByRole("heading", { name: row.title ?? row.name!, exact: true }).first()).toBeVisible(options());
     await ctx.input.evidence(`chat-catalog-opened-${kind}-${row.id}.json`, { id: row.id, kind, url: ctx.input.page.url(), title: row.title ?? row.name });
-    await ctx.input.page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
-    await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
+    await ctx.input.page.goto(sourceUrl, { waitUntil: "domcontentloaded", ...options() });
+    await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(options());
+    remainingBudget?.();
   }
 }

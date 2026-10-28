@@ -34,6 +34,12 @@ describe("conversational proposal and simultaneous human answer oracles", () => 
     else wrong.state.submitStatuses = [200, 200];
     expect(definition.grade(wrong).passed).toBe(false); expect(definition.grade(undefined).passed).toBe(false);
   });
+  it("a settled non-backlog execution task is not rescued by longer observation", () => {
+    for (const status of ["todo", "in_progress", "done"]) {
+      const o = valid("questions-and-approvals.accept-one-proposal"); o.tasks[0]!.status = status;
+      expect(gradeConfirmationWorkflow(o).passed).toBe(false);
+    }
+  });
   it("accepting the proposal twice cannot produce two durable tasks", () => {
     const o = valid("questions-and-approvals.accept-one-proposal"); o.tasks.push({ ...o.tasks[0]!, id: "duplicate" }); expect(gradeConfirmationWorkflow(o).passed).toBe(false);
   });
