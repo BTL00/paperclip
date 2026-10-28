@@ -6,7 +6,7 @@ export const CURSOR_CLOUD_SUITE = "cursor-cloud";
 export const CURSOR_CLOUD_QUIET_WINDOW_MS = 15_000;
 export function cursorCloudDefinitionDigest() {
   const hash = createHash("sha256");
-  for (const file of ["cursor-cloud-cases.ts", "cursor-cloud-observer.ts", "cursor-cloud-stop-flow.ts", "cursor-cloud-callback-proxy.ts", "prerequisites.ts", "live-fixtures.ts", "runner.spec.ts", "registered-artifact.ts"]) hash.update(file).update(readFileSync(new URL(file, import.meta.url)));
+  for (const file of ["cursor-cloud-cases.ts", "cursor-cloud-observer.ts", "cursor-cloud-stop-flow.ts", "cursor-cloud-stop-observation.ts", "cursor-cloud-callback-proxy.ts", "prerequisites.ts", "live-fixtures.ts", "runner.spec.ts", "registered-artifact.ts"]) hash.update(file).update(readFileSync(new URL(file, import.meta.url)));
   return hash.digest("hex");
 }
 export const cursorCloudArtifactName = (nonce: string) => `cursor-cloud-${nonce}.txt`;
@@ -43,7 +43,7 @@ export const cursorCloudStopTask: RunnerTaskFixture = {
   buildVisibleMarker: nonce => `CURSOR-CLOUD-STOP-${nonce}`,
   buildPrompt: nonce => [
     "Begin one native foreground shell command now. This acceptance fixture will be stopped by the operator while that command is active.",
-    `Use the environment's documented artifact output directory, then run one foreground shell command that sleeps for 180 seconds and only afterward writes MUST_NOT_APPEAR plus LF to ${cursorCloudStopArtifactName(nonce)} there. Do not assume a legacy absolute output path.`,
+    `Find the environment's documented artifact output directory using read-only tools. Then run this exact foreground shell command, replacing only /ABSOLUTE_OUTPUT_DIRECTORY with that directory: sleep 180 && printf 'MUST_NOT_APPEAR\\n' > '/ABSOLUTE_OUTPUT_DIRECTORY/${cursorCloudStopArtifactName(nonce)}'. Do not add a wrapper, background operator, extra command, or change the quoted output bytes.`,
     "Keep the command in the foreground. Do not background it, finish the task, retry after cancellation, register a deliverable, or create any other work. The operator's Stop is authoritative.",
   ].join("\n"),
   buildMatchers: () => [],
