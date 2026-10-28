@@ -35,6 +35,8 @@ import { connectionCheckpoints, type ConnectionEvidence } from "./connection-evi
 import { githubJourneyCheckpoints, type GitHubReviewJourneyEvidence } from "./github-review-evidence.js";
 import type { MatrixExecution, RunnerE2EResult } from "./types.js";
 
+const publicExecution = runnerMatrix.find(execution => execution.id === "core-compatibility.runner-codex.local.message-marker")!;
+
 const temporaryDirectories: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -430,7 +432,7 @@ describe("historical publication security", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "runner-landing-test-"));
     const output = path.join(root, "landing");
     temporaryDirectories.push(root);
-    const execution = runnerMatrix[0]!;
+    const execution = publicExecution;
     const campaignResult = {
       ...result(execution, "passed"),
       screenshots: [
@@ -549,7 +551,7 @@ describe("historical publication security", () => {
   it("admits declared PNG screenshots and the trusted summary only", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "runner-s3-test-"));
     temporaryDirectories.push(root);
-    const execution = runnerMatrix[0]!;
+    const execution = publicExecution;
     const campaign = buildRunnerCampaign({
       campaignId: "campaign-summary",
       generatedAt: "2026-08-28T00:01:00.000Z",
@@ -686,7 +688,7 @@ describe("historical publication security", () => {
   });
 
   it("requires trusted-fixture opt-in and rejects unsafe screenshot paths", () => {
-    const execution = runnerMatrix[0]!;
+    const execution = publicExecution;
     expect(() => buildRunnerCampaign({
       campaignId: "unsafe-screenshot",
       generatedAt: "2026-08-28T00:01:00.000Z",
