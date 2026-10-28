@@ -8,7 +8,7 @@ import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { companies, companySkills, companySkillVersions, companySkillRepositorySnapshots as snapshots,
-  skillPackageDeletions, createDb } from "@paperclipai/db";
+  skillPackageDeletions, createDb, withDedicatedDbConnection } from "@paperclipai/db";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
 import * as storageModule from "../storage/index.js";
@@ -20,6 +20,8 @@ import { skillPackageMaintenance } from "../services/skill-package-maintenance.j
 import { skillPackageManifest, validateSkillPackageManifest, writeSkillPackageArchive, extractSkillPackageArchive,
   verifySkillPackageDirectory } from "../services/skill-package-files.js";
 import { skillFileBytes, skillSnapshotHash } from "../services/skill-snapshot.js";
+import { readCustomerSuccessResource } from "../services/customer-success-inspection.js";
+import { repositorySkillProjection } from "../services/skill-repository-package.js";
 import { hasRestorableSnapshot } from "../services/skill-version-cache.js";
 
 const support = await getEmbeddedPostgresTestSupport();
@@ -69,7 +71,7 @@ describe.skipIf(!support.supported)("external skill packages", () => {
         name, markdown: files.find(file => file.path === `skills/${name}/SKILL.md`)!.content, sourceType: "github",
         metadata: { skillSourceId: randomUUID(), snapshotHash: "saved" } }).returning();
       const [version] = await db.insert(companySkillVersions).values({ companyId, companySkillId: skill!.id, revisionNumber: 1,
-        repositorySnapshotId: id, repositorySkillPath: `skills/${name}/SKILL.md`, packageSnapshotId: id,
+        repositorySnapshotId: id, repositorySkillPath: `skills/${name}/SKILL.md`, packageSnapshotId: id, migrationAt: null,
         packageFileMap: [{ path: "SKILL.md", kind: "skill", sourcePath: `skills/${name}/SKILL.md` }] }).returning();
       await db.update(companySkills).set({ currentVersionId: version!.id }).where(eq(companySkills.id, skill!.id));
       skills.push({ skill: skill!, version: version! });
@@ -78,6 +80,111 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     const resolve = () => service.listRuntimeSkillEntries(companyId, { onlyKeys: new Set(skills.map(({ skill }) => skill.key)), snapshotLatest: true });
     return { companyId, id, store, skills, service, resolve };
   }
+
+  it("forks a packaged repository inside an outer transaction with a one-connection pool", async () => {
+    const f = await fixture();
+    const fork = await db.transaction(tx => companySkillService(tx as unknown as typeof db, { packageDb: db })
+      .createLocalSkill(f.companyId, { name: "Idempotent fork", slug: "idempotent-fork", forkedFromSkillId: f.skills[0]!.skill.id }));
+    const saved = await f.service.getVersion(f.companyId, fork.id, fork.currentVersionId!);
+    expect(saved!.fileInventory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ".paperclip-repository/shared/run.sh", content: files[2]!.content }),
+    ]));
+  }, 15_000);
+
+  it("lists version metadata without reading archives, while inspection reads the requested historical bytes", async () => {
+    const f = await fixture();
+    const { skill, version } = f.skills[0]!;
+    await db.update(companySkills).set({ markdown: "New current markdown" }).where(eq(companySkills.id, skill.id));
+    const read = vi.spyOn(storage, "getObject");
+    const history = await f.service.listVersions(f.companyId, skill.id);
+    expect(history[0]!.fileInventory).toEqual([{ path: "SKILL.md", kind: "skill" }]);
+    expect(read.mock.calls.filter(call => call[1].endsWith("files.tar.gz"))).toHaveLength(0);
+    await db.update(companySkillVersions).set({ packageFileMap: [
+      ...version.packageFileMap!, { path: "run.sh", kind: "script", sourcePath: "shared/run.sh" },
+    ] }).where(eq(companySkillVersions.id, version.id));
+    const script = await readCustomerSuccessResource(db, storage, {
+      operation: "skills.file", companyId: f.companyId, resourceId: skill.id, versionId: version.id, path: "run.sh",
+    }) as { content: string };
+    expect(Buffer.from(script.content, "base64").toString()).toBe(files[2]!.content);
+    const result = await readCustomerSuccessResource(db, storage, {
+      operation: "skills.file", companyId: f.companyId, resourceId: skill.id, versionId: version.id, path: "SKILL.md",
+    }) as { content: string };
+    expect(Buffer.from(result.content, "base64").toString()).toBe(files[0]!.content);
+    const missing = await readCustomerSuccessResource(db, storage, {
+      operation: "skills.file", companyId: f.companyId, resourceId: skill.id, versionId: version.id, path: "not-saved.md",
+    });
+    expect(missing).toEqual({ available: false, reason: "skill_file_not_snapshotted" });
+  });
+
+  it("does not block a warm turn behind a paused archive read for retention", async () => {
+    const f = await fixture();
+    await f.resolve();
+    await fs.rm(skillPackagePaths(f.companyId, f.id).directory, { recursive: true, force: true });
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const reading = new Promise<void>(resolve => { entered = resolve; });
+    const original = storage.getObject.bind(storage);
+    vi.spyOn(storage, "getObject").mockImplementation(async (companyId, key, options) => {
+      if (key.endsWith("files.tar.gz")) { entered(); await blocked; }
+      return original(companyId, key, options);
+    });
+    const cleanup = hasRestorableSnapshot(db, f.companyId, f.skills[0]!.version.id);
+    try {
+      await reading;
+      const warm = await f.resolve();
+      expect(warm.map(entry => entry.sourceStatus)).toEqual(["available", "available"]);
+    } finally { release(); await cleanup; }
+    expect(await fs.stat(skillPackagePaths(f.companyId, f.id).directory).catch(() => null)).toBeNull();
+  }, 15_000);
+
+  it("skips an in-flight publication without waiting on its row or the warm preparation lock", async () => {
+    const f = await fixture(true);
+    await db.update(companySkills).set({ currentVersionId: null }).where(eq(companySkills.companyId, f.companyId));
+    await db.update(snapshots).set({ createdAt: new Date(0), maintenanceAt: new Date(0) }).where(eq(snapshots.id, f.id));
+    let retirementStarted!: () => void;
+    const waiting = new Promise<void>(resolve => { retirementStarted = resolve; });
+    const debug = db.$client.options.debug;
+    db.$client.options.debug = (_connection, query) => {
+      if (query.includes('company_skill_repository_snapshots') && query.includes('for update')) retirementStarted();
+    };
+    let sweep: Promise<void> | undefined;
+    try {
+      await withDedicatedDbConnection(db, connection => connection.transaction(async tx => {
+        await tx.select({ id: snapshots.id }).from(snapshots).where(eq(snapshots.id, f.id)).for("update");
+        await tx.update(companySkills).set({ currentVersionId: f.skills[0]!.version.id }).where(eq(companySkills.id, f.skills[0]!.skill.id));
+        sweep = skillPackageWork(db, storage).tick(new AbortController().signal);
+        await waiting;
+        await sweep;
+      }));
+      await sweep;
+      expect((await f.store.descriptor(f.companyId, f.id)).storage).not.toBeNull();
+    } finally { db.$client.options.debug = debug; await sweep; }
+  }, 15_000);
+
+  it("refuses to publish a package retired before the publication row lock", async () => {
+    const f = await fixture(true);
+    await db.update(companySkills).set({ currentVersionId: null }).where(eq(companySkills.companyId, f.companyId));
+    await db.update(snapshots).set({ storage: null }).where(eq(snapshots.id, f.id));
+    await expect(f.service.createVersion(f.companyId, f.skills[0]!.skill.id, {}, null, {
+      skill: f.skills[0]!.skill, skipInventoryRefresh: true, fileInventory: files,
+      packageSnapshotId: f.id, repositorySnapshotId: f.id, repositorySkillPath: files[0]!.path,
+    })).rejects.toThrow(/changed during publication/);
+    const [skill] = await db.select().from(companySkills).where(eq(companySkills.id, f.skills[0]!.skill.id));
+    expect(skill!.currentVersionId).toBeNull();
+  });
+
+  it("converts a legacy fork with the scanner's deepest accepted repository path", async () => {
+    const companyId = await company();
+    const deep = [...Array(63).fill("d"), "SKILL.md"].join("/");
+    const projected = repositorySkillProjection([{ ...files[0]!, path: deep }], deep);
+    const [skill] = await db.insert(companySkills).values({ companyId, key: "deep", slug: "deep", name: "Deep", markdown: projected[0]!.content }).returning();
+    const [version] = await db.insert(companySkillVersions).values({ companyId, companySkillId: skill!.id, revisionNumber: 1, fileInventory: projected }).returning();
+    await skillPackageMaintenance(db, storage).migrateVersions({ id: version!.id, apply: true, clearLegacy: true });
+    const [saved] = await db.select().from(companySkillVersions).where(eq(companySkillVersions.id, version!.id));
+    expect(saved!.migrationAt).toBeNull();
+    expect(await skillPackageStore(db, storage).versionFiles(saved!)).toEqual(projected);
+  });
 
   it("automatically converts legacy rows, clears verified payloads and preserves version identities", async () => {
     const companyId = await company();

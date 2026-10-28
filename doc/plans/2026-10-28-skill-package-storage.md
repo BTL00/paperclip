@@ -342,8 +342,8 @@ warm package preparation. Native access timestamps are coalesced hourly on disk.
 Lifecycle ownership remains in the package/native asset services. `index.ts` only
 registers them with the existing coordinator. `migration_at`/`maintenance_at` and the
 existing deletion receipts are durable truth; no additional worker queue table was
-introduced. Unfinished conversion blocks idle sleep. Optional retention may wait for
-next ingress wake. This does not establish deployed sleep or a Cloud alarm contract.
+introduced. Conversion retains the original bytes and may wait for ingress without
+blocking idle sleep. Optional retention may wait for the next ingress wake. This does not establish deployed sleep or a Cloud alarm contract.
 
 ## Delivery slices and proof
 

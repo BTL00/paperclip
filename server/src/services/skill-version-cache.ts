@@ -177,10 +177,11 @@ export async function hasRestorableSnapshot(db: Db, companyId: string, versionId
     // Git packages intentionally permit byte eviction. Their immutable recipe,
     // not a network probe during cleanup, is the restoration contract.
     if ((await store.descriptor(companyId, packageId)).restorable) return true;
-    if (version.repositorySnapshotId && (entry.encoding === "base64" || !await store.withPackage(companyId, packageId,
-      async root => repositorySkillFrontmatter(await fs.readFile(path.join(root, entrypoint), "utf8"))))) return false;
-    // Never evict the only known-good bytes based on a permanent process cache.
-    return store.verifyDurable(companyId, packageId);
+    if (version.repositorySnapshotId && entry.encoding === "base64") return false;
+    // Validate original frontmatter inside the same isolated storage verification,
+    // outside the preparation lock and without rebuilding the shared cache.
+    return store.verifyDurable(companyId, packageId, undefined, version.repositorySnapshotId
+      ? async root => Boolean(repositorySkillFrontmatter(await fs.readFile(path.join(root, entrypoint), "utf8"))) : undefined);
   }
   const files = await store.versionFiles(version);
   return validateInventory(files) && files.some(file => file.path === "SKILL.md");

@@ -76,9 +76,10 @@ restore deadlines on startup, pause in drain/standby, and stop on shutdown. With
 pending conversion, retry, or eligible cache deadline they perform no recurring work.
 The supported live writer is the owning server; independent SQL writers/other servers
 need restart reconstruction or an explicit wake. No permanent DB listener is added.
-Conversion is an idle-sleep blocker while unfinished. Cache/deletion times are earliest
-eligibility, may wait until the next ingress wake, and do not claim an external Cloud
-alarm or measured host suspension.
+Conversion retains authoritative legacy bytes until verification succeeds. Conversion
+retries and cache/deletion dates are optional maintenance eligibility; they may wait
+until the next ingress wake, including with package storage disabled. They do not
+block idle sleep or claim an external Cloud alarm or measured host suspension.
 Each object-deletion receipt has a 30-second storage deadline. Shutdown cancels
 pending delete/existence requests; incomplete cleanup retains the receipt for retry.
 
@@ -267,3 +268,15 @@ The larger restore recipe stays out of those queries. Ten-skill cold preparation
 slower on this busy host; the raw receipts retain that result as well as warm samples.
 The earlier full repository test attempt remains incomplete; this follow-up does not
 claim a clean full-suite result, deployed Railway measurements, or a live agent run.
+
+### Administrative version reads
+
+Version lists, current-version summaries, and test-run detail return file names/kinds
+without bodies. Diff and restore fetch only the selected version through its existing
+single-version endpoint. Archive reads for those operations and retention checks use
+isolated scratch directories, so storage latency does not hold the company preparation
+lock. Support inspection reads the requested stored version without Git recovery.
+
+Package preparation renews a 24-hour publication grace. Publication and retirement
+lock the same package row and recheck its receipt/current references before commit;
+a prepared receipt retired before publication cannot silently become current.

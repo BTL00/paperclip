@@ -53,6 +53,12 @@ Automated: [Studio](../../ui/src/pages/SkillStudio.test.tsx) covers UI behavior;
 
 Manual: Create or fork a disposable skill, edit instructions, save, and reload. Run a bounded test, respond to any question, and inspect the output. Verify the saved version matches what was tested and failed saves retain the draft.
 
+Version history lists file metadata without downloading archives. Opening a diff
+fetches only its selected versions; restoring fetches the chosen version. The
+[library UI regression](../../ui/src/pages/CompanySkills.test.tsx) checks deferred
+loads; the [package regression](../../server/src/__tests__/skill-package-store.test.ts)
+checks that slow archive verification cannot hold up a warm agent preparation.
+
 ### `agent-enablement`
 
 Automated: [policy service](../../server/src/__tests__/company-skill-policy-service.test.ts) and [agent skills state](../../ui/src/pages/agent-skills/AgentSkillsTab.test.ts) cover policy/state contracts.

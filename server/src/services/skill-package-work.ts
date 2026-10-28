@@ -72,29 +72,41 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
         const manifest = validateSkillPackageManifest(row.restore.manifest);
         if (row.restore.version !== 1 || manifest.contentHash !== row.contentHash
           || packageSha256(skillPackageManifestBytes(manifest)) !== row.storage.manifestSha256) throw new Error("Invalid skill restore recipe; keep durable bytes");
-        await withSkillVersionCacheLock(db, row.companyId, async () => {
-          const referenced = await db.select({ id: versions.id, repositorySnapshotId: versions.repositorySnapshotId }).from(versions).where(and(eq(versions.companyId, row.companyId),
-            sql`(${versions.repositorySnapshotId} = ${id} or ${versions.packageSnapshotId} = ${id})`));
-          if (referenced.some(version => version.repositorySnapshotId !== id)) return;
-          const [current] = await db.execute(sql`select 1 from company_skills s where s.company_id = ${row.companyId}
-            and s.current_version_id in (select id from company_skill_versions where repository_snapshot_id = ${id} or package_snapshot_id = ${id})
-            union all select 1 from company_skill_test_runs t where t.company_id = ${row.companyId}
-              and t.status in ('queued', 'running') and t.skill_version_id in
-                (select id from company_skill_versions where repository_snapshot_id = ${id} or package_snapshot_id = ${id}) limit 1`);
-          if (current) return;
-          const pinned = new Set<string>();
-          for (const agent of await db.select({ config: agents.adapterConfig }).from(agents).where(eq(agents.companyId, row.companyId))) {
-            for (const entry of readPaperclipSkillSyncPreference(agent.config ?? {}).desiredSkillEntries) if (entry.versionId) pinned.add(entry.versionId);
-          }
-          const active = await protectedVersions(db, row.companyId);
-          if (!active || referenced.some(version => active.has(version.id) || pinned.has(version.id))) return;
-          signal.throwIfAborted();
-          // Metadata/recipe remain. Triggered deletion receipts retain the old
-          // object keys through the rollback grace; future reads reacquire the SHA.
-          const retired = await db.update(snapshots).set({ storage: null }).where(and(eq(snapshots.id, id), isNull(snapshots.upload),
-            sql`${snapshots.storage}->>'durable' is distinct from 'true'`)).returning({ id: snapshots.id });
-          if (retired.length) await removeLocal();
-        }, true);
+        const publishing = await db.transaction(async tx => {
+          // Publication takes this row lock before making a version current.
+          // Skip active publishers before taking the warm preparation lock.
+          const [latest] = await tx.select({ storage: snapshots.storage, upload: snapshots.upload,
+            migrationAt: snapshots.migrationAt, maintenanceAt: snapshots.maintenanceAt })
+            .from(snapshots).where(eq(snapshots.id, id)).for("update", { skipLocked: true });
+          if (!latest) return true;
+          if (!latest.storage || latest.storage.durable || latest.upload || latest.migrationAt
+            || !latest.maintenanceAt || latest.maintenanceAt.getTime() > Date.now()) return;
+          await withSkillVersionCacheLock(db, row.companyId, async () => {
+            const referenced = await tx.select({ id: versions.id, repositorySnapshotId: versions.repositorySnapshotId }).from(versions).where(and(eq(versions.companyId, row.companyId),
+              sql`(${versions.repositorySnapshotId} = ${id} or ${versions.packageSnapshotId} = ${id})`));
+            if (referenced.some(version => version.repositorySnapshotId !== id)) return;
+            const [current] = await tx.execute(sql`select 1 from company_skills s where s.company_id = ${row.companyId}
+              and s.current_version_id in (select id from company_skill_versions where repository_snapshot_id = ${id} or package_snapshot_id = ${id})
+              union all select 1 from company_skill_test_runs t where t.company_id = ${row.companyId}
+                and t.status in ('queued', 'running') and t.skill_version_id in
+                  (select id from company_skill_versions where repository_snapshot_id = ${id} or package_snapshot_id = ${id}) limit 1`);
+            if (current) return;
+            const pinned = new Set<string>();
+            for (const agent of await tx.select({ config: agents.adapterConfig }).from(agents).where(eq(agents.companyId, row.companyId))) {
+              for (const entry of readPaperclipSkillSyncPreference(agent.config ?? {}).desiredSkillEntries) if (entry.versionId) pinned.add(entry.versionId);
+            }
+            const active = await protectedVersions(tx as unknown as Db, row.companyId);
+            if (!active || referenced.some(version => active.has(version.id) || pinned.has(version.id))) return;
+            signal.throwIfAborted();
+            // Metadata/recipe remain. Triggered deletion receipts retain the old
+            // object keys through the rollback grace; future reads reacquire the SHA.
+            const retired = await tx.update(snapshots).set({ storage: null }).where(and(eq(snapshots.id, id), isNull(snapshots.upload),
+              sql`${snapshots.storage}->>'durable' is distinct from 'true'`)).returning({ id: snapshots.id });
+            if (retired.length) await removeLocal();
+          }, true);
+          return false;
+        });
+        if (publishing) return;
       }
     }
     await db.update(snapshots).set({ maintenanceAt: next }).where(and(eq(snapshots.id, id), lte(snapshots.maintenanceAt, new Date())));

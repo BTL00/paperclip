@@ -31,6 +31,7 @@ import {
   companySkillTestRuns,
   companySkillVersions, withDedicatedDbConnection,
   companySkills,
+  companySkillRepositorySnapshots,
   costEvents,
   documents,
   issueAttachments,
@@ -105,6 +106,7 @@ import type {
   CompanySkillUpdateHoldReason,
   CompanySkillUsageAgent,
   CompanySkillVersion,
+  CompanySkillVersionSummary,
   CompanySkillVersionCreateRequest,
   CompanySkillVersionFileInventoryEntry,
   IssueAttachment,
@@ -2802,7 +2804,7 @@ function enrichSkill(
   skill: CompanySkill,
   attachedAgentCount: number,
   usedByAgents: CompanySkillUsageAgent[] = [],
-  currentVersion: CompanySkillVersion | null = null,
+  currentVersion: CompanySkillVersionSummary | null = null,
   starredByCurrentActor = false,
   existingForks: CompanySkillForkSummary[] = [],
 ) {
@@ -2976,6 +2978,8 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   const packageDb = options.packageDb ?? db;
   const packages = skillPackageStore(packageDb);
   const packageRuntime = skillPackageRuntime(packageDb);
+  // Admin reads keep SQL on the caller's transaction, which may own the pool's only slot.
+  const packageReader = db === packageDb ? packages : skillPackageStore(db);
   const visibility = (database: DbOrTransaction = db) => skillAccessService(database as Db, options.actor);
   const folderSvc = folderService(db);
   const agents = agentService(db);
@@ -3486,11 +3490,19 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   async function getVersion(companyId: string, skillId: string, versionId: string): Promise<CompanySkillVersion | null> {
     if (!await getById(companyId, skillId)) return null;
     const row = await readVersionMetadata(companyId, skillId, versionId);
-    return row ? toCompanySkillVersion({ ...row, fileInventory: await packages.versionFiles(row) }) : null;
+    return row ? toCompanySkillVersion({ ...row, fileInventory: await packageReader.versionFiles(row) }) : null;
   }
 
-  async function getCurrentVersion(skill: CompanySkill): Promise<CompanySkillVersion | null> {
-    return skill.currentVersionId ? getVersion(skill.companyId, skill.id, skill.currentVersionId) : null;
+  async function versionSummary(row: StoredSkillVersion): Promise<CompanySkillVersionSummary> {
+    return { ...toCompanySkillVersion(row), fileInventory: await packageReader.versionInventory(row) };
+  }
+  async function getVersionSummary(companyId: string, skillId: string, versionId: string) {
+    if (!await getById(companyId, skillId)) return null;
+    const row = await readVersionMetadata(companyId, skillId, versionId);
+    return row ? versionSummary(row) : null;
+  }
+  async function getCurrentVersion(skill: CompanySkill): Promise<CompanySkillVersionSummary | null> {
+    return skill.currentVersionId ? getVersionSummary(skill.companyId, skill.id, skill.currentVersionId) : null;
   }
 
   async function isStarredByActor(companyId: string, skillId: string, actor: SkillActor | null | undefined) {
@@ -3681,7 +3693,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     return out;
   }
 
-  async function listVersions(companyId: string, skillId: string): Promise<CompanySkillVersion[]> {
+  async function listVersions(companyId: string, skillId: string): Promise<CompanySkillVersionSummary[]> {
     const skill = await getById(companyId, skillId);
     if (!skill) throw notFound("Skill not found");
     const rows = await db
@@ -3689,8 +3701,8 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       .from(companySkillVersions)
       .where(and(eq(companySkillVersions.companyId, companyId), eq(companySkillVersions.companySkillId, skillId)))
       .orderBy(desc(companySkillVersions.revisionNumber));
-    const result: CompanySkillVersion[] = [];
-    for (const row of rows) result.push(toCompanySkillVersion({ ...row, fileInventory: await packages.versionFiles(row) }));
+    const result: CompanySkillVersionSummary[] = [];
+    for (const row of rows) result.push(await versionSummary(row));
     return result;
   }
 
@@ -3707,7 +3719,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     const fileInventory = serializeVersionFileInventory(
       options.fileInventory ?? await collectVersionFileInventory(companyId, skill),
     );
-    const previousVersion = options.fileInventory === undefined ? await getCurrentVersion(skill) : null;
+    const previousVersion = options.fileInventory === undefined && skill.currentVersionId ? await readVersionMetadata(companyId, skill.id, skill.currentVersionId) : null;
     // Shipped release rows retain their existing validation contract. All user
     // snapshots use the package store; source imports prepare before their transaction.
     let packageFileMap = options.packageFileMap ?? null;
@@ -3726,6 +3738,12 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     }
     const persist = async (tx: DbOrTransaction) => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+      if (packageSnapshotId) {
+        const [saved] = await tx.select({ storage: companySkillRepositorySnapshots.storage })
+          .from(companySkillRepositorySnapshots).where(and(eq(companySkillRepositorySnapshots.companyId, companyId),
+            eq(companySkillRepositorySnapshots.id, packageSnapshotId))).for("update");
+        if (!saved?.storage) throw conflict("Skill package changed during publication; retry the operation.");
+      }
       await tx.execute(sql`
         select ${companySkills.id}
         from ${companySkills}
@@ -4445,19 +4463,13 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     const normalizedPath = normalizePortablePath(relativePath || "SKILL.md");
     if (skill.metadata?.skillSourceId && skill.metadata?.snapshotHash && skill.currentVersionId) {
       const version = await readVersionMetadata(skill.companyId, skill.id, skill.currentVersionId);
-      let file: CompanySkillVersionFileInventoryEntry | null | undefined;
-      if (version?.packageSnapshotId) {
-        const mapping = version.packageFileMap?.find(file => file.path === normalizedPath);
-        if (mapping) file = await packages.withPackage(skill.companyId, version.packageSnapshotId, async (root, manifest) => {
-          const entry = manifest.files.find(file => file.path === mapping.sourcePath);
-          if (!entry) return null;
-          const encoding = mapping.encoding ?? entry.encoding;
-          return { path: mapping.path, kind: mapping.kind, content: (await fs.readFile(path.join(root, entry.path))).toString(encoding),
-            encoding, executable: entry.executable };
-        });
-        else if (!version.repositorySnapshotId) file = await packageRuntime.readFile(version, normalizedPath);
-      } else if (version) file = (await packages.versionFiles(version)).find(file => file.path === normalizedPath);
-      if (!file && version?.repositorySnapshotId) file = await packageRuntime.readFile(version, normalizedPath);
+      let file: CompanySkillVersionFileInventoryEntry | undefined;
+      if (version) {
+        file = await packageReader.readVersionFile(version, normalizedPath);
+        if (!file && version.repositorySnapshotId && version.repositorySkillPath) {
+          file = (await runtimeVersionInventory(skill.companyId, toCompanySkillVersion(version))).find(file => file.path === normalizedPath);
+        }
+      }
       if (!file) throw notFound("Installed skill snapshot is missing a file.");
       return { ...file, skillId: skill.id, language: file.encoding === "base64" ? null : inferLanguageFromPath(normalizedPath),
         markdown: file.encoding !== "base64" && isMarkdownPath(normalizedPath), editable: false };
@@ -6063,11 +6075,13 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     return true;
   }
 
-  async function runtimeVersionInventory(companyId: string, version: CompanySkillVersion) {
-    if (!version.repositorySnapshotId) return version.fileInventory.length ? version.fileInventory
-      : packages.versionFiles((await readVersionMetadata(companyId, version.companySkillId, version.id))!);
+  async function runtimeVersionInventory(companyId: string, version: CompanySkillVersionSummary) {
+    if (!version.repositorySnapshotId) {
+      const row = (await readVersionMetadata(companyId, version.companySkillId, version.id))!;
+      return packageReader.versionFiles(row);
+    }
     if (!version.repositorySkillPath) throw unprocessable("Installed repository snapshot is unavailable.");
-    return repositorySkillProjection(await packages.files(companyId, version.repositorySnapshotId), version.repositorySkillPath);
+    return repositorySkillProjection(await packageReader.files(companyId, version.repositorySnapshotId, true), version.repositorySkillPath);
   }
 
   async function materializeVersionSnapshot(companyId: string, skill: CompanySkill, version: StoredSkillVersion): Promise<string> {
@@ -6816,7 +6830,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       throw unprocessable("Cannot run a skill test for a skill with zero files.");
     }
 
-    const currentVersion = await getCurrentVersion(skill);
+    const currentVersion = skill.currentVersionId ? await getVersion(companyId, skill.id, skill.currentVersionId) : null;
     if (!currentVersion || !versionInventorySnapshotEqual(currentVersion.fileInventory, currentSnapshot)) {
       return createVersion(companyId, skill.id, { label: "Auto version for test run" }, actor);
     }
@@ -7063,7 +7077,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     if (!run) return null;
     const harnessIssueGone = Boolean(row.harnessIssueDeletedAt);
     const [version, issue, documentRows, interactionRows, attachmentRows, workProductRows] = await Promise.all([
-      getVersion(companyId, skillId, row.skillVersionId),
+      getVersionSummary(companyId, skillId, row.skillVersionId),
       harnessIssueGone
         ? Promise.resolve(null)
         : db

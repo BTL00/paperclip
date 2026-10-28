@@ -898,7 +898,8 @@ describeEmbeddedPostgres("companySkillService.list", () => {
       releasedAt: new Date("2026-07-21T00:00:00.000Z"),
     });
     if (!champion) throw new Error("Expected seeded v7-roster release");
-    const championHashes = Object.fromEntries(champion.fileInventory.map((entry) => [
+    const championVersion = (await svc.getVersion(companyId, paperclipSkill.id, champion.id))!;
+    const championHashes = Object.fromEntries(championVersion.fileInventory.map((entry) => [
       entry.path,
       createHash("sha256").update(entry.content).digest("hex"),
     ]));
@@ -2705,7 +2706,8 @@ describeEmbeddedPostgres("companySkillService.list", () => {
     versions = await svc.listVersions(companyId, skill.id);
     expect(versions).toHaveLength(2);
     expect(versions[0]).toMatchObject({ revisionNumber: 2, authorUserId: "board" });
-    expect(versions[0]!.fileInventory).toEqual([
+    expect(versions[0]!.fileInventory).toEqual([{ path: "SKILL.md", kind: "skill" }]);
+    expect((await svc.getVersion(companyId, skill.id, versions[0]!.id))!.fileInventory).toEqual([
       expect.objectContaining({ path: "SKILL.md", content: editedMarkdown }),
     ]);
     await expect(svc.getById(companyId, skill.id)).resolves.toMatchObject({

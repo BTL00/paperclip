@@ -449,9 +449,10 @@ sleep eligibility for a configured Muse connection.
 ## Skill package maintenance
 
 The package delivery worker automatically converts legacy snapshots and versions.
-Unfinished `migration_at` rows block idle sleep until their durable contents are
-verified and conversion finishes. Package/object/native-asset retention timestamps
-are earliest cleanup eligibility, not promised delivery deadlines; optional cleanup
-may wait for the next ingress wake. Workers reconstruct persisted rows and filesystem
+Legacy contents remain authoritative until conversion is verified. Unfinished or
+failed conversions, including rows retained while package storage is disabled,
+may wait for the next ingress wake and do not block idle sleep. Their persisted
+retry dates and package/object/native-asset retention timestamps are earliest
+maintenance eligibility, not promised delivery deadlines. Workers reconstruct persisted rows and filesystem
 access leases on startup, and use the existing coordinator's drain/standby/shutdown
 controls. No external Cloud alarm or provider suspension is established by these tests.

@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { createGzip, createGunzip } from "node:zlib";
 import { extract, pack } from "tar-stream";
 import type { CompanySkillVersionFileInventoryEntry } from "@paperclipai/shared";
+import { REPOSITORY_CONTENT_DIR } from "./skill-repository-package.js";
 import { assertSkillSnapshotPath, skillFileBytes, skillSnapshotHash, MAX_SKILL_SNAPSHOT_BYTES, MAX_SKILL_SNAPSHOT_FILES } from "./skill-snapshot.js";
 
 export const MAX_SKILL_PACKAGE_BYTES = MAX_SKILL_SNAPSHOT_BYTES;
@@ -38,7 +39,9 @@ export function validateSkillPackageManifest(value: unknown): SkillPackageManife
   let total = 0;
   for (const file of manifest.files) {
     assertSkillSnapshotPath(file.path);
-    if (file.path.length > 4096 || file.path.split("/").length > 64 || paths.has(file.path)
+    // A portable repository fork adds one generated directory to scanner-accepted paths.
+    const sourcePath = file.path.startsWith(`${REPOSITORY_CONTENT_DIR}/`) ? file.path.slice(REPOSITORY_CONTENT_DIR.length + 1) : file.path;
+    if (sourcePath.length > 4096 || sourcePath.split("/").length > 64 || paths.has(file.path)
       || !kinds.has(file.kind) || !["utf8", "base64"].includes(file.encoding) || typeof file.executable !== "boolean"
       || !Number.isSafeInteger(file.size) || file.size < 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("Invalid skill package file");
     paths.add(file.path);

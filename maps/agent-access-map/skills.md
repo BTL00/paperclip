@@ -91,6 +91,12 @@ support a narrower shape than full API.
 
 ## `versions`
 
+Version lists and current/test-run version summaries contain file names and kinds.
+Use `GET /api/companies/{companyId}/skills/{skillId}/versions/{versionId}` for the
+selected version's file contents. Authorization remains company/skill scoped; support
+inspection reads only stored bytes for the requested version and does not recover Git.
+
+
 Capability ID: `skills/versions`.
 
 Review: `baseline`.
