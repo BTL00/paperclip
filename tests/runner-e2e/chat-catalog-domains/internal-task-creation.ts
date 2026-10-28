@@ -87,9 +87,8 @@ async function observeCreation(ctx: ChatCatalogContext, state: Record<string, un
     const attachments = await ctx.input.api.get<Attachment[]>(`/api/issues/${saved.id}/attachments`);
     for (const file of attachments.filter(row => /\.html?$/i.test(row.originalFilename ?? row.filename ?? "") || row.contentType === "text/html").slice(0, 3)) {
       if (file.byteSize !== undefined && file.byteSize > 1_048_576) continue;
-      const response = await ctx.input.api.request.get(`/api/attachments/${file.id}/content`);
-      if (!response.ok()) continue;
-      const body = await response.text();
+      const content = await ctx.input.api.getAttachmentContent(file.id);
+      const body = content.toString("utf8");
       if (Buffer.byteLength(body) <= 1_048_576) websiteFiles.push({ issueId: saved.id, attachmentId: file.id, body,
         sha256: createHash("sha256").update(body).digest("hex"), createdAt: file.createdAt });
     }
