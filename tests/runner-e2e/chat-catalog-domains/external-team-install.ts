@@ -1,3 +1,6 @@
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import { CHAT_OPENCODE_MODEL, CHAT_OPENCODE_PROFILE } from "../chat-runtime-profile.js";
+import type { SecretReference } from "../types.js";
 import {
   prepareTeamConditions,
   observeTeamConditions,
@@ -53,6 +56,39 @@ export function catalogTeamMembers(
   return snapshot.agents.filter(
     (agent) => catalogTeamProvenance(agent)?.catalogId === teamId,
   );
+}
+interface TeamInstallRuntime {
+  profileId: string; adapterType: "paperclip_runner"; provider: "opencode"; model: string; accountRef: SecretReference;
+}
+export function selectedTeamInstallRuntime(ctx: ChatCatalogContext, actor: Agent) {
+  const profile = ctx.input.execution.profile, config = actor.adapterConfig;
+  const ref = ctx.input.fixtures.secretRefs.OPENROUTER_API_KEY;
+  const bound = (config.env as Record<string, unknown> | undefined)?.OPENROUTER_API_KEY as SecretReference | undefined;
+  if (profile.id !== CHAT_OPENCODE_PROFILE || profile.provider !== "opencode" || profile.model !== CHAT_OPENCODE_MODEL || profile.credential !== "OPENROUTER_API_KEY"
+    || actor.companyId !== ctx.input.fixtures.company.id || actor.adapterType !== "paperclip_runner" || config.provider !== "opencode" || config.model !== CHAT_OPENCODE_MODEL || config.timeoutSec !== 0
+    || !ref || ref.type !== "secret_ref" || !ref.secretId || ref.version !== "latest" || Object.keys(ref).sort().join() !== "secretId,type,version"
+    || bound?.type !== ref.type || bound.secretId !== ref.secretId || bound.version !== ref.version)
+    throw new Error("Selected team installer must use its actual configured OpenCode OpenRouter1017 account");
+  return { profileId: profile.id, adapterType: "paperclip_runner", provider: "opencode", model: profile.model, accountRef: { type: ref.type, secretId: ref.secretId, version: ref.version } } as TeamInstallRuntime;
+}
+export function teamInstallOverrides(team: Pick<CatalogTeam, "agentSlugs">, runtime: TeamInstallRuntime) {
+  return Object.fromEntries(team.agentSlugs.map(slug => [slug, { adapterType: runtime.adapterType, adapterConfig: { provider: runtime.provider, model: runtime.model, timeoutSec: 0, lifecycleMode: "per_turn", opencodePermissionMode: "allow", env: { OPENROUTER_API_KEY: runtime.accountRef } } }]));
+}
+export function teamMemberRuntimeMatches(agent: Agent, expected: TeamInstallRuntime, companyId: string) {
+  const config = agent.adapterConfig, ref = (config?.env as Record<string, unknown> | undefined)?.OPENROUTER_API_KEY as SecretReference | undefined;
+  return expected?.profileId === CHAT_OPENCODE_PROFILE && expected.adapterType === "paperclip_runner" && expected.provider === "opencode" && expected.model === CHAT_OPENCODE_MODEL
+    && expected.accountRef?.type === "secret_ref" && !!expected.accountRef.secretId && expected.accountRef.version === "latest"
+    && agent.companyId === companyId && agent.adapterType === expected.adapterType && config?.provider === expected.provider && config.model === expected.model && config.timeoutSec === 0
+    && ref?.type === "secret_ref" && ref.secretId === expected.accountRef.secretId && ref.version === "latest";
+}
+export async function verifyInstalledTeamRuntime(ctx: ChatCatalogContext, team: CatalogTeam, first: TeamResourceSnapshot, runtime: TeamInstallRuntime) {
+  const members = catalogTeamMembers(first, team.id);
+  if (members.length !== team.agentSlugs.length) throw new Error("Installed team runtime readback requires the complete actual package");
+  const saved = await Promise.all(members.map(member => ctx.input.api.get<Agent>(`/api/agents/${member.id}`)));
+  if (JSON.stringify(ids(saved)) !== JSON.stringify(ids(members)) || saved.some(member => !teamMemberRuntimeMatches(member, runtime, ctx.input.fixtures.company.id))) throw new Error("Actual saved installed-member runtime differs from selected OpenCode1017");
+  const memberIds = new Set(members.map(member => member.id));
+  if ((await ctx.allRuns()).some(run => memberIds.has(run.agentId) && !!run.startedAt)) throw new Error("Imported member work started before independent runtime readback");
+  return { memberIds: saved.map(member => member.id).sort(), provider: runtime.provider, model: runtime.model, verifiedBeforeImportedWork: true };
 }
 const ids = (rows: Array<{ id: string }>) => rows.map((row) => row.id).sort();
 function hasResourceLink(
@@ -131,6 +167,12 @@ export function gradeTeamInstall(value: unknown) {
       after.agents.length - before.agents.length === team.counts.agents,
     "Exactly the package's agents exist in this company with immutable catalog provenance; no unrelated or duplicate hires satisfy the count.",
   );
+  const runtime = o.state.selectedRuntime as TeamInstallRuntime, runtimeReadback = o.state.runtimeReadback as { memberIds?: string[]; provider?: string; model?: string; verifiedBeforeImportedWork?: boolean } | undefined;
+  c.add("selected-runtime-preserved-for-every-installed-member", !!runtime && !!first && !!after && !!team
+    && runtimeReadback?.verifiedBeforeImportedWork === true && runtimeReadback.provider === runtime.provider && runtimeReadback.model === runtime.model && JSON.stringify(runtimeReadback.memberIds) === JSON.stringify(ids(members))
+    && catalogTeamMembers(first, team.id).length === team.agentSlugs.length && catalogTeamMembers(first, team.id).every(member => teamMemberRuntimeMatches(member, runtime, o.companyId))
+    && members.every(member => teamMemberRuntimeMatches(member, runtime, o.companyId)),
+  "Every actual imported member retains the selected OpenCode/OpenRouter1017 and exact existing company account reference; public saved configuration is independently read before any imported work.");
   c.add(
     "intended-project-and-routine-resources",
     !!team &&
@@ -252,6 +294,8 @@ export const teamInstallExternalCases = [
         throw new Error(
           "Setup blocker: actual selected installer actor lacks a ready account or creation authority",
         );
+      const selectedRuntime = selectedTeamInstallRuntime(ctx, actor);
+      const adapterOverrides = teamInstallOverrides(team, selectedRuntime);
       const conditional = await prepareTeamConditions(ctx, team);
       const preview = conditional.conditionalPreview;
       if (preview.errors.length || preview.portabilityPreview.errors.length)
@@ -266,10 +310,11 @@ export const teamInstallExternalCases = [
       await ctx.input.api.post(`${root(ctx)}/chats/${actor.id}`);
       await ctx.refreshIssue();
       await ctx.input.api.patch(`/api/issues/${ctx.issue()!.id}`, {
-        description: `The accepted website team preview is ${team.name}, catalog key ${team.key}, content hash ${team.contentHash}. Install the complete selected package under the current CEO using this company's existing eligible runtime account. No team resource is installed yet. The selected runtime uses ${actor.adapterType} in environment ${ctx.input.fixtures.environment.id}.`,
+        description: `The accepted website team preview is ${team.name}, catalog key ${team.key}, content hash ${team.contentHash}. Install the complete selected package under the current CEO using this company's existing eligible runtime account. No team resource is installed yet. The selected runtime uses ${actor.adapterType} in environment ${ctx.input.fixtures.environment.id}. The existing eligible runtime is OpenCode/OpenRouter ${selectedRuntime.model}; its credential stays in the existing same-company secret reference. The supported installer takes these per-slug adapterOverrides for this accepted runtime selection: ${JSON.stringify(adapterOverrides)}.`,
       });
       return {
         ...conditional,
+        selectedRuntime,
         team,
         before,
         companyPrefix: ctx.input.fixtures.company.issuePrefix,
@@ -303,6 +348,7 @@ export const teamInstallExternalCases = [
       async act(ctx, state) {
         await waitForReply(ctx);
         state.first = await observeTeamResources(ctx);
+        state.runtimeReadback = await verifyInstalledTeamRuntime(ctx, state.team as CatalogTeam, state.first as TeamResourceSnapshot, state.selectedRuntime as TeamInstallRuntime);
         state.initialRunId = (await ctx.allRuns())[0]?.id;
         state.firstConditional = await observeTeamConditions(ctx, state);
         const firstObservation = await observeExternal(ctx, state);
