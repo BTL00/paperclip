@@ -1,3 +1,4 @@
+import { candidateServingSelected, retainCandidateStartup } from "./candidate-serving-proof.js";
 import { withholdPrivateScreenshots } from "./screenshot-privacy.js";
 import { copyHealthHelloDetail } from "./chat-readiness-detail.js";
 import { copyRetainedSourceSdk } from "./source-sdk-evidence.js";
@@ -864,6 +865,10 @@ async function runAttempt(input: {
       );
       await mkdir(casePrivateDir, { recursive: true });
       await copySharedEvidence(privateDir, casePrivateDir);
+      if (candidateServingSelected([candidate.id])) {
+        const retained = await retainCandidateStartup({ temporaryRoot, destination: path.join(casePrivateDir, "snapshots", "candidate-serving-startup.json") });
+        if (!retained && result.status === "passed") result = { ...result, status: "failed", failureClass: "permanent_infrastructure", error: "Candidate serving startup custody is incomplete" };
+      }
       if (reporterPrivacy.length) {
         const original = { status: result.status, failureClass: result.failureClass, error: result.error };
         const snapshots = path.join(casePrivateDir, "snapshots"); await mkdir(snapshots, { recursive: true });

@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+import { candidateServingSelected, exactCandidateSelection, CANDIDATE_GENERATION, publishCandidateSupervisor } from "./candidate-serving-proof.js";
 import { stopSetupHealthIfRequested } from "./chat-setup-health.js";
 import { publishInvitationSourceProof, invitationSourceProofPath } from "./chat-catalog-domains/identity-invite-source-proof.js";
 import { readSelectedVaultServerEnvironment } from "./chat-vault-private-server.js";
@@ -200,7 +202,15 @@ function describeChildExit(candidate: ChildProcess) {
 }
 
 let invitationSourceGeneration: string | undefined;
+let candidateStarted = false;
 async function startServer() {
+  const candidateServing = candidateServingSelected(executionIds);
+  if (candidateServing) {
+    exactCandidateSelection(executionIds);
+    if (candidateStarted || usesInstalledCli(process.env) || process.env.NODE_OPTIONS) throw new Error("Candidate serving prerequisite is unqualified");
+    candidateStarted = true;
+    definedServerEnvironment[CANDIDATE_GENERATION] = crypto.randomUUID();
+  }
   if (shutdownRequested()) {
     throw new Error("Refusing to start Paperclip after wrapper shutdown");
   }
@@ -258,6 +268,12 @@ async function startServer() {
     void stopWithFeedback(candidate, shutdownSignal).catch(() => {});
   }
   await stopServer.watch(candidate);
+  if (candidateServing) {
+    if (!candidate.pid) throw new Error("Candidate serving prerequisite is unqualified");
+    await publishCandidateSupervisor({ temporaryRoot, sourceRoot: repositoryRoot, apiOrigin: `http://127.0.0.1:${port}`,
+      attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", executionId: executionIds[0]!, generation: definedServerEnvironment[CANDIDATE_GENERATION]!,
+      pid: candidate.pid, spawnedAt: Date.parse(sourceSpawnedAt), resolve: specifier => import.meta.resolve(specifier) });
+  }
   const invitationAttemptId = process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID;
   if (!installed && candidate.pid && invitationAttemptId) {
     invitationSourceGeneration = await publishInvitationSourceProof({ temporaryRoot, sourceRoot: repositoryRoot, apiOrigin: `http://127.0.0.1:${port}`,
@@ -390,6 +406,7 @@ async function writeRestartAck(
 }
 
 async function restartServer({ requestId, preserveRunner, crashAfterResult, controllerDowntimeMs = 0 }: RestartRequest) {
+  if (candidateServingSelected(executionIds)) throw new Error("Candidate serving replacement is forbidden");
   activeRestartRequestId = requestId;
   appendLog(`\nRestart request ${requestId}: stopping Paperclip\n`);
   const previous = child;
@@ -439,6 +456,10 @@ async function supervise() {
   const executionIds: string[] = JSON.parse(process.env.PAPERCLIP_RUNNER_E2E_EXECUTION_IDS ?? "[]");
   if (executionIds.some(id => id.includes(".legacy-claude.local.") || /\.assistant-claude-(?:haiku|sonnet)\.local\./.test(id))) {
     definedServerEnvironment.PATH = await qualifyLegacyClaudeCli(temporaryRoot, definedServerEnvironment);
+  }
+  if (candidateServingSelected(executionIds)) {
+    exactCandidateSelection(executionIds);
+    if ((await readdir(paperclipHome)).length !== 0) throw new Error("Candidate serving requires a fresh owned home");
   }
   const databaseReservation = await prepareRunnerE2EServerConfig({
     temporaryRoot,

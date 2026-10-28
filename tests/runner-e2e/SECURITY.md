@@ -588,3 +588,17 @@ evidence secret finding withholds all screenshots for that attempt. The launcher
 retains a closed withholding reason and removes public markers while preserving
 original private PNG bytes and hashes. Later cleanup labels and empty sanitized
 export scans cannot clear this decision; the publisher and gallery enforce it.
+
+### Candidate webhook startup identity
+
+The isolated webhook core-candidate cell verifies its actual source-mode child,
+supervisor generation, reviewed source/loader hashes and health-response witness
+before public fixture creation or any adapter hello. Its owned home must be
+fresh, and replacement server generations are rejected. This is an E2E startup
+precondition; production routes and native tool behavior are unchanged.
+
+Closed, hash-only startup custody is retained in private case snapshots even on
+early failure and bound to the pre-setup verified receipts. Missing or changed
+custody cannot qualify a successful result. Existing secret scans and sticky
+screenshot withholding apply without exceptions; no source/result files or
+findings are omitted, and the original unknown webhook match remains quarantined.

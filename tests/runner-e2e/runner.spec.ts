@@ -1,3 +1,4 @@
+import { candidateServingSelected, CANDIDATE_HEADER, verifyCandidateServing } from "./candidate-serving-proof.js";
 import { withholdPrivateScreenshots } from "./screenshot-privacy.js";
 import { ordinaryChatCapture } from "./chat-screenshot-capture.js";
 import { checkSetupHealthCredential } from "./chat-setup-credential.js";
@@ -949,6 +950,13 @@ for (const execution of executions) {
     });
 
     try {
+      if (candidateServingSelected([execution.id])) {
+        const serving = await verifyCandidateServing({ temporaryRoot, sourceRoot: path.resolve(import.meta.dirname, "../.."), apiOrigin: api.baseURL,
+          attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", executionId: execution.id, resolve: specifier => import.meta.resolve(specifier),
+          health: async () => { const response = await request.get("/api/health", { maxRedirects: 0 });
+            return { ok: response.ok(), header: response.headers()[CANDIDATE_HEADER], companies: await api.get("/api/companies") }; } });
+        await writeSanitizedJson(snapshotsDir, "candidate-serving-verified.json", serving, secrets);
+      }
       trace?.phase("setup");
       await saveTrace();
       const catalogDescriptor = execution.suite.id === "chat-features" ? findChatCatalogCase(execution.task.id) : undefined;

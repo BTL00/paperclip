@@ -1,15 +1,34 @@
+import path from "node:path";
+import { candidateServingSelected, exactCandidateSelection, CANDIDATE_GENERATION, installCandidateHealthWitness, publishCandidateChild, candidateSourceManifest, assertCandidateReleased } from "./candidate-serving-proof.js";
 import { CHAT_SETUP_HEALTH_ID } from "./chat-setup-health.js";
 import { installChatReadinessObserver } from "./chat-readiness-observer.js";
 // This entrypoint is used only by isolated Runner E2E instances. Production
 // service code has no test flag, delay, altered prompt, or private test API.
 import { ServerResponse } from "node:http";
-import { PaperclipRunnerToolAuthority } from "../../server/src/services/native-runtime/paperclip-runner-tool-authority.js";
 import { canonicalDocumentIssueId, contextCommentGateSelected, holdCommittedDocumentResponse, isArmed } from "./context-comment-gate.js";
 import { holdInteractionResponse } from "./interaction-response-gate.js";
 import { installOwnedEmailResponseLoss } from "./chat-catalog-domains/runtime-email-fault.js";
 import { installOwnedEmailReceiptDuplicate } from "./chat-catalog-domains/runtime-email-duplicate.js";
 
 const ids: string[] = JSON.parse(process.env.PAPERCLIP_RUNNER_E2E_EXECUTION_IDS ?? "[]");
+if (candidateServingSelected(ids)) {
+  exactCandidateSelection(ids);
+  const sourceRoot = path.resolve(import.meta.dirname, "../..");
+  if (JSON.stringify(process.execArgv) !== JSON.stringify(["--import", path.join(sourceRoot, "cli/node_modules/tsx/dist/loader.mjs")])
+    || JSON.stringify(process.argv.slice(1)) !== JSON.stringify([path.join(sourceRoot, "tests/runner-e2e/server-entry.ts"), "onboard", "--yes", "--run"])) throw new Error("Candidate serving prerequisite is unqualified");
+  await candidateSourceManifest(sourceRoot, specifier => import.meta.resolve(specifier));
+}
+const { PaperclipRunnerToolAuthority } = await import("../../server/src/services/native-runtime/paperclip-runner-tool-authority.js");
+if (candidateServingSelected(ids)) {
+  const sourceRoot = path.resolve(import.meta.dirname, "../..");
+  const temporaryRoot = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "";
+  const digest = await publishCandidateChild({ temporaryRoot, sourceRoot, apiOrigin: `http://127.0.0.1:${process.env.PAPERCLIP_RUNNER_E2E_PORT}`,
+    attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", executionId: ids[0]!, generation: process.env[CANDIDATE_GENERATION] ?? "", resolve: specifier => import.meta.resolve(specifier) });
+  installCandidateHealthWitness(digest);
+  const { requireServerAdapter } = await import("../../server/src/adapters/index.js");
+  const adapter = requireServerAdapter("paperclip_runner"), testEnvironment = adapter.testEnvironment;
+  adapter.testEnvironment = async function (...args) { await assertCandidateReleased(temporaryRoot, digest); return testEnvironment.apply(this, args); };
+}
 if (ids.length && ids.every(id => id === CHAT_SETUP_HEALTH_ID || id.startsWith("chat-features.runner-opencode.local."))) {
   const { requireServerAdapter } = await import("../../server/src/adapters/index.js");
   await installChatReadinessObserver({ executionIds: ids, temporaryRoot: process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT ?? "",
