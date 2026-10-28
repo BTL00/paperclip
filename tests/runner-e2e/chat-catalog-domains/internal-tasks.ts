@@ -1,4 +1,5 @@
 import { savedDesignInstruction, withRenderedCommentReference, validRenderedCommentReference } from "./internal-comment-reference.js";
+import { linkedQuestionTakeover, observeLinkedTaskQuestion } from "../chat-linked-question.js";
 import { withEditOwnership } from "./internal-edit-ownership.js";
 import { verifyDistinctTaskFixtures } from "./internal-distinct-fixtures.js";
 import { delegatedTaskCases } from "./internal-task-creation.js";
@@ -90,28 +91,37 @@ function ambiguousTask(): ChatCatalogCase {
     await verifyDistinctTaskFixtures(ctx, [t, otherTask]);
     return { project: p, task: t, otherProject, otherTask };
   });
-  return { ...base, sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-distinct-fixtures.ts"], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
+  return { ...base, sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-distinct-fixtures.ts", "chat-linked-question.ts"], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
     async act(ctx, state) {
-      const first = await pollUntil({ label: "Task ambiguity clarification", deadlineAt: Date.now() + 150_000,
+      const plain = await pollUntil({ label: "Task ambiguity clarification", deadlineAt: Date.now() + 150_000,
         load: () => observeInternal(ctx, state), accept: o => o.runs.length === 1 && o.runs.every(row => row.status === "succeeded")
           && ctx.issue()?.conversationState === "waiting" });
+      const first = await observeLinkedTaskQuestion(ctx, state, plain);
       state.clarification = { ...first, state: structuredClone(state) };
       await ctx.input.evidence("chat-catalog-task-clarification.json", state.clarification);
       const selected = entity(state, "task"); const other = entity(state, "otherTask");
       if (!sameTask(selected, first.tasks.find(row => row.id === selected.id)) || !sameTask(other, first.tasks.find(row => row.id === other.id)))
         throw new Error("Ambiguous task changed before the person chose a source");
       const answer = `The Landing page task in Launch (${selected.identifier ?? selected.id}).`;
-      const textInput = ctx.input.page.getByTestId("question-text-answer-composer").last();
+      const card = first.linkedQuestionEvidence;
+      if (card) {
+        const fresh = (await observeLinkedTaskQuestion(ctx, state, plain)).linkedQuestionEvidence;
+        if (!fresh || fresh.interactionId !== card.interactionId || fresh.questionId !== card.questionId || fresh.payloadDigest !== card.payloadDigest)
+          throw new Error("The actual linked clarification question changed before the person's selection");
+      }
+      const answerRoot = card ? linkedQuestionTakeover(ctx.input.page, card) : ctx.input.page;
+      const textInput = answerRoot.getByTestId("question-text-answer-composer").last();
       if (await textInput.isVisible()) {
         await textInput.locator('[contenteditable="true"],textarea').first().fill(answer);
-        await ctx.input.page.getByRole("button", { name: /Submit answers|Submit|Continue/, exact: true }).last().click();
+        await answerRoot.getByRole("button", { name: /Submit answers|Submit|Continue/, exact: true }).last().click();
       } else {
-        const otherChoice = ctx.input.page.getByRole("radio", { name: "Other", exact: true }).last();
+        const otherChoice = answerRoot.getByRole("radio", { name: "Other", exact: true }).last();
         if (await otherChoice.isVisible()) {
           await otherChoice.click();
-          await ctx.input.page.getByTestId("question-other-answer-composer").last().locator('[contenteditable="true"],textarea').first().fill(answer);
-          await ctx.input.page.getByRole("button", { name: /Submit answers|Submit|Continue/, exact: true }).last().click();
+          await answerRoot.getByTestId("question-other-answer-composer").last().locator('[contenteditable="true"],textarea').first().fill(answer);
+          await answerRoot.getByRole("button", { name: /Submit answers|Submit|Continue/, exact: true }).last().click();
         } else {
+          if (card) throw new Error("The linked question has no supported explicit clarification input");
           const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, answer);
         }
       }
