@@ -25,7 +25,12 @@ describe("approved design search calibration", () => {
   });
   it.each([
     "Version 1 with amber navigation is signed off. Version 2 remains pending review.",
+    "Revision 1 is approved, whereas revision 2 remains an unapproved draft.",
+    "Revision 1 is approved, but revision 2 is not yet approved.",
+    "Revision 1 is approved, while revision 2 is an unapproved draft.",
     "The approved design is v1 with amber navigation. V2 is not yet approved.",
+    "Revision 1 was approved. Revision 2 is not officially approved and is an unapproved draft.",
+    "Revision 1 was approved. Revision 2 has never been approved and is an unapproved draft.",
     "Revision 1 is approved. RUN-2 revision 2 has not been approved and is an unapproved draft.",
   ])("accepts truthful current-version disclosure: %s", reply => { const o = valid(); o.reply = reply; expect(gradeDesignSearch(o).passed).toBe(true); });
   it.each([
@@ -36,6 +41,10 @@ describe("approved design search calibration", () => {
     "Revision 1 is approved. Revision 1 is an unapproved draft.",
     "Revision 1 is approved. The newer draft is no longer unapproved.",
     "Revision 1 is approved. Revision 2 is an unapproved draft. Revision 2 is approved.",
+    "Revision 1 is approved. Revision 2 is an unapproved draft. Revision 2 approved.",
+    "Revision 1 is approved. Revision 2 is an unapproved draft. Also approved: revision 2.",
+    "Revision 1 is approved. Revision 2 is an unapproved draft. We did not choose a filename, but revision 2 is approved.",
+    "Revision 1 is approved. Revision 2 is an unapproved draft. V2 has been signed off.",
   ])("rejects unrelated, wrong-version, negated or contradictory disclosure: %s", reply => { const o = valid(); o.reply = reply; expect(gradeDesignSearch(o).passed).toBe(false); });
   it("retains exact linked target and historical approval checks with explicit revision ordering", () => {
     const o = valid(); o.reply = "Revision 1 is approved. Revision 2 is an unapproved draft."; o.links = ["/RUN/issues/other"]; expect(gradeDesignSearch(o).passed).toBe(false);
