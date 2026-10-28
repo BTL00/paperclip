@@ -87,9 +87,26 @@ vi.mock("./installation-integrity.js", () => ({ verifyNativeAcpxInstallation: vi
 
 describe("Copilot build-owned installation", () => {
   it("admits the current profile with environment launch preparation", () => {
-    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(71);
+    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(72);
     expect(QUALIFIED_ACPX_PROFILES.copilot.qualificationStatus).toBeUndefined();
-    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:b7a25fe627daf3857ac8097d9a374b1ba15355176389b92457838bf19e9d91bd");
+    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:dc746f2f41a58f0f6af1aff15bbbd647fb0c9320b4d6302c90608429b80f61ac");
+  });
+
+  it("preserves v71 while binding the shared Cursor Cloud runtime sources in v72", async () => {
+    const bytes = readFileSync(new URL("../../../test/fixtures/copilot-profile-v71-identity.json", import.meta.url));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe("e8c7ef12c07a2ba231e9fea5fca7de7580f3c7a9220e73f2d0ebc557600821bf");
+    const prior = JSON.parse(bytes.toString("utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v72-identity.json", import.meta.url), "utf8"));
+    expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
+      "agentProfileVersion", "configuredEnvironmentRustSourceSha256", "configuredEnvironmentSourceSha256",
+      "nativeBackendSourceSha256", "nativeExecutionSourceSha256", "profileCompatibilitySourceSha256",
+      "providerLaunchSourceSha256", "runtimeRequestBridgeSourceSha256", "semanticBridgeSourceSha256",
+      "semanticSchemaBundleSourceSha256",
+    ]);
+    expect(Object.keys(current.declaration).sort()).toEqual(Object.keys(prior.declaration).sort());
+    expect(isSupportedAcpxProfileVersion("copilot", 71)).toBe(true);
+    await expect(verifyCopilotInstallation({ ...QUALIFIED_ACPX_PROFILES.copilot,
+      agentProfileVersion: 71, commandDigest: prior.commandDigest })).rejects.toThrow("exact pinned");
   });
 
   it("preserves v70 while binding historical Grok recovery decoding in v71", async () => {
