@@ -13,7 +13,7 @@ import { getStorageService, type StorageService } from "../storage/index.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
 import { conflict, notFound } from "../errors.js";
 import { assertSkillSnapshotPath, skillFileBytes } from "./skill-snapshot.js";
-import { ensureSkillCacheDirectory, withSkillVersionCacheLock } from "./skill-version-cache.js";
+import { ensureSkillCacheDirectory, SkillCacheBusy, withSkillVersionCacheLock } from "./skill-version-cache.js";
 import { boundedHashStream, extractSkillPackageArchive, MAX_SKILL_MANIFEST_BYTES, packageSha256,
   skillPackageManifest, skillPackageManifestBytes, validateSkillPackageManifest, verifySkillPackageDirectory, relocateSkillPackageVerification, writeSkillPackageArchive,
   type SkillPackageManifest } from "./skill-package-files.js";
@@ -49,6 +49,45 @@ function flight<T>(db: Db, key: string, action: () => Promise<T>): Promise<T> {
   const work = action().finally(() => pending!.delete(key));
   pending.set(key, work);
   return work;
+}
+type SharedFlight = { work: Promise<unknown>; controller: AbortController; waiters: number };
+const sharedFlights = new WeakMap<Db, Map<string, SharedFlight>>();
+function sharedFlight<T>(db: Db, key: string, cancellation: AbortSignal | undefined, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  cancellation?.throwIfAborted();
+  let pending = sharedFlights.get(db);
+  if (!pending) { pending = new Map(); sharedFlights.set(db, pending); }
+  let entry = pending.get(key);
+  if (!entry) {
+    const controller = new AbortController();
+    entry = { controller, waiters: 0, work: Promise.resolve() };
+    const created = entry;
+    entry.work = action(controller.signal).finally(() => {
+      if (pending!.get(key) === created) pending!.delete(key);
+    });
+    pending.set(key, entry);
+  }
+  const current = entry;
+  current.waiters++;
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const release = () => {
+      if (settled) return false;
+      settled = true;
+      cancellation?.removeEventListener("abort", aborted);
+      current.waiters--;
+      return true;
+    };
+    const aborted = () => {
+      if (!release()) return;
+      if (current.waiters) { reject(cancellation!.reason); return; }
+      if (pending!.get(key) === current) pending!.delete(key);
+      current.controller.abort(cancellation!.reason);
+      // The last caller owns cancellation and waits for storage/queue cleanup.
+      void current.work.then(() => reject(cancellation!.reason), () => reject(cancellation!.reason));
+    };
+    cancellation?.addEventListener("abort", aborted, { once: true });
+    current.work.then(value => { if (release()) resolve(value as T); }, error => { if (release()) reject(error); });
+  });
 }
 type PackageIoQueue = { active: number; waiting: Array<() => void> };
 const storageIo: PackageIoQueue = { active: 0, waiting: [] };
@@ -113,8 +152,10 @@ async function readBoundedObject(storage: StorageService, companyId: string, key
 }
 
 /** Owns immutable package storage. Authorization belongs to the referencing
- * skill/source, and must be checked even when package bytes are already cached. */
-export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
+ * skill/source, and must be checked even when package bytes are already cached.
+ * Transaction readers supply their originating DB as cacheOwner for dedicated
+ * cache locks; metadata queries remain on the caller's transaction. */
+export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cacheOwner: Db = db) {
   const storage = () => suppliedStorage ?? getStorageService();
   const scope = (companyId: string, id: string) => and(eq(snapshots.companyId, companyId), eq(snapshots.id, id));
   async function descriptor(companyId: string, id: string): Promise<Descriptor> {
@@ -191,8 +232,8 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     const key = `${paths.manifest}:${row.storage?.manifestSha256 ?? row.contentHash}`;
     const cached = manifests.get(key);
     if (cached) return cached.manifest;
-    const load = async () => {
-      const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
+    const load = async (sharedSignal: AbortSignal) => {
+      const signal = AbortSignal.any([sharedSignal, AbortSignal.timeout(180_000)]);
       await ensureSkillCacheDirectory(paths.parent, true);
       // Legacy manifests have no independently stored checksum. Derive them once
       // per process from the authoritative row until the operator migrates it.
@@ -227,7 +268,7 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         bytes = skillPackageManifestBytes((await restoreRecipe(row)).manifest);
       } else if (!bytes) {
         const files = await legacyFiles(row);
-        if (row.storage) return manifestFor(row, cancellation);
+        if (row.storage) return manifestFor(row, signal);
         bytes = skillPackageManifestBytes(skillPackageManifest(files));
       }
       signal.throwIfAborted();
@@ -237,14 +278,12 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
         || manifest.totalBytes !== row.storage.totalBytes)) throw new Error("Skill package receipt does not match its manifest");
       await ensureSkillCacheDirectory(paths.parent, true);
       const temp = `${paths.manifest}.${randomUUID()}`;
-      try { await fs.writeFile(temp, bytes, { flag: "wx", mode: 0o600 }); await fs.rename(temp, paths.manifest); }
+      try { await fs.writeFile(temp, bytes, { flag: "wx", mode: 0o600, signal }); signal.throwIfAborted(); await fs.rename(temp, paths.manifest); }
       finally { await fs.rm(temp, { force: true }); }
       rememberManifest(key, manifest, bytes.length);
       return manifest;
     };
-    // Optional work must neither inherit an uncancellable interactive read nor
-    // cancel a shared read that another caller still needs.
-    return cancellation ? load() : flight(db, `manifest:${key}`, load);
+    return sharedFlight(db, `manifest:${key}`, cancellation, load);
   }
   async function restoreInto(row: Descriptor, manifest: SkillPackageManifest, staging: string,
     archivePath: string, signal: AbortSignal, allowRecovery = true) {
@@ -288,21 +327,53 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
   // Admin reads and retention verification own a scratch directory. They never
   // wait for or hold the lock used to prepare and pin an agent's warm files.
   async function withIsolatedPackage<T>(companyId: string, id: string,
-    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true, cancellation?: AbortSignal) {
+    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true, cancellation?: AbortSignal, cacheRead = false) {
     const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
     signal.throwIfAborted();
     const row = await descriptor(companyId, id);
     const manifest = await manifestFor(row, signal);
-    return withPackageIo(async () => {
+    let published = false;
+    const result = await withPackageIo(async () => {
       const parent = skillPackagePaths(companyId, id).parent;
       await ensureSkillCacheDirectory(parent, true);
       const staging = await fs.mkdtemp(path.join(parent, ".verify-"));
       const archive = `${staging}.tar.gz`;
       try {
         await restoreInto(row, manifest, staging, archive, signal, allowRecovery);
-        return await consume(staging, manifest);
+        const result = await consume(staging, manifest);
+        if (cacheRead) {
+          // Network, extraction, hashing and response reads all happen before
+          // this short publication lock. Busy preparation keeps its priority.
+          const paths = skillPackagePaths(companyId, id);
+          const previous = await fs.mkdtemp(path.join(parent, ".verify-"));
+          try {
+            await withSkillVersionCacheLock(cacheOwner, companyId, async () => {
+              let moved = false;
+              try { await fs.rename(paths.directory, previous); moved = true; }
+              catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+              try { await fs.rename(staging, paths.directory); }
+              catch (error) { if (moved) await fs.rename(previous, paths.directory); throw error; }
+              relocateSkillPackageVerification(staging, paths.directory, manifest.files);
+              touchSkillPackage(paths.directory);
+              published = true;
+            }, true);
+          } catch (error) { if (!(error instanceof SkillCacheBusy)) throw error; }
+          finally { await fs.rm(previous, { recursive: true, force: true }); }
+        }
+        return result;
       } finally { await fs.rm(staging, { recursive: true, force: true }); await fs.rm(archive, { force: true }); }
     }, signal);
+    if (published) {
+      // Verify possible eviction candidates outside both the preparation lock
+      // and the storage slot used for this fill; take the lock only to remove.
+      await trimSkillPackageCache(db, companyId, skillPackagePaths(companyId, id).directory,
+        (id, signal) => verifyDurable(companyId, id, signal).catch(() => false),
+        async remove => {
+          try { await withSkillVersionCacheLock(cacheOwner, companyId, remove, true); }
+          catch (error) { if (!(error instanceof SkillCacheBusy)) throw error; }
+        });
+    }
+    return result;
   }
   async function materialize(row: Descriptor, manifest: SkillPackageManifest) {
     const paths = skillPackagePaths(row.companyId, row.id);
@@ -534,7 +605,11 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
       return result;
     }
     signal.throwIfAborted();
-    return withIsolatedPackage(version.companyId, id, read, allowRecovery, signal);
+    const acquire = async () => {
+      const cached = await withPackageIo(() => read(root).catch(() => null), signal, inventoryIo);
+      return cached ?? withIsolatedPackage(version.companyId, id, read, allowRecovery, signal, true);
+    };
+    return cancellation ? acquire() : flight(db, `version-read:${version.companyId}:${version.id}:${allowRecovery}`, acquire);
   }
   async function readVersionFile(version: StoredSkillVersion, relativePath: string, allowRecovery = true) {
     assertSkillSnapshotPath(relativePath);
@@ -557,7 +632,11 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService) {
     const cached = await withPackageIo(() => read(skillPackagePaths(version.companyId, id).directory).catch(() => null), signal, inventoryIo);
     if (cached) return cached;
     signal.throwIfAborted();
-    return withIsolatedPackage(version.companyId, id, read, allowRecovery, signal);
+    return flight(db, `file-read:${version.companyId}:${version.id}:${relativePath}:${allowRecovery}`,
+      async () => {
+        const cached = await withPackageIo(() => read(skillPackagePaths(version.companyId, id).directory).catch(() => null), signal, inventoryIo);
+        return cached ?? withIsolatedPackage(version.companyId, id, read, allowRecovery, signal, true);
+      });
   }
   async function versionInventory(version: StoredSkillVersion): Promise<Array<{ path: string; kind: CompanySkillVersionFileInventoryEntry["kind"] }>> {
     if (version.packageSnapshotId) {

@@ -454,6 +454,98 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     await expect(f.store.versionFiles(saved.version)).rejects.toThrow("storage offline");
   });
 
+  it("coalesces cold version reads and retains the verified package for subsequent reads", async () => {
+    const f = await fixture();
+    await f.resolve();
+    const root = skillPackagePaths(f.companyId, f.id).directory;
+    await fs.rm(root, { recursive: true });
+    const read = vi.spyOn(storage, "getObject");
+    const saved = f.skills[0]!;
+    const get = () => f.service.getVersion(f.companyId, saved.skill.id, saved.version.id);
+    const [first, second, third] = await Promise.all([get(), get(), get()]);
+    expect(first!.fileInventory).toEqual([{ path: "SKILL.md", kind: "skill", content: files[0]!.content }]);
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+    expect(await get()).toEqual(first);
+    expect(await f.store.readVersionFile(saved.version, "SKILL.md")).toMatchObject({ content: files[0]!.content });
+    expect(read.mock.calls.filter(call => call[1].endsWith("files.tar.gz"))).toHaveLength(1);
+    expect(await verifySkillPackageDirectory(root, skillPackageManifest(files).files)).toBe(true);
+  });
+
+  it("shares a cold manifest while allowing one caller to cancel without aborting another", async () => {
+    const f = await fixture();
+    const get = storage.getObject.bind(storage);
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let storageSignal: AbortSignal | undefined;
+    const read = vi.spyOn(storage, "getObject").mockImplementation(async (...args) => {
+      storageSignal = args[2]?.signal;
+      entered();
+      await blocked;
+      return get(...args);
+    });
+    const cancellation = new AbortController();
+    const first = f.store.manifest(f.companyId, f.id, cancellation.signal).catch(error => error);
+    await started;
+    const second = f.store.manifest(f.companyId, f.id);
+    try {
+      // The shared one-slot pool places this query after the second descriptor.
+      await db.select({ id: snapshots.id }).from(snapshots).where(eq(snapshots.id, f.id));
+      cancellation.abort(new Error("Caller stopped"));
+      expect((await first).message).toBe("Caller stopped");
+      expect(storageSignal?.aborted).toBe(false);
+      release();
+      expect(await second).toEqual(skillPackageManifest(files));
+      expect(read).toHaveBeenCalledOnce();
+    } finally { release(); await Promise.allSettled([first, second]); }
+  });
+
+  it("keeps warm preparation responsive while a read-triggered cache trim verifies storage", async () => {
+    const f = await fixture();
+    await f.resolve();
+    const paths = skillPackagePaths(f.companyId, f.id);
+    // Exceed the directory bound without manufacturing large file payloads.
+    for (let index = 0; index < 63; index++) {
+      const orphan = path.join(paths.parent, randomUUID());
+      await fs.mkdir(orphan);
+      const later = new Date(Date.now() + 60_000);
+      await fs.utimes(orphan, later, later);
+    }
+    const changed = files.map((file, index) => index ? file : { ...file, content: `${file.content}Updated\n` });
+    const id = await f.store.prepare(f.companyId, changed);
+    const [version] = await db.insert(companySkillVersions).values({ companyId: f.companyId,
+      companySkillId: f.skills[0]!.skill.id, revisionNumber: 2, packageSnapshotId: id, migrationAt: null,
+      packageFileMap: f.skills[0]!.version.packageFileMap }).returning();
+    const receipt = (await f.store.descriptor(f.companyId, f.id)).storage!;
+    const get = storage.getObject.bind(storage);
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(storage, "getObject").mockImplementation(async (...args) => {
+      if (args[1] === receipt.manifestKey) { entered(); await blocked; }
+      return get(...args);
+    });
+    const reading = f.store.versionFiles(version!);
+    let warming: ReturnType<typeof f.resolve> | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await started;
+      warming = f.resolve();
+      expect((await Promise.race([warming, new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Warm preparation waited for eviction storage")), 1_000);
+      })])).every(entry => entry.sourceStatus === "available")).toBe(true);
+      // Preparation can reuse its separate projection. Also access the shared
+      // package itself to prove eviction rechecks use after verification.
+      await f.store.versionFiles(f.skills[0]!.version);
+      release();
+      expect((await reading)[0]!.content).toBe(changed[0]!.content);
+      expect((await fs.stat(paths.directory)).isDirectory()).toBe(true);
+    } finally { clearTimeout(timeout); release(); await Promise.allSettled([reading, warming]); }
+  });
+
   it("bounds concurrent cached inventories while leaving warm turn preparation responsive", async () => {
     const f = await fixture();
     await f.resolve();

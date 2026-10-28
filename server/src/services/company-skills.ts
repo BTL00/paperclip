@@ -2979,7 +2979,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   const packages = skillPackageStore(packageDb);
   const packageRuntime = skillPackageRuntime(packageDb);
   // Admin reads keep SQL on the caller's transaction, which may own the pool's only slot.
-  const packageReader = db === packageDb ? packages : skillPackageStore(db);
+  const packageReader = db === packageDb ? packages : skillPackageStore(db, undefined, packageDb);
   const visibility = (database: DbOrTransaction = db) => skillAccessService(database as Db, options.actor);
   const folderSvc = folderService(db);
   const agents = agentService(db);

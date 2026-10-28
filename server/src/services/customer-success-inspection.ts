@@ -292,7 +292,7 @@ export async function readCustomerSuccessResource(
             String(versionId),
           );
           if (version.companySkillId !== skill.id) throw notFound("Skill version not found");
-          const file = await skillPackageStore(tx, storage).readVersionFile(
+          const file = await skillPackageStore(tx, storage, db).readVersionFile(
             version as typeof schema.companySkillVersions.$inferSelect, relative, false);
           if (file?.content !== undefined) {
             const bytes = Buffer.from(file.content, file.encoding === "base64" ? "base64" : "utf8");

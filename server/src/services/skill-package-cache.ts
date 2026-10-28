@@ -15,7 +15,8 @@ export function touchSkillPackage(directory: string) {
 /** Called only after a cold fill, under the company cache lock. Never on a warm
  * check. Version projections and run pins have their own existing retention. */
 export async function trimSkillPackageCache(db: Db, companyId: string, directory: string,
-  verifyDurable: (id: string, signal: AbortSignal) => Promise<boolean>) {
+  verifyDurable: (id: string, signal: AbortSignal) => Promise<boolean>,
+  removeVerified: (action: () => Promise<void>) => Promise<void> = action => action()) {
   const parent = path.dirname(directory);
   await ensureSkillCacheDirectory(parent);
   const contents = await fs.readdir(parent, { withFileTypes: true });
@@ -24,20 +25,30 @@ export async function trimSkillPackageCache(db: Db, companyId: string, directory
     const target = path.join(parent, entry.name);
     // Every I/O attempt has a three-minute deadline; leave a much longer crash
     // grace so housekeeping cannot race a live publisher in another process.
-    if (Date.now() - (await fs.lstat(target)).mtimeMs > 60 * 60_000) await fs.rm(target, { recursive: true, force: true });
+    const stat = await fs.lstat(target).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (stat && Date.now() - stat.mtimeMs > 60 * 60_000) await fs.rm(target, { recursive: true, force: true });
   }
   const names = contents.filter(entry => entry.isDirectory() && /^[a-f0-9-]{36}$/i.test(entry.name)).map(entry => entry.name);
   if (!names.length) return;
   const rows = await db.select({ id: snapshots.id, storage: snapshots.storage }).from(snapshots)
     .where(and(eq(snapshots.companyId, companyId), inArray(snapshots.id, names)));
   const byId = new Map(rows.map(row => [row.id, row.storage]));
-  const entries = await Promise.all(names.map(async id => {
+  const candidates = await Promise.all(names.map(async id => {
     const location = path.join(parent, id);
     const receipt = byId.get(id);
-    return { id, location, receipt, lastUsed: used.get(location) ?? (await fs.lstat(location)).mtimeMs,
+    const stat = await fs.lstat(location).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (!stat) return null;
+    return { id, location, receipt, lastUsed: used.get(location) ?? stat.mtimeMs,
       // Include an upper bound on block rounding and directory/manifest overhead.
       bytes: receipt ? receipt.totalBytes + receipt.fileCount * 8192 : 64 * 1024 * 1024 };
   }));
+  const entries = candidates.filter(entry => entry !== null);
   let bytes = entries.reduce((total, entry) => total + entry.bytes, 0);
   let count = entries.length;
   const signal = AbortSignal.timeout(10_000);
@@ -50,9 +61,15 @@ export async function trimSkillPackageCache(db: Db, companyId: string, directory
     // A storage outage must not discard the last recoverable copy. Keep the
     // excess until the next cold fill can confirm a durable copy independently.
     if (byId.has(entry.id) && !await verifyDurable(entry.id, signal)) break;
-    await fs.rm(entry.location, { recursive: true, force: true });
-    await fs.rm(path.join(parent, `${entry.id}.json`), { force: true });
-    used.delete(entry.location);
+    let removed = false;
+    await removeVerified(async () => {
+      if ((used.get(entry.location) ?? entry.lastUsed) > entry.lastUsed) return;
+      await fs.rm(entry.location, { recursive: true, force: true });
+      await fs.rm(path.join(parent, `${entry.id}.json`), { force: true });
+      used.delete(entry.location);
+      removed = true;
+    });
+    if (!removed) continue;
     bytes -= entry.bytes;
     count--;
   }
