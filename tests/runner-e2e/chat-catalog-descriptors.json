@@ -3328,6 +3328,7 @@
       "chat-catalog-domains/internal-inbox-search.ts",
       "chat-scenarios/inbox-search.yaml",
       "chat-catalog-domains/internal-notification-audience.ts",
+      "chat-catalog-domains/internal-notification-events.ts",
       "chat-catalog-domains/internal-privacy.ts",
       "chat-catalog-domains/identity-auth.ts",
       "../../packages/shared/src/project-mentions.ts"

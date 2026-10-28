@@ -1,3 +1,4 @@
+import { bindNotificationPublicEvents, publicNotificationFrame, type NotificationPublicFrame, type NotificationBoundFrame, type NotificationObserverInput } from "./internal-notification-events.js";
 import { expect, type Page } from "@playwright/test";
 import { extractUserMentionIds } from "../../../packages/shared/src/project-mentions.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
@@ -5,21 +6,21 @@ import { pollUntil } from "../api.js";
 import { makeDefinition } from "./internal-definition.js";
 import { mainPerson, observerPerson, personRead } from "./internal-privacy.js";
 import { checks, entity, hasLink, observation, observeInternal, project, putDocument, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
-interface Frame { principalId: string; commentId: string; taskId: string; eligible: boolean; at: number }
+type Frame = NotificationBoundFrame;
 interface ToastReceipt { text: string; hrefs: string[]; at: number }
 interface ObserverEvidence { principalId: string; visibility: string; frames: Frame[]; toasts: ToastReceipt[]; sockets: string[] }
 interface AudienceObservation extends InternalObservation { alex: ObserverEvidence; riley: ObserverEvidence; observedAt: number }
-interface ObserverProbe { page: Page; principalId: string; frames: Frame[]; sockets: string[] }
+interface ObserverProbe { page: Page; principalId: string; companyId: string; taskId: string; origin: string; frames: NotificationPublicFrame[]; sockets: string[]; overflow: boolean; baseline?: { sessionPrincipalId: string; activityIds: string[]; commentIds: string[] } }
 const negativeWindowMs = 2000;
 declare global { interface Window { __paperclipAudienceToastReceipts?: ToastReceipt[] } }
-async function startObserver(page: Page, principalId: string, target: Entity, href: string): Promise<ObserverProbe> {
-  const probe: ObserverProbe = { page, principalId, frames: [], sockets: [] };
+async function startObserver(page: Page, principalId: string, target: Entity, href: string, companyId: string): Promise<ObserverProbe> {
+  const probe: ObserverProbe = { page, principalId, companyId, taskId: target.id, origin: new URL(href).origin, frames: [], sockets: [], overflow: false };
   page.on("websocket", socket => {
     const path = new URL(socket.url()).pathname; if (!/\/events\/ws$/.test(path)) return; probe.sockets.push(path);
     socket.on("framereceived", frame => {
-      try { const message = JSON.parse(String(frame.payload)); const payload = message.payload;
-        if (message.type === "activity.logged" && payload?.action === "issue.comment_added" && payload.entityId === target.id && typeof payload.details?.commentId === "string" && typeof message.toastEligible === "boolean")
-          probe.frames.push({ principalId, commentId: payload.details.commentId, taskId: target.id, eligible: message.toastEligible, at: Date.now() });
+      try { const message = JSON.parse(String(frame.payload));
+        const actual = publicNotificationFrame(message, companyId, target.id, Date.now());
+        if (actual) { if (probe.frames.length >= 128) probe.overflow = true; else probe.frames.push(actual); }
       } catch { /* Non-JSON transport frames are not task/comment evidence. */ }
     });
   });
@@ -37,9 +38,35 @@ async function startObserver(page: Page, principalId: string, target: Entity, hr
   }, { id: target.id, identifier: target.identifier });
   return probe;
 }
-async function observeProbe(probe: ObserverProbe): Promise<ObserverEvidence> {
+async function publicProbeRows(probe: ObserverProbe) {
+  const read = async (route: string) => {
+    const response = await probe.page.request.get(new URL(route, probe.origin).href, { timeout: 15000, maxRedirects: 0 });
+    try { if (response.status() !== 200) throw new Error("Notification observer lacks authenticated saved evidence"); return await response.json(); }
+    finally { await response.dispose(); }
+  };
+  const [activity, comments] = await Promise.all([read(`/api/issues/${probe.taskId}/activity`), read(`/api/issues/${probe.taskId}/comments?order=asc`)]);
+  if (!Array.isArray(activity) || !Array.isArray(comments)) throw new Error("Notification observer saved evidence is not a list");
+  return { activity: activity.map((row: Record<string, unknown>) => ({ id: row.id, companyId: row.companyId, entityType: row.entityType, entityId: row.entityId,
+    action: row.action, actorType: row.actorType, actorId: row.actorId, createdAt: row.createdAt, details: { commentId: (row.details as Record<string, unknown> | null)?.commentId } })),
+    comments: comments.map((row: Record<string, unknown>) => ({ id: row.id, companyId: row.companyId, issueId: row.issueId, createdAt: row.createdAt,
+      authorAgentId: row.authorAgentId, authorUserId: row.authorUserId, deletedAt: row.deletedAt })) };
+}
+async function armProbe(probe: ObserverProbe) {
+  const session = await probe.page.request.get(new URL("/api/auth/get-session", probe.origin).href, { timeout: 15000, maxRedirects: 0 });
+  let personId: unknown;
+  try { if (session.status() !== 200) throw new Error("Notification observer has no actual session"); personId = (await session.json())?.user?.id; }
+  finally { await session.dispose(); }
+  if (personId !== probe.principalId) throw new Error("Notification observer session principal mismatch");
+  const rows = await publicProbeRows(probe);
+  probe.baseline = { sessionPrincipalId: probe.principalId, activityIds: rows.activity.map(row => String(row.id)), commentIds: rows.comments.map(row => String(row.id)) };
+  probe.frames.length = 0;
+}
+async function observeProbe(probe: ObserverProbe) {
   const browser = await probe.page.evaluate(() => ({ visibility: document.visibilityState, toasts: window.__paperclipAudienceToastReceipts ?? [] }));
-  return { principalId: probe.principalId, frames: structuredClone(probe.frames), sockets: [...probe.sockets], ...browser };
+  const input: NotificationObserverInput | undefined = probe.baseline ? { principalId: probe.principalId, sessionPrincipalId: probe.baseline.sessionPrincipalId,
+    frames: structuredClone(probe.frames), overflow: probe.overflow, baselineActivityIds: probe.baseline.activityIds, baselineCommentIds: probe.baseline.commentIds,
+    ...await publicProbeRows(probe) } : undefined;
+  return { principalId: probe.principalId, sockets: [...probe.sockets], ...browser, input };
 }
 function commentEvent(person: ObserverEvidence, commentId: string, taskId: string) { return person.frames.find(frame => frame.principalId === person.principalId && frame.commentId === commentId && frame.taskId === taskId); }
 function actualToast(person: ObserverEvidence, since: number, target: Entity, origin: string) {
@@ -80,6 +107,14 @@ export function gradeNotificationAudience(value: unknown) {
 }
 function notificationAudience(): ChatCatalogCase {
   let riley: Awaited<ReturnType<typeof observerPerson>> | undefined; let alexProbe: ObserverProbe | undefined; let rileyProbe: ObserverProbe | undefined;
+  let latestBinding: ReturnType<typeof bindNotificationPublicEvents> | undefined;
+  const observeAudienceProbes = async () => {
+    if (!alexProbe || !rileyProbe) throw new Error("Missing actual observer pages");
+    const [alex, riley] = await Promise.all([observeProbe(alexProbe), observeProbe(rileyProbe)]);
+    latestBinding = alex.input && riley.input ? bindNotificationPublicEvents(alexProbe.companyId, alexProbe.taskId, [alex.input, riley.input]) : undefined;
+    return { alex: { principalId: alex.principalId, visibility: alex.visibility, sockets: alex.sockets, toasts: alex.toasts, frames: latestBinding?.frames[0] ?? [] },
+      riley: { principalId: riley.principalId, visibility: riley.visibility, sockets: riley.sockets, toasts: riley.toasts, frames: latestBinding?.frames[1] ?? [] } };
+  };
   let observe: (ctx: Parameters<ChatCatalogCase["setup"]>[0], state: Record<string, unknown>) => Promise<AudienceObservation>;
   const base = makeDefinition("inbox-search.notification-audience", async ctx => {
     const alexId = await mainPerson(ctx); riley = await observerPerson(ctx);
@@ -88,25 +123,26 @@ function notificationAudience(): ChatCatalogCase {
       await putDocument(ctx, t.id, "# Launch draft\nThe Acorn Notes draft is ready for human review.\n");
       const read = await personRead(riley, `/api/issues/${t.id}`); if (read.status !== 200) throw new Error("The nonparticipant is not an actual authorized task reader");
       const origin = ctx.input.api.baseURL; const href = `${origin}/${ctx.input.fixtures.company.issuePrefix}/activity`;
-      alexProbe = await startObserver(await ctx.input.page.context().newPage(), alexId, t, href); rileyProbe = await startObserver(await riley.context.newPage(), riley.id, t, href);
+      alexProbe = await startObserver(await ctx.input.page.context().newPage(), alexId, t, href, ctx.input.fixtures.company.id); rileyProbe = await startObserver(await riley.context.newPage(), riley.id, t, href, ctx.input.fixtures.company.id);
       await pollUntil({ label: "Observer page visibility and production socket registration", deadlineAt: Date.now() + 15000,
-        load: async () => ({ alex: await observeProbe(alexProbe!), riley: await observeProbe(rileyProbe!) }),
+        load: observeAudienceProbes,
         accept: proof => proof.alex.visibility === "visible" && proof.riley.visibility === "visible" && proof.alex.sockets.length > 0 && proof.riley.sockets.length > 0 });
+      await Promise.all([armProbe(alexProbe), armProbe(rileyProbe)]);
       await rileyProbe.page.waitForTimeout(250);
       const participation = await ctx.input.api.post<Entity>(`/api/issues/${t.id}/comments`, { body: "I am following the launch draft. Please post an update here when it is ready." });
       await pollUntil({ label: "Both real signed-in task cache subscriptions", deadlineAt: Date.now() + 30000,
-        load: async () => ({ alex: await observeProbe(alexProbe!), riley: await observeProbe(rileyProbe!) }),
+        load: observeAudienceProbes,
         accept: proof => proof.alex.visibility === "visible" && proof.riley.visibility === "visible" && !!commentEvent(proof.alex, participation.id, t.id) && !!commentEvent(proof.riley, participation.id, t.id) });
       return { project: p, task: t, alexId, rileyId: riley.id, participation, negativeWindowMs };
-    } catch (error) { await alexProbe?.page.close(); await rileyProbe?.page.close(); await riley.dispose(); riley = undefined; throw error; }
+    } catch (error) { await ctx.input.evidence("chat-notification-public-event-binding.json", { binding: latestBinding ?? null }).catch(() => undefined); await alexProbe?.page.close(); await rileyProbe?.page.close(); await riley.dispose(); riley = undefined; throw error; }
   }, gradeNotificationAudience);
   observe = async (ctx, state) => {
     if (!alexProbe || !rileyProbe) throw new Error("Missing actual observer pages");
-    const o = await observeInternal(ctx, state); const [alex, riley] = await Promise.all([observeProbe(alexProbe), observeProbe(rileyProbe)]);
+    const o = await observeInternal(ctx, state); const { alex, riley } = await observeAudienceProbes();
     return { ...o, alex, riley, observedAt: Date.now() };
   };
   return { ...base, authentication: "human-session", expectedRunCount: 2, minimumRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 480000,
-    sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-notification-audience.ts", "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts", "../../packages/shared/src/project-mentions.ts"], observe,
+    sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-notification-audience.ts", "chat-catalog-domains/internal-notification-events.ts", "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts", "../../packages/shared/src/project-mentions.ts"], observe,
     async act(ctx, state) {
       const first = await pollUntil({ label: "Normal participant-only actual browser notification", deadlineAt: Date.now() + 180000,
         load: () => observe(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" && firstAudiencePasses(o) });
