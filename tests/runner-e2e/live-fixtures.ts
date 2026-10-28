@@ -1,3 +1,4 @@
+import { applyChatMcpTimingDiagnostic } from "./chat-mcp-timing-diagnostic.js";
 import { CHAT_SETUP_HEALTH_SUITE } from "./chat-setup-health.js";
 import { isEvalRemoteOrigin } from "./eval-remote-gateway.js";
 import type { AiConnectionBinding } from "../../packages/shared/src/ai-connections.js";
@@ -345,6 +346,7 @@ export async function setupLiveFixtures(input: {
         secretRefs,
         executionId: input.executionNonce,
       });
+      applyChatMcpTimingDiagnostic(execution.id, agent);
       const autoCodex = agent.adapterType === "codex_local" && (agent.runner === undefined || agent.runner === "auto");
       const nativeCodex = agent.adapterType === "paperclip_runner" && (agent.adapterConfig as Record<string, unknown>).provider === "codex";
       if (environment.driver === "sandbox" && execution.profile.generation === "native"
