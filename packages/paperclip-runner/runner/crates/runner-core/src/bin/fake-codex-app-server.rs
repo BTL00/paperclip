@@ -1156,13 +1156,22 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     state.active_turn_id = None;
                     save_state(&state_path, &state)?;
                 }
-                send(json!({ "id": id, "result": {
+                let mut receipt = json!({
                     "threadId": params["threadId"], "turnId": params["turnId"],
                     "remoteStopped": !unconfirmed,
                     "remoteAgentId": if has_remote_run { json!("cursor-agent-fixture") } else { Value::Null },
                     "remoteRunId": if has_remote_run { json!("cursor-run-fixture") } else { Value::Null },
                     "status": if unconfirmed { "RUNNING" } else { "CANCELLED" },
-                }}))?;
+                });
+                if let Some(path) = argument(&args, "--cursor-cloud-terminal-file") {
+                    if !unconfirmed && Path::new(&path).exists() {
+                        let delivery: Value = serde_json::from_slice(&fs::read(path)?)?;
+                        receipt["remoteRunId"] = delivery["providerRunId"].clone();
+                        receipt["status"] = delivery["status"].clone();
+                        receipt["cursorCloudTerminalDelivery"] = delivery;
+                    }
+                }
+                send(json!({"id":id,"result":receipt}))?;
             }
 
             "thread/start" => {

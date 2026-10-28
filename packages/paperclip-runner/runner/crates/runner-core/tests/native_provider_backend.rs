@@ -1717,6 +1717,90 @@ fn cursor_cloud_replays_a_durable_terminal_batch_after_proxy_loss_and_a_lost_ack
 }
 
 #[test]
+fn cursor_cloud_stop_saves_and_acknowledges_terminal_delivery_before_proxy_exit() {
+    for hold_ack in [false, true] {
+        let directory = temporary_directory("cursor-cloud-stop-terminal");
+        let delivery_path = directory.join("terminal.json");
+        let config = cursor_cloud_config_with_args(
+            &directory,
+            &format!(
+                "--hold-turn --cursor-cloud-terminal-file '{}'",
+                delivery_path.display()
+            ),
+        );
+        let mut executor = NativeProviderCommandExecutor::with_runner_config(&directory, &config);
+        executor
+            .execute(&command(
+                1,
+                "run.prepare",
+                cursor_cloud_prepare_payload(&directory),
+            ))
+            .unwrap();
+        executor
+            .execute(&command(2, "session.open", json!({})))
+            .unwrap();
+        executor
+            .execute(&command(
+                3,
+                "turn.start",
+                json!({"text":"Stop and retain the receipt"}),
+            ))
+            .unwrap();
+        let state_path = directory.join("codex-provider-state.json");
+        let saved: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+        fs::write(&delivery_path, serde_json::to_vec(&json!({
+        "schema":"paperclip.cursor-cloud.terminal-delivery.v1", "threadId":saved["threadId"],
+        "turnId":saved["activeProviderTurnId"], "providerRunId":"run-stopped-fixture",
+        "receiptId":"00000000-0000-4000-8000-000000000002", "status":"CANCELLED", "interrupted":true,
+        "result":null,
+    })).unwrap()).unwrap();
+        if hold_ack {
+            fs::write(directory.join("terminal.json.hold-ack"), b"hold").unwrap();
+        }
+        executor
+            .execute(&command(4, "turn.stop", json!({})))
+            .unwrap();
+        assert_eq!(
+            delivery_path.exists(),
+            hold_ack,
+            "the Node receipt must be acknowledged after its durable save"
+        );
+        let retained: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+        assert_eq!(retained["lifecycle"], "prepared");
+        assert_eq!(
+            retained["cursorCloudTerminalReceipt"]["turnId"],
+            saved["activeProviderTurnId"]
+        );
+        assert!(retained["pendingEvents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["eventType"] == "turn.interrupted"));
+        let pending = executor.poll_events().unwrap();
+        executor.acknowledge_events(pending.len()).unwrap();
+        if hold_ack {
+            fs::remove_file(directory.join("terminal.json.hold-ack")).unwrap();
+            executor
+                .execute(&command(
+                    5,
+                    "run.attach",
+                    cursor_cloud_prepare_payload(&directory),
+                ))
+                .unwrap();
+            executor
+                .execute(&command(6, "session.open", json!({})))
+                .unwrap();
+            assert!(
+                !delivery_path.exists(),
+                "fresh attachment must retry the saved receipt acknowledgment"
+            );
+        }
+        executor.shutdown().unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
 fn cursor_cloud_run_attachment_reopens_the_same_thread_in_a_fresh_sidecar() {
     let directory = temporary_directory("cursor-cloud-cold-attachment");
     let config = cursor_cloud_config(&directory);

@@ -1902,9 +1902,26 @@ impl CodexCommandExecutor {
                 })
             },
         )
-        .map(|mut provider| {
+        .and_then(|mut provider| {
             provider.restore_descendant_thread_identities(&state.descendant_thread_ids);
-            provider
+            if state.config.provider == "cursor_cloud" && state.active_provider_turn_id.is_none() {
+                if let Some(receipt) = &state.cursor_cloud_terminal_receipt {
+                    let acknowledged = (|| {
+                        if let Some(delivery) = provider.cursor_cloud_terminal_delivery()? {
+                            if delivery.receipt() != *receipt {
+                                return Err(crate::local_runner::LocalRunnerError::invalid("Cursor Cloud retained terminal delivery changed across attachment"));
+                            }
+                            let _ = provider.acknowledge_cursor_cloud_terminal(&delivery);
+                        }
+                        Ok(())
+                    })();
+                    if let Err(error) = acknowledged {
+                        self.fail_started_provider(&mut provider);
+                        return Err(error);
+                    }
+                }
+            }
+            Ok(provider)
         })
         .map_err(|error| {
             DurableRunnerError::invalid(format!(
@@ -3462,7 +3479,7 @@ impl CodexCommandExecutor {
             .state
             .as_mut()
             .expect("Codex state remains available after provider termination");
-        if provider_turn_id.is_some() {
+        if state.active_provider_turn_id.is_some() {
             state.settle_active_provider_turn_identity()?;
         }
         let settled = state
@@ -4195,18 +4212,31 @@ impl CodexCommandExecutor {
             }
             return Ok(());
         }
-        let stopped = self
-            .provider
-            .as_mut()
-            .expect("provider is present")
-            .shutdown();
-        let receipt = self
-            .provider
-            .as_ref()
-            .and_then(CodexProvider::provider_termination_receipt)
-            .cloned();
-        if cloud_proxy || stopped.is_ok() {
-            self.provider = None;
+        let mut provider = self.provider.take().expect("provider is present");
+        let stopped = if cloud_proxy {
+            provider.shutdown_with_cursor_cloud_delivery(|delivery| {
+                let mut next = self.state.clone().expect("provider state is present");
+                let generation = next.provider_process_generation;
+                next.retain_cursor_cloud_terminal_delivery(
+                    delivery,
+                    self.event_identity.as_ref(),
+                    generation,
+                )
+                .map_err(|error| {
+                    crate::local_runner::LocalRunnerError::invalid(error.to_string())
+                })?;
+                self.persist_state(&next).map_err(|error| {
+                    crate::local_runner::LocalRunnerError::invalid(error.to_string())
+                })?;
+                self.state = Some(next);
+                Ok(true)
+            })
+        } else {
+            provider.shutdown()
+        };
+        let receipt = provider.provider_termination_receipt().cloned();
+        if !cloud_proxy && stopped.is_err() {
+            self.provider = Some(provider);
         }
         stopped.map_err(|error| {
             DurableRunnerError::invalid(format!("failed to stop provider: {error}"))

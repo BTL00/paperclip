@@ -3125,6 +3125,15 @@ impl CodexProvider {
     }
 
     pub fn shutdown(&mut self) -> Result<(), LocalRunnerError> {
+        self.shutdown_with_cursor_cloud_delivery(|_| Ok(false))
+    }
+
+    pub(crate) fn shutdown_with_cursor_cloud_delivery(
+        &mut self,
+        mut retain: impl FnMut(
+            &crate::cursor_cloud_proxy::TerminalDelivery,
+        ) -> Result<bool, LocalRunnerError>,
+    ) -> Result<(), LocalRunnerError> {
         self.expected_shutdown = true;
         // A failed courtesy response must never prevent process fencing.
         let cancellation = self.cancel_pending_requests();
@@ -3141,12 +3150,32 @@ impl CodexProvider {
             )
             .map_err(ProviderRequestError::into_inner)
             .and_then(|receipt| {
-                self.provider_termination_receipt =
-                    Some(crate::cursor_cloud_proxy::shutdown_receipt(
-                        &receipt,
-                        &self.thread_id,
-                        expected_turn.as_deref(),
-                    )?);
+                let normalized = crate::cursor_cloud_proxy::shutdown_receipt(
+                    &receipt,
+                    &self.thread_id,
+                    expected_turn.as_deref(),
+                )?;
+                if let Some(value) = receipt
+                    .get("cursorCloudTerminalDelivery")
+                    .filter(|value| !value.is_null())
+                {
+                    let delivery =
+                        crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id)?;
+                    if Some(delivery.turn_id.as_str()) != expected_turn.as_deref()
+                        || receipt.get("remoteRunId").and_then(Value::as_str)
+                            != Some(delivery.provider_run_id.as_str())
+                        || receipt.get("status").and_then(Value::as_str)
+                            != Some(delivery.status.as_str())
+                    {
+                        return Err(LocalRunnerError::invalid(
+                            "Cursor Cloud shutdown changed its terminal delivery",
+                        ));
+                    }
+                    if retain(&delivery)? {
+                        let _ = self.acknowledge_cursor_cloud_terminal(&delivery);
+                    }
+                }
+                self.provider_termination_receipt = Some(normalized);
                 Ok(())
             })
         } else {

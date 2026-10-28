@@ -116,13 +116,16 @@ export function startCursorCloudAppServerProxy(options: {
       else if (event.eventType === "harness.diagnostic") send({ method: "warning", params: { threadId, turnId, code: payload.code, message: payload.message ?? payload.code } });
     }
   }
-  async function stopReceipt(): Promise<Record<string, unknown>> {
+  async function stopReceipt(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (!session) return { remoteStopped: true, remoteRunId: null };
-    await session.close({ reason: "controller_shutdown", force: true });
+    await session.interrupt?.({});
     const state = await session.read?.() ?? {};
+    const expectedTurnId = typeof params.turnId === "string" ? params.turnId : null;
+    if (expectedTurnId !== null && expectedTurnId !== state.turnId) throw new Error("Cursor Cloud shutdown turn identity changed");
+    const stoppedTurnId = state.pendingTerminalDelivery ? state.turnId : expectedTurnId;
     if (state.runId && state.phase !== "terminal") throw new Error("Cursor Cloud remote Stop is unconfirmed");
     if (!state.runId && state.phase !== "idle") throw new Error("Cursor Cloud pending remote create is unconfirmed");
-    return { remoteStopped: true, threadId: session.ids().driverSessionId, turnId: state.turnId ?? null, remoteAgentId: state.agentId ?? null, remoteRunId: state.runId ?? null, ...(state.providerStatus ? { status: state.providerStatus } : {}) };
+    return { remoteStopped: true, threadId: session.ids().driverSessionId, turnId: stoppedTurnId ?? null, remoteAgentId: state.agentId ?? null, remoteRunId: state.runId ?? null, ...(state.pendingTerminalDelivery ? { cursorCloudTerminalDelivery: state.pendingTerminalDelivery } : {}), ...(state.providerStatus ? { status: state.providerStatus } : {}) };
   }
   async function handle(message: Rpc): Promise<void> {
     if (message.method === undefined && message.id !== undefined) {
@@ -160,7 +163,7 @@ export function startCursorCloudAppServerProxy(options: {
         if (!session || typeof params.turnId !== "string" || typeof params.receiptId !== "string") throw new Error("Cursor Cloud terminal receipt is missing");
         await session.acknowledgeTerminalDelivery({ turnId: params.turnId, receiptId: params.receiptId });
         result = { turnId: params.turnId, receiptId: params.receiptId, acknowledged: true }; break;
-      case "paperclip/shutdown": result = await stopReceipt(); break;
+      case "paperclip/shutdown": result = await stopReceipt(params); break;
       default: throw new Error("Unsupported Cursor Cloud proxy method");
     }
     send({ id: message.id, result });
