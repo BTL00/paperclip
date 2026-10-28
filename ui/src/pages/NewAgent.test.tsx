@@ -850,6 +850,24 @@ describe("New agent setup", () => {
     expect(JSON.stringify(config)).not.toContain("cursor-test-key");
     expect(secrets.create).toHaveBeenCalledWith("company-1", expect.objectContaining({ value: "cursor-test-key" }));
   });
+  it("configures native Cursor Cloud with an exact model and a saved cloud key through ordinary setup", async () => {
+    await render("paperclip_runner", "cursor_cloud");
+    expect(container.querySelector('[aria-label="Model"]')).toBeTruthy();
+    await fill("GitHub repository", "https://github.com/acme/repo");
+    await fill("Branch", "feature");
+    await fill("CURSOR_API_KEY", "native-cursor-test-key");
+    await fill("Model", "caller-custom-model");
+    await click("Run test");
+    expect(api.testEnvironment).toHaveBeenLastCalledWith("company-1", "paperclip_runner", expect.objectContaining({
+      adapterConfig: expect.objectContaining({ provider: "cursor_cloud", model: "caller-custom-model", repoUrl: "https://github.com/acme/repo", repoStartingRef: "feature" }),
+      testCredentials: { CURSOR_API_KEY: "native-cursor-test-key" },
+    }));
+    await click("Finish setup");
+    expect(api.hire).toHaveBeenCalledWith("company-1", expect.objectContaining({ adapterType: "paperclip_runner",
+      adapterConfig: expect.objectContaining({ provider: "cursor_cloud", model: "caller-custom-model", env: { CURSOR_API_KEY: { type: "secret_ref", secretId: "org-secret-1", version: "latest" } } }),
+    }));
+    expect(JSON.stringify(api.hire.mock.calls)).not.toContain("native-cursor-test-key");
+  });
   it("requires a new Cursor Cloud key even when organization and personal keys exist", async () => {
     secrets.list.mockResolvedValue([{ id: "existing", key: "CURSOR_API_KEY", name: "Cursor", status: "active" }]);
     secrets.listMyUserSecrets.mockResolvedValue([{ definition: { key: "CURSOR_API_KEY" }, secret: { id: "personal-key" } }]);

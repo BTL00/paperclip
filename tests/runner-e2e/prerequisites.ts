@@ -25,7 +25,25 @@ export function assertRemoteNativeEvidencePrerequisites(
 
 export function assertRunnerE2EPrerequisites(
   executions: readonly MatrixExecution[],
+  environment: NodeJS.ProcessEnv = process.env,
 ): void {
+  if (executions.some(execution => execution.profile.provider === "cursor_cloud")) {
+    const required = ["PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL", "PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO", "PAPERCLIP_PUBLIC_URL", "PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT"];
+    const missing = required.filter(name => !environment[name]?.trim());
+    if (missing.length) throw new Error(`Cursor Cloud acceptance setup-blocked: configure ${missing.join(", ")}. No provider credentials were loaded or sent.`);
+    let repo: URL, origin: URL;
+    try { repo = new URL(environment.PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO!); origin = new URL(environment.PAPERCLIP_PUBLIC_URL!); }
+    catch { throw new Error("Cursor Cloud acceptance setup-blocked: repository and public callback origin must be valid HTTPS URLs."); }
+    const port = Number(environment.PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT);
+    if (repo.protocol !== "https:" || repo.username || repo.password || repo.search || repo.hash
+      || origin.protocol !== "https:" || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/"
+      || !Number.isInteger(port) || port < 1024 || port > 65535) {
+      throw new Error("Cursor Cloud acceptance setup-blocked: use a credential-free HTTPS disposable repository, HTTPS callback origin, and dedicated loopback callback port (1024–65535).");
+    }
+    if (executions.some(execution => execution.profile.provider === "cursor_cloud" && (execution.environment.id !== "local" || execution.profile.model !== environment.PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL!.trim()))) {
+      throw new Error("Cursor Cloud acceptance requires the exact configured model and a local controller.");
+    }
+  }
   const blocked = [...new Set(
     executions
       .map((execution) => execution.profile.id)

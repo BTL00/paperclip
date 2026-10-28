@@ -63,6 +63,24 @@ function parsePublicOrigin(rawUrl: string | null | undefined): string | null {
   return origin === "null" ? null : origin;
 }
 
+export function chooseLocalRuntimeApiUrl(input: {
+  bindHost: string;
+  port: number;
+}): string {
+  const bindHost = normalizeHost(input.bindHost);
+  const connectHost = bindHost === "::" ? "::1"
+    : bindHost === "0.0.0.0" || !bindHost ? "127.0.0.1"
+    : bindHost;
+  return formatOrigin("http:", connectHost, input.port);
+}
+
+export function resolveLocalRuntimeApiUrl(environment: NodeJS.ProcessEnv = process.env): string | undefined {
+  const bindHost = environment.PAPERCLIP_LISTEN_HOST?.trim();
+  const port = Number(environment.PAPERCLIP_LISTEN_PORT);
+  if (!bindHost || !Number.isInteger(port) || port < 1 || port > 65535) return undefined;
+  return chooseLocalRuntimeApiUrl({ bindHost, port });
+}
+
 export function choosePrimaryRuntimeApiUrl(input: {
   authPublicBaseUrl?: string | null;
   allowedHostnames: string[];

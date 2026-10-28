@@ -10,6 +10,7 @@
 type RunnerModule = typeof import("@paperclipai/paperclip-runner");
 
 export type {
+  NativeCursorCloudConfig,
   DotHarnessDriver,
   DotAssignment,
   PaperclipJsonValue,
@@ -86,6 +87,7 @@ const sourceUrl = new URL(
 );
 const runner = (await import(sourceUrl.href)) as RunnerModule;
 
+export const CURSOR_CLOUD_DEFAULT_TIMEOUT_MS = runner.CURSOR_CLOUD_DEFAULT_TIMEOUT_MS;
 export const DurablePrpControlPlane = runner.DurablePrpControlPlane;
 export const decodeDurablePrpCheckpoint = runner.decodeDurablePrpCheckpoint;
 export const inspectDurablePrpCheckpointHeader = runner.inspectDurablePrpCheckpointHeader;
@@ -187,3 +189,6 @@ export const configuredEnvironment = runner.configuredEnvironment;
 export const probeNativeRunnerEnvironment = runner.probeNativeRunnerEnvironment;
 
 export const resolveGrokDisableWebSearch = runner.resolveGrokDisableWebSearch;
+
+export const CursorCloudClient = runner.CursorCloudClient;
+export const parseNativeCursorCloudConfig = runner.parseNativeCursorCloudConfig;

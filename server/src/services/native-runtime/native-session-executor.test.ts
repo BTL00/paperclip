@@ -85,6 +85,8 @@ import {
 } from "./native-harness-backup-stamp.js";
 import { nativeRuntimeContextFixture } from "./runtime-context.test-fixture.js";
 import { nativeToolContractFingerprintForTarget } from "./native-session-resume.js";
+import { forwardRemoteMcpRequest } from "./remote-mcp-relay.js";
+import { createCapabilityRunnerdProviderEnvironment } from "@paperclipai/paperclip-runner/live";
 import * as nativeSessionResume from "./native-session-resume.js";
 import * as nativeLeaseRenewal from "./native-execution-lease.js";
 import { buildNativeHeartbeatPreparationSpans, createNativeRunTrace } from "./native-run-trace.js";
@@ -145,7 +147,10 @@ type RunnerTransportOptions = {
     environmentLeaseId: string;
     runId: string;
   };
-  provider?: "codex" | "opencode" | "acpx";
+  provider?: "cursor_cloud" | "codex" | "opencode" | "acpx";
+  cursorCloud?: Extract<NativeExecutionInput["provider"], { kind: "cursor_cloud" }>["cursorCloud"];
+  environment?: NodeJS.ProcessEnv;
+  lifecyclePolicy?: NativeExecutionInput["session"]["lifecyclePolicy"];
   opencodePermissionMode?: "allow" | "ask" | "deny";
   acpxAgent?: "claude" | "codex";
   acpxPermissionMode?: "approve-all" | "approve-paperclip" | "approve-reads" | "deny-all";
@@ -1533,6 +1538,13 @@ describe("native provider usage normalization", () => {
   it("does not use a cumulative price or protocol-default zero for an incomplete delta", () => {
     expect(nativeUsageCostUsd({ runDelta: { inputTokens: 10, outputTokens: 1 }, providerCostUsd: 100 })).toBeUndefined();
     expect(nativeUsageCostUsd({ runDelta: { providerCostUsd: 0 } })).toBeUndefined();
+  });
+  it.each([0, 100])("keeps Cursor Cloud accounting unknown despite a facade price of %s", providerCostUsd => {
+    const provider = { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
+      schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture" }],
+    } } as NativeExecutionInput["provider"];
+    expect(nativeUsageCostUsd({ runDelta: { inputTokens: 0, outputTokens: 0, providerCostUsd } }, provider)).toBeUndefined();
+    expect(resolveNativeBilling(provider)).toEqual({ provider: "cursor", biller: "cursor", billingType: "unknown" });
   });
   it.each([["cursor", "cursor"], ["copilot", "github"], ["pi", "openrouter"]] as const)("keeps %s cost unknown and attributes its actual biller", (agent, biller) => {
     const provider = { kind: "acpx", agent, model: "exact-model" } as NativeExecutionInput["provider"];
@@ -6819,6 +6831,32 @@ describe("native startup restart detachment", () => {
 });
 
 describe("native terminal-turn accounting", () => {
+  it("keeps Cursor Cloud facade zero counters unpriced and incomplete in both result and persisted usage", async () => {
+    const current = { ...execution, binding: { ...execution.binding, runId: "cursor-cloud-unpriced-accounting" },
+      provider: { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
+        schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture" }],
+      } } } as NativeExecutionInput;
+    const onUsage = vi.fn(async (_receipt: import("@paperclipai/adapter-utils").AdapterUsageCheckpoint) => {});
+    const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, providerCostUsd: 0 };
+    state.execute.mockReset().mockImplementationOnce(async () => {
+      await accountingEvents.committed!({ eventType: "item.completed", turnId: "cloud-turn", payload: {
+        kind: "usage", usage: { runDelta: zero, runDeltaComplete: true },
+      } } as unknown as PrpEvent);
+      return { result: { summary: "Cloud work finished" }, terminal: { runTerminalState: "succeeded" }, turnId: "cloud-turn",
+        normalizedSessionId: current.session.normalizedSessionId, providerSessionId: "remote-cloud-agent",
+        driverKind: "cursor_cloud_api", driverVersion: "cursor-cloud-v1", nativeEventCount: 1,
+        highestContiguousSourceSeq: 1, usage: { runDelta: zero, runDeltaComplete: true } };
+    });
+    const result = await executePaperclipNativeSession({ db: leaseDb(current), execution: current,
+      runnerInstanceId: "cloud-accounting-controller", onUsage });
+    expect(result).toMatchObject({ usageComplete: false, costUsd: null, costStatus: "unpriced", provider: "cursor", biller: "cursor",
+      billingType: "unknown", resultJson: { providerAccounting: { usage: null, cost: null, externallyBilled: true } } });
+    expect(result.usage).toBeUndefined();
+    expect(result.costUsdExact).toBeUndefined();
+    expect(onUsage).toHaveBeenLastCalledWith(expect.objectContaining({ complete: false, costUsd: null, costStatus: "unpriced" }));
+    expect(onUsage.mock.calls.at(-1)![0].usage).toBeUndefined();
+  });
+
   it.each([false, true])("prices only complete direct Claude API turn accounting (%s)", async complete => {
     const { rehydrateRunnerdUsageNotification } = await import("@paperclipai/paperclip-runner/live");
     const { priceAnthropicReceipt } = await import("../anthropic-pricing.js");
@@ -11380,6 +11418,149 @@ describe("runnerd provider runtime wiring", () => {
     }
     await rm(isolatedStateDirectory, { recursive: true, force: true });
   });
+
+  function cursorCloudExecution(suffix: string): NativeExecutionInput {
+    const current = scopedNativeExecution(`cursor-cloud-${suffix}`);
+    return { ...current, schema: "paperclip.native-execution-input.v5",
+      executionMode: "default", planningContext: null, runtimeContext: nativeRuntimeContextFixture(),
+      provider: { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
+        schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture", startingRef: "test-ref" }], timeoutMs: 60_000,
+      } }, session: { ...current.session, driverKind: "cursor_cloud_api" } };
+  }
+
+  function cursorCloudOrigin(): void {
+    const prior = process.env.PAPERCLIP_PUBLIC_URL;
+    process.env.PAPERCLIP_PUBLIC_URL = "https://cursor-relay.example.test";
+    onTestFinished(() => { if (prior === undefined) delete process.env.PAPERCLIP_PUBLIC_URL; else process.env.PAPERCLIP_PUBLIC_URL = prior; });
+  }
+
+  function cloudRelayProbe(current: NativeExecutionInput, environment: NodeJS.ProcessEnv) {
+    return forwardRemoteMcpRequest({ runId: current.binding.runId,
+      authorization: `Bearer ${environment.PAPERCLIP_CURSOR_CLOUD_RELAY_TOKEN}`,
+      body: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+  }
+
+  function cursorCloudTransportOptions(): RunnerTransportOptions {
+    state.createBackend.mock.calls.at(-1)![1].codexTransportFactory!();
+    const options = state.createTransport.mock.calls.at(-1)![0];
+    onTestFinished(() => rm(dirname(options.environment!.PAPERCLIP_CURSOR_CLOUD_RELAY_SOCKET_PATH!), { recursive: true, force: true }));
+    return options;
+  }
+
+  it("binds Core API tools to the selected private controller listener", async () => {
+    const previous = Object.fromEntries(["PAPERCLIP_API_URL", "PAPERCLIP_LISTEN_HOST", "PAPERCLIP_LISTEN_PORT", "PORT"]
+      .map(key => [key, process.env[key]]));
+    try {
+      process.env.PAPERCLIP_API_URL = "https://callback-only.example.test";
+      process.env.PAPERCLIP_LISTEN_HOST = "127.0.0.1";
+      process.env.PAPERCLIP_LISTEN_PORT = "43219";
+      process.env.PORT = "3100";
+      const current = scopedNativeExecution("private-api-origin");
+      state.createBackend.mockReturnValueOnce({ kind: "test", openSession: vi.fn() } as never);
+      await createRunnerdBackend({ db: leaseDb(current), execution: current, runnerInstanceId: "private-api-controller" });
+      expect(state.toolAuthorityDefinitions).toHaveBeenLastCalledWith(expect.objectContaining({ apiUrl: "http://127.0.0.1:43219" }));
+      expect(process.env.PAPERCLIP_API_URL).toBe("https://callback-only.example.test");
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it.each([
+    [undefined, "43219"], ["127.0.0.1", undefined], ["127.0.0.1", "0"], ["127.0.0.1", "invalid"],
+  ])("keeps embedded Core API fallback with listener host=%s port=%s", async (host, port) => {
+    const previous = Object.fromEntries(["PAPERCLIP_API_URL", "PAPERCLIP_LISTEN_HOST", "PAPERCLIP_LISTEN_PORT"]
+      .map(key => [key, process.env[key]]));
+    try {
+      process.env.PAPERCLIP_API_URL = "http://embedded-controller.example.test";
+      if (host === undefined) delete process.env.PAPERCLIP_LISTEN_HOST;
+      else process.env.PAPERCLIP_LISTEN_HOST = host;
+      if (port === undefined) delete process.env.PAPERCLIP_LISTEN_PORT;
+      else process.env.PAPERCLIP_LISTEN_PORT = port;
+      const current = scopedNativeExecution(`embedded-api-origin-${host}-${port}`);
+      state.createBackend.mockReturnValueOnce({ kind: "test", openSession: vi.fn() } as never);
+      await createRunnerdBackend({ db: leaseDb(current), execution: current, runnerInstanceId: "embedded-api-controller" });
+      expect(state.toolAuthorityDefinitions.mock.calls.at(-1)![0].apiUrl).toBeUndefined();
+      expect(process.env.PAPERCLIP_API_URL).toBe("http://embedded-controller.example.test");
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it("wires Cursor Cloud to the native facade with selected credentials and a separate artifact root", async () => {
+    cursorCloudOrigin();
+    const current = cursorCloudExecution("selected-transport");
+    state.createBackend.mockReturnValueOnce({ kind: "test", openSession: vi.fn() } as never);
+    await createRunnerdBackend({ db: leaseDb(current), execution: current, runnerInstanceId: "cursor-controller",
+      runnerEnvironment: { CURSOR_API_KEY: "selected-company-cursor-key", OPENAI_API_KEY: "other-provider-secret", PRIVATE_HOST_VALUE: "private" } });
+    const options = cursorCloudTransportOptions();
+    expect(options).toMatchObject({ provider: "cursor_cloud", cursorCloud: current.provider.kind === "cursor_cloud" ? current.provider.cursorCloud : undefined });
+    expect(options.lifecyclePolicy).toEqual({ mode: "per_turn", idleTimeoutMs: null });
+    expect(options.adoptExistingRunner).toBeUndefined();
+    const projected = createCapabilityRunnerdProviderEnvironment({ provider: "cursor_cloud", options: options as never,
+      identity: options.prpIdentity as never,
+      codexHome: "/unused", runtimeContextPath: "/private/runtime-context.json", hasRuntimeContext: true });
+    expect(projected).toEqual({ CURSOR_API_KEY: "selected-company-cursor-key", PAPERCLIP_RUNNER_INSTANCE_ID: "cursor-controller",
+      PAPERCLIP_RUN_ID: current.binding.runId, PAPERCLIP_NORMALIZED_SESSION_ID: current.session.normalizedSessionId,
+      PAPERCLIP_NATIVE_RUNTIME_CONTEXT_PATH: "/private/runtime-context.json",
+      ...Object.fromEntries(Object.entries(options.environment!).filter(([key]) => key.startsWith("PAPERCLIP_CURSOR_CLOUD_"))),
+    });
+    expect(projected).not.toHaveProperty("OPENAI_API_KEY");
+    expect(projected).not.toHaveProperty("PRIVATE_HOST_VALUE");
+    const artifactRoot = projected.PAPERCLIP_CURSOR_CLOUD_ARTIFACT_ROOT!;
+    expect(state.toolAuthorityDefinitions).toHaveBeenLastCalledWith(expect.objectContaining({ workspaceRoot: artifactRoot }));
+    expect(artifactRoot).not.toBe(current.workspace.cwd);
+    const config = JSON.parse(await readFile(projected.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!, "utf8"));
+    expect(config).toMatchObject({ repos: [{ url: "https://github.com/acme/fixture", startingRef: "test-ref" }], binding: {
+      companyId: current.binding.companyId, agentId: current.binding.agentId, issueId: current.binding.issueId,
+      normalizedSessionId: current.session.normalizedSessionId,
+    } });
+    expect(JSON.stringify(config)).not.toContain("selected-company-cursor-key");
+    expect((await cloudRelayProbe(current, projected)).status).toBe(401);
+    expect(resolveNativeProviderEnvironment(current.provider, undefined, { CURSOR_API_KEY: "ambient-key" })).toEqual({});
+  });
+
+  it.each(["open-failed", "replacement-failed", "recover-failed", "recover-missing", "close", "cancel", "detach"] as const)(
+    "revokes Cursor Cloud relay admission after %s and admits an exact retry", async ending => {
+      cursorCloudOrigin();
+      const current = cursorCloudExecution(ending);
+      const rawSession = { close: vi.fn(async () => undefined), cancel: vi.fn(() => ({ cleanup: Promise.resolve() })),
+        detachControllerForRestart: vi.fn(async () => undefined) };
+      let environment: NodeJS.ProcessEnv;
+      let openingFailed = false;
+      const admitted = async () => {
+        expect((await cloudRelayProbe(current, environment)).status).toBe(503);
+      };
+      state.createBackend.mockReturnValueOnce({ kind: "test",
+        openSession: async () => { await admitted(); if ((ending === "open-failed" || ending === "replacement-failed") && !openingFailed) { openingFailed = true; throw new Error("cloud-open-fixture-failed"); } return rawSession; },
+        recoverSession: async () => { await admitted(); if (ending === "recover-failed") throw new Error("cloud-recover-fixture-failed");
+          return ending === "recover-missing" ? { recovered: false, reason: "fixture checkpoint missing" } : { recovered: true, session: rawSession }; },
+      } as never);
+      const backend = await createRunnerdBackend({ db: leaseDb(current), execution: current,
+        runnerInstanceId: "cursor-controller", runnerEnvironment: { CURSOR_API_KEY: "selected-company-cursor-key" } });
+      environment = cursorCloudTransportOptions().environment!;
+      expect((await cloudRelayProbe(current, environment)).status).toBe(401);
+      if (ending === "open-failed") await expect(backend.openSession({} as never)).rejects.toThrow("cloud-open-fixture-failed");
+      else if (ending === "replacement-failed") await expect(backend.openReplacementSession!({} as never, {} as never)).rejects.toThrow("cloud-open-fixture-failed");
+      else if (ending === "recover-failed") await expect(backend.recoverSession!({} as never, { signal: new AbortController().signal })).rejects.toThrow("cloud-recover-fixture-failed");
+      else if (ending === "recover-missing") expect(await backend.recoverSession!({} as never, { signal: new AbortController().signal })).toMatchObject({ recovered: false });
+      else {
+        const session = await backend.openSession({} as never);
+        if (ending === "close") await session.close({ reason: "fixture close" });
+        else if (ending === "cancel") await session.cancel!({ reason: "fixture cancel", signal: new AbortController().signal }).cleanup;
+        else await session.detachControllerForRestart!();
+      }
+      expect((await cloudRelayProbe(current, environment)).status).toBe(401);
+      const resumed = await backend.openSession({} as never);
+      try { expect((await cloudRelayProbe(current, environment)).status).toBe(503); }
+      finally { await resumed.close({ reason: "fixture retry complete" }); }
+    },
+  );
 
   it.each((["codex", "claude"] as const).flatMap(provider => (["unchanged", "external-checkpoint", "changed", "runtime-context", "retirement-failed", "stale-owner", "active-owner", "missing-owner", "foreign-environment", "plugin-replaced", "plugin-managed-github"] as const).filter(scenario => provider === "codex" || scenario.startsWith("plugin-")).map(scenario => [provider, scenario] as const)))("rotates an owned warm %s remote runner before checking changed configuration: %s", async (provider, scenario) => {
     const plugin = scenario === "plugin-replaced" || scenario === "plugin-managed-github";

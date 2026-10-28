@@ -16,6 +16,9 @@ import { runNativeActiveStopFlow as runCopilotActiveStopFlow } from "./copilot-a
 import { nativeActiveStopTasks as copilotActiveStopTasks } from "./copilot-active-stop-tasks.js";
 import type { RestartRunnerIdentity } from "./process-tree-owner.js";
 import { runNativeActiveStopFlow } from "./native-active-stop-flow.js";
+import { runCursorCloudStopFlow } from "./cursor-cloud-stop-flow.js";
+import { CursorCloudOwnedObserver, cursorCloudIdentityProof } from "./cursor-cloud-observer.js";
+import { assertCursorCloudCallbackIngress } from "./cursor-cloud-callback-proxy.js";
 import { runPiControlsFlow } from "./pi-controls-flow.js";
 import { runCursorNativeFlow } from "./cursor-native-flow.js";
 import { createRemoteNativeBootstrap, createRemoteFixtureClient } from "./remote-native-bootstrap.js";
@@ -647,7 +650,7 @@ for (const execution of executions) {
       if (trace) { try { await trace.configureCompany(api, id); } finally { await saveTrace(); } }
     };
     const api = new RunnerApi(request);
-    const companyRunFlow = execution.suite.id === "task-titles" || ["plan_task_guidance", "blocker_guidance", "continuation_accounting", "continuation", "context_integrity", "repository_skills", "agent_chat", "everyday_workflow", "first_task", "instruction_persistence", "pi_native", "pi_controls", "copilot_protection", "cursor_native", "native_active_stop", "native_provider_loss", "public_mcp", "case_handoff"].includes(execution.task.flow);
+    const companyRunFlow = execution.suite.id === "task-titles" || execution.task.flow === "cursor_cloud_stop" || ["plan_task_guidance", "blocker_guidance", "continuation_accounting", "continuation", "context_integrity", "repository_skills", "agent_chat", "everyday_workflow", "first_task", "instruction_persistence", "pi_native", "pi_controls", "copilot_protection", "cursor_native", "native_active_stop", "native_provider_loss", "public_mcp", "case_handoff"].includes(execution.task.flow);
     const publicMcpUsage = execution.task.flow === "public_mcp" ? assistantUsage(execution.profile.provider === "claude" ? "anthropic" : "openai", execution.profile.model) : undefined;
     let publicMcpUserId = "";
     const consoleDiagnostics: Array<Record<string, unknown>> = [];
@@ -698,6 +701,7 @@ for (const execution of executions) {
     let startupReuse: RunnerE2EResult["startupReuse"];
     const turnSubmissionTimesMs: number[] = [];
     const screenshots: NonNullable<RunnerE2EResult["screenshots"]> = [];
+    let cursorCloudObserver: CursorCloudOwnedObserver | undefined;
     let primaryError: unknown;
     let failureClassOverride: FailureClass | undefined;
     let cleanup: RunnerE2EResult["cleanup"] = "not_started";
@@ -931,6 +935,7 @@ for (const execution of executions) {
     try {
       trace?.phase("setup");
       await saveTrace();
+      if (execution.profile.provider === "cursor_cloud") await assertCursorCloudCallbackIngress(process.env.PAPERCLIP_PUBLIC_URL!);
       if (execution.task.flow === "public_mcp") publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
       if (execution.suite.id === "stock-harness") {
         const receipt = verifyStockHarnessPreflight(process.env[STOCK_PREFLIGHT_ENV]);
@@ -970,6 +975,10 @@ for (const execution of executions) {
         daytonaImage: process.env.PAPERCLIP_E2E_DAYTONA_IMAGE,
         onCompanyCreated,
       });
+      if (execution.profile.provider === "cursor_cloud") {
+        cursorCloudObserver = new CursorCloudOwnedObserver(api, fixtures.company.id, fixtures.agent.id, credentials.CURSOR_API_KEY!);
+        registerBeforeEnvironmentTeardownAssertion(() => cursorCloudObserver!.cleanup());
+      }
       await finishBudgetedEvalSetup({ executionId: execution.id, environmentId: execution.environment.id, agentId: fixtures.agent.id,
         companyId: fixtures.company.id, deadlineAt: startedAtMs + deadlineMs, api,
         observe: observations => writeSanitizedJson(snapshotsDir, "budgeted-setup.json", { observations }, secrets) });
@@ -1190,6 +1199,13 @@ for (const execution of executions) {
         });
         issue = story.issue as IssueRecord; selectedRuns = story.runs as RunRecord[];
         matcherResults = story.checks.map(check => ({ matcher: { kind: "json_path" as const, path: `nativeProviderLoss.${check.id}`, expected: true }, passed: check.passed, detail: check.detail }));
+      } else if (execution.task.flow === "cursor_cloud_stop") {
+        const story = await runCursorCloudStopFlow({ page, api, fixtures, execution, nonce, observer: cursorCloudObserver!, deadlineAt: startedAtMs + deadlineMs,
+          observe: (currentIssue, currentRuns) => { issue = currentIssue as IssueRecord; selectedRuns = currentRuns as RunRecord[]; },
+          capture: captureScreenshot, evidence: (name, data) => writeSanitizedJson(snapshotsDir, name, data, secrets),
+        });
+        issue = story.issue as IssueRecord; selectedRuns = story.runs as RunRecord[];
+        matcherResults = story.checks.map(check => ({ matcher: { kind: "json_path" as const, path: `cursorCloud.${check.id}`, expected: true }, passed: check.passed, detail: check.detail }));
       } else if (execution.task.flow === "native_active_stop") {
         const story = await (execution.profile.qualificationCandidate === "copilot" ? runCopilotActiveStopFlow : runNativeActiveStopFlow)({
           page, api, fixtures, execution: execution.profile.qualificationCandidate === "copilot" && execution.task.id === "pending-permission-stop" ? { ...execution, task: copilotActiveStopTasks[0]! } : execution, nonce, workspacePath, deadlineAt: startedAtMs + deadlineMs,
@@ -2492,6 +2508,11 @@ for (const execution of executions) {
         downloadedResponseProof = await readResponseProof(api, issue.id, run.id);
         fileObservations["api-response-proof.txt"] = downloadedResponseProof.content;
         await writeSanitizedJson(snapshotsDir, "downloaded-response-proof.json", downloadedResponseProof, secrets);
+      }
+      if (cursorCloudObserver) {
+        const checks = await cursorCloudObserver.assertContinuity(execution.task.expectedRunCount);
+        await writeSanitizedJson(snapshotsDir, "cursor-cloud-provider-continuity.json", { identities: [...cursorCloudObserver.identities.values()].map(cursorCloudIdentityProof), checks }, secrets);
+        matcherResults.push(...checks.map(check => ({ matcher: { kind: "json_path" as const, path: `cursorCloud.${check.id}`, expected: true }, passed: check.passed, detail: check.detail })));
       }
       const registeredArtifacts = await readRegisteredArtifacts(api, issue.id, run.id,
         taskMatchers.filter(matcher => matcher.kind === "artifact_exact").map(matcher => matcher.name));

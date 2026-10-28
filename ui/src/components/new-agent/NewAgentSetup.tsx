@@ -76,6 +76,9 @@ import {
 import { adapterCuratesModelOrder } from "../../lib/model-utils";
 
 const controlClass = nativeSelectClassName;
+const nativeSetupHarnesses: Record<string, string> = {
+  codex: "codex_local", claude: "claude_local", opencode: "opencode_local", pi: "pi_local", cursor_cloud: "cursor_cloud",
+};
 const blocking = (result: AdapterEnvironmentTestResult) =>
   result.status === "fail" ||
   result.checks.some((check) => check.code === ADAPTER_AUTH_MISSING_CHECK_CODE);
@@ -96,9 +99,9 @@ export function NewAgentSetup() {
       key={`${selectedCompanyId}:${params.get("name")}:${params.get("adapterType")}:${params.get("runnerProvider") ?? "codex"}:${params.get("runner") ?? "auto"}`}
       companyId={selectedCompanyId}
       name={params.get("name") ?? ""}
-      adapterType={params.get("adapterType") === "paperclip_runner" && ["codex", "claude", "opencode", "pi"].includes(params.get("runnerProvider") ?? "codex") ? params.get("runnerProvider") === "claude" ? "claude_local" : params.get("runnerProvider") === "opencode" ? "opencode_local" : params.get("runnerProvider") === "pi" ? "pi_local" : "codex_local" : params.get("adapterType") ?? ""}
-      initialRunner={params.get("runner") ?? (params.get("adapterType") === "paperclip_runner" && ["codex", "claude", "opencode", "pi"].includes(params.get("runnerProvider") ?? "codex") ? "paperclip" : params.has("setupAgentId") && ["codex_local", "claude_local", "opencode_local", "pi_local"].includes(params.get("adapterType") ?? "") ? "legacy" : "auto")}
-      preserveNativeHarness={params.get("adapterType") === "paperclip_runner" && ["codex", "claude", "opencode", "pi"].includes(params.get("runnerProvider") ?? "codex")}
+      adapterType={params.get("adapterType") === "paperclip_runner" && Object.hasOwn(nativeSetupHarnesses, params.get("runnerProvider") ?? "codex") ? nativeSetupHarnesses[params.get("runnerProvider") ?? "codex"] : params.get("adapterType") ?? ""}
+      initialRunner={params.get("runner") ?? (params.get("adapterType") === "paperclip_runner" && Object.hasOwn(nativeSetupHarnesses, params.get("runnerProvider") ?? "codex") ? "paperclip" : params.has("setupAgentId") && ["codex_local", "claude_local", "opencode_local", "pi_local", "cursor_cloud"].includes(params.get("adapterType") ?? "") ? "legacy" : "auto")}
+      preserveNativeHarness={params.get("adapterType") === "paperclip_runner" && Object.hasOwn(nativeSetupHarnesses, params.get("runnerProvider") ?? "codex")}
       runnerProvider={params.get("runnerProvider") ?? "codex"}
       createdAgentId={params.get("createdAgentId")}
       setupAgentId={params.get("setupAgentId")}
@@ -153,7 +156,8 @@ function Setup({
   const chooseProvider = multiProvider || brandType === "hermes_local";
   const hasCredentialField =
     chooseProvider || Boolean(SETUP_CREDENTIAL_KEYS[adapterType]);
-  const showModel = !isDot && !["cursor_cloud", "hermes_gateway"].includes(adapterType);
+  const nativeCursorCloud = adapterType === "cursor_cloud" && runner === "paperclip";
+  const showModel = !isDot && adapterType !== "hermes_gateway" && (adapterType !== "cursor_cloud" || nativeCursorCloud);
   const [allowUnmeteredProvider, setAllowUnmeteredProvider] = useState(false);
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [kimiModel, setKimiModel] = useState("");
@@ -274,12 +278,12 @@ function Setup({
   const companySecrets = useQuery({
     queryKey: queryKeys.secrets.list(companyId),
     queryFn: () => secretsApi.list(companyId),
-    enabled: hasCredentialField && adapterType !== "cursor_cloud",
+    enabled: hasCredentialField && (adapterType !== "cursor_cloud" || nativeCursorCloud),
   });
   const userSecrets = useQuery({
     queryKey: queryKeys.secrets.myUserSecrets(companyId),
     queryFn: () => secretsApi.listMyUserSecrets(companyId),
-    enabled: hasCredentialField && adapterType !== "cursor_cloud",
+    enabled: hasCredentialField && (adapterType !== "cursor_cloud" || nativeCursorCloud),
     retry: false,
   });
   const forced = resolveForcedKubernetesEnvironment(
@@ -362,7 +366,7 @@ function Setup({
   );
   const selectedBinding =
     adapterType === "cursor_cloud"
-      ? null
+      ? nativeCursorCloud ? providerBinding : null
       : (providerBinding ??
         (savedOrganizationKey
           ? {
@@ -381,6 +385,7 @@ function Setup({
     adapterType === "kimi_local" && Boolean(apiKey.trim() || selectedBinding);
   const cloud = Boolean(useCloudInstance());
   const available =
+    (!nativeCursorCloud || experimental.data?.enableNativeRunner === true) &&
     isNewAgentAdapterAllowed(adapterType, {
       cloud,
       nativeRunnerEnabled: experimental.data?.enableNativeRunner === true,
@@ -511,6 +516,7 @@ function Setup({
     return config;
   }
   function preparedConfig(nextConnection = connection, setupRunner?: AgentRunner) {
+    if (nativeCursorCloud && !model.trim()) throw new Error("Enter the exact Cursor Cloud model ID.");
     if (brandType === "copilot_runtime" && !models.data?.some(candidate => candidate.id === model))
       throw new Error("Refresh Copilot models and select an available model before creating this agent.");
     if (isDot && !allowUnmeteredProvider) throw new Error("Acknowledge external provider billing before creating your Dot agent.");
@@ -587,12 +593,12 @@ function Setup({
     const agent = savedAgent.data;
     if (agent.pauseReason !== "setup") { setScreen("saved"); return; }
     const config = agent.adapterConfig;
-    if (multiProvider) setRunner(agent.adapterType === "paperclip_runner" ? "paperclip" : "legacy");
+    if (multiProvider || adapterType === "cursor_cloud") setRunner(agent.adapterType === "paperclip_runner" ? "paperclip" : "legacy");
     setModel(typeof config.model === "string" ? config.model : "");
     setEffort(String(config.modelReasoningEffort ?? config.reasoningEffort ?? config.effort ?? config.thinkingEffort ?? config.piThinkingLevel ?? config.thinking ?? ""));
     setEnvironmentOverride(agent.defaultEnvironmentId ?? "");
     setRepository(typeof config.repoUrl === "string" ? config.repoUrl : "");
-    setBranch(typeof config.repoStartingRef === "string" ? config.repoStartingRef : "");
+    setBranch(typeof config.repoRef === "string" ? config.repoRef : typeof config.repoStartingRef === "string" ? config.repoStartingRef : "");
     setGatewayUrl(typeof config.apiBaseUrl === "string" ? config.apiBaseUrl : "");
     setAllowUnmeteredProvider(config.allowUnmeteredProvider === true);
     const kimiApi = config.kimiApi as { model?: string; protocol?: string; baseUrl?: string } | undefined;
@@ -1152,8 +1158,8 @@ function Setup({
                                 }}
                                 open={modelOpen}
                                 onOpenChange={setModelOpen}
-                                allowDefault={!multiProvider && brandType !== "copilot_runtime"}
-                                required={multiProvider || brandType === "copilot_runtime"}
+                                allowDefault={!multiProvider && brandType !== "copilot_runtime" && !nativeCursorCloud}
+                                required={multiProvider || brandType === "copilot_runtime" || nativeCursorCloud}
                                 creatable={brandType !== "copilot_runtime"}
                                 groupByProvider={multiProvider && !connectionModels}
                                 preserveOrder={Boolean(connectionModels) || adapterCuratesModelOrder(brandType)}
@@ -1265,7 +1271,7 @@ function Setup({
                                 </div>
                               </Field>
                             </div>
-                            {adapterType !== "cursor_cloud" && (
+                            {(adapterType !== "cursor_cloud" || nativeCursorCloud) && (
                               <div
                                 className={
                                   chooseProvider ? "sm:col-span-2" : undefined
@@ -1362,6 +1368,8 @@ function Setup({
                           </div>
                         )}
                         {adapterType === "cursor_cloud" && (
+                          <>
+                          {nativeCursorCloud && <p className="text-sm text-muted-foreground">Experimental. Requires a local Paperclip computer. Cursor manages cloud command permissions; the effective model is not acknowledged.</p>}
                           <div className="grid gap-5 sm:grid-cols-2">
                             <Field label="GitHub repository">
                               <Input
@@ -1386,8 +1394,9 @@ function Setup({
                               />
                             </Field>
                           </div>
+                          </>
                         )}
-                        {["codex_local", "claude_local", "opencode_local", "pi_local"].includes(adapterType) && <details className="space-y-3">
+                        {["codex_local", "claude_local", "opencode_local", "pi_local", "cursor_cloud"].includes(adapterType) && <details className="space-y-3">
                           <summary className="cursor-pointer text-sm text-muted-foreground">Advanced</summary>
                           <AgentRunnerSelect value={runner} disabled={busy}
                             pending={adapters.isFetching} error={adapters.error?.message} onRetry={() => { void adapters.refetch(); }}
@@ -1396,9 +1405,7 @@ function Setup({
                             onChange={value => { setRunner(value); resetTest(); }} />
                         </details>}
                       </section>
-                      {!["cursor_cloud", "hermes_gateway"].includes(
-                        adapterType,
-                      ) && (
+                      {adapterType !== "hermes_gateway" && (adapterType !== "cursor_cloud" || nativeCursorCloud) && (
                         <section className="space-y-5">
                           <h3 className="text-sm font-semibold">Environment</h3>
                           <select
@@ -1411,10 +1418,10 @@ function Setup({
                             }}
                           >
                             <option value="">
-                              Default: {environmentLabel}
+                              Default: {nativeCursorCloud ? environment ? environmentDisplayLabel(environment) : "Local machine" : environmentLabel}
                             </option>
                             {(envs.data ?? [])
-                              .filter((env) => env.status === "active" && (!managedOnly || env.driver !== "local"))
+                              .filter((env) => env.status === "active" && (!managedOnly || env.driver !== "local") && (!nativeCursorCloud || env.driver === "local"))
                               .map((env) => (
                                 <option key={env.id} value={env.id}>
                                   {environmentDisplayLabel(env)}

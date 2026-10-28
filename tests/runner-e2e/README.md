@@ -1,5 +1,33 @@
 # Paid runner full-stack E2E
 
+The explicit-only `cursor-cloud` suite uses a local controller and hosted Cursor
+Cloud work. Its three required cells check a downloaded registered artifact,
+question/answer continuation on the same Cloud agent, and UI Stop of an
+independently observed active Cloud run. It is experimental and unqualified until
+all three real cells pass. Model acknowledgement and provider dollar cost remain
+unavailable; catalog discovery and support tests are not live acceptance.
+
+Configure `PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_MODEL` with an exact account model,
+`PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REPO` with an owned disposable HTTPS repository,
+optional `PAPERCLIP_CURSOR_CLOUD_ACCEPTANCE_REF`, and `CURSOR_API_KEY`.
+Set `PAPERCLIP_CURSOR_CLOUD_CALLBACK_PORT` to a dedicated free loopback port and
+point an HTTPS tunnel at **that port only**. Set `PAPERCLIP_PUBLIC_URL` to the
+tunnel's origin. The E2E wrapper exposes only POST `/mcp/native-runs/:runId`
+through this listener; it rejects the UI and `/api/` paths. Public ingress is
+checked before fixtures or provider work. Never tunnel the local operator app.
+
+Discover with `pnpm test:e2e:runner -- --list --suite cursor-cloud`. The smallest
+paid cell is `pnpm test:e2e:runner -- --id cursor-cloud.runner-cursor-cloud.local.task-artifact`.
+Select `cloud-followup` and `active-run-stop` explicitly for the other two cells.
+The complete bounded checkpoint is `pnpm test:e2e:runner -- --suite cursor-cloud`.
+Each cell permits one attempt. Missing prerequisites setup-block before provider
+work. Teardown cancels observed active runs and deletes only agents named by
+run-owned persisted notices. The Stop proof includes a 15-second quiet window
+over native run status, published artifact absence, and local non-continuation;
+it does not inspect the entire remote filesystem. Attempts remain private because
+ordinary run snapshots can contain native session identifiers. Use the existing
+local report generator; the public history publisher refuses this suite.
+
 The [chat scenario catalog](chat-scenarios/README.md) plans conversational
 coverage across the product using human requests, assumed context and expected
 outcomes. It shares feature-map capability IDs and belongs to this Product E2E
