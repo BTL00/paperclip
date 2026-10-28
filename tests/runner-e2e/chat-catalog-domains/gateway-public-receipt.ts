@@ -6,7 +6,7 @@ const object = (value: unknown): Row => value && typeof value === "object" && !A
 const time = (value: unknown) => typeof value === "string" || value instanceof Date ? new Date(value).getTime() : NaN;
 const operation = "GET /api/issues/{id}/comments";
 export interface PublicReceiptBinding { companyId: string; leadId: string; canonicalRunId: string; workerId: string; workerTaskId: string; workerRunId: string }
-export function observedRedactedPublicReceipt(events: Row[], report: Row, comments: Row[], binding: PublicReceiptBinding) {
+function matchesPublicReceiptResponse(events: Row[], report: Row, comments: Row[], binding: PublicReceiptBinding) {
   if (!binding.companyId || !binding.leadId || !binding.canonicalRunId || !binding.workerId || !binding.workerTaskId || !binding.workerRunId
     || binding.workerId === binding.leadId || binding.workerRunId === binding.canonicalRunId || !report.id || typeof report.body !== "string"
     || report.companyId !== binding.companyId || report.issueId !== binding.workerTaskId || report.authorAgentId !== binding.workerId || report.createdByRunId !== binding.workerRunId
@@ -33,4 +33,8 @@ export function observedRedactedPublicReceipt(events: Row[], report: Row, commen
       || request.apiPayloadRedacted !== true || typeof request.apiPayloadSha256 !== "string" || !/^[a-f0-9]{64}$/.test(request.apiPayloadSha256)) return false;
     return nativeSha256({ ok: true, status: 200, contentType: result.contentType, retryAfter: null, data: comments, apiOperationId: operation }) === result.apiPayloadSha256;
   });
+}
+
+export function observedRedactedPublicReceipt(events: Row[], report: Row, comments: Row[], binding: PublicReceiptBinding, additionalPublicResponses: Row[][] = []) {
+  return [comments, ...additionalPublicResponses].some(response => matchesPublicReceiptResponse(events, report, response, binding));
 }

@@ -21,3 +21,6 @@ it("rejects ambiguous bare names across distinct published vendors",()=>expect(m
 it("keeps the original private/runtime/configuration negatives",()=>{const leaked=valid();leaked.state.secretLeaked=true;expect(gradeModelOptions(leaked).passed).toBe(false);const runtime=valid();runtime.state.agentRuntimeInventoryStatus=200;expect(gradeModelOptions(runtime).passed).toBe(false);const changed=valid();changed.agents[0]!.adapterConfig.model="different";expect(gradeModelOptions(changed).passed).toBe(false)});
 
 it("binds the entire public secret-reference projection rather than only its secret ID",()=>{const o=valid();Object.assign(o.agents[1]!.adapterConfig.env.OPENROUTER_API_KEY,{projectionAllowlistKey:"another-scope"});expect(gradeModelOptions(o).passed).toBe(false)});
+
+it.each(["openrouter/vendor/not-a-published-model", "openrouter/wrong-vendor/gpt-5.3-codex"])("rejects plain unquoted unsupported model %s",id=>{const o=valid();o.reply+=" Another model option is "+id+".";expect(gradeModelOptions(o).passed).toBe(false)});
+it("accepts plain unquoted actual public model with the same entitlement caveat",()=>{const o=valid();o.reply+=" Another public catalog option is openrouter/openai/gpt-5.3-codex.";expect(gradeModelOptions(o).passed).toBe(true)});

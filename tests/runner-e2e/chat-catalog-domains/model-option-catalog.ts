@@ -29,7 +29,8 @@ function normalized(id: string) { return id.toLowerCase().replace(/^openrouter\/
 export function observedModelChoices(reply: string) {
   const vendor = [...reply.matchAll(/\b(?:gpt-\d[\w.-]*|o[134](?:-[\w.-]+)?|claude-(?:sonnet|opus|haiku)-[\w.-]+)/gi)].map(m => m[0].replace(/[.,;:!?]+$/, ""));
   const code = [...reply.matchAll(/`([^`\n]+)`/g)].map(m => m[1]!).filter(s => /^[\w.-]+\/[\w./:+-]+$/.test(s) && !s.includes("://"));
-  return [...new Set([...vendor, ...code])];
+  const plainOpenRouter = [...reply.matchAll(/(?<![\w/:])openrouter\/[a-z0-9][\w.-]*\/[a-z0-9][\w./:+-]*/gi)].map(m => m[0].replace(/[.,;:!?]+$/, ""));
+  return [...new Set([...vendor, ...code, ...plainOpenRouter])];
 }
 export function modelChoiceMatches(id: string, models: DiscoveredModel[]) {
   const wanted = normalized(id), exact = models.some(m => normalized(m.id) === wanted);

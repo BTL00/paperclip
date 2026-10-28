@@ -30,3 +30,14 @@ it("rejects reordered/incomplete/comment-contaminated public DTO collections", a
 it("rejects wrong/missing/duplicate call starts and results, errors and bad chronology", async () => { for(const mutate of [(o:any)=>o.events.shift(),(o:any)=>o.events.push(structuredClone(o.events[0])),(o:any)=>o.events.push(structuredClone(o.events[1])),(o:any)=>item(o,0).item.name="read_task",(o:any)=>item(o,0).item.input.operationId="GET /api/companies/{companyId}/activity",(o:any)=>item(o).item.tool_use_id="other-call",(o:any)=>item(o).item.is_error=true,(o:any)=>o.events[0].seq=3,(o:any)=>o.events[1].createdAt="2026-10-28T11:59:59.000Z",(o:any)=>o.events[0].createdAt="2026-10-28T12:00:03.000Z",(o:any)=>o.events[1].protocolSchemaVersion=1,(o:any)=>o.events[1].payload.prpEvent.sourceKind="provider",(o:any)=>item(o).item.result.unproven="extra"]){ const o=await valid(); mutate(o);expect(observe(o)).toBe(false); } });
 it("never replaces Morgan's public receipt with the CEO's own real receipt", async () => { const o=await valid(); o.comments=[{...o.report, id:"own-comment",authorAgentId:"ceo",createdByRunId:"own-run",issueId:"own-task"}]; expect(observe(o)).toBe(false); });
 it("requires both actual response digest and the public DTO; a hash label alone cannot prove a read",async()=>{const o=await valid();item(o).item.result.apiPayloadSha256="a".repeat(64);expect(observe(o)).toBe(false)});
+
+it("matches supported actual public response orders without synthesizing or sorting private response bytes",async()=>{
+ const o=await valid(),prior={...o.report,id:"prior-comment",body:"Checking the required source.",createdAt:"2026-10-28T11:59:00Z"};
+ const ascending=[prior,o.report],descending=[o.report,prior];
+ item(o).item.result=redactRunnerApiPayloads({ok:true,status:200,contentType:"application/json",retryAfter:null,data:descending,apiOperationId:"GET /api/issues/{id}/comments"});
+ expect(observedRedactedPublicReceipt(o.events,o.report,ascending,o.binding)).toBe(false);
+ expect(observedRedactedPublicReceipt(o.events,o.report,ascending,o.binding,[descending])).toBe(true);
+ expect(observedRedactedPublicReceipt(o.events,o.report,ascending,o.binding,[[{...o.report,body:"changed"},prior]])).toBe(false);
+ item(o).item.result=redactRunnerApiPayloads({ok:true,status:200,contentType:"application/json",retryAfter:null,data:ascending,apiOperationId:"GET /api/issues/{id}/comments"});
+ expect(observedRedactedPublicReceipt(o.events,o.report,descending,o.binding,[ascending])).toBe(true);
+});

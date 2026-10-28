@@ -425,10 +425,12 @@ export const gatewayErrorExternalCases = [
             ),
           ),
         );
+        let ascendingMorganComments: Entity[] = [];
         for (const prefix of ["morgan", "own"]) {
           const comments = await ctx.input.api.get<Entity[]>(
             `/api/issues/${state[`${prefix}TaskId`]}/comments?order=asc`,
           );
+          if (prefix === "morgan") ascendingMorganComments = comments;
           state[`${prefix}ReceiptNativeBound`] = comments.some(
             (comment) =>
               comment.createdByRunId === state[`${prefix}RunId`] &&
@@ -459,7 +461,7 @@ export const gatewayErrorExternalCases = [
           }
         });
         const reports = await ctx.input.api.get<Entity[]>(
-            `/api/issues/${state.morganTaskId}/comments?order=asc`,
+            `/api/issues/${state.morganTaskId}/comments`,
           ),
           report = reports.find(
             (row) =>
@@ -481,7 +483,7 @@ export const gatewayErrorExternalCases = [
             if (observedMorganReceiptRead(events, report) || observedRedactedPublicReceipt(events, object(report), reports.map(object), {
               companyId: o.companyId, leadId: o.leadId, canonicalRunId: run.id, workerId: String(state.morganId),
               workerTaskId: String(state.morganTaskId), workerRunId: String(state.morganRunId),
-            })) state.canonicalReadMorganReceipt = true;
+            }, [ascendingMorganComments.map(object)])) state.canonicalReadMorganReceipt = true;
           }
         return { ...o, state };
       },
