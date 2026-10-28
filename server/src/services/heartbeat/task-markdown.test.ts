@@ -123,8 +123,10 @@ describe("heartbeat task markdown rendering", () => {
         const markdown = buildPaperclipTaskMarkdown({
           issue: { ...issue, workMode, conversationAgentId: "agent" },
           acceptedPlanContinuation,
+          interaction: acceptedPlanContinuation ? { kind: "request_confirmation", status: "accepted" } : undefined,
           acceptedPlan: { revisionId: "accepted-revision" },
         })!;
+        expect(markdown.includes("Accepted chat plan directive:")).toBe(acceptedPlanContinuation && workMode !== "ask");
         const templates = [...markdown.matchAll(/\/<prefix>\/(projects|goals)\/<([^>]+)>/g)];
         expect(templates.map((match) => match[1]).sort()).toEqual(["goals", "projects"]);
         for (const [, entity, input] of templates) {
@@ -139,5 +141,4 @@ describe("heartbeat task markdown rendering", () => {
     const ordinary = buildPaperclipTaskMarkdown({ issue })!;
     expect([...ordinary.matchAll(/\/<prefix>\/(projects|goals)\/<([^>]+)>/g)]).toEqual([]);
   });
-
 });
