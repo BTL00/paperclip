@@ -10,6 +10,33 @@ import { identityDefinition, identityObservation, observeIdentity, probeAgentPer
 
 export const requestedAuxiliaryServiceModel = "deepseek/deepseek-v4.1-flash-1017";
 
+function remainingCompanyServiceObservationBudget(ctx: ChatCatalogContext): number {
+  const now = Date.now(), deadline = ctx.observationDeadlineAt;
+  if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original company service observation budget exhausted or missing");
+  return deadline! - now;
+}
+
+/** The settings click starts an async PUT; observe its completion before independent readback. */
+export async function saveFastResponseModelBeforeTest(ctx: ChatCatalogContext, connection: AiManagedConnectionSummary,
+  clickSave: (options: { timeout: number }) => Promise<unknown>): Promise<FastResponseSettings> {
+  const remaining = () => remainingCompanyServiceObservationBudget(ctx);
+  const path = `/api/companies/${ctx.input.fixtures.company.id}/fast-response`;
+  const origin = new URL(ctx.input.page.url()).origin;
+  const response = ctx.input.page.waitForResponse(row => row.request().method() === "PUT"
+    && new URL(row.url()).origin === origin && new URL(row.url()).pathname === path, { timeout: remaining() });
+  const [, receipt] = await Promise.all([clickSave({ timeout: remaining() }), response]);
+  remaining();
+  expect(receipt.status(), "Actual fast response save completed successfully before service test").toBe(200);
+  const saved = await receipt.json() as FastResponseSettings;
+  const expected = { companyId: ctx.input.fixtures.company.id, enabled: true, connectionId: connection.id,
+    grantId: connection.grantId, model: requestedAuxiliaryServiceModel };
+  expect(saved, "Requested auxiliary model saved before any service test").toMatchObject(expected);
+  const persisted = (await ctx.input.api.get<{ settings: FastResponseSettings }>(path, { timeout: remaining() })).settings;
+  remaining();
+  expect(persisted, "Requested auxiliary model saved before any service test").toMatchObject(expected);
+  return persisted;
+}
+
 type Settings = DecisionModelSettings | PromptInjectionPreventionSettings | FastResponseSettings;
 const fastExperiments = new WeakMap<ChatCatalogContext, boolean>();
 const specs = [
@@ -87,17 +114,22 @@ export const companyModelIdentityCases: readonly ChatCatalogCase[] = specs.map(s
     await section.getByRole("button", { name: (state.connection as AiManagedConnectionSummary).name, exact: true }).click();
     if (spec.path !== "decision-model") await section.getByLabel("Model", { exact: true }).fill(requestedAuxiliaryServiceModel);
     await section.getByRole("switch", { name: spec.toggle, exact: true }).setChecked(true);
-    await section.getByRole("button", { name: spec.save, exact: true }).click();
-    if (spec.path !== "decision-model") {
+    if (spec.path === "fast-response") {
+      const persisted = await saveFastResponseModelBeforeTest(ctx, state.connection as AiManagedConnectionSummary,
+        options => section.getByRole("button", { name: spec.save, exact: true }).click(options));
+      state.modelBeforeTest = persisted.model;
+    } else await section.getByRole("button", { name: spec.save, exact: true }).click();
+    if (spec.path === "prompt-injection-prevention") {
       const persisted = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings;
       expect(persisted.model, "Requested auxiliary model saved before any service test").toBe(requestedAuxiliaryServiceModel);
       state.modelBeforeTest = persisted.model;
     }
-    await expect(section.getByRole("button", { name: spec.test, exact: true })).toBeEnabled();
-    const before = await ctx.input.api.get<CostSummary>(`${root}/costs/summary`);
-    const response = ctx.input.page.waitForResponse(row => row.request().method() === "POST" && new URL(row.url()).pathname === `${root}/${spec.path}/test`);
-    await section.getByRole("button", { name: spec.test, exact: true }).click();
-    const receipt = await response; state.testHttpStatus = receipt.status(); state.testResult = await receipt.json();
+    const testOptions = () => spec.path === "fast-response" ? { timeout: remainingCompanyServiceObservationBudget(ctx) } : {};
+    await expect(section.getByRole("button", { name: spec.test, exact: true })).toBeEnabled(testOptions());
+    const before = await ctx.input.api.get<CostSummary>(`${root}/costs/summary`, spec.path === "fast-response" ? { timeout: remainingCompanyServiceObservationBudget(ctx) } : undefined);
+    const response = ctx.input.page.waitForResponse(row => row.request().method() === "POST" && new URL(row.url()).pathname === `${root}/${spec.path}/test`, testOptions());
+    await section.getByRole("button", { name: spec.test, exact: true }).click(testOptions());
+    const receipt = await response; if (spec.path === "fast-response") remainingCompanyServiceObservationBudget(ctx); state.testHttpStatus = receipt.status(); state.testResult = await receipt.json();
     await expect(section.locator('[role="status"],[role="alert"]').last()).toBeVisible(); state.visibleTestReceipt = true;
     state.testCostEvents = (await ctx.input.api.get<CostSummary>(`${root}/costs/summary`)).eventCount - before.eventCount;
     state.saved = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings;

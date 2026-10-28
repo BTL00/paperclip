@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { companyModelIdentityCases, requestedAuxiliaryServiceModel } from "./identity-company-models.js";
+import { companyModelIdentityCases, requestedAuxiliaryServiceModel, saveFastResponseModelBeforeTest } from "./identity-company-models.js";
 import type { IdentityObservation } from "./identity-support.js";
 vi.mock("./identity-support.js", async importOriginal => ({
   ...await importOriginal<typeof import("./identity-support.js")>(), probeAgentPermission: async () => 403,
@@ -48,14 +48,65 @@ describe("company model service configuration and actual tests", () => {
     }) };
     const get = vi.fn(async () => ({ settings: { enabled: false, model: "openai/wrong-default" } }));
     const ctx = { refreshIssue: async () => {}, issue: () => ({ conversationState: "waiting" }), allRuns: async () => [{ id: "source", status: "succeeded" }],
-      input: { fixtures: { company: { id: "acorn", issuePrefix: "RUN" } }, api: { get }, page: { url: () => "https://fixture.test", goto: async () => {}, getByRole: () => section } } };
+      observationDeadlineAt: Date.now() + 390_000, input: { fixtures: { company: { id: "acorn", issuePrefix: "RUN" } }, api: { get }, page: { waitForResponse: async () => ({ status: () => 200, json: async () => ({ model: "wrong" }) }), url: () => "https://fixture.test", goto: async () => {}, getByRole: () => section } } };
     await expect(definition.act!(ctx as never, valid(id).state)).rejects.toThrow(/Requested auxiliary model saved before any service test/);
     expect(fill).toHaveBeenCalledExactlyOnceWith(requestedAuxiliaryServiceModel); expect(save).toHaveBeenCalledTimes(2);
-    expect(get).toHaveBeenCalledTimes(2); expect(test).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(id.endsWith("fast-responses") ? 1 : 2); expect(test).not.toHaveBeenCalled();
   });
   it("rejects an ordinary agent run standing in for a decision invocation", () => { const d = companyModelIdentityCases[0]!; const o = valid(d.scenarioId); o.runs = [{ id: "test", companyId: "acorn", agentId: "ceo", status: "succeeded" }]; o.state.history = []; expect(d.grade(o).passed).toBe(false); });
   it("rejects builtin fallback being reported as model classification", () => { const d = companyModelIdentityCases[1]!; const o = valid(d.scenarioId); (o.state.testResult as { samples: Array<{ invocationId?: string }> }).samples[0]!.invocationId = undefined; expect(d.grade(o).passed).toBe(false); });
   it("rejects classifier model samples without their independent cost events", () => { const d = companyModelIdentityCases[1]!; const o = valid(d.scenarioId); o.state.testCostEvents = 0; expect(d.grade(o).passed).toBe(false); });
   it("rejects fast response work-completion claims", () => { const d = companyModelIdentityCases[2]!; const o = valid(d.scenarioId); o.reply = "Open Settings for fast responses. Your task is finished."; expect(d.grade(o).passed).toBe(false); });
   it("rejects an acknowledgement whose independent invocation belongs to a different human", () => { const d = companyModelIdentityCases[2]!; const o = valid(d.scenarioId); (o.state.history as Array<{ responsibleUserId: string }>)[0]!.responsibleUserId = "other-person"; expect(d.grade(o).passed).toBe(false); });
+});
+
+describe("fast settings save completion before any service invocation", () => {
+  function fixture() {
+    const saved = { companyId: "acorn", enabled: true, connectionId: "shared", grantId: "grant", model: requestedAuxiliaryServiceModel };
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise(resolveValue => { resolve = resolveValue; });
+    const get = vi.fn(async () => ({ settings: saved }));
+    const ctx = { observationDeadlineAt: Date.now() + 390_000, input: { fixtures: { company: { id: "acorn" } }, api: { get }, page: {
+      url: () => "https://fixture.test",
+      waitForResponse: vi.fn((predicate: (row: unknown) => boolean) => {
+        expect(predicate({ request: () => ({ method: () => "PUT" }), url: () => "https://fixture.test/api/companies/acorn/fast-response" })).toBe(true);
+        for (const [method, path] of [["POST", "/api/companies/acorn/fast-response/test"], ["PUT", "/api/companies/foreign/fast-response"]])
+          expect(predicate({ request: () => ({ method: () => method }), url: () => `https://fixture.test${path}` })).toBe(false);
+        expect(predicate({ request: () => ({ method: () => "PUT" }), url: () => "https://foreign.test/api/companies/acorn/fast-response" })).toBe(false);
+        return pending;
+      }) } } };
+    const reply = (status = 200, body = saved) => resolve({ status: () => status, json: async () => body });
+    return { saved, ctx, get, reply, connection: { id: "shared", grantId: "grant" } };
+  }
+  it("waits for the real matching delayed PUT before reading persisted model", async () => {
+    const f = fixture(); const click = vi.fn(async () => {});
+    f.get.mockImplementation(async () => ({ settings: { ...f.saved, model: "stale" } }));
+    const pending = saveFastResponseModelBeforeTest(f.ctx as never, f.connection as never, click);
+    await Promise.resolve(); expect(f.get).not.toHaveBeenCalled();
+    f.get.mockResolvedValue({ settings: f.saved }); f.reply();
+    await expect(pending).resolves.toEqual(f.saved); expect(click).toHaveBeenCalledOnce(); expect(f.get).toHaveBeenCalledOnce();
+  });
+  it.each([403, 422, 500])("does not read or test after rejected save %s", async status => {
+    const f = fixture(); const pending = saveFastResponseModelBeforeTest(f.ctx as never, f.connection as never, async () => {}); f.reply(status);
+    await expect(pending).rejects.toThrow(/save completed successfully/); expect(f.get).not.toHaveBeenCalled();
+  });
+  it("rejects wrong PUT model and independently wrong persisted model", async () => {
+    for (const responseWrong of [true, false]) {
+      const f = fixture(); const pending = saveFastResponseModelBeforeTest(f.ctx as never, f.connection as never, async () => {});
+      if (!responseWrong) f.get.mockResolvedValue({ settings: { ...f.saved, model: "wrong" } });
+      f.reply(200, responseWrong ? { ...f.saved, model: "wrong" } : f.saved);
+      await expect(pending).rejects.toThrow(/Requested auxiliary model saved/);
+    }
+  });
+  it.each([{ companyId: "foreign" }, { connectionId: "foreign" }, { grantId: "foreign" }, { enabled: false }])("rejects wrong saved identity or disabled state %j", async wrong => {
+    const f = fixture(); const pending = saveFastResponseModelBeforeTest(f.ctx as never, f.connection as never, async () => {});
+    f.reply(200, { ...f.saved, ...wrong }); await expect(pending).rejects.toThrow(/Requested auxiliary model saved/);
+    expect(f.get).not.toHaveBeenCalled();
+  });
+  it("never grants a fresh or unlimited deadline after delayed save", async () => {
+    const f = fixture(); const now = Date.now(); const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const pending = saveFastResponseModelBeforeTest(f.ctx as never, f.connection as never, async () => {});
+    clock.mockReturnValue(now + 400_000); f.reply();
+    await expect(pending).rejects.toThrow(/budget exhausted/); expect(f.get).not.toHaveBeenCalled(); clock.mockRestore();
+  });
 });
