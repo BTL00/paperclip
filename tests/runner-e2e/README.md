@@ -3061,3 +3061,29 @@ they are not reported as charges or converted into reviewed lifecycle bounds.
 This mode therefore does not certify a full-lifecycle operating-cost ceiling.
 Omitting the policy preserves the stricter full-accounting gate. Historical
 journals and their holds are not rewritten by changing future campaign policy.
+
+### Selected self-addressed AgentMail inputs
+
+The existing protected `runner-e2e-paid` job can stage private inputs only for
+`chat-features.runner-opencode.local.chat-channels.outbound-email` and
+`chat-features.runner-opencode.local.recovery.unknown-email-outcome`.
+The protected environment supplies `PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN`,
+`CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON` (the selected AgentMail stanza only), and
+`CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64` (the existing campaign's 32-byte key,
+base64 encoded). Missing or mismatched inputs fail before staging or provider
+access. The configuration must authorize exactly one disposable inbox as its own
+recipient with `recipientAuthorization: "self-addressed-only"`; this does not
+permit a distinct reviewer mailbox or other external recipients.
+
+Preparation writes the existing external-config and commitment-key path contracts
+to owned private temporary files (directory0700, files0600), outside result
+staging. It never generates a replacement commitment key. The ordinary selected
+private-input loader, query binding, recipient-scoped product tool policy,
+redaction and artifact scans remain mandatory. Cleanup removes the prepared
+files before evidence upload and refuses symlink or unrelated roots. Preparation
+and cleanup errors emit fixed messages without raw input or filesystem diagnostics.
+Do not print secret values or copy private input folders into reports. Preparation is not proof of external delivery or authority
+to admit a paid case; retain separate source/input review and finite campaign
+admission.
+
+Offline workflow controls: `node --test tests/runner-e2e/agentmail-paid-inputs.test.mjs`.
