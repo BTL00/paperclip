@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseRemainingBudget, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { randomBytes } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -37,7 +38,7 @@ export const companySecretExternalCases=[definition("secrets.configure-company-s
  authentication:"human-session",expectedRunCount:2,expectedHumanMessageCount:2,attemptTimeoutMs:480000,
  sourceFiles:["chat-catalog-domains/external-company-secret.ts","chat-catalog-domains/external-private-browser.ts","chat-catalog-domains/external-private-browser-worker.ts","chat-catalog-domains/external-credential-language.ts","chat-catalog-domains/external-secret-scan.ts","chat-catalog-domains/external-support.ts","chat-catalog-domains/internal-support.ts","chat-catalog-domains/identity-support.ts","run-observations.ts","chat-flow.ts","chat-scenarios/secrets.yaml"],
  async act(ctx,state){
-  await waitForReply(ctx);const initial=await observeExternal(ctx,state),reply=initial.phaseReplies.at(-1);if(!reply||!deploymentSecretGuidance(reply.body))throw new Error("Actual reply must direct secure deployment-key entry and Morgan-only reference binding before human action");state.initialRunId=reply.runId;
+  await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx));const initial=await observeExternal(ctx,state),reply=initial.phaseReplies.at(-1);if(!reply||!deploymentSecretGuidance(reply.body))throw new Error("Actual reply must direct secure deployment-key entry and Morgan-only reference binding before human action");state.initialRunId=reply.runId;
   state.secretCountBeforeHuman=(await ctx.input.api.get<unknown[]>(`${root(ctx)}/secrets`)).length;if(state.secretCountBeforeHuman!==0)throw new Error("Secret was created before authorized human entry");
   const path=`/${ctx.input.fixtures.company.issuePrefix}/company/settings/secrets`,href=initial.links.find(link=>{try{const url=new URL(link,initial.origin);return url.origin===initial.origin&&url.pathname===path;}catch{return false;}});if(!href)throw new Error("Actual reply must link the supported secret management surface");
   const receipt=await privateBrowserEntry({mode:"company-secret-create",companyId:ctx.input.fixtures.company.id,baseURL:initial.origin,setupURL:new URL(href,initial.origin).href,providerURL:"",credential:values.get(ctx)!,cookies:await ctx.input.page.context().cookies(initial.origin)});
@@ -50,7 +51,7 @@ export const companySecretExternalCases=[definition("secrets.configure-company-s
   const saved=ctx.input.page.waitForResponse(response=>new URL(response.url()).pathname===`/api/agents/${state.morganId}`&&response.request().method()==="PATCH"&&response.ok());
   await ctx.input.page.getByRole("button",{name:"Save changes",exact:true}).click();await saved;await ctx.input.page.reload({waitUntil:"domcontentloaded"});
   await expect(editor.getByRole("textbox",{name:"Variable name",exact:true}).last()).toHaveValue("DEPLOYMENT_API_KEY");await expect(editor).toContainText("Deployment API key");state.morganBindingVisible=true;
-  await ctx.input.page.goto(source,{waitUntil:"domcontentloaded"});await sendChatMessage(ctx.input.page,ctx.scenario.query);
+  await ctx.input.page.goto(source,{waitUntil:"domcontentloaded"});await sendChatMessage(ctx.input.page,ctx.scenario.query, chatCatalogNativePhaseRemainingBudget(ctx));
  },
  async observe(ctx,state){
   const o=await observeExternal(ctx,state),value=values.get(ctx);if(!value||!ctx.issue())throw new Error("Private secret output scan fixture missing");

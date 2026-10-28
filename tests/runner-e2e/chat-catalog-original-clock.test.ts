@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatCatalogContext } from "./chat-catalog-contract.js";
-import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget, chatCatalogOriginalPhaseDeadline } from "./chat-catalog-contract.js";
 const observed = vi.hoisted(() => vi.fn());
 vi.mock("./chat-catalog-domains/internal-support.js", async importOriginal => ({ ...await importOriginal<object>(), observeInternal: observed }));
+import { waitForReply } from "./chat-catalog-domains/identity-support.js";
 import { settlePrivilegedChat } from "./chat-catalog-domains/privileged-support.js";
 function context(scenarioId = "cli-operations.owned-dev-instance", deadline = 870_000): ChatCatalogContext {
   return { scenario: { id: scenarioId }, input: { execution: { id: `chat-features.runner-opencode.local.${scenarioId}` } }, observationDeadlineAt: deadline,
@@ -15,6 +16,27 @@ describe("selected native phases share the once-created original flow clock", ()
     expect(chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000)).toBe(870_000);
     vi.setSystemTime(850_000); expect(chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000)).toBe(870_000);
     expect(ctx.observationDeadlineAt).toBe(870_000);
+  });
+  it.each(["instance-operations.backup-and-restore", "instance-operations.restart-service", "routines.webhook-trigger", "status-cards.explain-card", "secrets.configure-company-secret", "teams.configure-team", "steering.interrupt-with-direction"])("future13 %s shares the setup-inclusive original clock", scenario => {
+    vi.useFakeTimers(); vi.setSystemTime(800_000); const ctx = context(scenario);
+    expect(chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000)).toBe(870_000);
+    expect(chatCatalogOriginalPhaseDeadline(ctx)).toBe(870_000);
+    vi.setSystemTime(869_999); expect(chatCatalogNativePhaseRemainingBudget(ctx)!()).toBe(1);
+    vi.setSystemTime(870_000); expect(() => chatCatalogOriginalPhaseDeadline(ctx)).toThrow(/exhausted/);
+  });
+  it("actual identity helper settles after its old150s cap using only the original remaining clock", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(50_000); const ctx = context("secrets.configure-company-secret", 450_000);
+    Object.assign(ctx, { refreshIssue: async () => {}, allRuns: async () => [{ status: Date.now() >= 230_000 ? "succeeded" : "running" }] });
+    let completed = false; const pending = waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)).then(() => { completed = true; });
+    await vi.advanceTimersByTimeAsync(152_000); expect(completed).toBe(false);
+    await vi.advanceTimersByTimeAsync(28_000); await pending; expect(completed).toBe(true);
+    expect(ctx.observationDeadlineAt).toBe(450_000);
+  });
+  it.each(["onboarding.first-work", "routines.plugin-managed-routine", "status-cards.archive-card", "status-cards.other-authors-card"])("future13 %s does not receive new phase or UI behavior", scenario => {
+    vi.useFakeTimers(); vi.setSystemTime(800_000); const ctx = context(scenario, 1);
+    expect(chatCatalogNativePhaseDeadline(ctx, 900_000)).toBe(900_000);
+    expect(chatCatalogOriginalPhaseDeadline(ctx)).toBeUndefined();
+    expect(chatCatalogNativePhaseRemainingBudget(ctx)).toBeUndefined();
   });
   it("actual existing privileged phase can settle beyond150s without changing native/reply proof", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0); const ctx = context();

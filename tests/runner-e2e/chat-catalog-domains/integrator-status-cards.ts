@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { uploadFactualQueryAttachment, factualContextQueryAttachment } from "../chat-query-attachments.js";
 import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "../../../packages/shared/src/validators/status-card.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -180,8 +181,8 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
   define("status-cards.explain-card", "ceo", { authentication: "human-session", queryAttachments: factualContextQueryAttachment("selected-status-card.md"), expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
     sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
     async act(ctx, state) {
-      const first = await pollUntil({ label: "accessible source explanation before actual access change", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-        load: () => observeCards(ctx, state), accept: o => o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      const first = await pollUntil({ label: "accessible source explanation before actual access change", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000), intervalMs: 1000,
+        load: () => observeCards(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting") });
       if (!explainsSavedStaleness(first.reply)) throw new Error("Initial saved-versus-live explanation was incorrect; later unavailability cannot repair it");
       state.accessCheckpoint = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-card-explanation-before-access-loss.json", state.accessCheckpoint);
       const source = (state.sourceTasks as Entity[])[0]!;
@@ -193,7 +194,7 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
       await ctx.input.evidence("chat-card-current-source-unavailable-probe.json", { principalId: state.accessPrincipalId, sourceId: source.id, status: denial.status, kind: "source-deleted-unavailable", permissionDenialClaimed: false,
         savedSummaryRetained: retained.summaryBody === (state.card as StatusCard).summaryBody, savedHistoryRetained: JSON.stringify(retainedSummaries) === JSON.stringify(state.originalSummaries) });
       if (denial.status !== 404 || retained.summaryBody !== (state.card as StatusCard).summaryBody || JSON.stringify(retainedSummaries) !== JSON.stringify(state.originalSummaries)) throw new Error("Deleted source prerequisite did not retain card/history and actual principal404");
-      const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "That disposable source task was removed after your earlier answer. Can you still read and verify its current blocker details? Distinguish the older saved summary from what you can check now.");
+      const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "That disposable source task was removed after your earlier answer. Can you still read and verify its current blocker details? Distinguish the older saved summary from what you can check now.", chatCatalogNativePhaseRemainingBudget(ctx));
     },
   }),
   define("status-cards.refresh-card", "ceo", { expectedRunCount: 7, expectedHumanMessageCount: 4, attemptTimeoutMs: 1_200_000,
@@ -209,7 +210,7 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
       await pollUntil({ label: "actual refreshed card and native worker completion", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
         load: () => observeCards(ctx, state), accept: o => { const card = o.cards.find(row => row.id === before.id); return !!card && card.lastGeneratedAt !== before.lastGeneratedAt && freshSummary(o, card) && o.runs.length === 3 && o.runs.every(run => run.status === "succeeded"); } });
       const { sendChatMessage } = await import("../chat-flow.js");
-      await sendChatMessage(ctx.input.page, "What did the refresh actually produce?");
+      await sendChatMessage(ctx.input.page, "What did the refresh actually produce?", chatCatalogNativePhaseRemainingBudget(ctx));
       const succeeded = await pollUntil({ label: "successful generation actually reported before separate failure condition", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 4 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
       state.successfulRefreshResult = { ...succeeded, state: structuredClone(state) }; await ctx.input.evidence("chat-card-refresh-last-successful-result.json", state.successfulRefreshResult);
       const worker = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${(state.worker as Entity).id}`);
@@ -219,7 +220,7 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
       // genuine CEO source turns; nothing is hidden from the declared bound.
       const workerContext = { ...ctx, allRuns: async () => (await ctx.allRuns()).filter(run => run.agentId === worker.id) };
       const failure = await unavailableNativeModelFailure(workerContext, worker, async () => {
-        await sendChatMessage(ctx.input.page, "Run another full refresh of that card now.");
+        await sendChatMessage(ctx.input.page, "Run another full refresh of that card now.", chatCatalogNativePhaseRemainingBudget(ctx));
         const update = await pollUntil({ label: "explicit human full refresh creates actual generation attempt", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
           load: () => ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${before.id}/updates`),
           accept: updates => updates.some(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && !!row.generationIssueId) });
@@ -234,7 +235,7 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
         generationIssueId: failure.failedIssueId, cardId: before.id, observedCardState: actual?.state, observedGeneratingIssueId: actual?.generatingIssueId, failedUpdateIds: failedUpdates.map(update => update.id),
         cardErrorObserved: established, expectedCardFailureOutcome: established ? "observed" : "not-observed-failing-product-outcome", taskOrCardStatusPatched: false, cancelledAsFailure: false });
       await pollUntil({ label: "actual refresh source turn settled after failed generation", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 6 && o.runs.filter(run => run.status === "succeeded").length === 5 && o.runs.filter(run => run.status === "failed").length === 1 && ctx.issue()?.conversationState === "waiting" });
-      await sendChatMessage(ctx.input.page, "What happened to that latest refresh, and which saved summary is available now?");
+      await sendChatMessage(ctx.input.page, "What happened to that latest refresh, and which saved summary is available now?", chatCatalogNativePhaseRemainingBudget(ctx));
     },
   }),
 ];

@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseRemainingBudget, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -79,7 +80,7 @@ export const teamConfigureExternalCases = [definition("teams.configure-team", as
   async verifySetup(_ctx, state) { const c = checks(), rows = state.initialProbes as Probe[]; c.add("missing-account-fixture", rows.some(row => row.agentId === state.missingId && row.status === "fail"), "Actual saved-runtime probe reports the required missing member account."); c.add("working-account-fixture", rows.some(row => row.agentId === state.workingId && row.status === "pass"), "A distinct installed member already passes its runtime probe."); return c.result(); },
   sourceFiles: ["chat-catalog-domains/external-team-configure.ts", "chat-catalog-domains/external-team-install.ts", "codex-subscription-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "chat-flow.ts", "chat-scenarios/teams.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const initial = await observeExternal(ctx, state); state.initialRunId = initial.runs[0]?.id;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const initial = await observeExternal(ctx, state); state.initialRunId = initial.runs[0]?.id;
     state.initialMemberNamed = initial.reply.toLowerCase().includes(String(state.missingName).toLowerCase());
     const members = catalogTeamMembers(await observeTeamResources(ctx), String(state.teamId)), missing = members.find(row => row.id === state.missingId)!;
     const current = await probe(ctx, missing); const alreadyRepaired = current.status === "pass";
@@ -94,7 +95,7 @@ export const teamConfigureExternalCases = [definition("teams.configure-team", as
       await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     } else state.repairChannel = "agent-configuration";
     state.repairVerifiedAfter = Date.now(); state.repairConfirmed = (await probe(ctx, await ctx.input.api.get<Agent>(`/api/agents/${missing.id}`))).status === "pass";
-    await sendChatMessage(ctx.input.page, "Please verify which installed team members are ready now, including QA, and preserve the already working member's configuration.");
+    await sendChatMessage(ctx.input.page, "Please verify which installed team members are ready now, including QA, and preserve the already working member's configuration.", chatCatalogNativePhaseRemainingBudget(ctx));
   },
   async observe(ctx, state) {
     const members = catalogTeamMembers(await observeTeamResources(ctx), String(state.teamId)); state.afterProbes = await Promise.all(members.map(member => probe(ctx, member)));

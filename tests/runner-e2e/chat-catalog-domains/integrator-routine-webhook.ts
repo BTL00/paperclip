@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { uploadFactualQueryAttachment, factualContextQueryAttachment } from "../chat-query-attachments.js";
 import type { RoutineDetail, RoutineRunSummary } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -59,16 +60,17 @@ export const integratorRoutineWebhookCases = [integratorDefinition("routines", "
   expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
   sourceFiles: ["chat-catalog-domains/integrator-routine-webhook.ts", "chat-catalog-domains/integrator-webhook-private.ts", "chat-catalog-domains/integrator-webhook-private-worker.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/routines.yaml"],
   async act(ctx, state) {
-    const first = await pollUntil({ label: "actual webhook creation before any test-service event", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeWebhook(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });
+    const first = await pollUntil({ label: "actual webhook creation before any test-service event", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000), intervalMs: 1000, load: () => observeWebhook(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting") });
     state.triggerCheckpoint = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-webhook-created-before-event.json", state.triggerCheckpoint);
     const triggers = first.routine.triggers.filter(trigger => trigger.kind === "webhook" && !trigger.archived);
     if (triggers.length !== 1 || first.invocations.length || first.detectedCredentialLeak || !triggers[0]!.signingMode || triggers[0]!.signingMode === "none") throw new Error("Canonical webhook creation did not establish one safe authenticated trigger");
     if (!ctx.input.privateSecrets) throw new Error("Secure webhook human setup requires private redaction"); const trigger = triggers[0]!;
     const cookies = await ctx.input.page.context().cookies(); for (const cookie of cookies) ctx.input.privateSecrets.push(cookie.value);
+    chatCatalogNativePhaseRemainingBudget(ctx)?.();
     const humanSetup = await finishPrivateWebhook({ baseURL: ctx.input.api.baseURL, route: `/${ctx.input.fixtures.company.issuePrefix}/routines/${first.routine.id}`, routineId: first.routine.id, triggerId: trigger.id,
       setupPending: trigger.setupPending ?? false, signingMode: trigger.signingMode!, nonce: String(state.deliveryNonce), cookies }, value => ctx.input.privateSecrets!.push(value));
     state.humanSetup = humanSetup; await ctx.input.evidence("chat-webhook-private-human-receipt.json", humanSetup);
-    await pollUntil({ label: "actual authorized test-service native execution", deadlineAt: Date.now() + 240_000, intervalMs: 1000, load: () => observeWebhook(ctx, state), accept: o => o.invocations.length === 1 && o.invocations[0]?.status === "completed" && o.runs.length === 2 && o.runs.every(run => run.status === "succeeded") });
-    const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "Did the synthetic test-service event actually arrive, and what execution did it create?");
+    await pollUntil({ label: "actual authorized test-service native execution", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 240_000), intervalMs: 1000, load: () => observeWebhook(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.invocations.length === 1 && o.invocations[0]?.status === "completed" && o.runs.length === 2 && o.runs.every(run => run.status === "succeeded")) });
+    const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, "Did the synthetic test-service event actually arrive, and what execution did it create?", chatCatalogNativePhaseRemainingBudget(ctx));
   },
 })];

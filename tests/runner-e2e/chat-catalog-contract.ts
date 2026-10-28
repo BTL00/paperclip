@@ -41,6 +41,13 @@ const originalClockExecutionIds = new Set([
   "chat-features.runner-opencode.local.tasks.edit-properties",
   "chat-features.runner-opencode.local.steering.edit-queued-message",
   "chat-features.runner-opencode.local.steering.discard-queued-message",
+  "chat-features.runner-opencode.local.instance-operations.backup-and-restore",
+  "chat-features.runner-opencode.local.instance-operations.restart-service",
+  "chat-features.runner-opencode.local.routines.webhook-trigger",
+  "chat-features.runner-opencode.local.status-cards.explain-card",
+  "chat-features.runner-opencode.local.secrets.configure-company-secret",
+  "chat-features.runner-opencode.local.teams.configure-team",
+  "chat-features.runner-opencode.local.steering.interrupt-with-direction",
 ]);
 function usesOriginalNativePhaseClock(ctx: ChatCatalogContext): boolean {
   return originalClockExecutionIds.has(ctx.input?.execution?.id);
@@ -59,6 +66,10 @@ export function chatCatalogNativePhaseRemainingBudget(ctx: ChatCatalogContext): 
     if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original native observation budget exhausted or missing");
     return deadline! - now;
   };
+}
+/** Only explicitly selected lanes opt identity helpers into the original clock. */
+export function chatCatalogOriginalPhaseDeadline(ctx: ChatCatalogContext): number | undefined {
+  return usesOriginalNativePhaseClock(ctx) ? chatCatalogNativePhaseDeadline(ctx, 0) : undefined;
 }
 export function chatCatalogNativePhaseIsTimely(ctx: ChatCatalogContext): boolean {
   return !usesOriginalNativePhaseClock(ctx) || Number.isFinite(ctx.observationDeadlineAt) && Date.now() < ctx.observationDeadlineAt!;

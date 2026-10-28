@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import type { HeartbeatRun } from "../../../packages/shared/src/types/heartbeat.js";
@@ -64,13 +65,14 @@ export const runtimeInterruptionCases = [runtimeDefinition("steering.interrupt-w
   runPolicy: { kind: "terminal-counts", terminalStatusCounts: { cancelled: 1, succeeded: 2 } },
   sourceFiles: ["chat-catalog-domains/runtime-interruption.ts", "chat-catalog-domains/runtime-rendered-artifact.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "registered-artifact.ts", "chat-scenarios/steering.yaml"],
   async act(ctx, state) {
-    await pollUntil({ label: "Canonical interruption guidance before the actual human action", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Canonical interruption guidance before the actual human action", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running") && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded") });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running") && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded")) });
     state.queryReply = (await observeRuntime(ctx, state)).reply;
     const source = ctx.input.page.url(), task = state.task as Entity, confirmation = state.approvedDirection as Entity, endpoint = `/api/issues/${task.id}/queued-comments`;
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier ?? task.id}`, { waitUntil: "domcontentloaded" });
     const interrupted = ctx.input.page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname === `${endpoint}/interrupt`);
+    chatCatalogNativePhaseRemainingBudget(ctx)?.();
     await ctx.input.page.getByTestId(`task-chat-queued-interrupt-${confirmation.id}`).click(); state.humanInterrupted = true; state.interruptStatus = (await interrupted).status();
     const stopped = await pollUntil({ label: "Matching native cancellation ACK after actual supported Interrupt", deadlineAt: Date.now() + 90_000,
       load: () => ctx.input.api.get<HeartbeatRun>(`/api/heartbeat-runs/${state.workerRunId}`),
@@ -82,10 +84,10 @@ export const runtimeInterruptionCases = [runtimeDefinition("steering.interrupt-w
     // independently approved persisted plan and its actual queued response.
     await writeFile((state.gate as { gate: string }).gate, "The pending fixture tool has been released.", "utf8");
     let neverConcurrent = true;
-    const delivered = await pollUntil({ label: "One fresh native continuation after old-owner cleanup delivers simpler Website", deadlineAt: Date.now() + 240_000,
+    const delivered = await pollUntil({ label: "One fresh native continuation after old-owner cleanup delivers simpler Website", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 240_000),
       load: async () => { const runs = await ctx.allRuns(); neverConcurrent &&= runs.filter(row => row.agentId === (state.worker as Entity).id && ["running", "queued"].includes(row.status)).length <= 1;
         return { runs, task: await ctx.input.api.get<Entity>(`/api/issues/${task.id}`), queue: await ctx.input.api.get<IssueQueuedCommentQueue>(endpoint) }; },
-      accept: v => v.runs.length === 3 && v.task.status === "done" && v.queue.entries.length === 0 && v.runs.filter(row => row.id !== state.workerRunId).every(row => row.status === "succeeded"),
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.runs.length === 3 && v.task.status === "done" && v.queue.entries.length === 0 && v.runs.filter(row => row.id !== state.workerRunId).every(row => row.status === "succeeded")),
       reject: v => v.runs.length > 3 || v.runs.some(row => row.id !== state.workerRunId && ["failed", "cancelled", "timed_out"].includes(row.status)) ? "Interruption failed or delivered more than one successor" : undefined });
     const successors = delivered.runs.filter(row => row.agentId === (state.worker as Entity).id && row.id !== state.workerRunId); state.successorCount = successors.length; state.neverConcurrentOwners = neverConcurrent;
     const next = successors[0] && await ctx.input.api.get<HeartbeatRun>(`/api/heartbeat-runs/${successors[0].id}`); state.successor = next; state.successorRunId = next?.id;

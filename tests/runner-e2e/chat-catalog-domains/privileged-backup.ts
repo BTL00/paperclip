@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -125,7 +126,7 @@ const backup = privilegedDefinition("instance-operations.backup-and-restore", "p
       archiveRetention: "private owned attempt only; secret-bearing archive excluded from ordinary chat artifacts" };
     await ctx.input.evidence("chat-catalog-private-backup-restore.json", receipt);
     const message = `The operator backup and restore run produced this factual receipt. Please report what it establishes and any limits:\n\n${JSON.stringify(receipt)}`;
-    await sendChatMessage(ctx.input.page, message);
+    await sendChatMessage(ctx.input.page, message, chatCatalogNativePhaseRemainingBudget(ctx));
     state.restoreReport = await companionPhase(ctx, initial.runs.map(run => run.id), message);
     await ctx.input.evidence("chat-catalog-native-restore-report.json", state.restoreReport);
   }, grade: gradeBackupRestore,
