@@ -3,8 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { stageCursorCloudArtifact } from "../../../../packages/paperclip-runner/src/drivers/cursor-cloud/artifact-delivery.js";
 import { readVerifiedWorkspaceFile, type NativeRunnerFileHandoffInput } from "./native-runner-file-handoff.js";
+
+const { stageCursorCloudArtifact } = await import(new URL("../../../../packages/paperclip-runner/src/drivers/cursor-cloud/artifact-delivery.ts", import.meta.url).href);
 
 const roots: string[] = [];
 afterEach(async () => {
