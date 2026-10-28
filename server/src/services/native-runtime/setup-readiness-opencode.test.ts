@@ -12,7 +12,7 @@ vi.mock("@paperclipai/adapter-utils/runner-connectivity", () => ({ resolvePaperc
 vi.mock("./native-runner-execution-driver.js", () => ({ createNativeRunnerExecutionDriver: vi.fn() }));
 vi.mock("./native-session-executor.js", () => ({ buildNativeProviderEnvironment: (environment: Record<string, string>) => environment }));
 import { testNativeRunnerAuthentication } from "./setup-readiness.js";
-const model = "openrouter/deepseek/deepseek-v4-flash-1017";
+const model = "openrouter/deepseek/deepseek-v4.1-flash-1017";
 const context = (extra: Partial<AdapterEnvironmentTestContext> = {}): AdapterEnvironmentTestContext => ({ companyId: "company-1", adapterType: "paperclip_runner", config: { env: { OPENROUTER_API_KEY: "synthetic-selected-account" } }, ...extra });
 const receipt = () => ({ provider: "opencode", providerDriver: "opencode_server", effectiveModel: model, helloProbePassed: true });
 beforeEach(() => {
