@@ -26,3 +26,7 @@ it("rejects stale concurrent acceptance", () => { const o = valid(); o.state.con
 it("rejects silently overwriting an already-consumed message", () => { const o = valid(); o.state.dispatchedStatus = 200; expect(gradeQueueEdit(o).passed).toBe(false); });
 it("rejects a plausible wrong consumer without exact saved input and order", () => { const o = valid(); o.state.nativeDeliveryBound = false; expect(gradeQueueEdit(o).passed).toBe(false); });
 it("rejects losing the initial native work", () => { const o = valid(); o.state.initialRevisionRetained = false; expect(gradeQueueEdit(o).passed).toBe(false); });
+
+it.each([200, 403, 500])("rejects late edit status %s rather than replacing the real 409 assertion", status => {
+  const o = valid(); o.state.dispatchedStatus = status; expect(gradeQueueEdit(o).passed).toBe(false);
+});

@@ -7,7 +7,7 @@ import { submitTaskReply } from "../user-actions.js";
 import { checks, type Entity } from "./internal-support.js";
 import { probeAgentPermission, cleanupIdentityProbes } from "./identity-support.js";
 import { releaseRuntimeWorker } from "./runtime-busy-worker.js";
-import { humanQueuedRuntime } from "./runtime-queue-controls.js";
+import { humanQueuedRuntime, probeConsumedHumanQueue } from "./runtime-queue-controls.js";
 import { runtimeQueueCases } from "./runtime-queue.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime } from "./runtime-support.js";
 
@@ -78,7 +78,7 @@ export const runtimeDiscardCases = [runtimeDefinition("steering.discard-queued-m
     state.consumedBeforeCancellation = detail.contextSnapshot?.wakeCommentIds?.includes(second.comment.id) === true
       && detail.runnerProfileJson?.nativeExecutionInput?.task?.prompt?.includes(secondText) === true;
     state.discardedNeverDelivered = consumed.runs.every(row => !((row.contextSnapshot?.wakeCommentIds as string[] | undefined) ?? []).includes(targetId));
-    state.lateDiscardStatus = (await ctx.input.page.request.delete(`${queuePath}/${second.comment.id}`, { data: { queueId: secondQueue.queueId, revision: secondQueue.revision } })).status();
+    state.lateDiscardStatus = await probeConsumedHumanQueue(ctx, String(state.humanId), `${queuePath}/${second.comment.id}`, "DELETE", { queueId: secondQueue.queueId, revision: secondQueue.revision });
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     const message = `I later queued a different contact request on Website ${task.identifier ?? task.id}, comment ${second.comment.id}, and Morgan has already consumed it. Cancel that later contact requirement now by sending Morgan new direction to remove the contact section from the saved website plan while retaining the accessible-font requirement. Explain what happened to the already-delivered input; do not erase or rewrite it.`;
     const priorIds = consumed.runs.map(row => row.id);

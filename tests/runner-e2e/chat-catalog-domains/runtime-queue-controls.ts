@@ -28,6 +28,18 @@ export async function humanQueuedRuntime(ctx: ChatCatalogContext, targetText = r
   Object.assign(state, { queueBefore: before, targetId: before.entries[1]!.comment.id, humanId: session.user.id, concurrentMarker: `Preserve the human note ${ctx.input.nonce}.` });
   await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); return state;
 }
+export async function probeConsumedHumanQueue(ctx: ChatCatalogContext, humanId: string, endpoint: string, method: "PATCH" | "DELETE", data: unknown) {
+  const origin = ctx.input.api.baseURL, url = new URL(endpoint, origin);
+  if (ctx.scenario.id !== "steering.edit-queued-message" && ctx.scenario.id !== "steering.discard-queued-message") throw new Error("Consumed queue probe requires its declared human scenario");
+  if (!humanId || new URL(ctx.input.page.url()).origin !== origin || url.origin !== origin || url.search || url.hash
+    || !/^\/api\/issues\/[^/]+\/queued-comments\/[^/]+$/.test(url.pathname)) throw new Error("Consumed queue probe escaped its human fixture");
+  const apiSession = await ctx.input.api.get<{ user?: { id?: string } }>("/api/auth/get-session");
+  const browserSession = await ctx.input.page.request.get(`${origin}/api/auth/get-session`, { maxRedirects: 0 });
+  if (browserSession.status() !== 200 || apiSession.user?.id !== humanId || (await browserSession.json() as { user?: { id?: string } }).user?.id !== humanId)
+    throw new Error("Consumed queue probe requires the original authenticated human in both contexts");
+  const response = await ctx.input.page.request.fetch(url.href, { method, data, headers: { Origin: origin }, maxRedirects: 0, timeout: 15_000 });
+  return response.status();
+}
 async function edit(page: Page, id: string, body: string) {
   await page.getByTestId(`task-chat-queued-message-${id}`).getByRole("button", { name: /^Queued message actions:/ }).click();
   await page.getByRole("menuitem", { name: "Edit message", exact: true }).click();
@@ -111,7 +123,7 @@ export const runtimeQueueControlCases = [runtimeDefinition("steering.edit-queued
       reject: v => v.runs.length > 3 || v.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "The declared edited-message delivery failed or duplicated work" : undefined });
     await expect(ctx.input.page.getByText("Queued message changed", { exact: true })).toBeVisible();
     await expect(ctx.input.page.getByRole("button", { name: "Queue as new message", exact: true })).toBeVisible(); state.dispatchedWarningVisible = true;
-    state.dispatchedStatus = (await ctx.input.page.request.patch(mutation, { data: { queueId: pending.queueId, revision: pending.revision, body: "Late stale edit must not replace history" } })).status();
+    state.dispatchedStatus = await probeConsumedHumanQueue(ctx, String(state.humanId), mutation, "PATCH", { queueId: pending.queueId, revision: pending.revision, body: "Late stale edit must not replace history" });
     const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${(state.task as Entity).id}/comments?order=asc`);
     state.originalCommentStillReadable = comments.some(row => row.id === targetId && row.body === `${blueText} ${state.concurrentMarker}` && row.authorUserId === state.humanId);
     const consumers = delivered.runs.filter(row => row.agentId === (state.worker as Entity).id && row.id !== state.workerRunId);

@@ -25,3 +25,7 @@ it("rejects accepting a stale discard of consumed input", () => { const o = vali
 it("rejects a later answer borrowed from another native phase", () => { const o = valid(); o.state.latePhaseAttributed = false; expect(gradeDiscard(o).passed).toBe(false); });
 it("rejects new direction never reaching the actual later worker", () => { const o = valid(); o.state.cancelDirectionRunBound = false; expect(gradeDiscard(o).passed).toBe(false); });
 it("rejects overwriting the already-delivered historical request", () => { const o = valid(); o.state.consumedStillReadable = false; expect(gradeDiscard(o).passed).toBe(false); });
+
+it.each([403, 500])("rejects late discard status %s even when the human fixture otherwise looks valid", status => {
+  const o = valid(); o.state.lateDiscardStatus = status; expect(gradeDiscard(o).passed).toBe(false);
+});
