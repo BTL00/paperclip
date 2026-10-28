@@ -183,9 +183,10 @@
       "chat-catalog-domains/internal-definition.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/internal-activity.ts",
-      "chat-scenarios/activity.yaml"
+      "chat-scenarios/activity.yaml",
+      "chat-catalog-domains/recorded-work-claims.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "oracleVersion": "paperclip.chat-catalog.activity-overview.grounded.v2",
     "coverageGaps": [],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
@@ -1400,12 +1401,13 @@
     "scenarioId": "cases.related-work",
     "sourceFiles": [
       "chat-catalog-domains/integrator-case-related.ts",
+      "chat-catalog-domains/recorded-work-claims.ts",
       "chat-catalog-domains/integrator-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/internal-definition.ts",
       "chat-scenarios/cases.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.case-related.grounded.v2",
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
