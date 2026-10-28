@@ -2065,6 +2065,59 @@ impl CodexProvider {
         )
     }
 
+    pub(crate) fn cursor_cloud_terminal_delivery(
+        &mut self,
+    ) -> Result<Option<crate::cursor_cloud_proxy::TerminalDelivery>, LocalRunnerError> {
+        if self.config.provider != "cursor_cloud" {
+            return Ok(None);
+        }
+        let snapshot = self.read_thread()?;
+        if snapshot.pointer("/thread/id").and_then(Value::as_str) != Some(self.thread_id.as_str()) {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal snapshot changed its thread",
+            ));
+        }
+        let Some(value) = snapshot
+            .get("cursorCloudTerminalDelivery")
+            .filter(|value| !value.is_null())
+        else {
+            return Ok(None);
+        };
+        if latest_active_turn_id(&snapshot).is_some() {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal snapshot also reports active work",
+            ));
+        }
+        let delivery = crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id)?;
+        self.active_provider_turn_id = None;
+        Ok(Some(delivery))
+    }
+
+    pub(crate) fn acknowledge_cursor_cloud_terminal(
+        &mut self,
+        delivery: &crate::cursor_cloud_proxy::TerminalDelivery,
+    ) -> Result<(), LocalRunnerError> {
+        if self.config.provider != "cursor_cloud" || delivery.thread_id != self.thread_id {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal receipt changed its provider",
+            ));
+        }
+        let response = self.request(
+            "paperclip/ackTerminal",
+            json!({"turnId":delivery.turn_id,"receiptId":delivery.receipt_id}),
+        )?;
+        if response.get("acknowledged") != Some(&Value::Bool(true))
+            || response.get("turnId").and_then(Value::as_str) != Some(delivery.turn_id.as_str())
+            || response.get("receiptId").and_then(Value::as_str)
+                != Some(delivery.receipt_id.as_str())
+        {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal receipt was not acknowledged",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn read_thread(&mut self) -> Result<Value, LocalRunnerError> {
         // Probing provider state does not supersede an authoritative terminal.
         // A later replacement turn must still establish its own identity.
@@ -3081,6 +3134,15 @@ impl CodexProvider {
     }
 
     pub fn shutdown(&mut self) -> Result<(), LocalRunnerError> {
+        self.shutdown_with_cursor_cloud_delivery(|_| Ok(false))
+    }
+
+    pub(crate) fn shutdown_with_cursor_cloud_delivery(
+        &mut self,
+        mut retain: impl FnMut(
+            &crate::cursor_cloud_proxy::TerminalDelivery,
+        ) -> Result<bool, LocalRunnerError>,
+    ) -> Result<(), LocalRunnerError> {
         self.expected_shutdown = true;
         // A failed courtesy response must never prevent process fencing.
         let cancellation = self.cancel_pending_requests();
@@ -3097,12 +3159,32 @@ impl CodexProvider {
             )
             .map_err(ProviderRequestError::into_inner)
             .and_then(|receipt| {
-                self.provider_termination_receipt =
-                    Some(crate::cursor_cloud_proxy::shutdown_receipt(
-                        &receipt,
-                        &self.thread_id,
-                        expected_turn.as_deref(),
-                    )?);
+                let normalized = crate::cursor_cloud_proxy::shutdown_receipt(
+                    &receipt,
+                    &self.thread_id,
+                    expected_turn.as_deref(),
+                )?;
+                if let Some(value) = receipt
+                    .get("cursorCloudTerminalDelivery")
+                    .filter(|value| !value.is_null())
+                {
+                    let delivery =
+                        crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id)?;
+                    if Some(delivery.turn_id.as_str()) != expected_turn.as_deref()
+                        || receipt.get("remoteRunId").and_then(Value::as_str)
+                            != Some(delivery.provider_run_id.as_str())
+                        || receipt.get("status").and_then(Value::as_str)
+                            != Some(delivery.status.as_str())
+                    {
+                        return Err(LocalRunnerError::invalid(
+                            "Cursor Cloud shutdown changed its terminal delivery",
+                        ));
+                    }
+                    if retain(&delivery)? {
+                        let _ = self.acknowledge_cursor_cloud_terminal(&delivery);
+                    }
+                }
+                self.provider_termination_receipt = Some(normalized);
                 Ok(())
             })
         } else {

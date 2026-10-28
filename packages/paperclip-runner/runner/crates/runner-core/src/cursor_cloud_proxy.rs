@@ -1,4 +1,6 @@
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::local_runner::LocalRunnerError;
 
@@ -51,6 +53,80 @@ pub(crate) fn shutdown_receipt(
         "remoteStopped": true, "threadId": thread_id, "turnId": expected_turn_id,
         "remoteAgentId": remote_agent, "remoteRunId": remote_run, "status": value["status"],
     }))
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct TerminalDelivery {
+    pub schema: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub provider_run_id: String,
+    pub receipt_id: String,
+    pub status: String,
+    pub interrupted: bool,
+    pub result: Option<String>,
+}
+
+impl TerminalDelivery {
+    pub(crate) fn parse(value: &Value, thread_id: &str) -> Result<Self, LocalRunnerError> {
+        let invalid = || LocalRunnerError::invalid("Cursor Cloud terminal delivery is invalid");
+        let delivery: Self = serde_json::from_value(value.clone()).map_err(|_| invalid())?;
+        if delivery.schema != "paperclip.cursor-cloud.terminal-delivery.v1"
+            || delivery.thread_id != thread_id
+            || ![
+                &delivery.thread_id,
+                &delivery.turn_id,
+                &delivery.provider_run_id,
+                &delivery.receipt_id,
+            ]
+            .into_iter()
+            .all(|id| !id.is_empty() && id.len() <= 240 && !id.chars().any(char::is_control))
+            || !matches!(
+                delivery.status.as_str(),
+                "FINISHED" | "ERROR" | "CANCELLED" | "EXPIRED"
+            )
+            || delivery
+                .result
+                .as_ref()
+                .is_some_and(|text| text.len() > 262_144 || text.chars().count() > 65_536)
+        {
+            return Err(invalid());
+        }
+        Ok(delivery)
+    }
+
+    pub(crate) fn method(&self) -> &'static str {
+        if self.interrupted || self.status == "CANCELLED" {
+            "turn/interrupted"
+        } else if self.status == "FINISHED" {
+            "turn/completed"
+        } else {
+            "turn/failed"
+        }
+    }
+
+    pub(crate) fn receipt(&self) -> Value {
+        let bytes = serde_json::to_vec(self).expect("terminal delivery is serializable");
+        json!({ "turnId": self.turn_id, "receiptId": self.receipt_id,
+            "batchDigest": format!("sha256:{:x}", Sha256::digest(bytes)) })
+    }
+
+    pub(crate) fn final_params(&self) -> Value {
+        json!({ "threadId": self.thread_id, "turnId": self.turn_id,
+            "item": {"id":"final", "type":"agentMessage", "text":self.result} })
+    }
+
+    pub(crate) fn terminal_params(&self) -> Value {
+        let status = self.method().strip_prefix("turn/").unwrap();
+        let mut value = json!({ "threadId":self.thread_id, "turnId":self.turn_id,
+            "turn":{"id":self.turn_id, "status":status}, "cursorCloudTerminalDelivery":self });
+        if matches!(self.status.as_str(), "ERROR" | "EXPIRED") {
+            value["turn"]["error"] = json!({"code":format!("cursor_cloud_{}",self.status.to_lowercase()),
+                "message":"Cursor Cloud run ended without successful provider completion."});
+        }
+        value
+    }
 }
 
 #[cfg(test)]

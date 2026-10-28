@@ -7,8 +7,10 @@ import { join } from "node:path";
 import type { HarnessSession } from "../../contracts/harness-driver.js";
 import type { PrpEvent } from "../../protocol/replay-contract.js";
 import type { CursorCloudCreateInput, CursorCloudFollowupInput, CursorCloudRun, CursorCloudSseEvent } from "./cloud-client.js";
-import { CursorCloudClientError } from "./cloud-client.js";
-import { CursorCloudDriver, cursorCloudDriverDescriptor, type CursorCloudDriverOptions } from "./cursor-cloud-driver.js";
+import { CursorCloudClient, CursorCloudClientError } from "./cloud-client.js";
+import { cursorCloudDigest } from "./checkpoint.js";
+import { semanticCanonicalJson } from "../semantic-tool-receipt.js";
+import { CursorCloudDriver, cursorCloudDriverDescriptor, type CursorCloudDriverOptions, type CursorCloudSessionHandle } from "./cursor-cloud-driver.js";
 
 const roots: string[] = [];
 const sessions: HarnessSession[] = [];
@@ -71,6 +73,11 @@ async function fixture(peer = new Peer(), extra: Partial<CursorCloudDriverOption
 
 async function waitFor(check: () => boolean) { await vi.waitFor(() => expect(check()).toBe(true), { timeout: 2_000, interval: 5 }); }
 
+async function acknowledgeTerminal(session: CursorCloudSessionHandle) {
+  const pending = (await session.read?.())?.pendingTerminalDelivery as { turnId: string; receiptId: string };
+  await session.acknowledgeTerminalDelivery(pending);
+}
+
 async function rpc(path: string, body: unknown, token = "private-relay-token", session?: string): Promise<{ status: number; value: any; session?: string }> {
   return new Promise((accept, reject) => {
     const req = request({ socketPath: path, path: "/mcp", method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json", ...(session ? { "Mcp-Session-Id": session } : {}) } }, response => {
@@ -82,6 +89,60 @@ async function rpc(path: string, body: unknown, token = "private-relay-token", s
 }
 
 describe("Cursor Cloud native driver", () => {
+  it.each(["fresh", "follow-up"])("serializes the injected native MCP discovery and semantic controls on a %s run", async phase => {
+    const requests: Array<{ path: string; body: CursorCloudCreateInput }> = [];
+    const now = "2026-10-28T00:00:00Z";
+    let agentId = "";
+    let currentRunId = runId;
+    const nativeFetch: typeof globalThis.fetch = async (url, init) => {
+      const target = new URL(String(url));
+      expect(target.origin).toBe("https://controlled.cursor.test");
+      const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+      if (init?.method === "POST" && (target.pathname === "/v1/agents" || target.pathname === `/v1/agents/${agentId}/runs`)) {
+        const body = JSON.parse(String(init.body)) as CursorCloudCreateInput;
+        requests.push({ path: target.pathname, body });
+        agentId ||= body.agentId!;
+        currentRunId = requests.length === 1 ? runId : "run-22222222-2222-4222-8222-222222222222";
+        const run = { id: currentRunId, agentId, status: "RUNNING", createdAt: now, updatedAt: now };
+        return json(target.pathname === "/v1/agents"
+          ? { agent: { id: agentId, status: "ACTIVE", env: { type: "cloud" }, url: `https://cursor.com/agents/${agentId}`, createdAt: now, updatedAt: now, latestRunId: currentRunId }, run }
+          : { run });
+      }
+      if (target.pathname.endsWith("/stream")) return new Response(`id: completed\nevent: result\ndata: ${JSON.stringify({ runId: currentRunId, status: "FINISHED" })}\n\n`, { headers: { "content-type": "text/event-stream" } });
+      if (target.pathname === `/v1/agents/${agentId}/runs/${currentRunId}`) return json({ id: currentRunId, agentId, status: "FINISHED", createdAt: now, updatedAt: now });
+      throw new Error("Unexpected controlled provider request");
+    };
+    const instructions = "Exact assigned instructions.\n\nAssigned skill content stays intact.";
+    const f = await fixture(new Peer(), { instructions, modelParams: [{ id: "effort", value: "high" }], client: new CursorCloudClient({ apiKey: "synthetic-private-key", baseUrl: "https://controlled.cursor.test", fetch: nativeFetch }) });
+    const task = "Ask the assigned question.\nPreserve this exact task text.";
+    await f.session.startTurn({ message: { role: "user", text: task } });
+    await waitFor(() => f.events.filter(event => event.eventType === "turn.completed").length === 1);
+    if (phase === "follow-up") {
+      await acknowledgeTerminal(f.session);
+      await f.session.startTurn({ message: { role: "user", text: task } });
+      await waitFor(() => f.events.filter(event => event.eventType === "turn.completed").length === 2);
+    }
+    const sent = requests.at(-1)!;
+    expect(sent.path).toBe(phase === "fresh" ? "/v1/agents" : `/v1/agents/${agentId}/runs`);
+    expect(sent.body).toMatchObject({ model: { id: "explicit-model", params: [{ id: "effort", value: "high" }] }, mode: "agent", mcpServers: [{ name: "paperclip", type: "http", url: f.options.relay.url, headers: { Authorization: `Bearer ${f.options.relay.token}` } }] });
+    const prompt = sent.body.prompt.text;
+    expect(prompt).toContain('get_mcp_tools({server:"paperclip"})');
+    expect(prompt).toContain("native Paperclip Runner");
+    expect(prompt).toContain("controller-managed MCP authentication");
+    expect(prompt).toContain("do not need Paperclip REST credentials in the Cloud VM");
+    expect(prompt).toContain("unrelated inherited dashboard MCP namespaces");
+    for (const tool of ["request_human_input", "paperclip_finish", "paperclip_block"]) expect(prompt).toContain(tool);
+    expect(prompt.endsWith(`\n\nPaperclip task:\n${task}`)).toBe(true);
+    expect(requests[0]!.body.prompt.text.startsWith(instructions)).toBe(true);
+    if (phase === "follow-up") expect(prompt).not.toContain(instructions);
+    expect(prompt).not.toContain(f.options.relay.token);
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => /^checkpoint-.*\.json$/.test(name))!);
+    const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+    expect(checkpoint.instructionsDigest).toBe(cursorCloudDigest(requests[0]!.body.prompt.text.slice(0, -`\n\nPaperclip task:\n${task}`.length)));
+    const { prompt: submittedPrompt, model, mode, mcpServers } = sent.body;
+    expect(checkpoint.requestDigest).toBe(cursorCloudDigest(semanticCanonicalJson({ prompt: submittedPrompt, model, mode, mcpServers })));
+  });
+
   it("refuses expired relay authority before remote work while retaining idle recovery for cleanup", async () => {
     const f = await fixture();
     const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
@@ -113,17 +174,20 @@ describe("Cursor Cloud native driver", () => {
     const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
     const revised = { ...f.options, instructions: "Updated assigned instructions and skill bundle." };
     const restored = (await new CursorCloudDriver(revised).recoverSession(snapshot)).session!; sessions.push(restored);
+    await acknowledgeTerminal(restored);
     await restored.startTurn({ message: { role: "user", text: "Follow up" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 1);
-    expect(f.peer.request?.prompt.text).toBe("Updated assigned instructions and skill bundle.\n\nPaperclip task:\nFollow up");
+    expect(f.peer.request?.prompt.text).toMatch(/^Updated assigned instructions and skill bundle\.[\s\S]*\n\nPaperclip task:\nFollow up$/);
     expect(f.peer.createAgent).toHaveBeenCalledTimes(1);
     const activeSnapshot = await restored.snapshot(); await restored.detachControllerForRestart!();
     await expect(new CursorCloudDriver(f.options).recoverSession(activeSnapshot)).rejects.toThrow("instructions changed");
     const final = (await new CursorCloudDriver(revised).recoverSession(activeSnapshot)).session!; sessions.push(final);
     await final.interrupt!();
+    await acknowledgeTerminal(final);
     await final.startTurn({ message: { role: "user", text: "One more task" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 2);
-    expect(f.peer.request?.prompt.text).toBe("One more task");
+    expect(f.peer.request?.prompt.text).toMatch(/\n\nPaperclip task:\nOne more task$/);
+    expect(f.peer.request?.prompt.text).not.toContain(revised.instructions);
   });
 
   it("opens without paid work, sends exact model/instructions and current private MCP headers only on turn", async () => {
@@ -133,7 +197,7 @@ describe("Cursor Cloud native driver", () => {
     expect((await f.session.read?.())?.effectiveModelAcknowledged).toBe(false);
     await f.session.startTurn({ message: { role: "user", text: "Task one" } }); await f.peer.created.promise;
     await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
-    expect(f.peer.request).toMatchObject({ model: { id: "explicit-model" }, prompt: { text: "Follow these exact instructions.\n\nPaperclip task:\nTask one" }, mcpServers: [{ url: "https://relay.example.test/mcp", headers: { Authorization: "Bearer private-relay-token" } }] });
+    expect(f.peer.request).toMatchObject({ model: { id: "explicit-model" }, prompt: { text: expect.stringMatching(/^Follow these exact instructions\.[\s\S]*\n\nPaperclip task:\nTask one$/) }, mcpServers: [{ url: "https://relay.example.test/mcp", headers: { Authorization: "Bearer private-relay-token" } }] });
     expect(f.peer.request).not.toHaveProperty("schema");
     const identity = f.events.filter(event => event.payload.code === "cursor_cloud_remote_identity").map(event => JSON.parse(String(event.payload.message))).find(value => value.runId !== null);
     expect(identity).toEqual({ schema: "paperclip.cursor-cloud.remote-identity.v1", provider: "cursor_cloud", agentId: f.peer.native!.agentId, runId, ownerRunId: "paperclip-run", normalizedSessionId: "session", phase: "running" });
@@ -142,9 +206,10 @@ describe("Cursor Cloud native driver", () => {
     f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
     await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
     expect(f.events.some(event => event.eventType === "run.result.proposed")).toBe(false);
+    await acknowledgeTerminal(f.session);
     await f.session.startTurn({ message: { role: "user", text: "Task two" } });
     await waitFor(() => f.peer.createRun.mock.calls.length === 1);
-    expect(f.peer.request?.prompt.text).toBe("Task two"); expect(f.peer.createAgent).toHaveBeenCalledTimes(1);
+    expect(f.peer.request?.prompt.text).toMatch(/\n\nPaperclip task:\nTask two$/); expect(f.peer.request?.prompt.text).not.toContain(f.options.instructions); expect(f.peer.createAgent).toHaveBeenCalledTimes(1);
   });
 
   it("delivers the full admitted semantic response through the real Unix MCP bridge, rejects unknown/late calls", async () => {
@@ -210,6 +275,7 @@ describe("Cursor Cloud native driver", () => {
     expect(f.handler.mock.calls[0]![0].callId).not.toBe(f.handler.mock.calls[1]![0].callId);
     f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
     await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
+    await acknowledgeTerminal(f.session);
     await f.session.startTurn({ message: { role: "user", text: "Next turn" } });
     const third = await rpc(path, { id: 0, method: "initialize" });
     expect((await rpc(path, call, undefined, first.session)).status).toBe(404);
@@ -300,6 +366,69 @@ describe("Cursor Cloud native driver", () => {
     await writeFile(f.options.relay.socketPath, "unowned file", { mode: 0o600 });
     await expect(new CursorCloudDriver(f.options).recoverSession(snapshot)).rejects.toThrow("without safe dead-owner");
     expect(await readFile(f.options.relay.socketPath, "utf8")).toBe("unowned file");
+  });
+
+  it("retains the exact terminal delivery across restart until its receipt is acknowledged", async () => {
+    const f = await fixture();
+    const started = await f.session.startTurn({ message: { role: "user", text: "Retain the final result" } }); await f.peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    f.peer.native!.result = "Recovered final private-cursor-key private-relay-token";
+    f.peer.native!.status = "FINISHED"; f.peer.release.resolve();
+    await waitFor(() => f.events.some(event => event.eventType === "turn.completed"));
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    expect(JSON.parse(await readFile(checkpointPath, "utf8")).sourceSequence).toBe(f.events.find(event => event.eventType === "turn.completed")!.sourceSeq);
+    const pending = (await f.session.read?.())?.pendingTerminalDelivery as Record<string, unknown>;
+    expect(pending).toMatchObject({ schema: "paperclip.cursor-cloud.terminal-delivery.v1", threadId: "session", turnId: started.turnId, providerRunId: runId, status: "FINISHED", interrupted: false, result: "Recovered final [redacted] [redacted]", receiptId: expect.any(String) });
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    expect((await restored.read?.())?.pendingTerminalDelivery).toEqual(pending);
+    await expect(restored.startTurn({ message: { role: "user", text: "Must not replace the pending receipt" } })).rejects.toThrow("terminal delivery");
+    await expect(restored.acknowledgeTerminalDelivery({ turnId: started.turnId, receiptId: "wrong" })).rejects.toThrow("receipt");
+    expect((await restored.read?.())?.pendingTerminalDelivery).toEqual(pending);
+    await restored.acknowledgeTerminalDelivery({ turnId: started.turnId, receiptId: pending.receiptId as string });
+    expect((await restored.read?.())?.pendingTerminalDelivery).toBeNull();
+    const acknowledged = await restored.snapshot(); await restored.detachControllerForRestart!();
+    const final = (await new CursorCloudDriver(f.options).recoverSession(acknowledged)).session!; sessions.push(final);
+    expect((await final.read?.())?.pendingTerminalDelivery).toBeNull();
+    expect(f.peer.createAgent).toHaveBeenCalledTimes(1); expect(f.peer.createRun).not.toHaveBeenCalled();
+  });
+
+  it.each(["agent", "run"])("retries a transient recovery %s read without replacing work or extending its deadline", async read => {
+    const peer = new Peer(); peer.failCreate = read === "agent";
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "Recover the existing work" } }); await peer.created.promise;
+    await waitFor(() => f.events.some(event => read === "agent" ? event.payload.code === "cursor_cloud_remote_state_unknown" : event.eventType === "item.delta"));
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    const deadlineAt = JSON.parse(await readFile(checkpointPath, "utf8")).deadlineAt;
+    const error = new CursorCloudClientError("http_error", { status: 503 });
+    if (read === "agent") peer.getAgent.mockRejectedValueOnce(error);
+    else peer.getRun.mockRejectedValueOnce(error);
+    const stream = vi.spyOn(peer, "streamRun");
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    await waitFor(() => stream.mock.calls.length > 0);
+    expect(peer.createAgent).toHaveBeenCalledTimes(1); expect(peer.createRun).not.toHaveBeenCalled();
+    expect(JSON.parse(await readFile(checkpointPath, "utf8")).deadlineAt).toBe(deadlineAt);
+    await restored.interrupt!();
+  });
+
+  it("enforces the saved deadline while the first recovery read remains pending", async () => {
+    const f = await fixture();
+    await f.session.startTurn({ message: { role: "user", text: "Recover with a slow read" } }); await f.peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+    checkpoint.deadlineAt = Date.now() + 100; await writeFile(checkpointPath, JSON.stringify(checkpoint), { mode: 0o600 });
+    const blocked = deferred<CursorCloudRun>();
+    const getRun = f.peer.getRun.getMockImplementation()!;
+    f.peer.getRun.mockImplementationOnce(() => blocked.promise);
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    try {
+      await waitFor(() => f.peer.cancelRun.mock.calls.length === 1);
+      expect(f.peer.createAgent).toHaveBeenCalledTimes(1); expect(f.peer.createRun).not.toHaveBeenCalled();
+      await vi.waitFor(async () => expect((await restored.read?.())?.phase).toBe("terminal"));
+    } finally { blocked.resolve(await getRun()); }
   });
 
   it("treats an expired persisted active deadline as cleanup-only instead of buying another full turn", async () => {

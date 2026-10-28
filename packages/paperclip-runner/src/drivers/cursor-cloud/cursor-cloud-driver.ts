@@ -12,15 +12,27 @@ import type { PrpEvent } from "../../protocol/replay-contract.js";
 import { startRunnerToolBridge, type RunnerToolBridge, type RunnerToolCall } from "../runner-tool-bridge.js";
 import { semanticCanonicalJson } from "../semantic-tool-receipt.js";
 import { CursorCloudClient, CursorCloudClientError, isCursorCloudRunActive, type CursorCloudModelRef, type CursorCloudRun, type CursorCloudSseEvent } from "./cloud-client.js";
-import { parseNativeCursorCloudConfig, parseCursorCloudBinding, type NativeCursorCloudConfig, type CursorCloudBinding } from "./config.js";
-import { CursorCloudCheckpointStore, cursorCloudDigest, type CursorCloudCheckpoint } from "./checkpoint.js";
+import { CURSOR_CLOUD_MCP_SERVER_NAME, parseNativeCursorCloudConfig, parseCursorCloudBinding, type NativeCursorCloudConfig, type CursorCloudBinding } from "./config.js";
+import { CursorCloudCheckpointStore, cursorCloudDigest, type CursorCloudCheckpoint, type CursorCloudTerminalDelivery } from "./checkpoint.js";
 import { cursorCloudInlineInstructions } from "./inline-assets.js";
 import { stageCursorCloudArtifact } from "./artifact-delivery.js";
 import { releaseCursorCloudStaleSocket } from "./stale-socket.js";
 
 export const CURSOR_CLOUD_DRIVER_KIND = "cursor_cloud_api" as const;
 export const CURSOR_CLOUD_DRIVER_VERSION = "cursor-cloud-v1" as const;
+const CURSOR_CLOUD_CONTROL_INSTRUCTIONS = [
+  "You are executing in native Paperclip Runner, not a legacy REST adapter.",
+  `Paperclip control tools are provided by the injected MCP server "${CURSOR_CLOUD_MCP_SERVER_NAME}" with controller-managed MCP authentication; you do not need Paperclip REST credentials in the Cloud VM.`,
+  `At the start of each run, call get_mcp_tools({server:"${CURSOR_CLOUD_MCP_SERVER_NAME}"}) to discover its tools, then use the returned tool schemas for Paperclip task context and control.`,
+  "For Paperclip control, do not search unrelated inherited dashboard MCP namespaces or wait for their authentication.",
+  `When you need a human answer, use this server's offered request_human_input tool. Report completion with its offered ${PRP_COMPLETION_TOOL_NAME} tool, or a blocker with its offered ${PRP_BLOCK_TOOL_NAME} tool, following their schemas. Text alone does not submit a question, completion, or blocker.`,
+].join("\n");
 type CloudClient = Pick<CursorCloudClient, "createAgent" | "createRun" | "getAgent" | "getRun" | "cancelRun" | "streamRun" | "getUsage" | "listArtifacts" | "downloadArtifact">;
+
+export interface CursorCloudSessionHandle extends HarnessSession {
+  read(): Promise<Record<string, unknown>>;
+  acknowledgeTerminalDelivery(input: { turnId: string; receiptId: string }): Promise<void>;
+}
 
 export interface CursorCloudDriverOptions {
   model: string;
@@ -100,7 +112,7 @@ export class CursorCloudDriver implements HarnessDriver {
   async descriptor(): Promise<HarnessDriverDescriptor> {
     return cursorCloudDriverDescriptor();
   }
-  async openSession(input: OpenHarnessSessionInput): Promise<HarnessSession> { return this.#open(input, false); }
+  async openSession(input: OpenHarnessSessionInput): Promise<CursorCloudSessionHandle> { return this.#open(input, false); }
   async recoverSession(snapshot: PersistedHarnessSession, options?: HarnessSessionRecoveryOptions) {
     if (snapshot.driverKind !== CURSOR_CLOUD_DRIVER_KIND) return { recovered: false, reason: "Cursor Cloud recovery driver mismatch" };
     const session = await this.#open({ runId: snapshot.runId ?? "", normalizedSessionId: snapshot.normalizedSessionId ?? snapshot.driverSessionId, workingDirectory: snapshot.workingDirectory ?? this.#options.runtimeDirectory, signal: options?.signal }, true, snapshot.driverSessionId);
@@ -109,7 +121,7 @@ export class CursorCloudDriver implements HarnessDriver {
   async #open(input: OpenHarnessSessionInput, recovering: boolean, sessionId = input.normalizedSessionId): Promise<CursorCloudSession> {
     input.signal?.throwIfAborted();
     if (!input.runId || input.normalizedSessionId !== this.#options.binding.normalizedSessionId) throw new Error("Cursor Cloud session binding mismatch");
-    const instructions = await cursorCloudInlineInstructions(this.#options.instructions, this.#options.runtimeContext);
+    const instructions = `${await cursorCloudInlineInstructions(this.#options.instructions, this.#options.runtimeContext)}\n\n${CURSOR_CLOUD_CONTROL_INSTRUCTIONS}`;
     input.signal?.throwIfAborted();
     const store = new CursorCloudCheckpointStore(this.#options.runtimeDirectory, sessionId);
     await store.acquire();
@@ -122,7 +134,7 @@ export class CursorCloudDriver implements HarnessDriver {
       const modelDigest = cursorCloudDigest(semanticCanonicalJson({ id: this.#options.model, params: this.#options.modelParams ?? [] }));
       const instructionsDigest = cursorCloudDigest(instructions);
       if (existing && (existing.driverSessionId !== sessionId || existing.normalizedSessionId !== input.normalizedSessionId || existing.bindingDigest !== bindingDigest || existing.configDigest !== configDigest || existing.modelDigest !== modelDigest || (active(existing) && (existing.instructionsDigest !== instructionsDigest || existing.ownerRunId !== input.runId)))) throw new Error("Cursor Cloud recovery identity/configuration/instructions changed");
-      const checkpoint: CursorCloudCheckpoint = existing ?? { schema: "paperclip.cursor-cloud.checkpoint.v1", driverSessionId: sessionId, normalizedSessionId: input.normalizedSessionId, bindingDigest, configDigest, modelDigest, instructionsDigest, instructionsRevisionPending: false, ownerRunId: input.runId, agentId: null, runId: null, turnId: null, phase: "idle", pendingOperation: null, idempotencyKey: null, requestedAgentId: null, requestDigest: null, lastEventId: null, lastEventFingerprints: [], sourceSequence: 0, terminalStatus: null, deadlineAt: null, acceptedCompletion: null };
+      const checkpoint: CursorCloudCheckpoint = existing ?? { schema: "paperclip.cursor-cloud.checkpoint.v1", driverSessionId: sessionId, normalizedSessionId: input.normalizedSessionId, bindingDigest, configDigest, modelDigest, instructionsDigest, instructionsRevisionPending: false, ownerRunId: input.runId, agentId: null, runId: null, turnId: null, phase: "idle", pendingOperation: null, idempotencyKey: null, requestedAgentId: null, requestDigest: null, lastEventId: null, lastEventFingerprints: [], sourceSequence: 0, terminalStatus: null, deadlineAt: null, pendingTerminalDelivery: null, acceptedCompletion: null };
       if (checkpoint.instructionsDigest !== instructionsDigest) { checkpoint.instructionsDigest = instructionsDigest; checkpoint.instructionsRevisionPending = true; }
       checkpoint.ownerRunId = input.runId;
       await store.write(checkpoint);
@@ -139,7 +151,7 @@ export class CursorCloudDriver implements HarnessDriver {
   }
 }
 
-class CursorCloudSession implements HarnessSession {
+class CursorCloudSession implements CursorCloudSessionHandle {
   readonly #options: CursorCloudDriverOptions;
   readonly #input: OpenHarnessSessionInput;
   readonly #instructions: string;
@@ -179,7 +191,7 @@ class CursorCloudSession implements HarnessSession {
     const secured = await lstat(this.#options.relay.socketPath);
     if (!secured.isSocket() || secured.isSymbolicLink() || secured.ino !== socket.ino || secured.dev !== socket.dev || (secured.mode & 0o777) !== 0o600 || (process.getuid && secured.uid !== process.getuid())) throw new Error("Cursor Cloud bound relay socket changed while securing it");
   }
-  startRecovery(): void { if (active(this.#cp)) this.#work = this.#recoverActive().catch(error => this.#unresolved(error)); }
+  startRecovery(): void { if (active(this.#cp)) { this.#armDeadline(); this.#work = this.#recoverActive().catch(error => this.#unresolved(error)); } }
   ids() { return { driverSessionId: this.#cp.driverSessionId, providerSessionId: this.#cp.agentId, displayId: this.#cp.agentId ?? this.#cp.driverSessionId }; }
   events(): AsyncIterable<PrpEvent> { return this.#events.stream(); }
   turnControlCapabilities() { return { steering: false, queuedFollowUp: false }; }
@@ -190,16 +202,17 @@ class CursorCloudSession implements HarnessSession {
   async startTurn(input: { message: NativeUserMessage; requestedCollaborationMode?: "default" | "plan" }): Promise<{ turnId: string; effectiveCollaborationMode: "default" }> {
     if (input.requestedCollaborationMode === "plan") throw new HarnessCapabilityUnavailableError("plan", "native Cloud plan decisions are unsupported");
     if (this.#closed || active(this.#cp)) throw new Error("Cursor Cloud session is closed or has unresolved remote work");
+    if (this.#cp.pendingTerminalDelivery) throw new Error("Cursor Cloud terminal delivery must be acknowledged before new work");
     if (this.#options.relay.expiresAt <= Date.now()) throw new Error("Cursor Cloud semantic relay capability expired; only recovery cleanup is permitted");
     if (!input.message.text.trim() || Buffer.byteLength(input.message.text) > 1_048_576) throw new Error("Cursor Cloud turn text is empty or exceeds its bound");
     const turnId = `turn-${randomUUID()}`;
     const first = this.#cp.agentId === null;
-    const prompt = first || this.#cp.instructionsRevisionPending ? `${this.#instructions}\n\nPaperclip task:\n${input.message.text}` : input.message.text;
+    const prompt = `${first || this.#cp.instructionsRevisionPending ? this.#instructions : CURSOR_CLOUD_CONTROL_INSTRUCTIONS}\n\nPaperclip task:\n${input.message.text}`;
     const request = { prompt: { text: prompt }, model: { id: this.#options.model, ...(this.#options.modelParams ? { params: this.#options.modelParams } : {}) }, mode: "agent" as const,
-      mcpServers: [{ name: "paperclip", type: "http" as const, url: this.#options.relay.url, headers: { Authorization: `Bearer ${this.#options.relay.token}` } }] };
+      mcpServers: [{ name: CURSOR_CLOUD_MCP_SERVER_NAME, type: "http" as const, url: this.#options.relay.url, headers: { Authorization: `Bearer ${this.#options.relay.token}` } }] };
     this.#cp.turnId = turnId; this.#cp.runId = null; this.#cp.phase = "creating"; this.#cp.pendingOperation = first ? "create_agent" : "create_run";
     this.#cp.requestedAgentId = first ? `bc-${randomUUID()}` : null; this.#cp.idempotencyKey = `paperclip-${randomUUID()}`;
-    this.#cp.requestDigest = cursorCloudDigest(semanticCanonicalJson(request)); this.#cp.lastEventId = null; this.#cp.lastEventFingerprints = []; this.#cp.terminalStatus = null; this.#cp.acceptedCompletion = null;
+    this.#cp.requestDigest = cursorCloudDigest(semanticCanonicalJson(request)); this.#cp.lastEventId = null; this.#cp.lastEventFingerprints = []; this.#cp.terminalStatus = null; this.#cp.acceptedCompletion = null; this.#cp.pendingTerminalDelivery = null;
     this.#cp.deadlineAt = Date.now() + (this.#options.config.timeoutMs ?? CURSOR_CLOUD_DEFAULT_TIMEOUT_MS);
     this.#stopping = false; this.#stop = null;
     await this.#store.write(this.#cp);
@@ -262,14 +275,29 @@ class CursorCloudSession implements HarnessSession {
     }
   }
   async #recoverActive(): Promise<void> {
-    await this.#resolvePending();
-    if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
+    this.#streamAbort = new AbortController();
+    const signal = this.#streamAbort.signal;
+    let run: CursorCloudRun | undefined;
+    for (let attempt = 0; !this.#closed && !this.#stopping && active(this.#cp); attempt += 1) {
+      try {
+        await this.#resolvePending(signal);
+        if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
+        run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId, { signal });
+        break;
+      } catch (error) {
+        if (this.#closed || this.#stopping || signal.aborted) return;
+        if (!(error instanceof CursorCloudClientError && error.retryable)) throw error;
+        await this.#unresolved(error);
+        await delay(boundedPositive(this.#options.reconnectDelayMs, Math.min(250 * 2 ** attempt, 2_000)), undefined, { signal })
+          .catch(error => { if (!signal.aborted) throw error; });
+      }
+    }
+    if (!run || this.#closed || this.#stopping) return;
     this.#emit("turn.started", { recovered: true, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsAcknowledged: false });
     this.#publishRemoteIdentity();
-    const run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId);
     if (!isCursorCloudRunActive(run.status)) { await this.#settle(run, this.#cp.phase === "stopping"); return; }
     if (this.#cp.phase === "stopping" || this.#cp.deadlineAt === null || this.#cp.deadlineAt <= Date.now()) { await this.interrupt(); return; }
-    this.#armDeadline(); await this.#observe();
+    await this.#observe();
   }
   async #observe(): Promise<void> {
     for (let attempt = 0; attempt < 4 && !this.#stopping && !this.#closed; attempt += 1) {
@@ -316,9 +344,13 @@ class CursorCloudSession implements HarnessSession {
     if (!isCursorCloudRunActive(run.status) && active(this.#cp)) {
       const turnId = this.#cp.turnId!;
       this.#cp.phase = "terminal"; this.#cp.terminalStatus = run.status; this.#cp.pendingOperation = null; this.#cp.deadlineAt = null; this.#clearDeadline();
+      const delivery: CursorCloudTerminalDelivery = { schema: "paperclip.cursor-cloud.terminal-delivery.v1", threadId: this.#cp.driverSessionId, turnId, providerRunId: run.id, receiptId: randomUUID(), status: run.status as CursorCloudTerminalDelivery["status"], interrupted: interrupted || run.status === "CANCELLED", result: run.result ? this.#redact(run.result) : null };
+      this.#cp.pendingTerminalDelivery = delivery;
+      const events: PrpEvent[] = [];
+      if (delivery.result) events.push(this.#event("item.completed", { kind: "agentMessage", text: delivery.result, channel: "final" }, "final", turnId));
+      events.push(this.#event(delivery.interrupted ? "turn.interrupted" : run.status === "FINISHED" ? "turn.completed" : "turn.failed", { cursorCloudTerminalDelivery: delivery, providerStatus: run.status, remoteTerminalConfirmed: true, semanticCompletionAccepted: this.#cp.acceptedCompletion !== null, ...(run.status === "ERROR" || run.status === "EXPIRED" ? { error: { code: `cursor_cloud_${run.status.toLowerCase()}`, message: "Cursor Cloud run ended without successful provider completion." } } : {}) }, undefined, turnId));
       await this.#store.write(this.#cp);
-      if (run.result) this.#emit("item.completed", { kind: "agentMessage", text: this.#redact(run.result), channel: "final" }, "final", turnId);
-      this.#emit(interrupted || run.status === "CANCELLED" ? "turn.interrupted" : run.status === "FINISHED" ? "turn.completed" : "turn.failed", { providerStatus: run.status, remoteTerminalConfirmed: true, semanticCompletionAccepted: this.#cp.acceptedCompletion !== null, ...(run.status === "ERROR" || run.status === "EXPIRED" ? { error: { code: `cursor_cloud_${run.status.toLowerCase()}`, message: "Cursor Cloud run ended without successful provider completion." } } : {}) }, undefined, turnId);
+      for (const event of events) this.#publish(event);
     }
   }
   async #dispatch(call: RunnerToolCall): Promise<unknown> {
@@ -385,13 +417,24 @@ class CursorCloudSession implements HarnessSession {
     const text = this.#redactUnbounded(JSON.stringify(value));
     return Buffer.byteLength(text) > 65_536 ? { omitted: true, reason: "payload_limit" } : JSON.parse(text);
   }
-  #emit(eventType: PrpEvent["eventType"], payload: Record<string, unknown>, itemId?: string, turnId = this.#cp.turnId ?? undefined): void {
-    if (this.#closed) return;
+  #event(eventType: PrpEvent["eventType"], payload: Record<string, unknown>, itemId?: string, turnId = this.#cp.turnId ?? undefined): PrpEvent {
     const seq = ++this.#cp.sourceSequence;
-    const event: PrpEvent = { schema: "paperclip.prp.event.v1", schemaVersion: 1, sourceEventId: `cursor-cloud:${this.#cp.ownerRunId}:${seq}`, sourceSeq: seq, sourceInstanceId: this.#options.runnerInstanceId ?? "cursor-cloud-sidecar", sourceKind: "runner", runId: this.#cp.ownerRunId, normalizedSessionId: this.#cp.normalizedSessionId, ...(turnId ? { turnId } : {}), ...(itemId ? { itemId } : {}), eventType, priority: 1, emittedAt: new Date().toISOString(), payload };
+    return { schema: "paperclip.prp.event.v1", schemaVersion: 1, sourceEventId: `cursor-cloud:${this.#cp.ownerRunId}:${seq}`, sourceSeq: seq, sourceInstanceId: this.#options.runnerInstanceId ?? "cursor-cloud-sidecar", sourceKind: "runner", runId: this.#cp.ownerRunId, normalizedSessionId: this.#cp.normalizedSessionId, ...(turnId ? { turnId } : {}), ...(itemId ? { itemId } : {}), eventType, priority: 1, emittedAt: new Date().toISOString(), payload };
+  }
+  #publish(event: PrpEvent): void {
+    if (this.#closed) return;
     this.#transcript.push(event); if (this.#transcript.length > 1_024) this.#transcript.shift(); this.#events.push(event);
   }
-  async read(): Promise<Record<string, unknown>> { return { provider: "cursor_cloud", agentId: this.#cp.agentId, runId: this.#cp.runId, turnId: this.#cp.turnId, phase: this.#cp.phase, providerStatus: this.#cp.terminalStatus, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsDigest: this.#cp.instructionsDigest, instructionsAcknowledged: false, semanticCompletionReceipt: this.#cp.acceptedCompletion }; }
+  #emit(eventType: PrpEvent["eventType"], payload: Record<string, unknown>, itemId?: string, turnId = this.#cp.turnId ?? undefined): void {
+    if (!this.#closed) this.#publish(this.#event(eventType, payload, itemId, turnId));
+  }
+  async acknowledgeTerminalDelivery(input: { turnId: string; receiptId: string }): Promise<void> {
+    const pending = this.#cp.pendingTerminalDelivery;
+    if (!pending || pending.turnId !== input.turnId || pending.receiptId !== input.receiptId) throw new Error("Cursor Cloud terminal delivery receipt does not match");
+    await this.#store.write({ ...this.#cp, pendingTerminalDelivery: null });
+    this.#cp.pendingTerminalDelivery = null;
+  }
+  async read(): Promise<Record<string, unknown>> { return { provider: "cursor_cloud", agentId: this.#cp.agentId, runId: this.#cp.runId, turnId: this.#cp.turnId, phase: this.#cp.phase, providerStatus: this.#cp.terminalStatus, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsDigest: this.#cp.instructionsDigest, instructionsAcknowledged: false, semanticCompletionReceipt: this.#cp.acceptedCompletion, pendingTerminalDelivery: structuredClone(this.#cp.pendingTerminalDelivery) }; }
   async reconcile(): Promise<Record<string, unknown>> {
     await this.#resolvePending();
     if (this.#cp.agentId && this.#cp.runId) { const run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId); if (!isCursorCloudRunActive(run.status)) await this.#settle(run); }

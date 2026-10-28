@@ -5,6 +5,17 @@ import { isAbsolute, join } from "node:path";
 
 export const cursorCloudDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 
+export interface CursorCloudTerminalDelivery {
+  schema: "paperclip.cursor-cloud.terminal-delivery.v1";
+  threadId: string;
+  turnId: string;
+  providerRunId: string;
+  receiptId: string;
+  status: "FINISHED" | "ERROR" | "CANCELLED" | "EXPIRED";
+  interrupted: boolean;
+  result: string | null;
+}
+
 export interface CursorCloudCheckpoint {
   schema: "paperclip.cursor-cloud.checkpoint.v1";
   driverSessionId: string;
@@ -28,6 +39,7 @@ export interface CursorCloudCheckpoint {
   sourceSequence: number;
   terminalStatus: string | null;
   deadlineAt: number | null;
+  pendingTerminalDelivery: CursorCloudTerminalDelivery | null;
   acceptedCompletion: { callIdDigest: string; inputDigest: string; resultDigest: string; turnId: string } | null;
 }
 
@@ -82,11 +94,12 @@ export class CursorCloudCheckpointStore {
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
     try {
       const stat = await handle.stat();
-      if (!stat.isFile() || (stat.mode & 0o077) !== 0 || stat.size > 65_536) throw new Error("Cursor Cloud checkpoint is unsafe or exceeds its bound");
+      if (!stat.isFile() || (stat.mode & 0o077) !== 0 || stat.size > 524_288) throw new Error("Cursor Cloud checkpoint is unsafe or exceeds its bound");
       const value: unknown = JSON.parse(await handle.readFile("utf8"));
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid Cursor Cloud checkpoint");
       const cp = value as CursorCloudCheckpoint;
       if (cp.deadlineAt === undefined) cp.deadlineAt = ["creating", "running", "stopping"].includes(cp.phase) ? 0 : null;
+      if (cp.pendingTerminalDelivery === undefined) cp.pendingTerminalDelivery = null;
       if (cp.instructionsRevisionPending === undefined) cp.instructionsRevisionPending = false;
       const digestFields = [cp.bindingDigest, cp.configDigest, cp.modelDigest, cp.instructionsDigest];
       if (cp.schema !== "paperclip.cursor-cloud.checkpoint.v1" || !digestFields.every(v => typeof v === "string" && /^[a-f0-9]{64}$/.test(v))
@@ -99,6 +112,13 @@ export class CursorCloudCheckpointStore {
         || ![cp.driverSessionId, cp.normalizedSessionId, cp.ownerRunId].every(v => typeof v === "string" && v.length > 0 && v.length <= 1_024)
         || ![cp.agentId, cp.runId, cp.turnId, cp.idempotencyKey, cp.requestedAgentId, cp.requestDigest, cp.lastEventId, cp.terminalStatus].every(v => v === null || (typeof v === "string" && v.length <= 1_024))
         || ![null, "create_agent", "create_run"].includes(cp.pendingOperation)) throw new Error("Invalid Cursor Cloud checkpoint");
+      const pending = cp.pendingTerminalDelivery;
+      if (pending !== null && (typeof pending !== "object" || Array.isArray(pending)
+        || pending.schema !== "paperclip.cursor-cloud.terminal-delivery.v1" || pending.threadId !== cp.driverSessionId
+        || pending.turnId !== cp.turnId || pending.providerRunId !== cp.runId
+        || typeof pending.receiptId !== "string" || !/^[a-f0-9-]{36}$/.test(pending.receiptId)
+        || !["FINISHED", "ERROR", "CANCELLED", "EXPIRED"].includes(pending.status)
+        || typeof pending.interrupted !== "boolean" || (pending.result !== null && (typeof pending.result !== "string" || pending.result.length > 65_536)))) throw new Error("Invalid Cursor Cloud terminal delivery");
       return cp;
     } finally { await handle.close(); }
   }
@@ -106,7 +126,7 @@ export class CursorCloudCheckpointStore {
   write(value: CursorCloudCheckpoint): Promise<void> {
     if (!this.#lockToken) return Promise.reject(new Error("Cursor Cloud checkpoint has no owner"));
     const bytes = JSON.stringify(value);
-    if (Buffer.byteLength(bytes) > 65_536) return Promise.reject(new Error("Cursor Cloud checkpoint exceeds its bound"));
+    if (Buffer.byteLength(bytes) > 524_288) return Promise.reject(new Error("Cursor Cloud checkpoint exceeds its bound"));
     const operation = this.#writes.then(async () => {
       const temporary = `${this.path}.${randomUUID()}.tmp`;
       const handle = await open(temporary, "wx", 0o600);

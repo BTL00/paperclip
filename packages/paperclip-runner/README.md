@@ -224,6 +224,12 @@ Agent environment bindings support `CURSOR_API_KEY` only. Configure hosted shell
 secrets in the Cursor Cloud environment. Other selected process variables are
 rejected; they are not silently omitted from the hosted run.
 
+Paperclip native tools use the injected `paperclip` MCP server with
+controller-managed authentication; they need no Paperclip REST credentials in the
+Cloud VM. Cursor also loads account and team MCP servers. The driver directs
+Paperclip operations to the run-bound server; Cursor controls the other account
+tools. See [Cloud MCP configuration](https://cursor.com/docs/sdk/typescript).
+
 The hosted agent needs a reachable HTTPS callback origin from the server's public
 URL configuration (for example `PAPERCLIP_PUBLIC_URL`). Forward only
 `POST /mcp/native-runs/:runId` through a callback proxy; keep the local trusted

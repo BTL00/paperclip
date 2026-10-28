@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PassThrough } from "node:stream";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { request } from "node:http";
+import { CursorCloudCheckpointStore } from "./checkpoint.js";
+import { CursorCloudDriver, type CursorCloudSessionHandle } from "./cursor-cloud-driver.js";
 import { startCursorCloudAppServerProxy } from "../../cli/cursor-cloud-app-server-proxy.js";
 
 const roots: string[] = [];
@@ -75,12 +77,32 @@ describe("Cursor Cloud bounded stdio proxy", () => {
       if (target.pathname.endsWith(`/${remoteRunId}`)) return json({ id: remoteRunId, agentId: remoteAgentId, status: "FINISHED", createdAt: now, updatedAt: now });
       throw new Error("Unexpected controlled provider request");
     });
+    let releaseTerminalWrites!: () => void;
+    const terminalGate = new Promise<void>(resolve => { releaseTerminalWrites = resolve; });
+    let pausedTerminalWrites = 0;
+    const write = CursorCloudCheckpointStore.prototype.write;
+    vi.spyOn(CursorCloudCheckpointStore.prototype, "write").mockImplementation(async function(value) {
+      if (value.phase === "terminal" && value.pendingTerminalDelivery) {
+        pausedTerminalWrites += 1;
+        await terminalGate;
+      }
+      await write.call(this, value);
+    });
     const f = await peer();
     try {
       await f.rpc(1, "initialize");
       expect(await f.rpc(2, "thread/start", { model: "explicit-model", cwd: f.root })).toMatchObject({ result: { thread: { id: "session" } } });
       await f.rpc(3, "turn/start", { input: [{ type: "text", text: "Inspect native tool event delivery" }] });
       await vi.waitFor(() => expect(f.frames.filter(frame => frame.params?.item?.name === "get_mcp_tools" || frame.params?.item?.name === "read_file")).toHaveLength(3), { timeout: 1_000 });
+      await vi.waitFor(() => expect(pausedTerminalWrites).toBe(1), { timeout: 5_000 });
+      const pendingRead = f.rpc(9, "thread/read");
+      await vi.waitFor(() => expect(pausedTerminalWrites).toBe(2), { timeout: 5_000 });
+      expect(f.frames.some(frame => frame.id === 9)).toBe(false);
+      const checkpointPath = join(f.root, (await readdir(f.root)).find(name => /^checkpoint-.*\.json$/.test(name))!);
+      expect(JSON.parse(await readFile(checkpointPath, "utf8")).phase).toBe("running");
+      releaseTerminalWrites();
+      const committed = await pendingRead;
+      expect(JSON.parse(await readFile(checkpointPath, "utf8")).pendingTerminalDelivery.receiptId).toBe(committed.result.cursorCloudTerminalDelivery.receiptId);
       await vi.waitFor(() => expect(f.frames.some(frame => frame.method === "turn/completed")).toBe(true), { timeout: 5_000 });
       const tools = f.frames.filter(frame => frame.params?.item?.name === "get_mcp_tools" || frame.params?.item?.name === "read_file");
       expect(tools.map(frame => ({ method: frame.method, type: frame.params.item.type, tool: frame.params.item.tool, status: frame.params.item.status }))).toEqual([
@@ -93,8 +115,17 @@ describe("Cursor Cloud bounded stdio proxy", () => {
       expect(JSON.parse(tools[2].params.item.output)).toEqual({ omitted: true, reason: "payload_limit" });
       expect(JSON.stringify(tools)).not.toContain("private-key");
       expect(JSON.stringify(tools)).not.toContain("private-relay-token");
+      const retained = await f.rpc(4, "thread/read");
+      expect(retained.result.thread.turns).toEqual([]);
+      expect(retained.result.cursorCloudTerminalDelivery).toMatchObject({ status: "FINISHED", receiptId: expect.any(String) });
+      const receipt = retained.result.cursorCloudTerminalDelivery;
+      expect(await f.rpc(10, "paperclip/shutdown")).toMatchObject({ result: { cursorCloudTerminalDelivery: retained.result.cursorCloudTerminalDelivery } });
+      expect(await f.rpc(5, "paperclip/ackTerminal", { turnId: receipt.turnId, receiptId: "wrong" })).toHaveProperty("error");
+      expect(await f.rpc(6, "paperclip/ackTerminal", { turnId: receipt.turnId, receiptId: receipt.receiptId })).toMatchObject({ result: { acknowledged: true } });
+      expect((await f.rpc(7, "thread/read")).result.cursorCloudTerminalDelivery).toBeNull();
+      expect(await f.rpc(8, "paperclip/shutdown", { turnId: null })).toMatchObject({ result: { remoteStopped: true, turnId: null } });
       expect(nativeFetch.mock.calls.filter(([url, init]) => new URL(String(url)).pathname === "/v1/agents" && init?.method === "POST")).toHaveLength(1);
-    } finally { f.input.end(); await f.proxy.done; }
+    } finally { releaseTerminalWrites(); f.input.end(); await f.proxy.done; }
   });
   it("round-trips a semantic completion over stdio and certifies shutdown only after native terminal lookup", async () => {
     const remoteRunId = "run-22222222-2222-4222-8222-222222222222";
@@ -111,6 +142,12 @@ describe("Cursor Cloud bounded stdio proxy", () => {
       if (path.endsWith(`/${remoteRunId}`)) return json({ id: remoteRunId, agentId: remoteAgentId, status, createdAt: now, updatedAt: now });
       throw new Error("Unexpected controlled provider request");
     });
+    let openedSession!: CursorCloudSessionHandle;
+    const openSession = CursorCloudDriver.prototype.openSession;
+    vi.spyOn(CursorCloudDriver.prototype, "openSession").mockImplementation(async function(input) {
+      openedSession = await openSession.call(this, input);
+      return openedSession;
+    });
     const f = await peer();
     try {
       await f.rpc(1, "initialize"); await f.rpc(2, "thread/start", { model: "explicit-model", cwd: f.root, baseInstructions: "Use semantic completion." });
@@ -125,8 +162,19 @@ describe("Cursor Cloud bounded stdio proxy", () => {
       f.input.write(`${JSON.stringify({ id: call.id, result: { success: true, contentItems: [{ type: "inputText", text: "Exact accepted completion receipt" }] } })}\n`);
       expect((await response).value.result.content[0].text).toContain("Exact accepted completion receipt");
       expect(f.frames.some(frame => frame.method === "paperclip/runResult" || frame.method === "turn/completed")).toBe(false);
-      status = "FINISHED"; stream!.enqueue(new TextEncoder().encode(`id: 2\nevent: result\ndata: ${JSON.stringify({ runId: remoteRunId, status })}\n\n`));
-      await vi.waitFor(() => expect(f.frames.some(frame => frame.method === "turn/completed")).toBe(true), { timeout: 5_000 });
+      const snapshot = openedSession.snapshot.bind(openedSession);
+      let settleDuringRead = true;
+      vi.spyOn(openedSession, "snapshot").mockImplementation(async () => {
+        const value = await snapshot();
+        if (settleDuringRead) {
+          settleDuringRead = false;
+          status = "FINISHED"; stream!.enqueue(new TextEncoder().encode(`id: 2\nevent: result\ndata: ${JSON.stringify({ runId: remoteRunId, status })}\n\n`));
+          await vi.waitFor(() => expect(f.frames.some(frame => frame.method === "turn/completed")).toBe(true), { timeout: 5_000 });
+        }
+        return value;
+      });
+      const racing = await f.rpc(5, "thread/read");
+      expect(Boolean(racing.result.thread.turns.length && racing.result.cursorCloudTerminalDelivery)).toBe(false);
       expect(await f.rpc(4, "paperclip/shutdown", { threadId: "session", turnId: started.result.turn.id })).toMatchObject({ result: { remoteStopped: true, threadId: "session", turnId: started.result.turn.id, remoteAgentId, remoteRunId, status: "FINISHED" } });
       expect(nativeFetch.mock.calls.filter(([url, init]) => new URL(String(url)).pathname === "/v1/agents" && init?.method === "POST")).toHaveLength(1);
     } finally { f.input.end(); await f.proxy.done; }
