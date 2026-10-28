@@ -7,6 +7,17 @@ import { expect, it, vi } from "vitest";
 import type { DurablePrpControlPlane } from "./durable-prp-control-plane.js";
 import { createRunnerdCodexTransport, defaultCapabilityRunnerdBinary } from "../live/runnerd-codex-transport.js";
 
+function buildPrivateCursorCloudProxy(proxyPath: string): void {
+  const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const builderUrl = new URL("../../scripts/build-verified-provider-entrypoints.mjs", import.meta.url).href;
+  execFileSync(process.execPath, ["--input-type=module", "-e", [
+    "import { writeFile } from 'node:fs/promises';",
+    `const { bundleVerifiedProviderEntrypoints } = await import(${JSON.stringify(builderUrl)});`,
+    "const item = (await bundleVerifiedProviderEntrypoints({ write: false })).find(value => value.entrypoint.name === 'cursor-cloud-app-server-proxy');",
+    `await writeFile(${JSON.stringify(proxyPath)}, item.verifiedResult.outputFiles[0].contents, { mode: 0o600 });`,
+  ].join("\n")], { cwd: packageRoot, timeout: 20_000, stdio: "pipe" });
+}
+
 it("opens and closes the real Cloud facade without a provider prompt", async () => {
   const root = await mkdtemp("/tmp/cc-runner-launch-");
   const runtime = join(root, "cloud");
@@ -14,7 +25,8 @@ it("opens and closes the real Cloud facade without a provider prompt", async () 
   const socketPath = join(root, "mcp.sock");
   const fetchLog = join(root, "unexpected-fetches.jsonl");
   const proxyPath = join(root, "cloud-proxy.cjs");
-  const builtProxy = await readFile(fileURLToPath(new URL("../../dist/cli/cursor-cloud-app-server-proxy.cjs", import.meta.url)));
+  buildPrivateCursorCloudProxy(proxyPath);
+  const builtProxy = await readFile(proxyPath);
   const firstLine = builtProxy.indexOf(10) + 1;
   const guard = Buffer.from(`globalThis.fetch = async () => { require("node:fs").appendFileSync(${JSON.stringify(fetchLog)}, "unexpected fetch\\n", { mode: 0o600 }); throw new Error("Cloud launch preflight forbids provider requests"); };\n`);
   await writeFile(proxyPath, Buffer.concat([builtProxy.subarray(0, firstLine), guard, builtProxy.subarray(firstLine)]), { mode: 0o600 });
@@ -67,14 +79,7 @@ it("preserves native Cloud tool identity and redacted output through the real Ru
   const socketPath = join(root, "mcp.sock");
   const proxyPath = join(root, "cloud-proxy.cjs");
   const fetchLog = join(root, "controlled-fetches.jsonl");
-  const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
-  const builderUrl = new URL("../../scripts/build-verified-provider-entrypoints.mjs", import.meta.url).href;
-  execFileSync(process.execPath, ["--input-type=module", "-e", [
-    "import { writeFile } from 'node:fs/promises';",
-    `const { bundleVerifiedProviderEntrypoints } = await import(${JSON.stringify(builderUrl)});`,
-    "const item = (await bundleVerifiedProviderEntrypoints({ write: false })).find(value => value.entrypoint.name === 'cursor-cloud-app-server-proxy');",
-    `await writeFile(${JSON.stringify(proxyPath)}, item.verifiedResult.outputFiles[0].contents, { mode: 0o600 });`,
-  ].join("\n")], { cwd: packageRoot, timeout: 20_000, stdio: "pipe" });
+  buildPrivateCursorCloudProxy(proxyPath);
   const runId = "run-22222222-2222-4222-8222-222222222222";
   const fixture = Buffer.from(`;(() => {
     const assert = require('node:assert/strict'), fs = require('node:fs');
