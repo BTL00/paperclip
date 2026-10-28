@@ -123,6 +123,7 @@ function renderItem(
         : item.attachedTurn;
       const turn = attachedTurnItem ? (
         <TaskChatTurn
+          linkCaseReferences={linkCaseReferences}
           item={attachedTurnItem}
           timestampPrefix={
             attachedTurnItem.standaloneHeader ? undefined : item.timestamp
@@ -234,6 +235,7 @@ function renderItem(
     case "turn":
       return (
         <TaskChatTurn
+          linkCaseReferences={linkCaseReferences}
           item={item}
           renderChild={(child) =>
             renderItem(

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TaskChatThreadView } from "./TaskChatThreadView";
-import type { TaskChatMessageItem } from "./task-chat-model";
+import type { TaskChatItem, TaskChatMessageItem, TaskChatTurnItem } from "./task-chat-model";
 
 vi.mock("@/context/CompanyContext", () => ({
   useCompany: () => ({ selectedCompany: { id: "company", issuePrefix: "RUN" } }),
@@ -22,26 +22,34 @@ const reply: TaskChatMessageItem = {
 
 RUN-C3 "Resolved image clipping" is **done**, so not included.`,
 };
-function render(enabled?: boolean) {
+const surfaces = ["bubble", "standalone-turn", "attached-turn"] as const;
+function render(enabled?: boolean, surface: typeof surfaces[number] = "bubble") {
+  const turn: TaskChatTurnItem = {
+    id: "native-turn", kind: "turn", items: [], settled: true, standaloneHeader: true,
+    finalResponse: reply, summary: { toolCount: 1, added: 0, removed: 0 },
+  };
+  const items: TaskChatItem[] = surface === "bubble" ? [reply]
+    : surface === "standalone-turn" ? [turn]
+    : [{ ...reply, text: "", attachedTurn: turn }];
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={["/RUN/chats/ceo"]}>
         <ThemeProvider>
-          <TaskChatThreadView items={[reply]} scroll={false} {...{ linkCaseReferences: enabled }} />
+          <TaskChatThreadView items={items} scroll={false} {...{ linkCaseReferences: enabled }} />
         </ThemeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
-it("renders the actual case table identifiers as company-bound links when enabled", () => {
-  const html = render(true);
+it.each(surfaces)("renders company-bound case table links in %s when enabled", surface => {
+  const html = render(true, surface);
   expect(html).toContain('href="/RUN/cases/RUN-C1"');
   expect(html).toContain('href="/RUN/cases/RUN-C2"');
   expect(html).toContain("Mobile checkout failure");
   expect(html).toContain("so not included.");
 });
-it.each([false, undefined])("leaves case references as text when the feature is %s", enabled => {
-  const html = render(enabled);
+it.each(surfaces.flatMap(surface => [false, undefined].map(enabled => ({ surface, enabled }))))("leaves references as text in $surface when enabled=$enabled", ({ surface, enabled }) => {
+  const html = render(enabled, surface);
   expect(html).toContain("RUN-C1");
   expect(html).not.toContain('data-mention-kind="case"');
   expect(html).not.toContain('/cases/RUN-C');
