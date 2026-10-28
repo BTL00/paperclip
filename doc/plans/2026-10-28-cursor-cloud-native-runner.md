@@ -10,13 +10,19 @@ Target: a reviewable PR with experimental, local-first native Runner support.
 Merge, package publication, production rollout, and automatic conversion of
 existing agents are separate actions, not completed or implied by this record.
 
-Current delivery: [draft Runner core PR #18068](https://github.com/paperclipai/paperclip/pull/18068),
-with product activation being prepared as a dependent PR. The serving local
-candidate is `3050fa41a933`; neither PR is merged. Saved real-account setup has
-passed, but useful task completion, registered output, continuation, live replay,
-and active Stop have not passed. The latest Sonnet control has exposed a concrete
-staging-to-Core path mismatch; fix and independently reproduce that boundary
-before another paid artifact attempt. Preserve the earlier Mini failures.
+Current delivery: [draft Runner core PR #18068](https://github.com/paperclipai/paperclip/pull/18068)
+and dependent [draft product PR #18069](https://github.com/paperclipai/paperclip/pull/18069).
+Neither PR is merged. Candidate `b18b743cd45d` passed the ordinary Sonnet task
+and registered/downloaded artifact cell, including all eight acceptance matchers
+and exact owned cleanup. Earlier saved real-account setup passed. Core PR
+`9313c3eb7562` has all 57 checks green and Greptile 5/5 with no open threads.
+Continuation and replay remain unqualified; active Stop is unattempted. The
+third continuation attempt exposed an accounting-collection defect. Its repair
+passed actual receipt, ledger and budget controls. The fourth attempt reached
+the question tool, then failed to commit the confirmed Cloud terminal. A
+controlled test reproduced a cancellation/drain timing mismatch; its bounded
+Cloud-specific repair passed. Rebuild and fresh live qualification are next.
+All failures remain retained.
 
 ## Release outcome and authority
 
@@ -48,7 +54,8 @@ by a Paperclip per-command approval callback.
 
 Authentication uses an explicitly bound Cursor user/service-account API key.
 Authenticated catalog, repository access and real hosted execution were observed
-on 2026-10-28. Task acceptance remains unqualified. Record binding identifiers only;
+on 2026-10-28. Task and artifact acceptance passed on the candidate recorded below.
+Record binding identifiers only;
 never put key values in this plan or evidence. Select the acceptance model from
 the real account's catalog and record it before a paid attempt. It is a test
 choice, not a product allowlist. No paid calls were made by the research owner.
@@ -99,9 +106,9 @@ available. Diagnose the first divergence before another paid attempt.
 
 Research date: 2026-10-28. Public documentation is mutable; the inspected shipped
 SDK is exactly `@cursor/sdk@1.0.28`. Evidence labels below distinguish
-**documented**, **source-observed**, **unverified**, and eventual
-**product-qualified**. No authenticated observation or passing product cell is
-claimed here.
+**documented**, **source-observed**, **unverified**, and **product-qualified**.
+The dossier describes the inspected provider contract. Authenticated observations
+and exact product results are recorded separately in the ledger below.
 
 Official references:
 
@@ -151,58 +158,59 @@ the published package version and named distribution files.
 ## Capability inventory
 
 `Required` means part of this release; `Outside` means discovered but not part of
-this campaign; `Unsupported` means no product promise. Every implementation and
-product qualification column starts unverified. A planned mapping is not a
-support claim. Cloud v1 means the documented API as researched above; SDK means
+this campaign; `Unsupported` means no product promise. Controlled checks establish
+their tested boundary; authenticated observation and product qualification are
+distinct evidence levels. Exact candidate identities and failed attempts are
+in the ledger. Cloud v1 means the documented API as researched above; SDK means
 the exact inspected 1.0.28 package.
 
 | Capability/field | Exact harness/version/mode | Native evidence | Transport/wrapper | Runner mapping | Durable product/UI | Qualification | Loss/reason/next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Auth/key identity | Cloud v1 | Documented | HTTP auth | Planned admission | Saved binding/Test | Unverified | Required; check real account |
-| Entitlement/repository access | Cloud v1 | Unverified for account | API errors | Planned actionable failure | Reopen/reconnect | Unverified | Required setup |
-| Protocol/version discovery | Cloud v1 beta | Documented; mutable | Pin client contract | Planned compatibility | Diagnostic identity | Unverified | Required; retain candidate revision |
-| Model catalog/parameters | Cloud v1 | Documented | HTTP discovery | Preserve explicit input | Saved model/params | Unverified | Required; no fallback |
-| Exact model acknowledgment | Cloud v1 / SDK | Source-observed absent/echo | No receipt | Submitted identity only | Experimental limit | Unverified | Authorized exception |
+| Auth/key identity | Cloud v1 | Authenticated catalog and hosted work observed | Bound Bearer auth | Native admission implemented | Saved secret reference/Test | C1 passed | Required; no credential value in evidence |
+| Entitlement/repository access | Cloud v1 | Private fixture access and hosted clone observed | Typed API errors | Actionable admission failure | Reopen/reconnect | C1/C2 passed | Required setup |
+| Protocol/version discovery | Cloud v1 beta | Documented; mutable | Strict v1 client and SSE decoder | Versioned driver/launch profile | Diagnostic identity | Controlled checks and live traffic | Retain exact candidate; no provider version negotiation claim |
+| Model catalog/parameters | Cloud v1 | Authenticated catalog observed | HTTP discovery and explicit submitted values | No model fallback | Saved model/params | C1 passed; explicit Sonnet submitted live | Qualification model is not an allowlist or effective-model acknowledgment |
+| Exact model acknowledgment | Cloud v1 / SDK | Source-observed absent/echo | No receipt | Submitted identity only | Visible experimental limit | Unsupported | Authorized exception |
 | Default/Auto routing | Cloud v1 | Documented | Provider routing | Preserve caller choice | No fixed-model claim | Unverified | Outside acceptance model |
-| Agent/Plan modes | Cloud v1 | Documented | Request mode | Explicit supported modes | Saved selection | Unverified | Agent required; Plan decision unsupported |
+| Agent/Plan modes | Cloud v1 | Agent request observed | Always explicit Agent mode | Plan rejected | Agent-only Cloud configuration | Agent observed in C2 | Native Plan decisions unsupported |
 | Reasoning/context params | Cloud v1 | Documented catalog shape | Per-model values | Preserve values | Selected configuration | Unverified | Outside required cells |
-| Exact instructions on create | Cloud v1 | No digest receipt | Prompt content | Bind submitted content | Experimental limit | Unverified | Required under exception |
-| Instructions on continuation | Cloud v1 | No digest receipt | New run prompt | Refresh admitted content | Saved current instructions | Unverified | Required follow-up |
-| Assigned skills | Cloud v1 | Repo skills documented | Remote availability unknown | No inferred delivery | No qualified claim | Unverified | Inspect actual delivery |
-| MCP discovery/execution | Cloud v1 | Documented | HTTP/VM stdio | Planned semantic relay | Authorized tool receipts | Unverified | Required real tool result |
-| MCP refresh/reconnect | Cloud v1 / SDK | Configuration behavior documented | Re-supply on resume | Rebind scoped tools | Current authorization | Unverified | Required; revoke old access |
-| Runtime secrets | Cloud v1 | envVars beta may be ignored and cannot accompany client Agent ID | Auth key and scoped MCP headers only | Reject other selected process variables | Configure hosted secrets in Cursor | Unverified | Required key/header delivery proof; hosted envVars unsupported |
+| Exact instructions on create | Cloud v1 | No digest receipt | Full inline text and submitted digest | Content bound to checkpoint | Experimental limit | Controlled serialization; C2 behavior observed | Native acknowledgment unavailable |
+| Instructions on continuation | Cloud v1 | No digest receipt | Current full revision or fixed per-turn control guidance | Active digest changes fenced | Saved current instructions | Controlled revised/unchanged-turn checks | Required C3 remains unqualified |
+| Assigned skills | Cloud v1 | Bounded text assets inline | Virtual read-only file bundle | No local path/mount assumption | Submitted instruction bundle | Controlled asset checks | Binary assets, scripts by local path and persistent directory unsupported |
+| MCP discovery/execution | Cloud v1 | Authenticated SDK discovery and real tools observed | Scoped HTTPS relay to private Unix bridge | Normal Rust/PRP semantic transport | Authorized Core receipts | C2 passed; real question observed in C3 | Required real tool result |
+| MCP refresh/reconnect | Cloud v1 / SDK | Run-scoped inline configuration | Re-supply on every turn | Fresh expiring tool capability | Current source-run authority | Controlled follow-up/revocation checks | Required live C3 remains unqualified |
+| Runtime secrets | Cloud v1 | Key and scoped callback auth observed live | Bound auth key and scoped MCP headers only | Reject other selected process variables | Hosted shell secrets configured in Cursor | C1/C2 passed; controlled rejection checks | Hosted envVars unsupported |
 | Host callback tools | SDK 1.0.28 Cloud | Source-observed local only | No Cloud callbacks | Use relay | No callback claim | Unverified | Unsupported route |
-| Assistant text/boundaries | Cloud v1 | Documented | SSE | Planned ordered events | Task transcript | Unverified | Required normal task |
+| Assistant text/boundaries | Cloud v1 | Real SSE and durable PRP rows observed | Typed SSE | Ordered canonical events | Task transcript | C2 passed | Required normal task |
 | Thinking visibility | Cloud v1 | Documented event | SSE | Existing visibility policy | Policy-controlled rendering | Unverified | Outside required cells |
-| Tool identity/arguments/results | Cloud v1 | Documented; truncation possible | SSE | Preserve identity/loss markers | Activity and receipts | Unverified | Required; no invented payload |
-| Tool errors/partial deltas | Cloud v1 | Rich updates documented | Schema/version-dependent | Preserve supported fields | Diagnostic events | Unverified | Verify actual shapes |
-| Shell output/background work | Cloud v1 / SDK | Mixed documented/source evidence | Rich stream/status | Preserve active wait | Remain running | Unverified | Required status regression |
+| Tool identity/arguments/results | Cloud v1 | Real tool names, statuses and bounded results observed | SSE with stable call identity | Builtin facade; Core raw-argument policy retained | Activity and semantic receipts | C2 passed; controlled projection checks | Native truncation/redaction is not lossless raw capture |
+| Tool errors/partial deltas | Cloud v1 | Running frames and argument updates observed | Bounded typed projection | Consistent repeated starts accepted | Native activity and error status | Controlled projection/Stop observer checks | No broader lossless-delta promise |
+| Shell output/background work | Cloud v1 / SDK | Native command traffic observed | Active/background status handling | Preserve active wait | Running until terminal proof | Controlled status checks | C4 must observe actual pending command |
 | Native permission approval | Cloud v1 | No API callback | Native tools auto-run | No interception | Explicit limitation | Unverified | Unsupported |
 | Native question | Cloud v1 | No response contract found | No API callback | None | No supported claim | Unverified | Unsupported |
 | Native plan decision | Cloud v1 | No response contract found | No API callback | None | No supported claim | Unverified | Unsupported |
-| Semantic tool authorization | Paperclip native | Existing controller contract | Planned relay | Normal semantic dispatcher | Durable audit/effects | Unverified | Required positive/negative cases |
-| Semantic questions/approval/plans | Paperclip native | Separate existing contracts | Relay feasibility pending | No native equivalence | Existing interaction surfaces | Unverified | Do not infer from MCP discovery |
+| Semantic tool authorization | Paperclip native | Existing controller contract | Run/session/company/agent/epoch-bound relay | Normal semantic dispatcher | Durable audit/effects | C2 accepted effects; controlled negative/expiry checks | No parallel authorization path |
+| Semantic questions/approval/plans | Paperclip native | Separate existing contracts | Normal semantic relay | Structured question delivered | Real browser answer persisted | Question and answer observed in C3 | Complete continuation still unqualified; no native equivalence or broader decision claim |
 | Todos/plans/revisions | Cloud v1 | Rich events not qualified | Provider translation | No invented capability | Existing generic surface only | Unverified | Outside required cells |
-| Active steering/queue | Cloud v1; SDK absent | Documented API | HTTP delivery receipt | Preserve accepted/queued distinction | Current message delivery | Unverified | Outside required cells |
-| Ordinary follow-up | Cloud v1 | Documented | Existing agent/new run | Stable session identity | Same task continuation | Unverified | Required |
+| Active steering/queue | Cloud v1; SDK absent | Provider API documented | Not exposed by this driver | Descriptor explicitly disables both | No active steering/queue promise | Unsupported in this release | Ordinary follow-up is separate |
+| Ordinary follow-up | Cloud v1 | Documented | Existing Agent/new Run | Stable session identity and refreshed callback | Same task continuation | Controlled same-Agent and governed-yield tests | Required C3 awaits live confirmation of the bounded timing repair |
 | Interruption/replacement | Cloud v1 | Cancel/new-run primitives | Provider-owned sequencing | Ownership fence | Stop then continue | Unverified | No implicit simultaneous turn |
-| Load/resume/history | Cloud v1 | Durable agent/runs documented | API identity lookup | Reattach existing work | Persisted IDs | Unverified | Required recovery boundary |
+| Load/resume/history | Cloud v1 | Durable Agent/Run API observed | Exact owned identity lookup | Saved deadline and cursor; durable terminal acknowledgment | Persisted separate Agent/Run IDs | Controlled native crash/recovery checks | Ambiguous follow-up identity remains fenced |
 | Fork/compaction | Cloud v1 | Not qualified | No promised route | None promised | None promised | Unverified | Outside/unknown |
-| SSE replay | Cloud v1 | Documented IDs/retention | Last-Event-ID | Ordered deduplication | No duplicate effects/replies | Unverified | Required disconnect case |
-| Expired replay | Cloud v1 | Documented 410 | Terminal lookup | Reconcile bounded failure | Honest incomplete history | Unverified | Required deterministic case |
+| SSE replay | Cloud v1 | Real event IDs and exact cursor reconnect observed | Last-Event-ID | Ordered source-sequence deduplication | Durable event/effect identity | Controlled checks; partial live C5 transport proof | Full C5 requires normal two-turn settlement |
+| Expired replay | Cloud v1 | Documented 410 | Exact owned terminal lookup | No new paid prompt; bounded reconciliation | Incomplete history remains explicit | Controlled expired-stream check | No live retention-expiry claim |
 | Subagents/children | Cloud v1 | Custom agents documented | Rich identities not qualified | No attachment promise | No invented parent/child UI | Unverified | Outside required cells |
 | File edits/diffs | Cloud v1 | Tools/git documented | Provider stream/git snapshot | Activity only until proven | Independent result check | Unverified | Do not trust agent summary |
 | Images/inbound media | Cloud v1 | Images documented | Prompt attachment | Bound existing input | No broader media claim | Unverified | Outside required cells |
-| Artifacts | Cloud v1 | Documented listing/download | Relative path/signed URL | Planned safe retrieval | Inspectable result | Unverified | Required byte verification |
-| Usage/cache/subagent totals | Cloud v1 / SDK | Documented | Client usage API available | Production facade not wired | Usage/cost unknown | Unverified | Production accounting unsupported |
+| Artifacts | Cloud v1 | Native listing and signed download observed | Exact-host HTTPS and bounded bytes | Verified private staging and relative Core reference | Registered/downloadable result | C6 passed; exact 24 bytes/SHA/MIME | Core containment, symlink and hash guards retained |
+| Usage/cache/subagent totals | Cloud v1 / SDK | Authenticated token response observed diagnostically | Client usage API available | Quantitative production facade not wired | Usage/cost unknown | Production accounting unsupported | Confirmed terminal closure settles explicitly unpriced; receipt/budget controls pass |
 | Settled dollar cost | Current SDK docs | Documented eventual fields | API/schema divergence | Unknown until receipt | No fabricated zero | Unverified | Outside fixed-dollar guarantee |
 | Per-run dollar ceiling | Cloud v1 | No enforcement contract | No admitted native cap | Existing budget gates only | Explicit limitation | Unverified | Unsupported |
 | Idle/heartbeat/retry behavior | Cloud v1 | Partial documentation | Stream/recovery policy | Bounded activity | Quiet idle state | Unverified | No idle polling loop claim |
-| Cancel/terminal status | Cloud v1 | Documented | Cancel + status lookup | Stop settlement | Durable cancellation | Unverified | Required active-work case |
-| Late callbacks/effects | Paperclip native | Existing authority contract | Relay lifecycle | Fence stopped generation | No late task mutation | Unverified | Required negative case |
-| Native process/VM cleanup | Cloud v1 | Hosted lifecycle opaque | Archive/delete available | No host-PID proof | State exact cleanup evidence | Unverified | No physical cleanup claim |
-| Local relay/stream cleanup | New integration | Planned owned resources | Close/expiry | Bounded shutdown | No lingering local work | Unverified | Required |
+| Cancel/terminal status | Cloud v1 | Cancellation and terminal API reads observed | Exact Run cancel plus lookup | Unconfirmed termination stays fenced | Durable cancellation | Cleanup observed; native Stop/recovery controls pass | Required active-work C4 unrun |
+| Late callbacks/effects | Paperclip native | Existing authority contract | Expiry/revocation and current actor authority | Fence stopped generation | Stale mutation rejected | Controlled relay/authority checks | C4 still requires bounded live observation |
+| Native process/VM cleanup | Cloud v1 | Hosted lifecycle opaque | Delete plus independent exact Agent/Run 404 | No host-PID proof | Exact API absence recorded | Observed after retained campaigns | No physical remote VM cleanup claim |
+| Local relay/stream cleanup | New integration | Exact owned process exit observed | Socket close/expiry | Bounded shutdown and receipt acknowledgment | No lingering owned local work | Packaged/native controls and live cleanup | Required C4 still unrun |
 | Config/command discovery | Cloud v1 | Limited API inventory | Provider-specific | No arbitrary CLI promise | Normal configuration | Unverified | Outside required cells |
 
 ## Finite acceptance ledger
@@ -216,28 +224,30 @@ evidence-impact decision before carrying a prior pass forward.
 
 | Gate | Local-first cell | Required independent observation | Candidate/attempts | Verdict | Next action/owner |
 | --- | --- | --- | --- | --- | --- |
-| C1 Setup | Fresh configure; save/reopen/Test/reconnect | Correct saved runtime/model/binding; useful credential failure; real account test; no launch merely on read | Original 2264a82646 lifecycle failure retained; c011eb97cf fresh agent reached ready and dispatched; a1e6d247ba saved UI Test passed again after controller restart with real key/catalog/model and expected warning | Passed | Keep ordinary local restart operational |
-| C2 Task delivery | Ordinary task using real semantic tools | Provider activity; exact submitted content; authorized tool result; durable task finish accepted by controller; independently checked output; cleanup | Campaigns 1–3 failed before Cloud prompt; campaign 4 reached hosted work and 16 Core calls but internal REST used the callback origin and the six-minute deadline cancelled it; campaign 5 runs on repaired candidate 8e4c587102 | Failed; retry active | Check independent task/artifact acceptance; retain all original grades |
-| C3 Continuation | Follow-up on existing task/session | Same Cloud agent, distinct Cloud run; current instructions/tool grants; visible reply and durable result without duplicate work | Not frozen; none | Unattempted | Lead: verify resume identity |
+| C1 Setup | Fresh configure; save/reopen/Test/reconnect | Correct saved runtime/model/binding; useful credential failure; real account test; no launch merely on read | Original lifecycle failure retained; fresh readiness/dispatch proved by the passing Sonnet-2 cell; saved instance restarted on `abb79acfb016`, Sonnet/key binding survived reload and Test, and ordinary Finish setup reached Your agent is ready; independent API read confirms native Runner/Cloud/Sonnet/secret_ref and lifecycle ready | Passed | Keep the scoped callback listener operational for the local trial |
+| C2 Task delivery | Ordinary task using real semantic tools | Provider activity; exact submitted content; authorized tool result; durable task finish accepted by controller; independently checked output; cleanup | `cursor-cloud-local-20261028-artifact-sonnet-2`, source `b18b743cd45d`, explicit `claude-sonnet-4-5`, all 8 matchers passed; result SHA-256 `eea3414ff54c7de99f4fc533cd4d88d415bc501dc56e95aa73a8c8f7fe09f270`; original failed campaigns retained below | Passed on recorded candidate | Assess pending recovery changes before carrying this pass forward |
+| C3 Continuation | Follow-up on existing task/session | Same Cloud agent, distinct Cloud run; current instructions/tool grants; visible reply and durable result without duplicate work | Four retained failed attempts. Sonnet-3 exposed accounting collection; its repair passed real receipt/budget controls. Sonnet-4 on `de3c7d6b6c27` applied the question, then failed to commit the exact confirmed Cloud terminal. The real governed stack reproduced the timing mismatch and passed after repair | Failed; timing repair verified locally | Rebuild, freeze and run a fresh bounded continuation/replay campaign |
 | C4 Stop | Stop while provider work is actually pending | Cancel exact run; observe provider terminal state; close local resources; later relay calls/replays cannot mutate task; bounded observation recorded | Not frozen; none | Unattempted | Lead: live Stop plus deterministic race proof |
-| C5 Replay | Disconnect/reconnect and retention expiry | Resume cursor; stable order; no duplicate effect/reply; expired stream reconciles through known run without a new paid prompt | Not frozen; none | Unattempted | Lead/client owner: deterministic then live disconnect |
-| C6 Artifact | Download provider-produced result | Listed relative artifact; safe retrieval; independently verified bytes; usable Paperclip result access after settlement; cleanup recorded | Not frozen; none | Unattempted | Lead: ordinary user result path |
+| C5 Replay | Disconnect/reconnect and retention expiry | Resume cursor; stable order; no duplicate effect/reply; expired stream reconciles through known run without a new paid prompt | Same failed C3 campaign exercised one native cut and matching Last-Event-ID reconnect with HTTP 200/SSE; 180 durable rows ordered and 140 PRP source tuples unique; no second turn or successful semantic settlement | Partial transport proof; unqualified | Require normal two-turn completion on the repaired candidate |
+| C6 Artifact | Download provider-produced result | Listed relative artifact; safe retrieval; independently verified bytes; usable Paperclip result access after settlement; cleanup recorded | Same Sonnet-2 result as C2; one registered/downloaded artifact, exact 24-byte fixture and MIME verified; SHA-256 `475af2a29ebe3347d92d24efaa58ee6e50a96c1e25297a4410ea12407aa5c1d9`; exact owned Agent and Run each returned 404 after cleanup | Passed on recorded candidate | Keep the original artifact bytes/receipt and repeat if the output path changes |
 
-Current total: **1 passed, 1 failed, 4 unattempted, 0 setup-blocked of 6 required**.
+Current total: **3 passed on recorded candidates, 2 unqualified, 1 unattempted
+of 6 required**.
 A user-approved 30-day key now authenticates to the real Cloud model catalog and
-is bound privately in the paused local fixture. The user approved the callback
+is bound privately in the ready local trial. The user approved the callback
 tunnel and access to the new private README-only fixture repository. Both are
 configured, and a fresh authenticated repository preflight confirms access.
 The saved product Test passed after reopening across a controller restart. An
 initial Test failure was traced to test-drive intentionally discarding ambient
 PAPERCLIP_* routing variables; saving auth.publicBaseUrl in its isolated instance
 configuration supplied the callback origin. This was setup repair, with no
-production-code change or provider prompt. Task delivery has three retained
-pre-prompt failures and one failed hosted attempt. Its exact owned Agent and Run
-were independently absent (HTTP 404) after cancellation/deletion; the original
-cleanup-uncertainty grade remains retained. Campaign 5 is active with exact owned
-identity persisted privately for recovery. The other four downstream gates remain
-unattempted. Hosted billing is unknown; no zero-cost claim is made.
+production-code change or provider prompt. Task delivery retains its earlier
+pre-prompt and hosted failures alongside the passing Sonnet artifact attempt.
+Four continuation attempts remain failed. Their exact owned Agent and Run
+were independently absent (HTTP 404) after cleanup or later reconciliation.
+The fourth attempt retains its original cleanup-failure grade. No paid work is active.
+The original cleanup-uncertainty grades remain retained. Hosted billing is
+unknown; no zero-cost claim is made.
 No source, simulation, protocol test, or screenshot qualifies a live cell.
 
 Required supporting verification, reported separately from those six cells:
@@ -267,11 +277,11 @@ Required supporting verification, reported separately from those six cells:
 | API client | Implemented by client owner; supporting controlled wire proof reported separately | Client owner | Preserve exact pinned contract and run live acceptance |
 | Native driver/semantic relay | Driver-owned controlled suite: 26/26 passed 2026-10-28; runner TypeScript check passed; no live-provider claim | Lead | Integrate full checks and execute the six live cells |
 | Credentials/model/budget | Real key privately bound; catalog/repository access and hosted execution observed; scoped tunnel approved; cost unknown | Lead | Preserve explicit model and owned cleanup for each paid attempt |
-| Candidate/evidence | Three pre-prompt failures and four hosted artifact attempts retained; draft Core PR open; no merge or publication | Lead | Repair the observed stage-to-Core boundary, then repeat the ordinary artifact cell |
+| Candidate/evidence | Earlier failures, passing Sonnet task/artifact and four failed continuation attempts retained; Core `9313c3eb7562` checks/review green; timing repair `9c54295c5060` requires fresh gates; both draft PRs open; no merge or publication | Lead | Rebuild timing repair, then qualify continuation/replay and active Stop |
 
 The saved product Test and reconnect succeeded with real account/catalog access.
-The next gate remains the ordinary artifact cell after the observed handoff
-repair. Each paid task must be small, have a known output,
+The next gate is the rebuilt timing repair, then continuation/replay and active Stop.
+Each paid task must be small, have a known output,
 retain run/evidence identity, and have cleanup already wired. Diagnose the first
 divergence before another paid attempt. Record active jobs and cleanup obligations
 here before interruption; there are no active provider jobs recorded by the
@@ -302,6 +312,263 @@ an Agent's unrelated latest Run. This limitation needs explicit live evidence or
 an improved provider identity contract before stronger recovery claims.
 
 ## Local milestone evidence — 2026-10-28
+
+Entries below retain earlier state and pending decisions at each milestone.
+The current release decision is the finite acceptance ledger above.
+
+The controlled reproduction separated transport delivery from the governed-wait
+deadline. Actual Rust/private Node proxy cases delivered the applied question
+response and canonical interrupted terminal with both immediate and 18-second
+cancellation, without a Stop command. The same real backend under
+`executeNativeSession` passed immediate cancellation but failed the 18-second
+case at `governed_wait_provider_terminal_unproven`. Cloud permits 20 seconds
+for cancellation; the generic governed drain allowed 15 seconds.
+
+Core repair `9c54295c5060` adds a trusted, optional terminal-drain bound to the
+existing cancellation result. The Cloud backend supplies 30 seconds from its
+20-second cancellation budget plus handoff margin. Other providers retain the
+15-second default. The runtime validates the bound, preserves the existing
+operation cap and consumption-owner abort, and still requires the matching
+canonical terminal. The same real governed case now passes at both delays.
+Fourteen negative, default, operation-cap and recovery controls, 326 affected
+unit cases and eight bundle/Grok checks passed. Missing, foreign and explicitly
+unconfirmed terminal evidence still fails. No accounting or budget fence changed.
+Copilot advances to immutable v73 because shared identity inputs changed; v72
+bytes and decoding are preserved. Grok v8 bytes are unchanged. This asserts no
+new Copilot or Grok live qualification. Fresh Core review and CI are required.
+
+Old Product head `3115d0bf2c` also failed its Copilot v71 source attestation and
+the two already-repaired Cloud launch fixtures. One browser test copied whole
+page text instead of YAML. Its unchanged isolated case passed, then its complete
+six-case browser file passed on the aligned Product source. The original CI
+failure remains retained and its cause is unclassified; new-head CI is still
+required. No speculative UI or browser-test edit was made.
+
+The fourth continuation campaign used clean source `de3c7d6b6c27`, with the
+same explicit Sonnet selection, omitted parameters, fixture repository/ref,
+allow-unpriced opt-in, deadlines and zero automatic retries. Full build passed
+and its build stamp matched the source. All source and test files matched
+Product `cacb45fd5bfd`; only this qualification document differed. The Runner
+package source and exact CJS/daemon bytes were unchanged from the previous
+packaged proof.
+
+The exact question tool was applied. An interrupt command was issued, followed
+by a Stop command issued about 15 seconds later. Those command timestamps do
+not establish completion times or a fast interrupt acknowledgment. The exact
+native stop receipt records `providerExitConfirmed: true`, `remoteStopped: true`
+and status `FINISHED`.
+The matching Node checkpoint retained its interrupted terminal-delivery batch.
+No canonical turn terminal reached Core before the governed-wait drain failed.
+The checkpoint's later last-write time is not asserted to be terminal creation
+time. The 15-second drain and 20-second Cloud cancellation bounds require a
+controlled composition check; the live timing alone does not prove its cause.
+This is a candidate terminal-handoff divergence; it is not evidence of a
+provider provisioning failure. No eligible replay frame was cut, no answer or
+second run completed, and C4 remained on hold. Missing canonical evidence
+correctly leaves accounting pending; do not weaken that boundary.
+
+The ordinary result remains FAIL/cleanup_failure, SHA-256
+`2965928841f50408cc07eb705c9a785680acf2a106735a37ab9a9f1a4f3536f7`.
+Its original cleanup could not confirm deletion. Later independent exact owned
+Agent/Run lookups both returned 404. That reconciliation does not replace the
+original grade. The wrapper restored the exact original CJS and released the
+callback port and source/dist freeze. No further paid work is active.
+
+Before that attempt, the accounting repair passed ten focused tests, including
+nine scenarios through the actual PostgreSQL receipt, ledger and budget path.
+Matching completed and interrupted terminals settle as complete and explicitly
+unpriced, with no fabricated counters or zero dollar cost. Allow-unpriced
+permits the next reservation only after ledger settlement; block still blocks.
+Missing, foreign and explicitly unconfirmed terminals, capture failures and
+replaced recorders retain pending debt. Saved canonical evidence also restores
+collection closure on recovery. Generic receipt, ledger and budget code is
+unchanged. Full recursive typecheck passed at Product `cacb45fd5bfd`.
+
+The third continuation campaign on `69edecfd84ae` saved and independently
+verified explicit allow-unpriced policies before dispatch. It discovered the
+correct MCP server, created the exact structured question and received the
+browser answer. The committed matching `turn.interrupted` carried
+`error: null` and `status: interrupted`; native cancellation was confirmed and
+the exact owned Node process had exited. Nevertheless, Core emitted incomplete
+Cursor accounting because numeric usage was absent. The run remained pending
+with no accounting receipt, and the normal budget gate paused the company.
+The original ordinary result is FAIL/candidate_failure, SHA-256
+`0326c611f99557fbcd0fb6dcda6bacdbcda6f4fe8079189abef2f0cd748d9596`.
+Cleanup passed; independent final Agent/Run reads returned 404, the exact
+shipping CJS was restored and the callback port was released. One real cut and
+cursor reconnect occurred, but no second run completed, so C3/C5 remain
+unqualified and C4 is unattempted.
+
+This is an accounting-producer defect. A confirmed matching committed terminal
+must close collection as explicitly unpriced when Cursor supplies no numeric
+usage. Missing or mismatched terminals, explicitly unconfirmed provider
+termination and capture failures must remain pending. Receipt, ledger and
+budget enforcement retain their existing contracts. Prove these boundaries
+through the actual accounting path before another paid campaign; do not mutate
+the failed measured company to bypass its pending incident.
+
+The second continuation campaign on `9683ba4678ee` found the run-bound catalog,
+created the required structured question and received the real browser answer.
+Its next run could not enqueue because the fixture company and agent policies
+blocked unpriced usage. A budget incident paused the company after the first
+unknown-cost turn; retrying the response could not bypass that policy. The
+original result remains FAIL/candidate_failure, SHA-256
+`1dfdd92bef4e69dd09bfde0eb7294f219d5a8bfd8e9803b4e747c2e33791aa93`.
+Cleanup passed and exact owned Agent/Run each returned 404. The original CJS was
+restored. C5 again exercised a real cut/reconnect, but no second turn completed.
+
+This is a qualification-policy mismatch, not a reason to change production
+budget enforcement. The bounded fixtures now require explicit
+`PAPERCLIP_CURSOR_CLOUD_ALLOW_UNPRICED_QUALIFICATION=1`, upsert only their owned
+company and agent monthly billed-cent policies, and verify both saved policies
+before dispatch. Each remains active with a 1,000-cent known-cost hard stop;
+unknown pricing is explicitly allowed under the user's test-spending approval.
+It is not a provider dollar cap. Cost reporting remains unknown. Missing opt-in,
+failed readback and changed guards block setup. The red controls, 71 passing
+fixture/registration cases, 19 strengthened budget controls and full E2E
+typecheck are retained. No production default changed. The separate saved local
+trial received the same explicit policy through the public API and verified
+readback; its actual vendor cost remains unknown.
+
+Only fixture policy/evidence changed after `9683ba4678ee`; the model prompt,
+provider CJS and native daemon are unchanged. Retain all prior grades at their
+original definition hashes and run a fresh company/Agent campaign. Do not
+unpause the failed measured company or relabel its result.
+
+The first live continuation/replay campaign failed its required question on
+`62fb0252e931`. Cursor queried unrelated inherited account MCP namespaces, both
+requiring authentication, and never selected the injected `paperclip` server.
+It then ended with objective unsatisfied and no structured question. The
+ordinary fixture retained its failed grade and cleanup passed; exact Agent/Run
+reads returned 404. No second run or Stop attempt occurred. One real SSE cut
+reconnected to the same owned run using the exact cursor, with ordered unique
+retained events, but this does not pass the complete C3/C5 contract. Original
+CJS bytes were restored after finalization.
+
+Code and retained C2 traffic identify a product guidance gap. The request names
+the injected server, but model-facing instructions did not identify it. C2
+found it by a broad tool search; C3 selected similarly named account servers.
+Neither unrelated name comes from the repository, and the current semantic
+question tool remains available. [Cursor's SDK documentation](https://cursor.com/docs/sdk/typescript)
+confirms that Cloud also loads account/team MCP servers; local setting-source
+filters do not apply. The repair now binds one provider server-name constant,
+directs discovery to that server on every turn, distinguishes semantic questions
+from native callbacks, and explains controller-managed authentication without
+VM REST credentials. Two serialized-request regressions first failed; all 46
+Cloud cases then passed. This is a supported correction hypothesis, not a claim
+that model causality has been proved. Keep the outcome oracle unchanged and use
+a fresh campaign because active checkpoints reject instruction-digest changes.
+
+Core CI also exposed a real Copilot source-attestation mismatch after shared
+bridge/contract changes. The immutable identity advanced to v72 while preserving
+the original v71 bytes and decoder. Eighty-six identity/compatibility controls
+passed. This refresh does not assert a new Copilot live qualification. The final
+Core source has a green full build, 436 selected TypeScript cases, 33 native
+backend integrations and eight bundle/profile checks; fresh remote gates for
+that source remain pending. Earlier Copilot CI and local failures stay retained.
+
+A further recovery race was reproduced during review: the native run could
+finish between two startup reads, causing Rust to reject the valid terminal
+batch against an older active-turn cache. The repair validates active state and
+terminal delivery from one snapshot and updates the cache only after validation.
+The proxy likewise returns one captured state view after the queued checkpoint
+commit. Both native and proxy red controls reproduced the mismatch; all 33
+native integrations and 46 Cloud/facade cases then passed. A paused-write test
+also proves thread/read cannot return the random terminal receipt before it is
+durable: the response stays blocked while disk remains running, then returns
+the exact receipt found in the committed checkpoint. Preserve these controls
+and the earlier review grades; a new review is still required for this repair.
+
+The saved local test-drive was restarted on `abb79acfb016` and returned healthy.
+The ordinary UI retained the explicit Sonnet model and organization-secret
+reference, passed the account/catalog Test with its expected experimental
+warning, and completed Finish setup. Independent API state confirms
+`paperclip_runner`, provider `cursor_cloud`, model `claude-sonnet-4-5`,
+`secret_ref`, lifecycle `ready` and idle status. Setup sent no provider prompt.
+The callback-only tunnel again returned 404 for root/API and 401 for an
+unauthenticated native-run request. This validates C1's saved setup on the
+repaired application; the later Stop receipt repair changes no setup behavior.
+
+Final inspection found one related Stop receipt gap: shutdown could close Node
+before Rust consumed its retained terminal batch, blocking a later same-Agent
+turn. Retained Node/Rust red controls reproduced it. The repair retains the
+batch through the shutdown receipt, persists and acknowledges it before process
+exit, avoids double settlement, and retries a matching receipt on attachment.
+All 33 native backend integrations and 46 controlled Cloud/proxy/facade cases
+passed, as did Node typecheck and unchanged Grok v8 identity. The complete
+repaired candidate must be rebuilt before the remaining live cells.
+
+Both recovery findings now have retained red/green controls. Recovery arms the
+saved absolute deadline before any read, retries only transient read failures
+under that obligation, and aborts pending reads during Stop. Terminal delivery
+is persisted privately before publication. Rust imports and deduplicates that
+delivery into its durable outbox, saves the receipt, then acknowledges the Node
+checkpoint. New work cannot supersede unacknowledged terminal delivery. The
+actual Rust regression reproduced the lost-turn failure and then passed crash
+before final delivery and partial final delivery with lost acknowledgment. All
+32 native backend integrations and 362 selected TypeScript cases passed. Node
+typecheck and the existing Grok v8 immutable identity passed; no Grok identity
+refresh or new Grok live qualification is asserted.
+
+The selected CI launch fixture now builds a private proxy, because that lane
+does not contain a shared dist bundle. Its missing-dist failure and two passing
+real-facade controls are retained. The product test roots also preserve short
+Darwin socket paths while using the platform temporary directory elsewhere.
+Stop qualification now observes the exact native delayed command, joins its
+identity to an unfinished Core execution, and checks again immediately before
+UI Stop. Retained native traffic showed argument-free running frames followed
+by running argument updates for the same call. The observer accepts consistent
+updates and rejects completion, changed ownership, stream loss and expiry.
+Its original failures and 73 passing focused controls remain recorded.
+
+Evidence impact: the recovery repair changes terminal settlement and the Rust
+artifact identity. Rebuild and qualify final settlement through the remaining
+two-turn continuation cell. It does not change provider artifact discovery,
+download, staging, Core file verification or registration, so retain C6's exact
+Sonnet-2 artifact evidence. C2 keeps its original candidate identity; do not
+relabel that result as a new run. The Stop prompt and observer changed, so only
+the new fixture can establish C4. No live replay or Stop pass exists yet.
+
+`cursor-cloud-local-20261028-artifact-sonnet-2` passed on source `b18b743cd45d`.
+The same explicit Sonnet model, omitted parameters, repository/ref, fixture and
+deadlines were used after the path repair. All eight ordinary matchers passed:
+continuity, exact final marker, task done, run succeeded, native/local execution,
+exact registered artifact bytes and MIME, and cleanup. Independent saved state
+contains one accepted result with objective satisfied and one registered,
+downloadable 24-byte artifact. Its SHA-256 is
+`475af2a29ebe3347d92d24efaa58ee6e50a96c1e25297a4410ea12407aa5c1d9`.
+The exact owned Cloud Agent and Run each returned 404 after cleanup. The
+canonical result SHA-256 is
+`eea3414ff54c7de99f4fc533cd4d88d415bc501dc56e95aa73a8c8f7fe09f270`.
+This passes C2/C6 for this candidate; vendor cost remains unknown.
+
+The production stager now returns a path relative to the admitted artifact root
+for both fresh and repeated staging. The provider's 33 focused controls passed.
+The product regression first reproduced the exact rejection through the actual
+Core file reader, then passed normal/repeated handoff and post-staging hash
+tamper rejection. A static test import initially failed the server TypeScript
+root boundary and emitted eight unwanted source-side files. Only those
+untracked emitted files were removed; the established dynamic test import fixed
+the compile boundary. Full builds then passed in both the serving checkout and
+the independent Product PR checkout. The latter also passed full workspace
+typecheck, 1,085 focused tests across 18 files, 46 E2E support tests, token gates
+and map gates. These do not replace the unresolved full test gate.
+
+The repaired CJS proxy is
+`dbb219296765add55e7568c4494885f64b9ca5cd7a09128247929995a5e20aa6`.
+Its 1,696-entry private tarball (14,012,533 bytes) has SHA-256
+`b25e463011ab6cab7c2b2d9dd53c1b91422025441ab68a66ed0a03880731e551`.
+The controlled extracted-package protocol and shutdown proof passed. A first
+parity check used the wrong working directory, changing esbuild's source labels;
+the unchanged check from the canonical package build directory matched both
+shipped bundles exactly. No runtime bytes changed during the live attempt.
+
+Core review at this stage scored 3/5 and identified two recovery defects:
+terminal checkpoint persistence can precede durable delivery of terminal events,
+and recovery reads can fail before the saved absolute deadline is armed. The
+Core owner is repairing both with regressions. Continuation/replay and Stop are
+held until the repaired candidate is built and its evidence impact is recorded.
+Diagnose any new divergence before another paid attempt.
 
 Campaign 5 (`8e4c587102`, explicit `gpt-5.4-mini`) created the exact expected
 24-byte file, but native artifact download metadata was rejected before Core

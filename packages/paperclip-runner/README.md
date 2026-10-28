@@ -244,6 +244,10 @@ experimental. Cursor manages its own shell permissions; native permission,
 question and plan callbacks and fixed per-run dollar limits are unavailable.
 Production usage and dollar cost remain unknown; the Cloud usage API is not yet
 projected through the Runner facade.
+Budget policies can block further work after an unpriced run. If you accept
+unknown charges, clear **Block new work when usage has no reliable price** in
+both company and agent policies under **Costs → Budgets → Advanced settings**.
+Known-cost hard stops remain active, but cannot cap charges Cursor does not report.
 Paperclip semantic tools use their existing authorization. Stop cancels the exact
 Cloud run and requires a terminal provider receipt. Unknown cancellation remains
 unconfirmed. Recovery reuses the saved Agent/Run and stream cursor, keeps the
