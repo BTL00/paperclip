@@ -7,6 +7,17 @@ import { checks, entity, hasLink, observation, observeInternal, project, putDocu
 interface DesignObservation extends InternalObservation {
   approvedRevision?: Entity; approvalComments: Entity[]; olderApprovalComments: Entity[]; privateReadStatus: number; agentSearchStatus: number; agentSearchResults: unknown[];
 }
+function describesUnapprovedCurrentDraft(reply: string, target: Entity) {
+  return reply.split(/[.\n;]/).some(part => {
+    const taskReferences = part.match(/\b[A-Z][A-Z0-9]*-\d+\b/g) ?? [];
+    if (taskReferences.length && (!target.identifier || taskReferences.some(id => id !== target.identifier))) return false;
+    const versions = [...part.matchAll(/\b(?:revision|version)\s*(\d+)\b|\bv(\d+)\b/gi)].map(match => Number(match[1] ?? match[2]));
+    if (versions.some(version => version !== 2)) return false;
+    return /\b(?:newer|later|latest|current|revision\s*2|version\s*2|v2|violet\s+navigation)\b/i.test(part)
+      && /\b(?:unapproved|not approved|not yet approved|pending review)\b/i.test(part)
+      && !/\b(?:not|never|no longer|isn't)\s+(?:an?\s+)?(?:unapproved|pending review)\b/i.test(part);
+  });
+}
 export function gradeDesignSearch(value: unknown) {
   const c = checks(); const o = observation(value) as DesignObservation | undefined;
   c.add("independent-design-history", !!o && Array.isArray(o.approvalComments) && Array.isArray(o.agentSearchResults), "Saved design revision, human approval and actual acting-agent search evidence are required.");
@@ -23,7 +34,7 @@ export function gradeDesignSearch(value: unknown) {
     && o.reply.split(/[.\n]/).some(sentence => /\b(?:approved|signed[ -]off)\b/i.test(sentence)
       && /\b(?:revision\s*1|version\s*1|v1|amber\s+navigation)/i.test(sentence)
       && !/\b(?:not|never|no longer)\s+(?:yet\s+)?(?:approved|signed[ -]off)\b|\bunapproved\b/i.test(sentence))
-    && /\b(?:newer|later|latest|current)\b[^.\n]*(?:unapproved|not approved|not yet approved|pending review)|\b(?:unapproved|not approved|not yet approved|pending review)\b[^.\n]*(?:newer|later|latest|current)/i.test(o.reply)
+    && describesUnapprovedCurrentDraft(o.reply, target)
     && !/\b(?:violet\s+navigation|revision\s*2|version\s*2|v2)\b[^.\n]*(?:is|was|has been)\s+(?:the\s+)?(?:latest\s+)?approved/i.test(o.reply),
     "The answer links the actual approved design and explains that the later revision is still a draft.");
   c.add("read-only-design-search", !!originals && originals.every(row => sameTask(row, o.tasks.find(now => now.id === row.id)))
