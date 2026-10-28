@@ -16,6 +16,54 @@ export interface ChatCatalogContext {
   /** Available only to the two allowlisted native Slack ingress cases. */
   selectSlackSource?(issueId: string): Promise<void>;
 }
+
+/** These exact selected OpenCode/local journeys use the original flow clock for
+ * native observation phases. Other cases/lanes keep their authored phase caps. */
+const originalClockExecutionIds = new Set([
+  "chat-features.runner-opencode.local.cli-operations.feedback-bundle",
+  "chat-features.runner-opencode.local.cli-operations.inspect-run-cli",
+  "chat-features.runner-opencode.local.cli-operations.owned-dev-instance",
+  "chat-features.runner-opencode.local.developer-labs.component-reference",
+  "chat-features.runner-opencode.local.developer-labs.gated-lab",
+  "chat-features.runner-opencode.local.developer-labs.interaction-fixture",
+  "chat-features.runner-opencode.local.recovery.browser-reconnect",
+  "chat-features.runner-opencode.local.recovery.controller-restart",
+  "chat-features.runner-opencode.local.recovery.explain-stall",
+  "chat-features.runner-opencode.local.recovery.retry-exhausted",
+  "chat-features.runner-opencode.local.recovery.source-action",
+  "chat-features.runner-opencode.local.routines.pause-owned",
+  "chat-features.runner-opencode.local.routines.run-now",
+  "chat-features.runner-opencode.local.steering.queue-follow-up",
+  "chat-features.runner-opencode.local.steering.stop-versus-pause",
+  "chat-features.runner-opencode.local.task-coordination.delegate-with-context",
+  "chat-features.runner-opencode.local.task-coordination.independent-review",
+  "chat-features.runner-opencode.local.task-coordination.pause-tree",
+  "chat-features.runner-opencode.local.tasks.edit-properties",
+  "chat-features.runner-opencode.local.steering.edit-queued-message",
+  "chat-features.runner-opencode.local.steering.discard-queued-message",
+]);
+function usesOriginalNativePhaseClock(ctx: ChatCatalogContext): boolean {
+  return originalClockExecutionIds.has(ctx.input?.execution?.id);
+}
+export function chatCatalogNativePhaseDeadline(ctx: ChatCatalogContext, legacyDeadlineAt: number): number {
+  if (!usesOriginalNativePhaseClock(ctx)) return legacyDeadlineAt;
+  const deadline = ctx.observationDeadlineAt, now = Date.now();
+  if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original native observation budget exhausted or missing");
+  return deadline!;
+}
+/** Recheck the same clock before each declared human send operation. */
+export function chatCatalogNativePhaseRemainingBudget(ctx: ChatCatalogContext): (() => number) | undefined {
+  if (!usesOriginalNativePhaseClock(ctx)) return undefined;
+  return () => {
+    const now = Date.now(), deadline = ctx.observationDeadlineAt;
+    if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original native observation budget exhausted or missing");
+    return deadline! - now;
+  };
+}
+export function chatCatalogNativePhaseIsTimely(ctx: ChatCatalogContext): boolean {
+  return !usesOriginalNativePhaseClock(ctx) || Number.isFinite(ctx.observationDeadlineAt) && Date.now() < ctx.observationDeadlineAt!;
+}
+
 export type ChatCatalogTerminalRunStatus = "succeeded" | "cancelled" | "failed" | "timed_out";
 export type ChatCatalogRunPolicy =
   | { kind: "terminal-counts"; terminalStatusCounts: Partial<Record<ChatCatalogTerminalRunStatus, number>> }

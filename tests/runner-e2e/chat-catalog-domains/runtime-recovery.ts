@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -9,9 +10,9 @@ import { runtimeDefinition, runtimeObservation, observeRuntime } from "./runtime
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 type Artifact = Awaited<ReturnType<typeof readRegisteredArtifacts>>[number];
 async function settled(ctx: ChatCatalogContext, count: number) {
-  return pollUntil({ label: `Controller continuity phase ${count}`, deadlineAt: Date.now() + 180_000,
+  return pollUntil({ label: `Controller continuity phase ${count}`, deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
     load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: ({ issue, runs }) => issue?.conversationState === "waiting" && runs.length === count && runs.every(run => run.status === "succeeded"),
+    accept: ({ issue, runs }) => chatCatalogNativePhaseIsTimely(ctx) && (issue?.conversationState === "waiting" && runs.length === count && runs.every(run => run.status === "succeeded")),
     reject: ({ runs }) => runs.some(run => ["failed", "cancelled", "timed_out"].includes(run.status)) ? "A continuity provider turn failed" : undefined });
 }
 export async function currentControllerFile(ctx: ChatCatalogContext, name: string) {
@@ -54,7 +55,7 @@ export const runtimeRecoveryCases = [runtimeDefinition("recovery.controller-rest
   if (ctx.input.execution.environment.id !== "local") throw new Error("Owned-file controller continuity fixture requires the actual local runtime");
   const headerMarker = `Retained Acorn header ${ctx.input.nonce}`; const filename = `website-${ctx.input.nonce}.html`;
   await sendChatMessage(ctx.input.page,
-    `Start a small website draft in ${filename} in your current working directory, with a single header containing exactly ${JSON.stringify(headerMarker)}. Register that real file as a downloadable artifact work product titled ${filename}. This is a draft: do not add the contact section yet. Remember this instruction for when I ask to continue: keep the existing header and file, then add a contact section containing hello@acorn.example and register the final file as a new artifact from that continuation. Do this within our current conversation; no project, delegated task or external action is needed.`);
+    `Start a small website draft in ${filename} in your current working directory, with a single header containing exactly ${JSON.stringify(headerMarker)}. Register that real file as a downloadable artifact work product titled ${filename}. This is a draft: do not add the contact section yet. Remember this instruction for when I ask to continue: keep the existing header and file, then add a contact section containing hello@acorn.example and register the final file as a new artifact from that continuation. Do this within our current conversation; no project, delegated task or external action is needed.`, chatCatalogNativePhaseRemainingBudget(ctx));
   const first = await settled(ctx, 1); const source = ctx.issue()!;
   const [initialArtifact] = await readRegisteredArtifacts(ctx.input.api, source.id, first.runs[0]!.id, [filename]);
   const fileBeforeRestart = await currentControllerFile(ctx, filename);

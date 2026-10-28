@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { IssueTreeHold } from "../../../packages/shared/src/types/issue-tree-control.js";
 import { pollUntil } from "../api.js";
@@ -65,9 +66,9 @@ export const runtimeTreeCases = ["task-coordination.pause-tree", "steering.stop-
       "The independent manual leaf pause and effective budget hold are genuine saved prerequisites."); return c.result();
   },
   async act(ctx, state) {
-    await pollUntil({ label: "Actual canonical tree-pause guidance before the human acts", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Actual canonical tree-pause guidance before the human acts", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 3 && v.runs.filter(row => row.agentId === ctx.input.fixtures.agent.id).every(row => row.status === "succeeded") });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 3 && v.runs.filter(row => row.agentId === ctx.input.fixtures.agent.id).every(row => row.status === "succeeded")) });
     const before = await observeRuntime(ctx, state); state.queryReply = before.reply;
     state.bothActuallyRunning = [state.workerRunId, (state.second as State).workerRunId].every(id => before.runs.some(row => row.id === id && row.status === "running"));
     const root = `/api/issues/${(state.parent as Entity).id}`, source = ctx.input.page.url();

@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
 import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
@@ -137,7 +138,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
       if (implementation.scenarioId === "chat-channels.channel-file") await completeNativeSlackFileConditional(context, implementation, state, deadlineAt);
     } else {
       await prepareNativeStopCanonicalBoundary(context, implementation, state, renderedQuery, setupBoundary);
-      await sendChatMessage(input.page, renderedQuery);
+      await sendChatMessage(input.page, renderedQuery, chatCatalogNativePhaseRemainingBudget(context));
     }
     if (implementation.queryOutcome === "rejected") {
       const rejection = validateChatCatalogGrade(await implementation.verifyQueryRejection!(context, state));
@@ -149,6 +150,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     let passedAt: number | undefined;
     await pollUntil({ label: scenario.id, deadlineAt, intervalMs: 1_000, load: refresh,
       accept: result => {
+        if (!chatCatalogNativePhaseIsTimely(context)) return false;
         if (!result.grade.passed) { passedAt = undefined; return false; }
         passedAt ??= Date.now();
         return Date.now() - passedAt >= 5_000;
@@ -163,6 +165,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
           ? `Settled scenario failed: ${result.grade.checks.filter(check => !check.passed).map(check => check.id).join(", ")}` : undefined;
       }, timeoutDetail: result => result?.grade.checks.filter(check => !check.passed).map(check => check.id).join(", "),
     });
+    expect(chatCatalogNativePhaseIsTimely(context), "Original selected native observation budget before final proof").toBe(true);
     const originalIssueId = context.issue()?.id;
     await input.page.reload({ waitUntil: "domcontentloaded" });
     if (!slack) await expect(input.page.getByTestId("task-chat-composer-input")).toBeVisible();
@@ -172,6 +175,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     await implementation.verifyResult(context, state, observation);
     for (const check of persisted.grade.checks) input.check?.(check.id, check.passed, check.detail);
     await input.capture("chat-catalog-result", scenario.id, "chat-catalog-result.png");
+    expect(chatCatalogNativePhaseIsTimely(context), "Original selected native observation budget includes complete final proof").toBe(true);
   } catch (error) {
     failed = true;
     throw error;

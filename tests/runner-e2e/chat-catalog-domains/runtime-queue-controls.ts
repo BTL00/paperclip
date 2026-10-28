@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect, type Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import type { IssueQueuedCommentQueue } from "../../../packages/shared/src/types/issue.js";
@@ -73,10 +74,10 @@ export const runtimeQueueControlCases = [runtimeDefinition("steering.edit-queued
   authentication: "human-session", expectedRunCount: 3, attemptTimeoutMs: 720_000,
   setupPolicy: runtimeQueueCases[0]!.setupPolicy, verifySetup: runtimeQueueCases[0]!.verifySetup,
   async act(ctx, state) {
-    await pollUntil({ label: "Canonical editing guidance while the real worker remains active", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Canonical editing guidance while the real worker remains active", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running")
-        && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded") });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running")
+        && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded")) });
     state.queryReply = (await observeRuntime(ctx, state)).reply; const source = ctx.input.page.url();
     const initial = await queue(ctx, state), targetId = String(state.targetId), mutation = `${endpoint(state)}/${targetId}`;
     state.agentEditStatus = await probeAgentPermission(ctx, mutation, "PATCH", { queueId: initial.queueId, revision: initial.revision, body: blueText });

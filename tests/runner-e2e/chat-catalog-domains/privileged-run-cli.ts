@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -55,9 +56,9 @@ const inspect = privilegedDefinition("cli-operations.inspect-run-cli", "privileg
     return { ...operator, ...busy, agentCancelStatus, initialRunReallyRunning: busy.workerWasReallyWaiting };
   },
   async act(ctx, state) {
-    const initial = await pollUntil({ label: "Canonical run-control guidance", deadlineAt: Date.now() + 150_000,
-      load: () => observeInternal(ctx, state), accept: o => !!o.reply && ctx.issue()?.conversationState === "waiting"
-        && o.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded").length === 1 });
+    const initial = await pollUntil({ label: "Canonical run-control guidance", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
+      load: () => observeInternal(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (!!o.reply && ctx.issue()?.conversationState === "waiting"
+        && o.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded").length === 1) });
     const returned = inspectRunCommands(initial.reply, String(state.workerRunId));
     await runOwnedCli(ctx, returned.commands[0]!);
     const read = await ctx.input.api.get<{ id: string; agentId: string; companyId: string; status: string }>(`/api/heartbeat-runs/${state.workerRunId}`);

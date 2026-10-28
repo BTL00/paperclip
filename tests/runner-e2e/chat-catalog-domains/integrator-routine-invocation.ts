@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { createRoutineSchema } from "../../../packages/shared/src/validators/routine.js";
 import type { RoutineDetail, RoutineRunSummary } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -67,8 +68,8 @@ export const integratorRoutineInvocationCases = [integratorDefinition("routines"
   sourceFiles: ["chat-catalog-domains/integrator-routine-invocation.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/routines.yaml"],
   expectedRunCount: 3, expectedHumanMessageCount: 2, attemptTimeoutMs: 720_000,
   async act(ctx, state) {
-    const first = await pollUntil({ label: "routine invocation first actual reply", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-      load: () => observeInvocation(ctx, state), accept: o => o.invocations.length === 1 && o.runs.some(row => row.agentId === o.leadId && row.contextSnapshot?.issueId === ctx.issue()?.id && row.status === "succeeded") && ctx.issue()?.conversationState === "waiting",
+    const first = await pollUntil({ label: "routine invocation first actual reply", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000), intervalMs: 1000,
+      load: () => observeInvocation(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.invocations.length === 1 && o.runs.some(row => row.agentId === o.leadId && row.contextSnapshot?.issueId === ctx.issue()?.id && row.status === "succeeded") && ctx.issue()?.conversationState === "waiting"),
       reject: o => o.invocations.length > 1 ? "Initial request created duplicate routine invocations" : undefined });
     state.firstInvocation = { ...first, state: structuredClone(state) };
     const invocation = first.invocations[0]!;
@@ -85,6 +86,6 @@ export const integratorRoutineInvocationCases = [integratorDefinition("routines"
       load: () => observeInvocation(ctx, state), accept: o => o.invocations.length === 1 && o.invocations[0]?.status === "completed" && o.runs.length === 2 && o.runs.every(run => run.status === "succeeded"),
       reject: o => o.invocations.length > 1 || o.runs.length > 2 ? "Delivery replay admitted unexpected additional work" : undefined });
     const { sendChatMessage } = await import("../chat-flow.js");
-    await sendChatMessage(ctx.input.page, "What was the actual result of that summary run?");
+    await sendChatMessage(ctx.input.page, "What was the actual result of that summary run?", chatCatalogNativePhaseRemainingBudget(ctx));
   },
 })];

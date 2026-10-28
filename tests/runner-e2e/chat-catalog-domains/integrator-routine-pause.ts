@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import type { RoutineDetail, RoutineRunSummary } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
@@ -75,8 +76,8 @@ export const integratorRoutinePauseCases = [integratorDefinition("routines", "ro
     return c.result();
   },
   async act(ctx, state) {
-    const checkpoint = await pollUntil({ label: "actual pause reply while invocation remains running", deadlineAt: Date.now() + 150_000, intervalMs: 1000,
-      load: () => observePause(ctx, state), accept: o => o.runs.length === 3 && o.runs.some(run => run.agentId === o.leadId && run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+    const checkpoint = await pollUntil({ label: "actual pause reply while invocation remains running", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000), intervalMs: 1000,
+      load: () => observePause(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.runs.length === 3 && o.runs.some(run => run.agentId === o.leadId && run.status === "succeeded") && ctx.issue()?.conversationState === "waiting") });
     state.pauseCheckpoint = { ...checkpoint, state: structuredClone(state) };
     await ctx.input.evidence("chat-routine-pause-running-checkpoint.json", state.pauseCheckpoint);
     gates.get(ctx)?.release();

@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { Issue, IssueRecoveryAction } from "../../../packages/shared/src/types/issue.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -72,9 +73,9 @@ function infrastructureCase(id: "recovery.explain-stall" | "recovery.source-acti
       c.add("original-source-action-owner", recovery.active?.sourceIssueId === task.id && recovery.active.ownerType === "board" && recovery.active.recoveryIssueId == null, "The original task exposes the real operator-owned recovery without a separate repair task."); return c.result(); },
     sourceFiles: ["chat-catalog-domains/runtime-infrastructure.ts", "chat-catalog-domains/runtime-native-fault.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "../../server/src/services/hot-restart.ts", "../../server/src/vendor/paperclip-runner/index.ts", "chat-scenarios/recovery.yaml"],
     async act(ctx, state) {
-      await pollUntil({ label: "Canonical source explanation while native infrastructure remains failed", deadlineAt: Date.now() + 150_000,
+      await pollUntil({ label: "Canonical source explanation while native infrastructure remains failed", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
         load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-        accept: v => v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "failed") && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded") });
+        accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "failed") && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded")) });
       state.queryReply = (await observeRuntime(ctx, state)).reply;
       const source = ctx.input.page.url(), task = state.task as Issue;
       await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier ?? task.id}`, { waitUntil: "domcontentloaded" });

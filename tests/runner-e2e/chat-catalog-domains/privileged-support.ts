@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { observeInternal, observation, type Entity, type InternalObservation } from "./internal-support.js";
@@ -16,18 +17,18 @@ export function remainingPrivilegedObservationBudget(ctx: ChatCatalogContext): n
   return deadline! - now;
 }
 export async function settlePrivilegedChat(ctx: ChatCatalogContext, observationDeadlineAt?: number): Promise<InternalObservation> {
-  return pollUntil({ label: "Canonical privileged guidance settled", deadlineAt: observationDeadlineAt ?? Date.now() + 150_000,
+  return pollUntil({ label: "Canonical privileged guidance settled", deadlineAt: chatCatalogNativePhaseDeadline(ctx, observationDeadlineAt ?? Date.now() + 150_000),
     load: () => observeInternal(ctx, {}),
-    accept: o => (observationDeadlineAt === undefined || Date.now() < observationDeadlineAt) && o.runs.length === 1 && o.runs[0]?.status === "succeeded" && !!o.reply && ctx.issue()?.conversationState === "waiting",
+    accept: o => chatCatalogNativePhaseIsTimely(ctx) && ((observationDeadlineAt === undefined || Date.now() < observationDeadlineAt) && o.runs.length === 1 && o.runs[0]?.status === "succeeded" && !!o.reply && ctx.issue()?.conversationState === "waiting"),
     reject: o => o.runs.some(run => ["failed", "timed_out", "cancelled"].includes(run.status)) ? "Canonical guidance run failed" : undefined });
 }
 export const privilegedObservation = observation;
 
 /** Bind a declared factual operator handoff to its actual persisted human message and native reply. */
 export async function companionPhase(ctx: ChatCatalogContext, priorRunIds: string[], message: string) {
-  const final = await pollUntil({ label: "Native reply to the actual operator receipt", deadlineAt: Date.now() + 150_000,
+  const final = await pollUntil({ label: "Native reply to the actual operator receipt", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
     load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: o => o.issue?.conversationState === "waiting" && o.runs.length === priorRunIds.length + 1 && o.runs.every(run => run.status === "succeeded") });
+    accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.issue?.conversationState === "waiting" && o.runs.length === priorRunIds.length + 1 && o.runs.every(run => run.status === "succeeded")) });
   const run = final.runs.find(run => !priorRunIds.includes(run.id) && run.agentId === ctx.input.fixtures.agent.id);
   if (!run) throw new Error("Operator receipt did not produce its own native reply");
   const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`);

@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -83,9 +84,9 @@ const feedback = privilegedDefinition("cli-operations.feedback-bundle", "privile
       sharingPreferenceBefore: sharingBefore.feedbackDataSharingPreference, workerWasReallyWaiting: true, cancelledBeforeCanonical: true, agentReportStatus, ...(await prepareOwnedCli(ctx)) };
   },
   async act(ctx, state) {
-    await pollUntil({ label: "Canonical human-export guidance settled", deadlineAt: Date.now() + 150000,
+    await pollUntil({ label: "Canonical human-export guidance settled", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150000),
       load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: o => o.issue?.conversationState === "waiting" && o.runs.length === 2 && o.runs.filter(r => r.status === "succeeded").length === 1 && o.runs.filter(r => r.status === "cancelled").length === 1 });
+      accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.issue?.conversationState === "waiting" && o.runs.length === 2 && o.runs.filter(r => r.status === "succeeded").length === 1 && o.runs.filter(r => r.status === "cancelled").length === 1) });
     const prior = await ctx.allRuns(); const company = ctx.input.fixtures.company.id, task = state.task as Entity;
     const output = path.join(String(state.operatorDirectory), "feedback-export");
     const result = JSON.parse(await runOwnedCli(ctx, ["feedback", "export", "--company-id", company, "--issue-id", task.id, "--out", output, "--json"])); state.cliExecuted = true;
@@ -129,14 +130,14 @@ const feedback = privilegedDefinition("cli-operations.feedback-bundle", "privile
       remoteSharingEnabled: false, publicAttachmentCreated: false, outcomeKind: "operator interrupted unfinished work; not a model failure or failed-native run" };
     await ctx.input.evidence("chat-catalog-local-feedback-export-receipt.json", receipt);
     const message = `The human operator exported this local review bundle and retained the original interrupted work evidence. These are the observed facts; please report its location and contents without publishing it:\n\n${JSON.stringify(receipt)}`;
-    await sendChatMessage(ctx.input.page, message); state.exportReport = await companionPhaseForCancelled(ctx, prior.map(r => r.id), message);
+    await sendChatMessage(ctx.input.page, message, chatCatalogNativePhaseRemainingBudget(ctx)); state.exportReport = await companionPhaseForCancelled(ctx, prior.map(r => r.id), message);
   }, grade: gradeFeedbackBundle, async verifyResult(ctx) { await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); },
 });
 // companionPhase's default all-succeeded assertion intentionally does not apply to this retained cancelled fixture.
 async function companionPhaseForCancelled(ctx: Parameters<typeof companionPhase>[0], prior: string[], message: string) {
-  const result = await pollUntil({ label: "Native reply to local interrupted-work export receipt", deadlineAt: Date.now() + 150000,
+  const result = await pollUntil({ label: "Native reply to local interrupted-work export receipt", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150000),
     load: async () => { await ctx.refreshIssue(); return { issue: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: o => o.issue?.conversationState === "waiting" && o.runs.length === prior.length + 1 && o.runs.filter(r => r.status === "succeeded").length === 2 && o.runs.filter(r => r.status === "cancelled").length === 1 });
+    accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.issue?.conversationState === "waiting" && o.runs.length === prior.length + 1 && o.runs.filter(r => r.status === "succeeded").length === 2 && o.runs.filter(r => r.status === "cancelled").length === 1) });
   const run = result.runs.find(r => !prior.includes(r.id) && r.agentId === ctx.input.fixtures.agent.id)!;
   const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`), human = comments.filter(c => !c.authorAgentId && c.body === message);
   const replies = comments.filter(c => c.authorAgentId === ctx.input.fixtures.agent.id && c.createdByRunId === run.id);

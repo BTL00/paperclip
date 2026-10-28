@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { pollUntil } from "../api.js";
@@ -42,12 +43,12 @@ export const runtimeQueueCases = [runtimeDefinition("steering.queue-follow-up", 
     return c.result();
   },
   async act(ctx, state) {
-    const phase = await pollUntil({ label: "Canonical follow-up saved while Morgan remains active", deadlineAt: Date.now() + 150_000,
+    const phase = await pollUntil({ label: "Canonical follow-up saved while Morgan remains active", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), queue: await ctx.input.api.get<IssueQueuedCommentQueue>(`/api/issues/${(state.task as Entity).id}/queued-comments`) }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 2
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && (value.source?.conversationState === "waiting" && value.runs.length === 2
         && value.runs.find(run => run.id === state.workerRunId)?.status === "running"
         && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
-        && value.queue.entries.filter(entry => /contact/i.test(entry.comment.body)).length === 1 });
+        && value.queue.entries.filter(entry => /contact/i.test(entry.comment.body)).length === 1) });
     const canonical = phase.runs.find(run => run.agentId === ctx.input.fixtures.agent.id)!;
     state.canonicalRunId = canonical.id; state.workerStatusAtReply = phase.runs.find(run => run.id === state.workerRunId)!.status;
     state.queuedAtReply = phase.queue; state.queryReply = (await observeRuntime(ctx, state)).reply;

@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
@@ -59,10 +60,10 @@ export const runtimeIndependentReviewCases = [runtimeDefinition("task-coordinati
   if (!ctx.input.privateSecrets) throw new Error("Independent actor probes require the private credential sink");
   const owned = []; for (const agentId of [worker.id, reviewer.id]) { const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${agentId}/keys`, { name: "independent-review-probe" }); ctx.input.privateSecrets.push(key.token); owned.push({ ...key, agentId }); credentials.set(ctx, owned); }
   await openStandingChat(ctx);
-  await sendChatMessage(ctx.input.page, `Launch Website ${task.identifier ?? task.id} has Morgan's actual website.html deliverable and acceptance reference ${marker}. It is blocked awaiting my authorization to request review; its saved completion policy requires eligible Riley, different from Morgan. Remember this context and acknowledge only. Do not request review, modify policy or work until my next message.`);
-  const acknowledged = await pollUntil({ label: "Actual source acknowledgment without any pre-query review admission", deadlineAt: Date.now() + 150_000,
+  await sendChatMessage(ctx.input.page, `Launch Website ${task.identifier ?? task.id} has Morgan's actual website.html deliverable and acceptance reference ${marker}. It is blocked awaiting my authorization to request review; its saved completion policy requires eligible Riley, different from Morgan. Remember this context and acknowledge only. Do not request review, modify policy or work until my next message.`, chatCatalogNativePhaseRemainingBudget(ctx));
+  const acknowledged = await pollUntil({ label: "Actual source acknowledgment without any pre-query review admission", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
     load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), task: await ctx.input.api.get<Issue>(`/api/issues/${task.id}`) }; },
-    accept: v => v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.every(row => row.status === "succeeded") && v.task.status === "blocked" && !v.runs.some(row => row.agentId === reviewer.id) });
+    accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.every(row => row.status === "succeeded") && v.task.status === "blocked" && !v.runs.some(row => row.agentId === reviewer.id)) });
   return { worker, reviewer, gate: prepared.gate, task: delivered.task, implementationBefore: delivered.task, marker, artifact, implementationRunId: delivered.runs[0]!.id,
     actualImplementation: true, setupReviewRunCount: 0, setupRunIds: acknowledged.runs.map(row => row.id), reviewerEligibleBeforeQuery: reviewer.lifecycleState === "ready" && ["active", "idle"].includes(reviewer.status ?? "") };
 }, gradeIndependentReview, {
@@ -70,10 +71,10 @@ export const runtimeIndependentReviewCases = [runtimeDefinition("task-coordinati
   sourceFiles: ["chat-catalog-domains/runtime-independent-review.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/identity-support.ts", "registered-artifact.ts", "chat-scenarios/task-coordination.yaml"],
   async act(ctx, state) {
     const task = state.task as Issue, reviewer = state.reviewer as Entity;
-    const pending = await pollUntil({ label: "Canonical authorization starts Riley's genuine independent review stage", deadlineAt: Date.now() + 180_000,
+    const pending = await pollUntil({ label: "Canonical authorization starts Riley's genuine independent review stage", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), task: await ctx.input.api.get<Issue>(`/api/issues/${task.id}`), ready: await readFile((state.gate as { ready: string }).ready, "utf8").catch(() => "") }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 4 && v.task.status === "in_review" && v.task.executionState?.currentParticipant?.agentId === reviewer.id
-        && v.ready === "waiting" && v.runs.some(row => row.agentId === reviewer.id && row.status === "running") && v.runs.filter(row => row.agentId !== reviewer.id).every(row => row.status === "succeeded"),
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 4 && v.task.status === "in_review" && v.task.executionState?.currentParticipant?.agentId === reviewer.id
+        && v.ready === "waiting" && v.runs.some(row => row.agentId === reviewer.id && row.status === "running") && v.runs.filter(row => row.agentId !== reviewer.id).every(row => row.status === "succeeded")),
       reject: v => v.runs.length > 4 || v.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "The authorized independent review failed, duplicated, or bypassed the saved gate" : undefined });
     state.pendingReview = pending.task; state.reviewerWasReallyWaiting = true; state.pendingReply = "";
     const reviewRun = pending.runs.find(row => row.agentId === reviewer.id)!; state.reviewRunId = reviewRun.id;
@@ -115,9 +116,9 @@ export const runtimeIndependentReviewCases = [runtimeDefinition("task-coordinati
     state.reviewAfter = completed.task;
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     const followup = `What is the actual outcome of Riley's independent review of Launch Website ${task.identifier ?? task.id}, and is the governed task now finished?`;
-    await sendChatMessage(ctx.input.page, followup);
-    const final = await pollUntil({ label: "Own source phase reports actual review and completion", deadlineAt: Date.now() + 150_000,
-      load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; }, accept: v => v.source?.conversationState === "waiting" && v.runs.length === 5 && v.runs.every(row => row.status === "succeeded") });
+    await sendChatMessage(ctx.input.page, followup, chatCatalogNativePhaseRemainingBudget(ctx));
+    const final = await pollUntil({ label: "Own source phase reports actual review and completion", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
+      load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; }, accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 5 && v.runs.every(row => row.status === "succeeded")) });
     const run = final.runs.find(row => !completed.runs.some(prior => prior.id === row.id))!;
     const comments = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`), human = comments.filter(row => !row.authorAgentId && row.body === followup), replies = comments.filter(row => row.authorAgentId === ctx.input.fixtures.agent.id && row.createdByRunId === run.id);
     const full = await ctx.input.api.get<{ runnerProfileJson?: { nativeExecutionInput?: { task?: { prompt?: string } } } }>(`/api/heartbeat-runs/${run.id}`);

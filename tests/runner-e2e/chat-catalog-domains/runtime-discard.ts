@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import type { IssueComment, IssueQueuedCommentQueue } from "../../../packages/shared/src/types/issue.js";
@@ -44,10 +45,10 @@ export const runtimeDiscardCases = [runtimeDefinition("steering.discard-queued-m
   sourceFiles: ["chat-catalog-domains/runtime-discard.ts", "chat-catalog-domains/runtime-queue-controls.ts", "chat-catalog-domains/runtime-queue.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-scenarios/steering.yaml"],
   setupPolicy: runtimeQueueCases[0]!.setupPolicy, verifySetup: runtimeQueueCases[0]!.verifySetup,
   async act(ctx, state) {
-    await pollUntil({ label: "Human discard guidance while Morgan is genuinely active", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Human discard guidance while Morgan is genuinely active", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running")
-        && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded") });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 2 && v.runs.some(row => row.id === state.workerRunId && row.status === "running")
+        && v.runs.some(row => row.agentId === ctx.input.fixtures.agent.id && row.status === "succeeded")) });
     state.queryReply = (await observeRuntime(ctx, state)).reply;
     const source = ctx.input.page.url(), task = state.task as Entity, root = `/api/issues/${task.id}`, queuePath = `${root}/queued-comments`;
     const initial = await ctx.input.api.get<IssueQueuedCommentQueue>(queuePath), targetId = String(state.targetId);
@@ -82,7 +83,7 @@ export const runtimeDiscardCases = [runtimeDefinition("steering.discard-queued-m
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     const message = `I later queued a different contact request on Website ${task.identifier ?? task.id}, comment ${second.comment.id}, and Morgan has already consumed it. Cancel that later contact requirement now by sending Morgan new direction to remove the contact section from the saved website plan while retaining the accessible-font requirement. Explain what happened to the already-delivered input; do not erase or rewrite it.`;
     const priorIds = consumed.runs.map(row => row.id);
-    await sendChatMessage(ctx.input.page, message);
+    await sendChatMessage(ctx.input.page, message, chatCatalogNativePhaseRemainingBudget(ctx));
     const final = await pollUntil({ label: "One real new-direction continuation after already-delivered cancellation", deadlineAt: Date.now() + 300_000,
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), task: await ctx.input.api.get<Entity>(root), queue: await ctx.input.api.get<IssueQueuedCommentQueue>(queuePath) }; },
       accept: v => v.source?.conversationState === "waiting" && v.runs.length === 5 && v.runs.every(row => row.status === "succeeded") && v.task.status === "done" && v.queue.entries.length === 0,

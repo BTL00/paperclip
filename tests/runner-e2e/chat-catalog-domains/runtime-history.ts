@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { pollUntil } from "../api.js";
@@ -12,10 +13,10 @@ import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 type Artifact = Awaited<ReturnType<typeof readRegisteredArtifacts>>[number];
 
 async function sourceSettled(ctx: ChatCatalogContext, count: number) {
-  return pollUntil({ label: "Native persisted-history phase", deadlineAt: Date.now() + 180_000,
+  return pollUntil({ label: "Native persisted-history phase", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
     load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: value => value.source?.conversationState === "waiting" && value.runs.length === count
-      && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).every(run => run.status === "succeeded") });
+    accept: value => chatCatalogNativePhaseIsTimely(ctx) && (value.source?.conversationState === "waiting" && value.runs.length === count
+      && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).every(run => run.status === "succeeded")) });
 }
 async function retainHistory(ctx: ChatCatalogContext, state: Record<string, unknown>) {
   const rows = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`);
@@ -107,7 +108,7 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { ...scope, amount: 500,
       hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
   const source = await openStandingChat(ctx); const designMarker = `Selected blue preview ${ctx.input.nonce}`; const filename = `blue-preview-${ctx.input.nonce}.html`;
-  await sendChatMessage(ctx.input.page, `We have selected the blue design. Save an actual small HTML preview named ${filename} with blue (#0000ff) styling and the exact visible marker ${JSON.stringify(designMarker)}. Register this real file as a downloadable artifact work product titled ${filename}. Keep that blue design and this exact preview as our selected version for the next turn. No delegated task or external action is needed.`);
+  await sendChatMessage(ctx.input.page, `We have selected the blue design. Save an actual small HTML preview named ${filename} with blue (#0000ff) styling and the exact visible marker ${JSON.stringify(designMarker)}. Register this real file as a downloadable artifact work product titled ${filename}. Keep that blue design and this exact preview as our selected version for the next turn. No delegated task or external action is needed.`, chatCatalogNativePhaseRemainingBudget(ctx));
   const phase = await sourceSettled(ctx, 1);
   const [previewBefore] = await readRegisteredArtifacts(ctx.input.api, source.id, phase.runs[0]!.id, [filename]);
   if (!previewBefore?.content.includes(designMarker) || !/blue|#0000ff/i.test(previewBefore.content)) throw new Error("Native prerequisite did not save the actual selected blue preview");
@@ -125,7 +126,7 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     await retainHistory(ctx, state);
     const prior = canonical.runs.map(run => run.id);
     const message = "Use the alternate green design I chose earlier, and show me that preview. If our history does not establish that alternate choice, ask me a focused clarification before creating or changing anything.";
-    await sendChatMessage(ctx.input.page, message); await sourceSettled(ctx, 3);
+    await sendChatMessage(ctx.input.page, message, chatCatalogNativePhaseRemainingBudget(ctx)); await sourceSettled(ctx, 3);
     state.unknownDesignPhase = await attributedPhase(ctx, prior, message);
   },
   async observe(ctx, state) {
@@ -143,7 +144,7 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
   },
 }), runtimeDefinition("recovery.browser-reconnect", async ctx => {
   const state = await busyRuntimeWorker(ctx); const source = await openStandingChat(ctx);
-  await sendChatMessage(ctx.input.page, `Please keep track of the existing Website task ${state.task.identifier ?? state.task.id}, assigned to Morgan. It is already running and waiting for the human brief. Acknowledge that reference without creating work or interrupting Morgan.`);
+  await sendChatMessage(ctx.input.page, `Please keep track of the existing Website task ${state.task.identifier ?? state.task.id}, assigned to Morgan. It is already running and waiting for the human brief. Acknowledge that reference without creating work or interrupting Morgan.`, chatCatalogNativePhaseRemainingBudget(ctx));
   await sourceSettled(ctx, 2);
   const history = await ctx.input.api.get<Entity[]>(`/api/issues/${source.id}/comments?order=asc`);
   const before = await ctx.allRuns(); const original = before.find(run => run.id === state.workerRunId);
@@ -153,10 +154,10 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     const offlineObserved = await ctx.input.page.evaluate(() => navigator.onLine === false);
     if (!offlineObserved) throw new Error("Browser did not actually disconnect");
     await writeFile(state.gate.gate, `The real human brief is now available: save a website delivery task document with the marker Reconnected website ${ctx.input.nonce}. Complete this original task normally.`, "utf8");
-    const advanced = await pollUntil({ label: "Server completes while browser is offline", deadlineAt: Date.now() + 180_000,
+    const advanced = await pollUntil({ label: "Server completes while browser is offline", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => ({ task: await ctx.input.api.get<Entity>(`/api/issues/${state.task.id}`), runs: await ctx.allRuns(),
         comments: await ctx.input.api.get<Entity[]>(`/api/issues/${state.task.id}/comments?order=asc`) }),
-      accept: value => value.task.status === "done" && value.runs.find(run => run.id === state.workerRunId)?.status === "succeeded",
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && (value.task.status === "done" && value.runs.find(run => run.id === state.workerRunId)?.status === "succeeded"),
       reject: value => value.runs.some(run => run.id === state.workerRunId && ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Disconnected worker did not complete successfully" : undefined });
     if (!advanced.comments.some(row => row.createdByRunId === state.workerRunId && row.authorAgentId === state.worker.id)) throw new Error("Offline progress lacks real persisted worker comments");
     return { ...state, history, offlineComments: advanced.comments, setupRunIds: advanced.runs.map(run => run.id), offlineObserved,
@@ -190,15 +191,15 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     }
     const prior = (await ctx.allRuns()).map(run => run.id);
     const message = `I was disconnected again while Morgan worked on the new Website task ${next.task.identifier ?? next.task.id}. Is that follow-up website finished? Please report its actual current state; do not start another task or interrupt it.`;
-    await sendChatMessage(ctx.input.page, message); await sourceSettled(ctx, 5);
+    await sendChatMessage(ctx.input.page, message, chatCatalogNativePhaseRemainingBudget(ctx)); await sourceSettled(ctx, 5);
     const remainingRun = (await ctx.allRuns()).find(run => run.id === next.workerRunId);
     const remainingTask = await ctx.input.api.get<Entity>(`/api/issues/${next.task.id}`);
     state.remainingPhase = { ...await attributedPhase(ctx, prior, message), taskId: next.task.id, runId: next.workerRunId,
       offlineObserved, runningWhileOffline, reconnected: await ctx.input.page.evaluate(() => navigator.onLine),
       runStatusAtReply: remainingRun?.status, taskStatusAtReply: remainingTask.status };
     await releaseRuntimeWorker(next);
-    await pollUntil({ label: "Remaining phase settles before separate failed-native phase", deadlineAt: Date.now() + 180_000,
-      load: () => ctx.allRuns(), accept: rows => rows.length === 5 && rows.every(run => run.status === "succeeded") });
+    await pollUntil({ label: "Remaining phase settles before separate failed-native phase", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
+      load: () => ctx.allRuns(), accept: rows => chatCatalogNativePhaseIsTimely(ctx) && (rows.length === 5 && rows.every(run => run.status === "succeeded")) });
     const failureWorker = await runtimeWorker(ctx, "Riley"); let failedTask: Entity | undefined;
     let failedOffline = false, failure: Awaited<ReturnType<typeof unavailableNativeModelFailure>> | undefined;
     await ctx.input.page.context().setOffline(true);
@@ -218,7 +219,7 @@ export const runtimeHistoryCases = [runtimeDefinition("agent-chat.remember-and-f
     if (!failure || !failedTask) throw new Error("The offline fixture produced no genuine native failure");
     const failureBoundary = (await ctx.allRuns()).map(run => run.id);
     const failedMessage = `I was disconnected during Riley's Website configuration-failure attempt ${failedTask!.identifier ?? failedTask!.id}. Did that attempt finish? Read its actual retained run state and explain it without starting another attempt.`;
-    await sendChatMessage(ctx.input.page, failedMessage); await sourceSettled(ctx, 7);
+    await sendChatMessage(ctx.input.page, failedMessage, chatCatalogNativePhaseRemainingBudget(ctx)); await sourceSettled(ctx, 7);
     state.failedReconnectEvidence = failure;
     state.failedReconnectPhase = { ...await attributedPhase(ctx, failureBoundary, failedMessage), runId: failure.failedRun.id, taskId: failedTask!.id,
       offlineObserved: failedOffline, failedWhileOffline: failure.failedRun.status === "failed", reconnected: await ctx.input.page.evaluate(() => navigator.onLine) };

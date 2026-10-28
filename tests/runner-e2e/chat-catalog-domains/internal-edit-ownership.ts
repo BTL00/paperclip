@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { collectRunEvents } from "../run-observations.js";
@@ -101,8 +102,8 @@ export function withEditOwnership(primary: ChatCatalogCase): ChatCatalogCase {
     async setup(ctx) { const state = await primary.setup(ctx); const riley = await fixtureWorker(ctx); await ctx.input.api.patch(`/api/agents/${riley.id}`, { name: "Riley" }); return { ...state, riley, canonicalEditQuery: ctx.scenario.query }; },
     grade: value => gradeEditOwnership(value, primary.grade),
     async act(ctx, state) {
-      const first = await pollUntil({ label: "Fully validated initial permitted property edit", deadlineAt: Date.now() + 150000,
-        load: () => observeInternal(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" && primary.grade(o).passed });
+      const first = await pollUntil({ label: "Fully validated initial permitted property edit", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150000),
+        load: () => observeInternal(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && (o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" && primary.grade(o).passed) });
       state.firstEdit = { ...first, state: structuredClone(state) }; const riley = entity(state, "riley"); const t = entity(state, "task");
       await ctx.input.api.post(`/api/companies/${ctx.input.fixtures.company.id}/budgets/policies`, { scopeType: "agent", scopeId: riley.id, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
       gate = await startRunBriefGate(ctx, riley.id);
@@ -115,7 +116,7 @@ export function withEditOwnership(primary: ChatCatalogCase): ChatCatalogCase {
           reject: value => value.runs.some(run => run.agentId === riley.id && ["failed", "cancelled", "succeeded", "timed_out"].includes(run.status)) ? "The conditional real checkout ended before the denial request" : undefined });
         state.heldTask = held.task; state.heldRun = held.runs.find(run => run.agentId === riley.id); state.gateCalls = structuredClone(gate.calls);
         await ctx.input.evidence("chat-catalog-edit-properties-boundary-variant.json", { firstEdit: state.firstEdit, heldTask: state.heldTask, heldRun: state.heldRun, gateCalls: state.gateCalls });
-        const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, ctx.scenario.query);
+        const { sendChatMessage } = await import("../chat-flow.js"); await sendChatMessage(ctx.input.page, ctx.scenario.query, chatCatalogNativePhaseRemainingBudget(ctx));
       } catch (error) { await gate.close(); gate = undefined; throw error; }
     },
     async observe(ctx, state): Promise<EditOwnership> {

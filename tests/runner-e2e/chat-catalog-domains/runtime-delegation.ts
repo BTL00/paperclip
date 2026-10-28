@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { expect } from "@playwright/test";
@@ -75,10 +76,10 @@ export const runtimeDelegationCases = [runtimeDefinition("task-coordination.dele
   ctx.input.privateSecrets.push(key.token); keys.set(ctx, { ...key, workerId: prepared.worker.id });
   await openStandingChat(ctx);
   const setupMessage = `This conversation tracks Launch ${parent.identifier ?? parent.id}, which you own. It has the actual approved design brief attached to human comment ${briefComment.id}; Morgan is available for implementation. Remember this work context and acknowledge it here, but do not start, modify, delegate or complete work until my next request.`;
-  await sendChatMessage(ctx.input.page, setupMessage);
-  await pollUntil({ label: "Genuine source context acknowledgement before delegation", deadlineAt: Date.now() + 150_000,
+  await sendChatMessage(ctx.input.page, setupMessage, chatCatalogNativePhaseRemainingBudget(ctx));
+  await pollUntil({ label: "Genuine source context acknowledgement before delegation", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
     load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-    accept: v => v.source?.conversationState === "waiting" && v.runs.length === 1 && v.runs[0]?.agentId === ctx.input.fixtures.agent.id && v.runs[0].status === "succeeded" });
+    accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 1 && v.runs[0]?.agentId === ctx.input.fixtures.agent.id && v.runs[0].status === "succeeded") });
   return { worker: prepared.worker, gate: prepared.gate, parent: await ctx.input.api.get<Entity>(`/api/issues/${parent.id}`), marker,
     humanId: session.user.id, briefCommentId: briefComment.id, briefAttachment: attachment, briefHash: hash(Buffer.from(brief)),
     briefDownloadedHash: hash(await ctx.input.api.getAttachmentContent(attachment.id)), sourceId: ctx.issue()!.id };
@@ -86,13 +87,13 @@ export const runtimeDelegationCases = [runtimeDefinition("task-coordination.dele
   authentication: "human-session", setupHumanMessageCount: 1, expectedHumanMessageCount: 2, expectedRunCount: 4, attemptTimeoutMs: 900_000,
   sourceFiles: ["chat-catalog-domains/runtime-delegation.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "completion-update-flow.ts", "completion-updates.ts", "registered-artifact.ts", "chat-scenarios/task-coordination.yaml"],
   async act(ctx, state) {
-    const phase = await pollUntil({ label: "Canonical source creates exactly one actual Morgan child with Launch context", deadlineAt: Date.now() + 180_000,
+    const phase = await pollUntil({ label: "Canonical source creates exactly one actual Morgan child with Launch context", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), waiting: await readFile((state.gate as { ready: string }).ready, "utf8").catch(() => ""),
         tasks: await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?includeAgentCreatedTasks=true&limit=1000`) }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 3 && v.waiting === "waiting"
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && (v.source?.conversationState === "waiting" && v.runs.length === 3 && v.waiting === "waiting"
         && v.runs.some(row => row.agentId === (state.worker as Entity).id && row.status === "running")
         && v.runs.filter(row => row.agentId === ctx.input.fixtures.agent.id).every(row => row.status === "succeeded")
-        && v.tasks.filter(row => row.id !== state.sourceId && row.id !== (state.parent as Entity).id).length === 1 });
+        && v.tasks.filter(row => row.id !== state.sourceId && row.id !== (state.parent as Entity).id).length === 1) });
     const task = phase.tasks.find(row => row.id !== state.sourceId && row.id !== (state.parent as Entity).id)!; state.task = task; state.workerWasReallyWaiting = true;
     const fromSource = await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/issues?createdFromIssueId=${state.sourceId}&includeAgentCreatedTasks=true&limit=1000`);
     state.createdFromSource = fromSource.length === 1 && fromSource[0]?.id === task.id;
