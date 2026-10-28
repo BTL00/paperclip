@@ -99,3 +99,7 @@ export function validateSdkDiagnosticScan(scan){
  for(const [index,row]of scan.certificates.entries())if(!exact(row,["target","sources","outputs","markerSha256"])||row.target!==targets[index]||![row.sources,row.outputs,row.markerSha256].every(hex))throw new Error("scan_metadata_invalid");
  for(const row of scan.files)if(!exact(row,["path","bytes","sha256","findings"])||typeof row.path!=="string"||!targets.some(target=>row.path.startsWith(target+"/"))||!/^[A-Za-z0-9._/-]{1,300}$/.test(row.path)||row.path.split("/").some(part=>part==="..")||!Number.isSafeInteger(row.bytes)||row.bytes<0||row.bytes>8*1024*1024||!hex(row.sha256)||!Array.isArray(row.findings)||row.findings.length>3||row.findings.some(kind=>!["generic-key-shape","synthetic-credential-exact-match","synthetic-nonsecret-json-exact-match"].includes(kind)))throw new Error("scan_metadata_invalid");
 }
+
+export function assertSdkDiagnosticInvocation(requested,args){
+ if(requested&&(!args.some(arg=>arg==="--list"||arg==="--matrix-json")||args.some(arg=>["--installed-startup-only","--target-config","product-journeys"].includes(arg))))throw new Error("SDK diagnostic source permits catalog metadata only; scenario execution is forbidden");
+}

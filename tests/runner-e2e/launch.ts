@@ -1,3 +1,4 @@
+import { assertSdkDiagnosticInvocation } from "./sdk-build-diagnostic.mjs";
 import { copyHealthHelloDetail } from "./chat-readiness-detail.js";
 import { copyRetainedSourceSdk } from "./source-sdk-evidence.js";
 import { prepareChatRemoteHost } from "./chat-remote-host.js";
@@ -26,7 +27,7 @@ import { createRunnerE2ETemporaryRoot } from "./server-config.js";
 import { createHash, randomBytes } from "node:crypto";
 import { prepareCodexCiSandbox, requiresCodexCiSandbox } from "./codex-ci-sandbox.js";
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -1140,6 +1141,7 @@ async function runWithConcurrency<T, R>(
 
 async function main() {
   const args = process.argv.slice(2);
+  assertSdkDiagnosticInvocation(existsSync(path.join(repositoryRoot, "tests/runner-e2e/sdk-build-diagnostic-request.json")), args);
   if (args.includes("--target-config") || args.includes("product-journeys")) {
     const { launchProductJourneys } = await import("./product-journeys/launch.js");
     return launchProductJourneys(args, repositoryRoot);

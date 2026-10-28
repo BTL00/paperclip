@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { scanSdkDiagnosticOutputs } from "./sdk-build-diagnostic-scan.js";
-import { maybeSdkBuildDiagnostic, prepareSdkDiagnosticCopy, runSdkBuildDiagnostic, runSdkDiagnosticChild, sdkDiagnosticEnvironment, validateSdkDiagnosticScan, SDK_DIAGNOSTIC_FILE } from "./sdk-build-diagnostic.mjs";
+import { assertSdkDiagnosticInvocation, maybeSdkBuildDiagnostic, prepareSdkDiagnosticCopy, runSdkBuildDiagnostic, runSdkDiagnosticChild, sdkDiagnosticEnvironment, validateSdkDiagnosticScan, SDK_DIAGNOSTIC_FILE } from "./sdk-build-diagnostic.mjs";
 const roots: string[]=[]; const hash=(v:Buffer|string)=>createHash("sha256").update(v).digest("hex");
 async function temp(){const root=await mkdtemp(path.join(os.tmpdir(),"sdk-diagnostic-synthetic-test-"));roots.push(root);return root;}
 afterEach(async()=>{for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
@@ -59,4 +59,10 @@ it("only enters the diagnostic hook for the exact existing build job, not import
  const root=await temp();await write(root,"tests/runner-e2e/sdk-build-diagnostic-request.json",'{"schema":"paperclip.sdk-build-diagnostic-request/v1","buildValidationOnly":true,"noPaidAdmission":true}');let calls=0;const run=async()=>{calls++;return{synthetic:true};};
  for(const env of [{},{GITHUB_ACTIONS:"true",GITHUB_JOB:"run"},{GITHUB_ACTIONS:"false",GITHUB_JOB:"build_runner_artifacts"}])expect(await maybeSdkBuildDiagnostic(root,env,run)).toBeNull();expect(calls).toBe(0);
  expect(await maybeSdkBuildDiagnostic(root,{GITHUB_ACTIONS:"true",GITHUB_JOB:"build_runner_artifacts"},run)).toEqual({synthetic:true});expect(calls).toBe(1);
+});
+
+it("fails closed before any live launcher path while keeping the existing catalog graph available",()=>{
+ for(const args of [[],["--id","example"],["--matrix-json","--installed-startup-only"],["--list","--target-config","private.json"],["product-journeys","--list"]])expect(()=>assertSdkDiagnosticInvocation(true,args)).toThrow("scenario execution is forbidden");
+ for(const args of [["--matrix-json","--id","example"],["--list","--suite","chat-features"]])expect(()=>assertSdkDiagnosticInvocation(true,args)).not.toThrow();
+ expect(()=>assertSdkDiagnosticInvocation(false,["--id","example"])).not.toThrow();
 });

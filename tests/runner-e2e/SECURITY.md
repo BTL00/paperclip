@@ -587,7 +587,10 @@ the setup receipt contains only public identity, role, grant keys and statuses.
 The isolated `sdk-build-diagnostic` source branch uses the existing trusted AWS
 `build_runner_artifacts` job. Its main-only verified-entrypoint build hook checks
 both the exact GitHub job identity and the committed diagnostic request. It
-never runs from module imports, ordinary local builds, or paid case jobs.
+never runs from module imports, ordinary local builds, or paid case jobs. The
+diagnostic source also rejects every non-metadata launcher invocation before
+provider, browser, database, or result creation; this supplements protected paid
+gates and does not replace the coordinator's zero-start proof.
 
 The unchanged certified SDK/shared builder runs only in an owned temporary
 source copy with separate writable workspace links and build cache. The child

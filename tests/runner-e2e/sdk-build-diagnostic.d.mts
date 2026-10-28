@@ -12,3 +12,4 @@ export function runSdkDiagnosticChild(args: string[], options: { cwd: string; en
 export function runSdkBuildDiagnostic(repositoryRoot: string, options?: { expected?: SdkDiagnosticSource; builder?: typeof runSdkDiagnosticChild; scanner?: typeof runSdkDiagnosticChild }): Promise<SdkDiagnosticReceipt>;
 export function maybeSdkBuildDiagnostic<T = SdkDiagnosticReceipt>(repositoryRoot: string, env?: NodeJS.ProcessEnv, run?: (root: string) => Promise<T>): Promise<T | null>;
 export function validateSdkDiagnosticScan(scan: unknown): void;
+export function assertSdkDiagnosticInvocation(requested: boolean, args: readonly string[]): void;
