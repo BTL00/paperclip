@@ -5,6 +5,11 @@ import { checks, sameTask, type Entity } from "./internal-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface WorkspaceView { workspace: { id: string; companyId: string; projectId?: string | null; name: string; cwd: string }; repositories: unknown[] }
+export async function enableTaskWorkspaceView(ctx: ChatCatalogContext) {
+  await ctx.input.api.patch("/api/instance/settings/experimental", { enableIsolatedWorkspaces: true });
+  const settings = await ctx.input.api.get<{ enableIsolatedWorkspaces: boolean }>("/api/instance/settings/experimental");
+  if (settings.enableIsolatedWorkspaces !== true) throw new Error("The supported workspace view is not enabled");
+}
 export async function savedTaskWorkspace(ctx: ChatCatalogContext, options: { artifact?: boolean; workerName?: string; html?: boolean } = {}) {
   const { execution, fixtures, workspacePath, nonce, api } = ctx.input;
   const base = execution.profile.buildAgent({ environmentId: fixtures.environment.id, environmentFixtureId: execution.environment.id,
@@ -64,9 +69,7 @@ export const runtimeWorkspacesCases = [runtimeDefinition("workspaces.locate-file
   // The actual detail route is gated, independently of workspace realization.
   // Enable its supported UI fixture before the query, never after a bad link.
   if (!ctx.input.fixtures.company.issuePrefix) throw new Error("Workspace fixture has no public company prefix");
-  await ctx.input.api.patch("/api/instance/settings/experimental", { enableIsolatedWorkspaces: true });
-  const settings = await ctx.input.api.get<{ enableIsolatedWorkspaces: boolean }>("/api/instance/settings/experimental");
-  if (!settings.enableIsolatedWorkspaces) throw new Error("The supported workspace view is not enabled");
+  await enableTaskWorkspaceView(ctx);
   return { ...await savedTaskWorkspace(ctx), companyPrefix: ctx.input.fixtures.company.issuePrefix };
 }, gradeLocateFiles, {
   sourceFiles: ["chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/workspaces.yaml", "../../ui/src/components/IsolatedWorkspacesRouteGate.tsx", "../../ui/src/pages/ExecutionWorkspaceDetail.tsx"],
