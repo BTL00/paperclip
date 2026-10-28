@@ -7,14 +7,17 @@ import { stageCursorCloudArtifact } from "./artifact-delivery.js";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 describe("Cursor Cloud artifact registration boundary", () => {
-  it("stages independently downloaded bytes and preserves the exact metadata for Core registration", async () => {
+  it.each(["fresh", "existing"])("stages %s verified bytes with a contentRef relative to the artifact root", async state => {
     const root = await mkdtemp("/tmp/cc-artifact-"); roots.push(root);
     const bytes = Buffer.from("downloaded provider result\n"); const sha256 = createHash("sha256").update(bytes).digest("hex");
     const client = { listArtifacts: vi.fn(async () => ({ items: [{ path: "artifacts/result.txt", sizeBytes: bytes.length, updatedAt: "2026-10-28" }] })), downloadArtifact: vi.fn(async () => bytes) };
     const args = { contentRef: "cursor-artifact:artifacts/result.txt", filename: "result.txt", byteSize: bytes.length, sha256, contentType: "text/plain" };
-    const normalized = await stageCursorCloudArtifact({ arguments: args, agentId: "agent", runtimeDirectory: root, artifactRoot: join(root, "artifacts"), client, signal: new AbortController().signal });
-    expect(normalized).toEqual({ ...args, contentRef: join(root, "artifacts", sha256, "result.txt") });
-    expect(await readFile(normalized.contentRef as string)).toEqual(bytes);
+    const artifactRoot = join(root, "artifacts");
+    const input = { arguments: args, agentId: "agent", runtimeDirectory: root, artifactRoot, client, signal: new AbortController().signal };
+    if (state === "existing") await stageCursorCloudArtifact(input);
+    const normalized = await stageCursorCloudArtifact(input);
+    expect(normalized).toEqual({ ...args, contentRef: join(sha256, "result.txt") });
+    expect(await readFile(join(artifactRoot, normalized.contentRef as string))).toEqual(bytes);
     await expect(stageCursorCloudArtifact({ arguments: { ...args, sha256: "a".repeat(64) }, agentId: "agent", runtimeDirectory: root, artifactRoot: join(root, "artifacts"), client, signal: new AbortController().signal })).rejects.toThrow("do not match");
   });
   it("rejects host paths, traversal, unlisted paths, size mismatches and an unadmitted root", async () => {
