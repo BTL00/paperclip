@@ -63,7 +63,8 @@ export function describesHistoricalDelivery(reply: string, deliveredAt: string) 
   const months = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
   const dates = new RegExp(`\\b(?:\\d{4}-\\d{2}-\\d{2}|${months}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${months}(?:,?\\s+\\d{4})?)\\b`, "gi");
   let matched = false;
-  for (const part of reply.split(/\n+|;|(?<=[.!?])\s+/)) {
+  const prose = reply.replace(/\b(was|were|is|are|has|have|had|did|does|do|could|would|should|must)n['’]t\b/gi, "$1 not");
+  for (const part of prose.split(/\n+|;|(?<=[.!?])\s+/)) {
     // Qualified older history may have a different date; it is not the selected final.
     if (/\b(?:older|earlier|previous|superseded|outside)\b/i.test(part)) continue;
     if (/\blast\s+week\b/i.test(part)) {

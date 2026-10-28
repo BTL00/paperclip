@@ -18,6 +18,8 @@ describe("migrated historical website artifact calibration", () => {
     "The final website was delivered 21 October 2026.",
     "The approved final was delivered Oct 21.",
     "The final was delivered 2026-10-21 and imported October 26, 2026.",
+    "The earlier draft wasn't delivered October 20, 2026; the final website was delivered October 21, 2026.",
+    "I didn't change the files; the final website was delivered October 21, 2026.",
   ])("accepts correct source dates without a literal last-week phrase: %s", reply => {
     const o = valid(); o.reply = reply; expect(gradeArtifactSearch(o).passed).toBe(true);
   });
@@ -27,6 +29,8 @@ describe("migrated historical website artifact calibration", () => {
     "The final approved website was delivered last week, on October 26, 2026.",
     "The final approved website was not delivered last week.",
     "The final approved website was not delivered on October 21, 2026.",
+    "The final approved website wasn't delivered on October 21, 2026.",
+    "The final approved website wasn’t delivered last week.",
   ])("rejects wrong or contradicted delivery dates: %s", reply => {
     const o = valid(); o.reply = reply; expect(gradeArtifactSearch(o).passed).toBe(false);
   });
