@@ -114,7 +114,11 @@ describe("heartbeat task markdown rendering", () => {
 
   it("delivers only registered company-scoped entity link contracts to chat and its continuation", () => {
     const app = readFileSync(new URL("../../../../ui/src/App.tsx", import.meta.url), "utf8");
-    const board = app.slice(app.indexOf("function boardRoutes("), app.indexOf("function AppsConnectEntryRoute("));
+    const start = app.indexOf("function boardRoutes(");
+    const end = app.indexOf("function AppsConnectEntryRoute(");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const board = app.slice(start, end);
     const registered = new Set([...board.matchAll(/<Route\s+path="([^"]+)"/g)].map((match) => match[1]));
     expect(app).toMatch(/<Route path=":companyPrefix"[^>]*>[\s\S]*?\{boardRoutes\(/);
 
