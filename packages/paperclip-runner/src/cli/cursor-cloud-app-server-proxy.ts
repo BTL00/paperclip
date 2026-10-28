@@ -155,9 +155,10 @@ export function startCursorCloudAppServerProxy(options: {
         await session.interrupt({ ...(typeof params.turnId === "string" ? { turnId: params.turnId } : {}) }); result = true; break;
       case "thread/read": {
         if (!session) throw new Error("Cursor Cloud thread is not open");
-        const snapshot = await session.snapshot();
         const state = await session.read();
-        result = { cursorCloudTerminalDelivery: state.pendingTerminalDelivery, thread: { id: session.ids().driverSessionId, cwd, turns: snapshot.activeTurnId ? [{ id: snapshot.activeTurnId, status: "inProgress" }] : [] }, transcript: state }; break;
+        const activeTurnId = ["creating", "running", "stopping"].includes(String(state.phase)) && typeof state.turnId === "string" ? state.turnId : null;
+        await session.snapshot();
+        result = { cursorCloudTerminalDelivery: state.pendingTerminalDelivery, thread: { id: session.ids().driverSessionId, cwd, turns: activeTurnId ? [{ id: activeTurnId, status: "inProgress" }] : [] }, transcript: state }; break;
       }
       case "paperclip/ackTerminal":
         if (!session || typeof params.turnId !== "string" || typeof params.receiptId !== "string") throw new Error("Cursor Cloud terminal receipt is missing");

@@ -1329,13 +1329,22 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "thread/read" => {
                 if let Some(path) = argument(&args, "--cursor-cloud-terminal-file") {
                     if Path::new(&path).exists() {
-                        let delivery: Value = serde_json::from_slice(&fs::read(&path)?)?;
-                        state.active_turn_id = None;
-                        save_state(&state_path, &state)?;
-                        send(
-                            json!({"id": id, "result": {"thread": {"id": state.thread_id, "turns": []}, "cursorCloudTerminalDelivery": delivery}}),
-                        )?;
-                        continue;
+                        let first_read = format!("{path}.first-read");
+                        let finishes_between_reads = args
+                            .iter()
+                            .any(|arg| arg == "--cursor-cloud-finish-between-reads")
+                            && !Path::new(&first_read).exists();
+                        if finishes_between_reads {
+                            fs::write(first_read, b"observed active")?;
+                        } else {
+                            let delivery: Value = serde_json::from_slice(&fs::read(&path)?)?;
+                            state.active_turn_id = None;
+                            save_state(&state_path, &state)?;
+                            send(
+                                json!({"id": id, "result": {"thread": {"id": state.thread_id, "turns": []}, "cursorCloudTerminalDelivery": delivery}}),
+                            )?;
+                            continue;
+                        }
                     }
                 }
                 if descendant_notifications

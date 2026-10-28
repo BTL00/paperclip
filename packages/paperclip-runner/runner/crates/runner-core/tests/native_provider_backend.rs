@@ -1615,16 +1615,21 @@ fn cursor_cloud_facade_keeps_provider_labels_and_requires_semantic_completion() 
 
 #[test]
 fn cursor_cloud_replays_a_durable_terminal_batch_after_proxy_loss_and_a_lost_ack() {
-    for partial in [false, true] {
+    for (partial, finishes_between_reads) in [(false, false), (true, false), (false, true)] {
         let directory = temporary_directory("cursor-cloud-terminal-replay");
         let delivery_path = directory.join("terminal.json");
         let hold_ack = directory.join("terminal.json.hold-ack");
         let config = cursor_cloud_config_with_args(
             &directory,
             &format!(
-                "--hold-turn --cursor-cloud-terminal-file '{}' {}",
+                "--hold-turn --cursor-cloud-terminal-file '{}' {} {}",
                 delivery_path.display(),
                 if partial { "--held-final-message" } else { "" },
+                if finishes_between_reads {
+                    "--cursor-cloud-finish-between-reads"
+                } else {
+                    ""
+                },
             ),
         );
         let mut first = NativeProviderCommandExecutor::with_runner_config(&directory, &config);

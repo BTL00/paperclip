@@ -2077,11 +2077,20 @@ impl CodexProvider {
                 "Cursor Cloud terminal snapshot changed its thread",
             ));
         }
-        snapshot
+        let Some(value) = snapshot
             .get("cursorCloudTerminalDelivery")
             .filter(|value| !value.is_null())
-            .map(|value| crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id))
-            .transpose()
+        else {
+            return Ok(None);
+        };
+        if latest_active_turn_id(&snapshot).is_some() {
+            return Err(LocalRunnerError::invalid(
+                "Cursor Cloud terminal snapshot also reports active work",
+            ));
+        }
+        let delivery = crate::cursor_cloud_proxy::TerminalDelivery::parse(value, &self.thread_id)?;
+        self.active_provider_turn_id = None;
+        Ok(Some(delivery))
     }
 
     pub(crate) fn acknowledge_cursor_cloud_terminal(
