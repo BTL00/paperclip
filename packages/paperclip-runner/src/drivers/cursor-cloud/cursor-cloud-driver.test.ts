@@ -302,6 +302,44 @@ describe("Cursor Cloud native driver", () => {
     expect(await readFile(f.options.relay.socketPath, "utf8")).toBe("unowned file");
   });
 
+  it.each(["agent", "run"])("retries a transient recovery %s read without replacing work or extending its deadline", async read => {
+    const peer = new Peer(); peer.failCreate = read === "agent";
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "Recover the existing work" } }); await peer.created.promise;
+    await waitFor(() => f.events.some(event => read === "agent" ? event.payload.code === "cursor_cloud_remote_state_unknown" : event.eventType === "item.delta"));
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    const deadlineAt = JSON.parse(await readFile(checkpointPath, "utf8")).deadlineAt;
+    const error = new CursorCloudClientError("http_error", { status: 503 });
+    if (read === "agent") peer.getAgent.mockRejectedValueOnce(error);
+    else peer.getRun.mockRejectedValueOnce(error);
+    const stream = vi.spyOn(peer, "streamRun");
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    await waitFor(() => stream.mock.calls.length > 0);
+    expect(peer.createAgent).toHaveBeenCalledTimes(1); expect(peer.createRun).not.toHaveBeenCalled();
+    expect(JSON.parse(await readFile(checkpointPath, "utf8")).deadlineAt).toBe(deadlineAt);
+    await restored.interrupt!();
+  });
+
+  it("enforces the saved deadline while the first recovery read remains pending", async () => {
+    const f = await fixture();
+    await f.session.startTurn({ message: { role: "user", text: "Recover with a slow read" } }); await f.peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    const snapshot = await f.session.snapshot(); await f.session.detachControllerForRestart!(); await f.pump;
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => name.endsWith(".json"))!);
+    const checkpoint = JSON.parse(await readFile(checkpointPath, "utf8"));
+    checkpoint.deadlineAt = Date.now() + 100; await writeFile(checkpointPath, JSON.stringify(checkpoint), { mode: 0o600 });
+    const blocked = deferred<CursorCloudRun>();
+    const getRun = f.peer.getRun.getMockImplementation()!;
+    f.peer.getRun.mockImplementationOnce(() => blocked.promise);
+    const restored = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!; sessions.push(restored);
+    try {
+      await waitFor(() => f.peer.cancelRun.mock.calls.length === 1);
+      expect(f.peer.createAgent).toHaveBeenCalledTimes(1); expect(f.peer.createRun).not.toHaveBeenCalled();
+      await vi.waitFor(async () => expect((await restored.read?.())?.phase).toBe("terminal"));
+    } finally { blocked.resolve(await getRun()); }
+  });
+
   it("treats an expired persisted active deadline as cleanup-only instead of buying another full turn", async () => {
     const f = await fixture();
     await f.session.startTurn({ message: { role: "user", text: "Expire during outage" } }); await f.peer.created.promise;

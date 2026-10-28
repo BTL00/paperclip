@@ -179,7 +179,7 @@ class CursorCloudSession implements HarnessSession {
     const secured = await lstat(this.#options.relay.socketPath);
     if (!secured.isSocket() || secured.isSymbolicLink() || secured.ino !== socket.ino || secured.dev !== socket.dev || (secured.mode & 0o777) !== 0o600 || (process.getuid && secured.uid !== process.getuid())) throw new Error("Cursor Cloud bound relay socket changed while securing it");
   }
-  startRecovery(): void { if (active(this.#cp)) this.#work = this.#recoverActive().catch(error => this.#unresolved(error)); }
+  startRecovery(): void { if (active(this.#cp)) { this.#armDeadline(); this.#work = this.#recoverActive().catch(error => this.#unresolved(error)); } }
   ids() { return { driverSessionId: this.#cp.driverSessionId, providerSessionId: this.#cp.agentId, displayId: this.#cp.agentId ?? this.#cp.driverSessionId }; }
   events(): AsyncIterable<PrpEvent> { return this.#events.stream(); }
   turnControlCapabilities() { return { steering: false, queuedFollowUp: false }; }
@@ -262,14 +262,29 @@ class CursorCloudSession implements HarnessSession {
     }
   }
   async #recoverActive(): Promise<void> {
-    await this.#resolvePending();
-    if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
+    this.#streamAbort = new AbortController();
+    const signal = this.#streamAbort.signal;
+    let run: CursorCloudRun | undefined;
+    for (let attempt = 0; !this.#closed && !this.#stopping && active(this.#cp); attempt += 1) {
+      try {
+        await this.#resolvePending(signal);
+        if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
+        run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId, { signal });
+        break;
+      } catch (error) {
+        if (this.#closed || this.#stopping || signal.aborted) return;
+        if (!(error instanceof CursorCloudClientError && error.retryable)) throw error;
+        await this.#unresolved(error);
+        await delay(boundedPositive(this.#options.reconnectDelayMs, Math.min(250 * 2 ** attempt, 2_000)), undefined, { signal })
+          .catch(error => { if (!signal.aborted) throw error; });
+      }
+    }
+    if (!run || this.#closed || this.#stopping) return;
     this.#emit("turn.started", { recovered: true, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsAcknowledged: false });
     this.#publishRemoteIdentity();
-    const run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId);
     if (!isCursorCloudRunActive(run.status)) { await this.#settle(run, this.#cp.phase === "stopping"); return; }
     if (this.#cp.phase === "stopping" || this.#cp.deadlineAt === null || this.#cp.deadlineAt <= Date.now()) { await this.interrupt(); return; }
-    this.#armDeadline(); await this.#observe();
+    await this.#observe();
   }
   async #observe(): Promise<void> {
     for (let attempt = 0; attempt < 4 && !this.#stopping && !this.#closed; attempt += 1) {
