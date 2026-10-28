@@ -1216,7 +1216,8 @@ jobs:
             const allowed = new Set(["chat-features.runner-opencode.local.chat-channels.outbound-email", "chat-features.runner-opencode.local.recovery.unknown-email-outcome"]);
             if (!allowed.has(process.env.SELECTED_EXECUTION_ID)) throw new Error();
             const tokenName = "PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN";
-            if (!process.env[tokenName] || process.env[tokenName].length < 12) throw new Error();
+            const token = process.env[tokenName];
+            if (!token || token.length < 12 || /[^\x21-\x7e]/.test(token)) throw new Error();
             const raw = process.env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON;
             if (!raw || Buffer.byteLength(raw) > 65536) throw new Error();
             const config = JSON.parse(raw), provider = config.providers?.agentmail, fields = provider?.prerequisites;

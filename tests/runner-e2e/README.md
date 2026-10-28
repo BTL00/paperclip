@@ -3070,7 +3070,9 @@ The existing protected `runner-e2e-paid` job can stage private inputs only for
 The protected environment supplies `PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN`,
 `CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON` (the selected AgentMail stanza only), and
 `CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64` (the existing campaign's 32-byte key,
-base64 encoded). Missing or mismatched inputs fail before staging or provider
+base64 encoded). The token must contain at least 12 printable ASCII characters
+with no spaces or control characters; preparation never trims or rewrites it.
+Missing or mismatched inputs fail before staging or provider
 access. The configuration must authorize exactly one disposable inbox as its own
 recipient with `recipientAuthorization: "self-addressed-only"`; this does not
 permit a distinct reviewer mailbox or other external recipients.

@@ -27,7 +27,7 @@ function fixture(change = () => {}, fault = "") {
 }
 function noRawInputs(f, result = f.result) {
   const outputs = [result.stdout, result.stderr, fs.readFileSync(f.githubEnv, "utf8")];
-  const raw = [f.token, f.env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON, f.env.CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64, "owned@example.test"];
+  const raw = [f.token, f.env[tokenName], f.env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON, f.env.CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64, "owned@example.test"];
   for (const value of raw.filter(Boolean)) for (const output of outputs) assert.ok(!output.includes(value), "Raw selected input reached an output boundary");
 }
 function clean(f, change = () => {}, fault = "") {
@@ -58,6 +58,16 @@ const invalid = [
   ["different environment", ({ env }) => { env.SELECTED_EXECUTION_ID = selected.replace(".local.", ".daytona."); }],
   ["missing token", ({ env }) => { delete env[tokenName]; }],
   ["short token", ({ env }) => { env[tokenName] = "short"; }],
+  ["whitespace-only token", ({ env }) => { env[tokenName] = " ".repeat(20); }],
+  ["leading token whitespace", ({ env, token }) => { env[tokenName] = " " + token; }],
+  ["trailing token whitespace", ({ env, token }) => { env[tokenName] = token + " "; }],
+  ["embedded token space", ({ env, token }) => { env[tokenName] = token + " middle"; }],
+  ["token newline", ({ env, token }) => { env[tokenName] = token + "\n"; }],
+  ["token carriage return", ({ env, token }) => { env[tokenName] = token + "\r"; }],
+  ["token tab", ({ env, token }) => { env[tokenName] = token + "\t"; }],
+  ["token control byte", ({ env, token }) => { env[tokenName] = token + "\x01"; }],
+  ["token DEL byte", ({ env, token }) => { env[tokenName] = token + "\x7f"; }],
+  ["token non-ASCII control", ({ env, token }) => { env[tokenName] = token + "\u0085"; }],
   ["missing configuration", ({ env }) => { delete env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON; }],
   ["JSON parser diagnostic containing input", ({ env, token }) => { env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON = `{"${token}":`; }],
   ["null configuration", ({ env }) => { env.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON = "null"; }],
