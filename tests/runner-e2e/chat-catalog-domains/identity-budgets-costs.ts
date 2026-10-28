@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { BudgetOverview } from "../../../packages/shared/src/types/budget.js";
 import { checks, entity } from "./internal-support.js";
@@ -30,7 +31,7 @@ export const budgetIdentityCases = [identityDefinition("budgets-costs.set-budget
   return { worker, other, workerConfig };
 }, gradeBudget, {
   async act(ctx, state) {
-    await waitForReply(ctx);
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx));
     const root = `/api/companies/${ctx.input.fixtures.company.id}`; const worker = entity(state, "worker");
     state.agentWriteStatus = await probeAgentPermission(ctx, `${root}/budgets/policies`, "POST", {
       scopeType: "agent", scopeId: worker.id, amount: 5000, windowKind: "calendar_month_utc" });

@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { randomBytes } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -63,7 +64,7 @@ export const appTestExternalCases = [definition("app-permissions.test-as-agent",
 }, gradeAppTest, {
   authentication: "human-session", sourceFiles: ["chat-catalog-domains/external-app-test.ts", "chat-catalog-domains/external-provider.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../ui/src/pages/apps/Browse.tsx", "../../ui/src/pages/apps/ConnectorsToolbar.tsx", "../../ui/src/pages/apps/connection-owner.tsx", "../../ui/src/pages/apps/AppDetail.tsx", "../../ui/src/pages/apps/app-detail/PermissionsPanel.tsx", "chat-scenarios/app-permissions.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const provider = providers.get(ctx)!; state.providerCallsBeforeBoard = provider.calls.filter(row => row.method === "tools/call").length;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const provider = providers.get(ctx)!; state.providerCallsBeforeBoard = provider.calls.filter(row => row.method === "tools/call").length;
     const o = await observeExternal(ctx, state); if (!appTestGuidance(o.reply)) throw new Error("Chat must identify Morgan and the requested read action before the board test");
     const prefix = String(state.connectionPath);
     const navigation = appTestNavigation(o.reply, o.links, o.origin, prefix);

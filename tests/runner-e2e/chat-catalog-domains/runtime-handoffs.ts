@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { pollUntil } from "../api.js";
@@ -41,7 +42,7 @@ export const runtimeHandoffCases = [runtimeDefinition("agent-chat.track-delegate
   await ctx.input.api.saveAgentInstructions(prepared.worker.id, instructions);
   const prompt = `Create one task titled Website, assigned to Morgan, to draft our launch page. Morgan is waiting for the human brief, which will include the reference ${marker}. Let Morgan implement it on that separate work task. Track the result here and tell me here when the work is complete, with access to the actual result. You may begin that one handoff now; no additional task or project is needed.`;
   await sendChatMessage(ctx.input.page, prompt);
-  const phase = await pollUntil({ label: "Actual conversation-created Morgan handoff", deadlineAt: Date.now() + 180_000,
+  const phase = await pollUntil({ label: "Actual conversation-created Morgan handoff", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
     load: async () => {
       await ctx.refreshIssue();
       const tasks = await ctx.input.api.get<Entity[]>(`${prepared.company}/issues?includeAgentCreatedTasks=true&limit=1000`);
@@ -49,7 +50,7 @@ export const runtimeHandoffCases = [runtimeDefinition("agent-chat.track-delegate
       return { source: ctx.issue(), tasks, runs: await ctx.allRuns(),
         waiting: candidates.length === 1 ? await readRuntimeTaskGate(ctx, prepared.gate, candidates[0]!.id, prepared.worker.id) : "" };
     },
-    accept: value => value.source?.conversationState === "waiting" && value.waiting === "waiting" && value.runs.length === 2
+    accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.waiting === "waiting" && value.runs.length === 2
       && value.runs.some(run => run.agentId === prepared.worker.id && run.status === "running")
       && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
       && value.tasks.filter(task => task.id !== source.id).length === 1,
@@ -79,9 +80,9 @@ export const runtimeHandoffCases = [runtimeDefinition("agent-chat.track-delegate
     return c.result();
   },
   async act(ctx, state) {
-    const phase = await pollUntil({ label: "Canonical handoff status response", deadlineAt: Date.now() + 150_000,
+    const phase = await pollUntil({ label: "Canonical handoff status response", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 3
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.length === 3
         && value.runs.find(run => run.id === state.workerRunId)?.status === "running"
         && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).every(run => run.status === "succeeded") });
     const queryIds = phase.runs.filter(run => !(state.setupRunIds as string[]).includes(run.id)).map(run => run.id);

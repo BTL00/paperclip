@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "../api.js";
 import { checks, sameTask, type Entity } from "./internal-support.js";
@@ -27,7 +28,7 @@ export function gradeRetirement(value: unknown) {
   return c.result();
 }
 export const runtimeRetirementCases = [runtimeDefinition("agents.retire-agent", async ctx => {
-  const state = await busyRuntimeWorker(ctx);
+  const state = await busyRuntimeWorker(ctx, { observationDeadlineAt: chatCatalogOriginalPhaseDeadline(ctx) });
   // Truthful historical fixture: this was completed by the human and assigned
   // to Morgan for recordkeeping. It does not impersonate prior provider work.
   const historicalTask = await ctx.input.api.post<Entity>(`/api/companies/${ctx.input.fixtures.company.id}/issues`, {
@@ -59,9 +60,9 @@ export const runtimeRetirementCases = [runtimeDefinition("agents.retire-agent", 
     return c.result();
   },
   async act(ctx, state) {
-    await pollUntil({ label: "Canonical retirement guidance while Morgan works", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Canonical retirement guidance while Morgan works", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 2
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.length === 2
         && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
         && value.runs.find(run => run.id === state.workerRunId)?.status === "running" });
     const o = await observeRuntime(ctx, state); state.queryReply = o.reply;

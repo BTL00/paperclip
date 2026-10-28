@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { appendFile, mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -61,7 +62,7 @@ export const cliAuthorizationIdentityCases: readonly ChatCatalogCase[] = [identi
   sourceFiles: ["chat-catalog-domains/identity-cli-authorization.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/access.yaml",
     "../../cli/src/index.ts", "../../cli/src/client/board-auth.ts", "../../cli/src/commands/client/auth.ts", "../../cli/src/commands/client/common.ts", "../../pnpm-lock.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const resources = owned.get(ctx); if (!resources) throw new Error("Owned CLI home missing");
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const resources = owned.get(ctx); if (!resources) throw new Error("Owned CLI home missing");
     const login = runCli(ctx, ["auth", "login", "--company-id", ctx.input.fixtures.company.id, "--no-browser"], "login");
     void login.catch(() => {}); // Later awaited; browser failures still trigger owned cleanup.
     // Observe the CLI's own public challenge, never synthesize its success or

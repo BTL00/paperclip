@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { grantCaseTaskAssignment } from "./integrator-case-prerequisites.js";
 import type { cases, caseEvents } from "../../../packages/db/src/schema/cases.js";
 import type { CaseHandoff, HandoffCaseResult } from "../../../packages/shared/src/case-handoffs.js";
@@ -69,9 +70,9 @@ export const integratorCaseHistoryCases = [integratorDefinition("cases", "cases.
       workflow_document_text: `# Diagnosis review\nMorgan (${worker.id}) saves the initial event-handler binding hypothesis in the task-owned diagnosis document, then hands this same primary to Riley (${reviewer.id}). Riley reviews the actual synthetic browser evidence in the brief, revises that same diagnosis document to explain the touch overlay intercepting taps, updates the case diagnosis fact accordingly, then hands this same primary back to Morgan for final recording. Morgan's final-recording phase reads the preserved revisions, saves a task comment and completes this ordinary task without another handoff or case closure.`,
       initialDocuments: [{ key: "brief", title: "Synthetic browser evidence", body: "Customer initially suspects an event-handler binding problem. Controlled reproduction later shows a transparent overlay intercepting touch on the Pay button; keyboard activation bypasses that hit target and succeeds. The overlay observation supersedes the preliminary event-binding hypothesis." }],
     });
-    const result = await pollUntil({ label: "real diagnosis revisions and two distinct agent handoffs", deadlineAt: Date.now() + 540_000, intervalMs: 1000,
+    const result = await pollUntil({ label: "real diagnosis revisions and two distinct agent handoffs", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 540_000), intervalMs: 1000,
       load: async () => ({ task: await ctx.input.api.get<Issue>(`/api/issues/${kickoff.taskId}`), runs: await ctx.allRuns(), handoffs: (await ctx.input.api.get<{ items: CaseHandoff[] }>(`/api/cases/${kickoff.caseId}/handoffs?limit=100`)).items }),
-      accept: v => v.task.status === "done" && v.runs.length === 3 && v.runs.every(run => run.status === "succeeded") && v.handoffs.length === 3,
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && v.task.status === "done" && v.runs.length === 3 && v.runs.every(run => run.status === "succeeded") && v.handoffs.length === 3,
       reject: v => v.runs.length > 3 || v.handoffs.length > 3 ? "Diagnosis prerequisite exceeded declared execution/handoff bounds" : undefined });
     return { project: p, worker: { id: worker.id }, reviewer: { id: reviewer.id }, task: result.task, case: await ctx.input.api.get<CaseRecord>(`/api/cases/${kickoff.caseId}`) };
   } catch (error) { await cleanup(ctx); throw error; }
@@ -82,8 +83,8 @@ export const integratorCaseHistoryCases = [integratorDefinition("cases", "cases.
 }, { expectedRunCount: 5, expectedHumanMessageCount: 2, attemptTimeoutMs: 1_200_000, cleanup,
   sourceFiles: ["chat-catalog-domains/integrator-case-history.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"],
   async act(ctx, state) {
-    const first = await pollUntil({ label: "canonical diagnosis history answer before distinct missing-history question", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-      load: () => observeHistory(ctx, state), accept: o => o.runs.length === 4 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+    const first = await pollUntil({ label: "canonical diagnosis history answer before distinct missing-history question", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000), intervalMs: 1000,
+      load: () => observeHistory(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && o.runs.length === 4 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
     state.firstHistory = { ...first, state: structuredClone(state) }; await ctx.input.evidence("chat-case-diagnosis-history-first.json", state.firstHistory);
     const row = first.caseRecord; const beforeIds = new Set(first.caseEvents.map(event => event.id));
     resources.get(ctx)!.unavailableText = `unretained-support-${ctx.input.nonce}`;

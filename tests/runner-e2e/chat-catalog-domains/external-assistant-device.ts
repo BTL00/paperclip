@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { definition, externalObservation, observeExternal, checks, verifyRenderedReply } from "./external-support.js";
@@ -63,7 +64,7 @@ export const assistantDeviceExternalCases = [definition("assistant-connections.d
   authentication: "human-session", attemptTimeoutMs: 780_000,
   sourceFiles: ["chat-catalog-domains/external-assistant-device.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "chat-catalog-domains/external-device-private-contract.ts", "../../ui/src/pages/McpConnect.tsx", "../../server/src/routes/public-mcp.ts", "../../server/src/services/public-mcp/oauth.ts", "../../packages/shared/src/public-mcp.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "public-mcp-client.ts", "chat-scenarios/assistant-connections.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const fixture = fixtures.get(ctx); if (!fixture) throw new Error("Device fixture missing");
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const fixture = fixtures.get(ctx); if (!fixture) throw new Error("Device fixture missing");
     const approvalUi = await privateBrowserEntry({
       mode: "device-approve", baseURL: origin, setupURL: fixture.primary.verification_uri_complete,
       providerURL: origin, credential: fixture.primary.user_code, companyId: ctx.input.fixtures.company.id,

@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { BudgetIncident, BudgetOverview } from "../../../packages/shared/src/types/budget.js";
 import type { CostEvent } from "../../../packages/shared/src/types/cost.js";
@@ -97,7 +98,7 @@ export const budgetIncidentIdentityCases: readonly ChatCatalogCase[] = ["budgets
       && incidentSourceFundingReady(budget, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id), "The real prerequisite budget incident and separate manual pause survive harness setup, without changing either hold."); return c.result();
   },
   async act(ctx, state) {
-    await waitForReply(ctx); if (scenarioId.endsWith("explain-hard-stop")) return;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); if (scenarioId.endsWith("explain-hard-stop")) return;
     const root = `/api/companies/${ctx.input.fixtures.company.id}`; const incident = state.incident as BudgetIncident;
     const beforeHuman = await ctx.input.api.get<BudgetOverview>(`${root}/budgets/overview`);
     const beforeHumanWorker = await ctx.input.api.get<PausedAgent>(`/api/agents/${entity(state, "worker").id}`);

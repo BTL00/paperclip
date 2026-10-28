@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "../api.js";
 import { checks } from "./internal-support.js";
@@ -22,7 +23,7 @@ export function gradePauseAgent(value: unknown) {
   c.add("exact-agent-identity", !!current && current.companyId === o.companyId, "The actual human control affects the same saved Morgan identity.");
   return c.result();
 }
-export const runtimeLifecycleCases = [runtimeDefinition("agents.pause-agent", busyRuntimeWorker, gradePauseAgent, {
+export const runtimeLifecycleCases = [runtimeDefinition("agents.pause-agent", ctx => busyRuntimeWorker(ctx, { observationDeadlineAt: chatCatalogOriginalPhaseDeadline(ctx) }), gradePauseAgent, {
   sourceFiles: ["chat-catalog-domains/runtime-agent-lifecycle.ts", "chat-catalog-domains/runtime-busy-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agents.yaml"],
   expectedRunCount: 2, attemptTimeoutMs: 600_000,
   setupPolicy: { readiness: "preserve-scenario", invariantCheckIds: ["lead-ready", "real-busy-worker", "worker-task-scope"] },
@@ -41,9 +42,9 @@ export const runtimeLifecycleCases = [runtimeDefinition("agents.pause-agent", bu
   },
   runPolicy: { kind: "terminal-counts", terminalStatusCounts: { succeeded: 1, cancelled: 1 } },
   async act(ctx, state) {
-    await pollUntil({ label: "Chat guidance while Morgan is still working", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Chat guidance while Morgan is still working", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.some(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded")
         && value.runs.find(run => run.id === state.workerRunId)?.status === "running" });
     const worker = state.worker as RuntimeAgent;
     state.beforeHumanStatus = (await ctx.input.api.get<RuntimeAgent>(`/api/agents/${worker.id}`)).status;

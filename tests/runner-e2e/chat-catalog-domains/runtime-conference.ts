@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { checks } from "./internal-support.js";
 import { waitForReply } from "./identity-support.js";
@@ -26,7 +27,7 @@ export const runtimeConferenceCases = [runtimeDefinition("agent-chat.conference-
 }, gradeConference, {
   sourceFiles: ["chat-catalog-domains/runtime-conference.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agent-chat.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); state.runsBeforeOpen = (await ctx.allRuns()).length; state.standingIssueBefore = ctx.issue()?.id;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); state.runsBeforeOpen = (await ctx.allRuns()).length; state.standingIssueBefore = ctx.issue()?.id;
     const o = await observeRuntime(ctx, state);
     const href = o.links.find(link => { const url = new URL(link, ctx.input.api.baseURL);
       return url.origin === ctx.input.api.baseURL && url.pathname === `/${state.companyPrefix}/board-chat`; });

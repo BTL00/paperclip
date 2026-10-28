@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { checks } from "./internal-support.js";
 import { waitForReply, probeAgentPermission } from "./identity-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime, agentLink, unchangedAgent, type RuntimeAgent } from "./runtime-support.js";
@@ -30,7 +31,7 @@ export const runtimeAgentKeyCases = [runtimeDefinition("agents.agent-api-key", a
   authentication: "human-session",
   sourceFiles: ["chat-catalog-domains/runtime-agent-keys.ts", "chat-catalog-domains/runtime-private-key.ts", "chat-catalog-domains/runtime-private-key-worker.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-scenarios/agents.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const worker = state.worker as RuntimeAgent;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const worker = state.worker as RuntimeAgent;
     const endpoint = `/api/agents/${worker.id}/keys`;
     state.agentCreateStatus = await probeAgentPermission(ctx, endpoint, "POST", { name: "local integration" });
     state.keysBeforeHuman = (await ctx.input.api.get<KeyRow[]>(endpoint)).length;

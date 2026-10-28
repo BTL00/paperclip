@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
@@ -7,11 +8,11 @@ import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 interface HireApproval { id: string; companyId: string; type: string; status: string; requestedByAgentId: string | null;
   decidedByUserId: string | null; payload: { agentId?: string; name?: string; role?: string; title?: string; reportsTo?: string; adapterType?: string; adapterConfig?: unknown } }
 async function pendingHire(ctx: ChatCatalogContext, name: string) {
-  return pollUntil({ label: `Actual governed ${name} proposal`, deadlineAt: Date.now() + 180_000,
+  return pollUntil({ label: `Actual governed ${name} proposal`, deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
     load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(),
       approvals: await ctx.input.api.get<HireApproval[]>(`/api/companies/${ctx.input.fixtures.company.id}/approvals`),
       agents: await ctx.input.api.get<RuntimeAgent[]>(`/api/companies/${ctx.input.fixtures.company.id}/agents`) }; },
-    accept: value => value.source?.conversationState === "waiting" && value.approvals.filter(row => row.type === "hire_agent" && row.status === "pending" && row.payload.name === name).length === 1
+    accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.approvals.filter(row => row.type === "hire_agent" && row.status === "pending" && row.payload.name === name).length === 1
       && value.agents.some(row => row.name === name && row.status === "pending_approval")
       && value.runs.every(run => run.agentId === ctx.input.fixtures.agent.id && run.status === "succeeded"),
     reject: value => value.runs.length > 4 || value.runs.some(run => run.agentId !== ctx.input.fixtures.agent.id || ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Governed hire admitted unexpected work or failed" : undefined });
