@@ -37,7 +37,7 @@ export function gradePostStop(value: unknown) {
   c.add("actual-same-source-stop-continuation-evidence", !!o, "A real setup human request, actual native provider cleanup, canonical human instruction and normal continuation must be independently observed."); if (!o) return c.result();
   const s = o.state;
   c.add("human-stop-cleanup-and-exact-message-chronology", s.stopStatus === 200 && s.gateReleasedAfterCleanup === true && s.chronologyBound === true && s.providerExited === true && s.initialHumanRetained === true,
-    "The same actual source run has a real Stop intent and ACK; the canonical human message persisted in between, unchanged, and only its eligible successor consumes it after cleanup.");
+    "The same actual source run has a real Stop intent and ACK; the owned protocol endpoint has retired (the OpenCode proxy, not SDK server health), and only its eligible successor consumes the unchanged canonical message after cleanup.");
   c.add("one-eligible-current-owner-with-no-revival-or-duplicate", o.runs.length === 2 && o.runs.filter(row => row.status === "cancelled").length === 1 && o.runs.filter(row => row.status === "succeeded").length === 1
     && o.runs.every(row => row.agentId === o.leadId) && s.singleSuccessor === true && s.sameCurrentAssignment === true && s.oldEvidenceRetained === true && o.humanQueries.length === 2 && o.tasks.length === 0,
     "The original stopped execution remains cancelled, one native source continuation owns the new direction under current assignment, and no duplicate task or user message appears.");
@@ -87,7 +87,7 @@ export const runtimePostStopCases = [runtimeDefinition("recovery.post-stop-messa
     return { runId: run.id, issueId: ctx.issue()!.id, intentId: intent.intentId, intentRecordedAt: intent.recordedAt };
   },
   async act(ctx, state) {
-    const cleaned = await pollUntil({ label: "Actual old source cancellation ACK and physical provider exit before neutral gate release", deadlineAt: Date.now() + 90000,
+    const cleaned = await pollUntil({ label: "Actual old source cancellation ACK and owned provider endpoint retirement before neutral gate release", deadlineAt: Date.now() + 90000,
       load: async () => ({ old: await ctx.input.api.get<NativeFaultRun>(`/api/heartbeat-runs/${state.workerRunId}`), providerExited: await ownedCleanupProviderHasExited(ctx) }),
       accept: v => v.old.status === "cancelled" && (v.old.resultJson?.nativeCancellation as StopIntent | undefined)?.dispatchState === "acknowledged" && v.providerExited });
     await releasePostStopGateAfterCleanup(cleaned.old, cleaned.providerExited, () => writeFile((state.gate as { gate: string }).gate, "The pending fixture tool has been released.", "utf8"));

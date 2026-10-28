@@ -24,6 +24,12 @@ export function matchesOwnedNativeIdentity(input: { identity: OwnedNativeIdentit
     && p.executable === e.executable && path.isAbsolute(p.runtimeRoot) && p.runtimeRoot.startsWith(`${e.root}${path.sep}`) && path.resolve(p.runtimeRoot) === p.runtimeRoot
     && !!run.processStartedAt && Number.isFinite(Date.parse(p.startedAt)) && Math.abs(Date.parse(p.startedAt) - Date.parse(String(run.processStartedAt))) < 2_000;
 }
+export function ownedNativeExecutablePath(pid: number, command: string, platform: NodeJS.Platform = process.platform) {
+  if (!Number.isSafeInteger(pid) || pid <= 1 || pid === process.pid) throw new Error("Executable identity requires an owned process candidate");
+  if (platform === "linux") return `/proc/${pid}/exe`;
+  if (platform === "darwin" && path.isAbsolute(command)) return command;
+  throw new Error("Owned executable identity is unavailable on this platform");
+}
 async function processIdentity(run: NativeFaultRun): Promise<OwnedNativeIdentity> {
   const pid = run.processPid;
   if (!Number.isSafeInteger(pid) || !pid || pid <= 1) throw new Error("Native infrastructure fault lacks an actual public process identity");
@@ -38,7 +44,7 @@ async function processIdentity(run: NativeFaultRun): Promise<OwnedNativeIdentity
       if (matches.length !== 1) throw new Error("ambiguous process argument identity");
       return matches[0]![1]!;
     };
-    return { pid, uid: Number(uid), group: Number(group), startedAt, executable: await realpath(executable), commandRunId: argument("run-id"), commandRunnerId: argument("runner-id"), runtimeRoot: await realpath(argument("state-dir")) };
+    return { pid, uid: Number(uid), group: Number(group), startedAt, executable: await realpath(ownedNativeExecutablePath(pid, executable)), commandRunId: argument("run-id"), commandRunnerId: argument("runner-id"), runtimeRoot: await realpath(argument("state-dir")) };
   } catch { throw new Error("Native infrastructure fault could not independently verify the actual process; private diagnostics withheld"); }
 }
 /** Authoring primitive only: this function is invoked solely inside the coordinator's selected live attempt. */

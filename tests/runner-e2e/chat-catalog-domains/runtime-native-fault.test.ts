@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { matchesOwnedNativeIdentity, type NativeFaultBinding } from "./runtime-native-fault.js";
+import { ownedNativeExecutablePath, matchesOwnedNativeIdentity, type NativeFaultBinding } from "./runtime-native-fault.js";
 function valid() {
   return { identity: { pid: 940123, uid: 501, group: 940123, startedAt: "2026-10-26T12:00:00Z", executable: "/qualified/runnerd", commandRunId: "run", commandRunnerId: "runner", runtimeRoot: "/owned/attempt/state/runner" },
     run: { id: "run", companyId: "company", agentId: "morgan", status: "running", runtimeMode: "native", nativeIssueId: "website", runnerInstanceId: "runner", processPid: 940123, processGroupId: 940123, processStartedAt: new Date("2026-10-26T12:00:00.123Z") } as NativeFaultBinding,
@@ -15,3 +15,10 @@ it("rejects a missing retained process start", () => { const x = valid(); x.run.
 
 it("rejects terminal public run state", () => { const x = valid(); x.run.status = "succeeded"; expect(matchesOwnedNativeIdentity(x)).toBe(false); });
 it("rejects legacy runtime", () => { const x = valid(); x.run.runtimeMode = "legacy"; expect(matchesOwnedNativeIdentity(x)).toBe(false); });
+
+it("uses Linux kernel executable identity without trusting a ps basename, preserving absolute macOS paths", () => {
+  expect(ownedNativeExecutablePath(987654, "node", "linux")).toBe("/proc/987654/exe");
+  expect(ownedNativeExecutablePath(987654, "/owned/bin/runner", "darwin")).toBe("/owned/bin/runner");
+  for (const platform of ["darwin", "win32"] as const) expect(() => ownedNativeExecutablePath(987654, "node", platform)).toThrow();
+  for (const pid of [0, 1, process.pid, 12.5]) expect(() => ownedNativeExecutablePath(pid, "/owned/bin/runner", "linux")).toThrow();
+});
