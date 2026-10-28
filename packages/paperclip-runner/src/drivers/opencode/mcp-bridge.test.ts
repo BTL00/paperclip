@@ -291,7 +291,7 @@ it("correlates the actual authenticated HTTP response write and completion witho
   expect(rows.every(row => row.rpcId === 23 && row.method === "tools/call")).toBe(true);
   expect(rows.find(row => row.phase === "http_received")).toMatchObject({ receivedAtMs: expect.any(Number), bodyReadMs: expect.any(Number) });
   expect(rows.find(row => row.phase === "http_received").receivedAtMs).toBeLessThanOrEqual(rows.find(row => row.phase === "http_write").atMs);
-  expect(rows.find(row => row.phase === "http_write").responseBytes).toBe(Buffer.byteLength(text));
+  expect(rows.find(row => row.phase === "http_write")).toMatchObject({ rpcId: 23, responseRpcId: JSON.parse(text).id, responseKind: "result", responseBytes: Buffer.byteLength(text) });
   expect(rows.findIndex(row => row.phase === "http_write")).toBeLessThan(rows.findIndex(row => row.phase === "http_finish"));
   expect(lines.join("\n")).not.toContain(secret); expect(lines.join("\n")).not.toContain(bridge.secret);
   const count = lines.length;

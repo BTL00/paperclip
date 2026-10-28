@@ -10,12 +10,12 @@ it("retains exact bounded correlations and numeric provider times without privat
   const secret = "synthetic-private-token@example.invalid";
   timing("controller_request", { rpcId: "2", controllerRequestId: "opencode-7", method: "item/tool/call", arguments: secret, headers: secret, url: secret });
   timing("provider_part", { executionId: "prt_generated123", providerStartMs: 1700000000000, providerEndMs: 1700000030000 });
-  timing("http_write", { rpcId: 2, responseBytes: 123, status: "success" });
+  timing("http_write", { rpcId: 2, responseRpcId: 99, responseKind: "result", responseBytes: 123, status: "success" });
   timing("http_received", { rpcId: secret, controllerRequestId: secret, method: secret, status: secret });
   const rows = lines.map(line => JSON.parse(line));
   expect(rows[0]).toMatchObject({ rpcId: 2, controllerRequestId: "opencode-7", method: "item/tool/call", sequence: 1 });
   expect(rows[1]).toMatchObject({ providerStartMs: 1700000000000, providerEndMs: 1700000030000, executionIdHash: expect.stringMatching(/^[a-f0-9]{24}$/) });
-  expect(rows[2]).toMatchObject({ rpcId: 2, responseBytes: 123 });
+  expect(rows[2]).toMatchObject({ rpcId: 2, responseRpcId: 99, responseKind: "result", responseBytes: 123 });
   expect(rows[3]).not.toHaveProperty("rpcId"); expect(rows[3]).not.toHaveProperty("method");
   expect(new Set(rows.map(row => row.observerId)).size).toBe(1);
   expect(lines.join("\n")).not.toContain(secret); expect(lines.join("\n")).not.toContain("prt_generated123");

@@ -692,6 +692,123 @@ fn provider_performance_spans(params: &Value) -> Vec<Value> {
     }).collect()
 }
 
+fn opencode_mcp_timing_record(params: &Value) -> Option<Value> {
+    let row = params.get("record")?.as_object()?;
+    let allowed = [
+        "code",
+        "observerId",
+        "sequence",
+        "phase",
+        "atMs",
+        "elapsedMs",
+        "rpcId",
+        "responseRpcId",
+        "responseKind",
+        "controllerRequestId",
+        "executionIdHash",
+        "method",
+        "status",
+        "receivedAtMs",
+        "bodyReadMs",
+        "responseBytes",
+        "providerStartMs",
+        "providerEndMs",
+    ];
+    if row.keys().any(|key| !allowed.contains(&key.as_str()))
+        || row.get("code")?.as_str()? != "opencode_mcp_timing"
+        || uuid::Uuid::parse_str(row.get("observerId")?.as_str()?).is_err()
+        || !(1..=256).contains(&row.get("sequence")?.as_u64()?)
+        || ![
+            "http_received",
+            "bridge_enqueue",
+            "bridge_result",
+            "http_write",
+            "http_finish",
+            "http_close",
+            "driver_dispatch",
+            "driver_result",
+            "controller_request",
+            "controller_response",
+            "provider_part",
+        ]
+        .contains(&row.get("phase")?.as_str()?)
+    {
+        return None;
+    }
+    for key in ["atMs", "elapsedMs"] {
+        row.get(key)?;
+    }
+    for key in [
+        "atMs",
+        "rpcId",
+        "responseRpcId",
+        "receivedAtMs",
+        "responseBytes",
+        "providerStartMs",
+        "providerEndMs",
+    ] {
+        if let Some(value) = row.get(key) {
+            if value
+                .as_u64()
+                .is_none_or(|number| number > 9_007_199_254_740_991)
+            {
+                return None;
+            }
+        }
+    }
+    for key in ["elapsedMs", "bodyReadMs"] {
+        if let Some(value) = row.get(key) {
+            if value
+                .as_f64()
+                .is_none_or(|number| !number.is_finite() || number < 0.0)
+            {
+                return None;
+            }
+        }
+    }
+    if let Some(value) = row.get("controllerRequestId") {
+        let suffix = value.as_str()?.strip_prefix("opencode-")?;
+        if suffix.is_empty()
+            || suffix.len() > 12
+            || !suffix.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return None;
+        }
+    }
+    if let Some(value) = row.get("executionIdHash") {
+        let value = value.as_str()?;
+        if value.len() != 24 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+    }
+    if let Some(value) = row.get("method") {
+        if ![
+            "initialize",
+            "ping",
+            "tools/list",
+            "tools/call",
+            "notifications/initialized",
+            "notifications/cancelled",
+            "item/tool/call",
+        ]
+        .contains(&value.as_str()?)
+        {
+            return None;
+        }
+    }
+    if let Some(value) = row.get("responseKind") {
+        if !["result", "error"].contains(&value.as_str()?) {
+            return None;
+        }
+    }
+    if let Some(value) = row.get("status") {
+        if !["success", "error", "closed"].contains(&value.as_str()?) {
+            return None;
+        }
+    }
+    Some(Value::Object(row.clone()))
+}
+
 pub fn normalize_codex_notification(method: &str, params: &Value) -> Vec<NormalizedProviderEvent> {
     let mut events = Vec::new();
     let push = |events: &mut Vec<NormalizedProviderEvent>,
@@ -706,6 +823,11 @@ pub fn normalize_codex_notification(method: &str, params: &Value) -> Vec<Normali
     };
 
     match method {
+        "paperclip/opencodeMcpTiming" => {
+            if let Some(record) = opencode_mcp_timing_record(params) {
+                push(&mut events, "harness.diagnostic", EventPriority::P1, record);
+            }
+        }
         "paperclip/providerPerformance" => {
             let spans = provider_performance_spans(params);
             if !spans.is_empty() {
@@ -1495,6 +1617,41 @@ fn has_rfc_uri_scheme_prefix(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opencode_mcp_timing_retains_closed_records_as_neutral_run_artifact_events() {
+        let record = json!({"code":"opencode_mcp_timing", "observerId":"89c0f755-e09e-4cab-a55e-8b371e3a5ff3", "sequence":1, "phase":"http_write", "atMs":1700000000000_u64, "elapsedMs":2.5, "rpcId":23, "responseRpcId":99, "responseKind":"result", "controllerRequestId":"opencode-7", "responseBytes":123, "method":"tools/call"});
+        let events = normalize_codex_notification(
+            "paperclip/opencodeMcpTiming",
+            &json!({"threadId":"actual-thread", "record":record}),
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "harness.diagnostic");
+        assert_eq!(events[0].priority, EventPriority::P1);
+        assert_eq!(events[0].payload, record);
+        let persisted: Value =
+            serde_json::from_str(&serde_json::to_string(&events[0].payload).unwrap()).unwrap();
+        assert_eq!(persisted, record);
+        assert!(persisted.get("userActionable").is_none());
+        for (key, value) in [
+            ("arguments", json!("private-token")),
+            ("method", json!("private-method")),
+            ("phase", json!("private-phase")),
+            ("rpcId", json!("private-id")),
+            ("sequence", json!(257)),
+            ("controllerRequestId", json!("private-id")),
+            ("executionIdHash", json!("private-id")),
+            ("status", json!("private-status")),
+        ] {
+            let mut invalid = record.clone();
+            invalid[key] = value;
+            assert!(normalize_codex_notification(
+                "paperclip/opencodeMcpTiming",
+                &json!({"record":invalid})
+            )
+            .is_empty());
+        }
+    }
 
     #[test]
     fn performance_diagnostics_keep_only_bounded_content_free_measurements() {

@@ -91,9 +91,8 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
   const messages: Array<{ id?: string | number; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown }> = [];
   const input = createInterface({ input: child.stdout! });
   input.on("line", line => messages.push(JSON.parse(line)));
-  const timings: Array<Record<string, unknown>> = [];
-  const errors = createInterface({ input: child.stderr! });
-  errors.on("line", line => { try { const value = JSON.parse(line); if (value.code === "opencode_mcp_timing") timings.push(value); } catch {} });
+  child.stderr!.resume();
+  const timingRecords = () => messages.filter(message => message.method === "paperclip/opencodeMcpTiming").map(message => message.params!.record as Record<string, unknown>);
   let exited = false;
   const exit = new Promise<void>(resolve => child.once("exit", () => { exited = true; resolve(); }));
   const send = (message: unknown) => child.stdin!.write(`${JSON.stringify(message)}\n`);
@@ -130,12 +129,17 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
     }
     expect(await response(4)).toBe(true);
     if (respond) {
+      const timings = timingRecords();
       const requested = timings.find(row => row.phase === "controller_request" && row.controllerRequestId === call.id);
       expect(requested).toBeDefined();
       expect(requested?.rpcId).toBe(Number(call.params!.callId));
-      await expect.poll(() => timings.find(row => row.phase === "controller_response" && row.controllerRequestId === call.id)).toMatchObject({ rpcId: requested!.rpcId, observerId: requested!.observerId, status: "success" });
+      await expect.poll(() => timingRecords().find(row => row.phase === "controller_response" && row.controllerRequestId === call.id)).toMatchObject({ rpcId: requested!.rpcId, observerId: requested!.observerId, status: "success" });
       expect(JSON.stringify(timings)).not.toContain("fixture-key");
-      expect(JSON.stringify(timings)).not.toContain(feedback);
+      expect(JSON.stringify(timingRecords())).not.toContain(feedback);
+      const announced = messages.findIndex(message => message.id === 2);
+      const notifications = messages.filter(message => message.method === "paperclip/opencodeMcpTiming");
+      expect(notifications.every(message => messages.indexOf(message) > announced && message.params!.threadId === call.params!.threadId)).toBe(true);
+      expect(messages.some(message => message.method === "warning")).toBe(false);
       const sessions = (await readdir(runtime, { withFileTypes: true })).filter(entry => entry.isDirectory());
       await expect.poll(async () => JSON.parse(await readFile(join(runtime, sessions[0]!.name, "data/fake-completion-feedback.json"), "utf8"))).toMatchObject([
         { result: { content: [{ text: expect.stringContaining(feedback) }] } },
@@ -153,7 +157,6 @@ it.each([true, false])("settles a real proxy interrupt with controller feedback 
       await exit;
     }
     input.close();
-    errors.close();
     await rm(root, { recursive: true, force: true });
   }
 }, 30_000);

@@ -397,7 +397,7 @@ claim isolation for every child credential or persisted value.
 
 For a bounded operator diagnosis, explicitly set `PAPERCLIP_OPENCODE_MCP_TIMING=1`
 in the selected run's configured environment. The default is off. It retains at
-most 256 closed timing records in the existing process diagnostic log. Records
+most 256 closed timing records as neutral `harness.diagnostic` run events. Records
 contain generated correlation IDs, allowlisted protocol phases, numeric times,
 status and response byte counts. They contain no arguments, results, headers,
 tokens or endpoint URLs. Unknown string identities and methods are omitted;

@@ -41,7 +41,12 @@ type RpcMessage = {
   error?: unknown;
 };
 
-const mcpTiming = createOpenCodeMcpTiming(process.env, line => { process.stderr.write(`${line}\n`); });
+const timingOutbox: unknown[] = [];
+let timingThreadAnnounced = false;
+const mcpTiming = createOpenCodeMcpTiming(process.env, line => {
+  if (timingOutbox.length < 256) timingOutbox.push(JSON.parse(line));
+  flushMcpTiming();
+});
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 const pending = new Map<
   string,
@@ -61,6 +66,13 @@ const usageLedger = new OpenCodeProxyUsageLedger();
 
 function send(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
+}
+
+function flushMcpTiming(): void {
+  if (!timingThreadAnnounced || !session) return;
+  while (timingOutbox.length) send({ method: "paperclip/opencodeMcpTiming", params: {
+    threadId: session.ids().driverSessionId, record: timingOutbox.shift(),
+  } });
 }
 
 function requestController(method: string, params: unknown, retainEnvelope = false): Promise<unknown> {
@@ -420,6 +432,10 @@ async function handle(message: RpcMessage): Promise<void> {
       throw new Error(`Unsupported OpenCode proxy method ${message.method}`);
   }
   send({ id: message.id, result });
+  if (message.method === "thread/start" || message.method === "thread/resume") {
+    timingThreadAnnounced = true;
+    flushMcpTiming();
+  }
 }
 
 let pendingInput = Promise.resolve();

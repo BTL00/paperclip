@@ -194,7 +194,7 @@ async function handleRequest(
   response.once("finish", () => timing("http_finish"));
   response.once("close", () => timing("http_close"));
   const sendRpc = (target: ServerResponse, responseId: unknown, result?: unknown, error?: unknown) =>
-    writeRpc(target, responseId, result, error, bytes => timing("http_write", { responseBytes: bytes }));
+    writeRpc(target, responseId, result, error, (bytes, outgoingId, responseKind) => timing("http_write", { responseBytes: bytes, responseRpcId: outgoingId, responseKind }));
   if (method === "notifications/cancelled") {
     const params = isRecord(message.params) ? message.params : {};
     const requestId = params.requestId;
@@ -314,12 +314,13 @@ function parseMessage(body: string): Record<string, unknown> {
   return parsed;
 }
 
-function writeRpc(response: ServerResponse, id: unknown, result?: unknown, error?: unknown, onWrite?: (bytes: number) => void): void {
+function writeRpc(response: ServerResponse, id: unknown, result?: unknown, error?: unknown, onWrite?: (bytes: number, outgoingId: unknown, responseKind: "result" | "error") => void): void {
   response.statusCode = 200;
   response.setHeader("Content-Type", "application/json");
-  const body = JSON.stringify({ jsonrpc: "2.0", id, ...(error === undefined ? { result } : { error }) });
+  const message = { jsonrpc: "2.0", id, ...(error === undefined ? { result } : { error }) };
+  const body = JSON.stringify(message);
   response.end(body);
-  try { onWrite?.(Buffer.byteLength(body)); } catch {}
+  try { onWrite?.(Buffer.byteLength(body), message.id, error === undefined ? "result" : "error"); } catch {}
 }
 
 function rpcError(code: number, message: string) {
