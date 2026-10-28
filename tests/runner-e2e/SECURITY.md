@@ -593,8 +593,14 @@ export scans cannot clear this decision; the publisher and gallery enforce it.
 
 The isolated webhook core-candidate cell verifies its actual source-mode child,
 supervisor generation, reviewed source/loader hashes and health-response witness
-before public fixture creation or any adapter hello. Its owned home must be
-fresh, and replacement server generations are rejected. This is an E2E startup
+before public company/agent fixture creation or any adapter hello. Source and
+health identity are checked first. The existing ordinary first-human signup and
+first-admin claim establish the authenticated session and enable the existing
+public-MCP instance setting; only that session
+may read the empty company directory. The unchanged witness is checked again
+before release, and the same session is reused afterward. This bootstrap creates
+no company, agent or model work. Its owned home must be fresh, and replacement
+server generations are rejected. This is an E2E startup
 precondition; production routes and native tool behavior are unchanged.
 
 Closed, hash-only startup custody is retained in private case snapshots even on

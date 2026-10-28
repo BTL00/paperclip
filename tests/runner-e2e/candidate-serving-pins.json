@@ -1,6 +1,16 @@
 {
   "baseline": "1fbf2670995f32d43c6ddb3806dca5ac86f2468a",
   "files": {
+    "tests/runner-e2e/public-mcp-flow.ts": "452171551fd57c626e7195469fe86afe63f78ff25605962e8fa9d5c31808ecfa",
+    "tests/runner-e2e/api.ts": "b546ed66b23020e5944576b1e6f8304654c74986be03cf66282855cd5df5d149",
+    "server/src/routes/companies.ts": "8289f44c355b8885a6139231c5500082c89f151eb866f48efabc72720e2cd0c9",
+    "server/src/routes/authz.ts": "85760b89fb1d0beb629d3c815d74bc17d5d254b2c8830f9bf1ce0b792095cc84",
+    "server/src/first-admin-claim.ts": "40d67849dc292589d8ccc3c5876f9be353abcf6a48862f3fa8fb606efacd671a",
+    "server/src/auth/better-auth.ts": "960c38d6cd94d67600c877ea469591e1a754eb699b11d1b8edd595e041550746",
+    "server/src/routes/access.ts": "c7303a7f62244566438df689fa5c37f9fadcec2e30de4892a95b51426ba6bc3b",
+    "server/src/routes/instance-settings.ts": "393c8181040e73919143a531932067293c62199fa8bec360ec08980f89f3611e",
+    "server/src/services/instance-settings.ts": "11a5b840f3f19537558ea1ce1c3cca2cd3b8ee523fe120861816d818b1187e79",
+    "server/src/middleware/auth.ts": "ccd9f31b65a392dfb536e73ba4f2e4655ce4075a3b486e5d1ac4d36ce024528c",
     "cli/src/index.ts": "14fb471e0974e2eeec347e4469956a8f71b850c4c7e71cdff51ea98123c003be",
     "tests/runner-e2e/web-server-command.ts": "1b9fd7d4bdb4a540f39062c0d21a1d74d18d1c1e206fc4744d400ab5c9d6194c",
     "tests/runner-e2e/server.ts": "48e31a595a00508d58b53e3e6bf03b01849ccf5b211e43b2a5675b051e784826",
@@ -16,8 +26,8 @@
     "server/src/services/routine-run-status.ts": "7a4b226cc4e6137392a3af764d486b715385e62a5c3a1f6d61b34d8b6d44a8cb",
     "server/src/middleware/redact-sensitive.ts": "f1fde1590128fe2fc95a6752e1daf4fe8e0a1478328a50944945597a6aa21315",
     "tests/runner-e2e/screenshot-privacy.ts": "f451b0702cc9d38f887ead0639a5e83ef9f70893a1817c87be94b3aebc4ffe21",
-    "tests/runner-e2e/runner.spec.ts": "f46da5d174e6e697502eaec70ff3db348b77cbd80984d0ba5e0c929930cf910b",
-    "tests/runner-e2e/candidate-serving-proof.ts": "810053879b4b2cf73610af32bec87fa0f62e4d3c9034168ec052048da232cd89"
+    "tests/runner-e2e/runner.spec.ts": "87e16f36e99881df785c53c41c82fee346a495f48628a2e39e770b8ea6efbd73",
+    "tests/runner-e2e/candidate-serving-proof.ts": "cdecc55cc88e362c1f9113fe3a7f53219ae5595b380d4cf14212dde30ab62295"
   },
   "runtimeFiles": {
     "cli/node_modules/tsx/LICENSE": "8dded67841a9261a622c739fb61c81785e93765de852828ceeb9403d20a74581",
@@ -56,6 +66,16 @@
     "../../server/src/services/native-runtime/runner-api-provider-response.js": "server/src/services/native-runtime/runner-api-provider-response.ts",
     "../../server/src/index.js": "server/src/index.ts",
     "./server-entry.js": "tests/runner-e2e/server-entry.ts",
-    "../../cli/src/index.js": "cli/src/index.ts"
+    "../../cli/src/index.js": "cli/src/index.ts",
+    "./public-mcp-flow.js": "tests/runner-e2e/public-mcp-flow.ts",
+    "./api.js": "tests/runner-e2e/api.ts",
+    "../../server/src/routes/companies.js": "server/src/routes/companies.ts",
+    "../../server/src/routes/authz.js": "server/src/routes/authz.ts",
+    "../../server/src/first-admin-claim.js": "server/src/first-admin-claim.ts",
+    "../../server/src/auth/better-auth.js": "server/src/auth/better-auth.ts",
+    "../../server/src/routes/access.js": "server/src/routes/access.ts",
+    "../../server/src/routes/instance-settings.js": "server/src/routes/instance-settings.ts",
+    "../../server/src/services/instance-settings.js": "server/src/services/instance-settings.ts",
+    "../../server/src/middleware/auth.js": "server/src/middleware/auth.ts"
   }
 }

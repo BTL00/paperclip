@@ -81,23 +81,45 @@ export function validateCandidateServing(child: ServingWitness, supervisor: Serv
     || !observed || observed.pid !== child.pid || observed.parentPid !== child.parentPid || hash(observed.started) !== child.processStartHash
     || supervisor.startedAt > child.startedAt || child.startedAt > now || header !== childDigest) fail();
 }
-export async function verifyCandidateServing(input: Omit<Binding, "generation"> & { temporaryRoot: string; resolve(specifier: string): string; health(): Promise<{ ok: boolean; header?: string; companies: unknown }> }) {
+export async function verifyCandidateServingIdentity(input: Omit<Binding, "generation"> & { temporaryRoot: string; resolve(specifier: string): string; health(): Promise<{ ok: boolean; header?: string }> }) {
   const child = await readWitness(input.temporaryRoot, "child"), supervisor = await readWitness(input.temporaryRoot, "supervisor");
   const manifestHash = await candidateSourceManifest(input.sourceRoot, input.resolve), health = await input.health(), table = await readProcessTable();
-  if (!health.ok || !Array.isArray(health.companies) || health.companies.length !== 0) fail();
+  if (!health.ok) fail();
   const expected = { ...input, generationHash: supervisor.value.generationHash, manifestHash };
   if (child.value.generationHash !== supervisor.value.generationHash) fail();
   validateCandidateServing(child.value, supervisor.value, expected, table?.find(p => p.pid === child.value.pid), health.header, child.digest);
   if ((await readWitness(input.temporaryRoot, "child")).digest !== child.digest || (await readWitness(input.temporaryRoot, "supervisor")).digest !== supervisor.digest) fail();
-  await writeFile(filename(input.temporaryRoot, "released"), JSON.stringify({ schema: "candidate.serving.released.v1", childReceiptSha256: child.digest }), { mode: 0o600, flag: "wx" });
   return { schema: "candidate.serving.verified.v1", child: child.value, supervisor: supervisor.value, childReceiptSha256: child.digest, supervisorReceiptSha256: supervisor.digest, sourceManifestSha256: manifestHash };
+}
+export async function candidateFirstHumanAdmission(input: {
+  identity(): Promise<Awaited<ReturnType<typeof verifyCandidateServingIdentity>>>;
+  bootstrap(): Promise<string>;
+  authenticatedDirectory(): Promise<{ userId: string; companies: unknown }>;
+  release(identity: Awaited<ReturnType<typeof verifyCandidateServingIdentity>>): Promise<void>;
+}) {
+  const before = await input.identity();
+  const userId = await input.bootstrap();
+  if (typeof userId !== "string" || !userId) fail();
+  const directory = await input.authenticatedDirectory();
+  if (directory.userId !== userId || !Array.isArray(directory.companies) || directory.companies.length !== 0) fail();
+  const after = await input.identity();
+  if (JSON.stringify(before) !== JSON.stringify(after)) fail();
+  await input.release(after);
+  return { userId, proof: { ...after, firstHumanSha256: hash(userId), authenticatedEmptyInstance: true, sameGenerationAfterBootstrap: true } };
+}
+export async function verifyCandidateServing(input: Parameters<typeof verifyCandidateServingIdentity>[0] & {
+  bootstrap(): Promise<string>; authenticatedDirectory(): Promise<{ userId: string; companies: unknown }>;
+}) {
+  return candidateFirstHumanAdmission({ identity: () => verifyCandidateServingIdentity(input), bootstrap: input.bootstrap, authenticatedDirectory: input.authenticatedDirectory,
+    release: identity => writeFile(filename(input.temporaryRoot, "released"), JSON.stringify({ schema: "candidate.serving.released.v1", childReceiptSha256: identity.childReceiptSha256 }), { mode: 0o600, flag: "wx" }) });
 }
 export async function retainCandidateStartup(input: { temporaryRoot: string; destination: string }) {
   const records: Record<string, unknown> = { schema: "candidate.serving.retained.v1", status: "unqualified" };
   for (const kind of ["child", "supervisor"] as const) { try { const p = await readWitness(input.temporaryRoot, kind); records[kind] = p.value; records[`${kind}ReceiptSha256`] = p.digest; } catch { records[`${kind}Available`] = false; } }
   try {
     const verified = JSON.parse(await readFile(path.join(path.dirname(input.destination), "candidate-serving-verified.json"), "utf8"));
-    if (verified.schema === "candidate.serving.verified.v1" && records.child && records.supervisor
+    if (verified.schema === "candidate.serving.verified.v1" && verified.authenticatedEmptyInstance === true && verified.sameGenerationAfterBootstrap === true
+      && typeof verified.firstHumanSha256 === "string" && /^[a-f0-9]{64}$/.test(verified.firstHumanSha256) && records.child && records.supervisor
       && verified.childReceiptSha256 === records.childReceiptSha256 && verified.supervisorReceiptSha256 === records.supervisorReceiptSha256
       && verified.sourceManifestSha256 === (records.child as ServingWitness).manifestHash
       && verified.sourceManifestSha256 === (records.supervisor as ServingWitness).manifestHash) records.status = "verified";

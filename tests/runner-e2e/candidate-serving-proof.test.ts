@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, symlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CANDIDATE_WEBHOOK, CANDIDATE_HEADER, installCandidateHealthWitness, closedServingWitness, exactCandidateSelection, retainCandidateStartup, validateCandidateServing, type ServingWitness } from "./candidate-serving-proof.js";
+import { CANDIDATE_WEBHOOK, CANDIDATE_HEADER, candidateFirstHumanAdmission, installCandidateHealthWitness, closedServingWitness, exactCandidateSelection, retainCandidateStartup, validateCandidateServing, type ServingWitness } from "./candidate-serving-proof.js";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const expected = { attemptId: "synthetic-attempt", executionId: CANDIDATE_WEBHOOK, generationHash: hash("generation"), sourceRoot: "/synthetic/source", apiOrigin: "http://127.0.0.1:3100", manifestHash: hash("reviewed-pins") };
 const observed = { pid: 1234, parentPid: 1233, started: "synthetic-process-start", processGroupId: 1233, kind: "node" };
@@ -44,16 +44,16 @@ describe("candidate webhook source admission", () => {
       expect(JSON.parse(await readFile(destination, "utf8"))).toEqual({ schema: "candidate.serving.retained.v1", status: "unqualified", childAvailable: false, supervisorAvailable: false });
     } finally { await rm(root, { recursive: true, force: true }); }
   });
-  for (const changed of [false, true]) it(`binds retained startup custody to pre-setup verification (changed=${changed})`, async () => {
+  for (const [changed, authenticated] of [[false, true], [true, true], [false, false]]) it(`binds retained startup custody to authenticated pre-setup verification (changed=${changed}, authenticated=${authenticated})`, async () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), "candidate-proof-synthetic-")));
     try {
       await mkdir(path.join(root, "control"), { mode: 0o700 }); await mkdir(path.join(root, "snapshots"), { mode: 0o700 });
       const c = JSON.stringify(child), p = JSON.stringify(supervisor);
       await writeFile(path.join(root, "control/candidate-serving-child.json"), c, { mode: 0o600 });
       await writeFile(path.join(root, "control/candidate-serving-supervisor.json"), p, { mode: 0o600 });
-      await writeFile(path.join(root, "snapshots/candidate-serving-verified.json"), JSON.stringify({ schema: "candidate.serving.verified.v1", childReceiptSha256: hash(changed ? "foreign" : c), supervisorReceiptSha256: hash(p), sourceManifestSha256: expected.manifestHash }), { mode: 0o600 });
-      const destination = path.join(root, "snapshots/startup.json"); expect(await retainCandidateStartup({ temporaryRoot: root, destination })).toBe(!changed);
-      expect(JSON.parse(await readFile(destination, "utf8")).status).toBe(changed ? "unqualified" : "verified");
+      await writeFile(path.join(root, "snapshots/candidate-serving-verified.json"), JSON.stringify({ schema: "candidate.serving.verified.v1", ...(authenticated ? { firstHumanSha256: hash("synthetic-person"), authenticatedEmptyInstance: true, sameGenerationAfterBootstrap: true } : {}), childReceiptSha256: hash(changed ? "foreign" : c), supervisorReceiptSha256: hash(p), sourceManifestSha256: expected.manifestHash }), { mode: 0o600 });
+      const destination = path.join(root, "snapshots/startup.json"); expect(await retainCandidateStartup({ temporaryRoot: root, destination })).toBe(!changed && authenticated);
+      expect(JSON.parse(await readFile(destination, "utf8")).status).toBe(changed || !authenticated ? "unqualified" : "verified");
     } finally { await rm(root, { recursive: true, force: true }); }
   });
   it("never follows a receipt symlink", async () => {
@@ -79,7 +79,9 @@ describe("candidate webhook source admission", () => {
   it("places the actual gate before any fixture/session and forbids every replacement", async () => {
     const source = await readFile(path.join(import.meta.dirname, "runner.spec.ts"), "utf8");
     const gate = source.indexOf("const serving = await verifyCandidateServing");
-    for (const call of ["await establishPublicMcpSession", "await setupLiveFixtures", "await setupFirstTaskFixtures", "await checkSetupHealthCredential"]) expect(gate).toBeLessThan(source.indexOf(call));
+    for (const call of ["await setupLiveFixtures", "await setupFirstTaskFixtures", "await checkSetupHealthCredential"]) expect(gate).toBeLessThan(source.indexOf(call));
+    expect(source).toContain("bootstrap: () => establishPublicMcpSession(api, page, secrets)");
+    expect(source.indexOf("publicMcpUserId = serving.userId")).toBeLessThan(source.indexOf("if (!publicMcpUserId &&"));
     const entry = await readFile(path.join(import.meta.dirname, "server-entry.ts"), "utf8");
     expect(entry.indexOf("await candidateSourceManifest")).toBeLessThan(entry.indexOf("const { PaperclipRunnerToolAuthority } = await import"));
     expect(entry.indexOf("await publishCandidateChild")).toBeLessThan(entry.indexOf('await import("../../cli/src/index.js")'));
@@ -88,4 +90,32 @@ describe("candidate webhook source admission", () => {
     expect(server.slice(server.indexOf("async function restartServer"), server.indexOf("async function restartServer") + 320)).toContain("Candidate serving replacement is forbidden");
     expect(server.indexOf("readdir(paperclipHome)")).toBeLessThan(server.indexOf("const databaseReservation = await prepareRunnerE2EServerConfig"));
   });
+});
+
+const identity = { schema: "candidate.serving.verified.v1", child, supervisor, childReceiptSha256: hash("child receipt"), supervisorReceiptSha256: hash("supervisor receipt"), sourceManifestSha256: expected.manifestHash };
+describe("first-human authenticated admission", () => {
+  it("checks identity, bootstraps once, reads the authenticated directory and rechecks before release", async () => {
+    const order: string[] = []; let signedIn = false, released = false;
+    const result = await candidateFirstHumanAdmission({
+      identity: async () => { order.push("identity"); return structuredClone(identity); },
+      bootstrap: async () => { order.push("ordinary-signup-claim"); signedIn = true; return "synthetic-human"; },
+      authenticatedDirectory: async () => { if (!signedIn) throw new Error("Board access required"); order.push("authenticated-companies"); return { userId: "synthetic-human", companies: [] }; },
+      release: async () => { order.push("release"); released = true; },
+    });
+    expect(order).toEqual(["identity", "ordinary-signup-claim", "authenticated-companies", "identity", "release"]);
+    expect(released).toBe(true); expect(result.userId).toBe("synthetic-human"); expect(result.proof.firstHumanSha256).toBe(hash("synthetic-human"));
+    expect(JSON.stringify(result.proof)).not.toContain("synthetic-human");
+  });
+  for (const kind of ["unauthenticated", "foreign-session", "nonempty-company", "missing-directory", "changed-generation", "identity-failed", "bootstrap-failed"] as const) {
+    it(`never releases ${kind}`, async () => {
+      let identities = 0, releases = 0, bootstrap = 0;
+      await expect(candidateFirstHumanAdmission({
+        identity: async () => { identities++; if (kind === "identity-failed") throw new Error("unqualified"); return kind === "changed-generation" && identities > 1 ? { ...identity, childReceiptSha256: hash("foreign") } : structuredClone(identity); },
+        bootstrap: async () => { bootstrap++; if (kind === "bootstrap-failed") throw new Error("claim rejected"); return "synthetic-human"; },
+        authenticatedDirectory: async () => { if (kind === "unauthenticated") throw new Error("Board access required"); return { userId: kind === "foreign-session" ? "foreign" : "synthetic-human", companies: kind === "nonempty-company" ? [{ id: "existing" }] : kind === "missing-directory" ? undefined : [] }; },
+        release: async () => { releases++; },
+      })).rejects.toThrow();
+      expect(releases).toBe(0); expect(bootstrap).toBe(kind === "identity-failed" ? 0 : 1);
+    });
+  }
 });

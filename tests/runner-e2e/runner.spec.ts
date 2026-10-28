@@ -954,8 +954,12 @@ for (const execution of executions) {
         const serving = await verifyCandidateServing({ temporaryRoot, sourceRoot: path.resolve(import.meta.dirname, "../.."), apiOrigin: api.baseURL,
           attemptId: process.env.PAPERCLIP_E2E_ACCOUNTING_ATTEMPT_ID ?? "", executionId: execution.id, resolve: specifier => import.meta.resolve(specifier),
           health: async () => { const response = await request.get("/api/health", { maxRedirects: 0 });
-            return { ok: response.ok(), header: response.headers()[CANDIDATE_HEADER], companies: await api.get("/api/companies") }; } });
-        await writeSanitizedJson(snapshotsDir, "candidate-serving-verified.json", serving, secrets);
+            return { ok: response.ok(), header: response.headers()[CANDIDATE_HEADER] }; },
+          bootstrap: () => establishPublicMcpSession(api, page, secrets),
+          authenticatedDirectory: async () => { const session = await api.get<{ user?: { id: string } }>("/api/auth/get-session");
+            return { userId: session.user?.id ?? "", companies: await api.get("/api/companies") }; } });
+        publicMcpUserId = serving.userId;
+        await writeSanitizedJson(snapshotsDir, "candidate-serving-verified.json", serving.proof, secrets);
       }
       trace?.phase("setup");
       await saveTrace();
@@ -996,7 +1000,7 @@ for (const execution of executions) {
         }, catalogDescriptor);
         matcherResults.push(...checks.map(check => ({ matcher: { kind: "json_path" as const, path: `boundary.${check.id}`, expected: true }, passed: check.passed, detail: check.detail })));
       } else {
-      if (execution.task.flow === "public_mcp" || execution.suite.id === "chat-features" && findChatCatalogCase(execution.task.id)?.authentication === "human-session") publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
+      if (!publicMcpUserId && (execution.task.flow === "public_mcp" || execution.suite.id === "chat-features" && findChatCatalogCase(execution.task.id)?.authentication === "human-session")) publicMcpUserId = await establishPublicMcpSession(api, page, secrets);
       if (execution.suite.id === "stock-harness") {
         const receipt = verifyStockHarnessPreflight(process.env[STOCK_PREFLIGHT_ENV]);
         await writeSanitizedJson(snapshotsDir, "stock-harness-preflight.json", receipt, secrets);
