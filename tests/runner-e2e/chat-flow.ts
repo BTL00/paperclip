@@ -2,7 +2,7 @@ import { archiveFaultClient } from "./chat-archive-fault-control.js";
 import type { ArchiveFaultTransport } from "./chat-catalog-domains/internal-archive-transport.js";
 import { prepareChatCatalogRespondent } from "./chat-catalog-respondent.js";
 import type { ChatPrivateInputs } from "./chat-private-inputs.js";
-import { chatCatalogAllowedRunStatuses } from "./chat-catalog-run-policy.js";
+import type { ChatCatalogFinalRunVerifier } from "./chat-catalog-run-policy.js";
 import { runHiringTemplateFlow } from "./hiring-template-flow.js";
 import { gradeHiringTemplateTurns } from "./hiring-template-turn-accounting.js";
 import type { HiringTemplateEvidence } from "./hiring-template-scoring.js";
@@ -398,6 +398,7 @@ export async function runChatFlow(input: ChatFlowInput) {
   const expectedStops = new Map<string, string>();
   let issue: ChatIssue;
   let runs: ChatRun[] = [];
+  let catalogFinalRunVerifier: ChatCatalogFinalRunVerifier | void = undefined;
   const settings = await api.get<Record<string, unknown>>(
     "/api/instance/settings/experimental",
   );
@@ -485,7 +486,7 @@ export async function runChatFlow(input: ChatFlowInput) {
     expect(await allRuns()).toHaveLength(0);
 
     if (execution.suite.id === CHAT_FEATURE_SUITE) {
-      await runChatFeatureFlow({ input, issue: () => issue, allRuns,
+      catalogFinalRunVerifier = await runChatFeatureFlow({ input, issue: () => issue, allRuns,
         refreshIssue: async () => { issue = await api.get<ChatIssue>(chatPath); if (issue) input.observe(issue, await allRuns()); } });
     } else if (caseId === "confirmation-ambiguous") {
       await runAmbiguousConfirmationReply({ input, issue: () => issue!, idle, comments });
@@ -1050,12 +1051,15 @@ export async function runChatFlow(input: ChatFlowInput) {
       hiringEvidence, hiringApiState: execution.suite.id === "hiring-templates"
         ? hiringEvidence!.turnApiState : undefined,
     });
+    if (catalogDescriptor?.runPolicy) {
+      if (typeof catalogFinalRunVerifier !== "function") throw new Error("Missing executable catalog final-run proof");
+      issue = await api.get<ChatIssue>(chatPath);
+      const finalGrade = catalogFinalRunVerifier(issue, runs.filter(run => !isResetRun(run)));
+      expect(finalGrade.passed, `Final catalog run custody: ${finalGrade.checks.filter(check => !check.passed).map(check => check.id).join(", ")}`).toBe(true);
+    }
     for (const run of runs.filter((run) => !isResetRun(run))) {
       expect(run.runtimeMode).toBe(execution.profile.expectedRuntimeMode);
-      if (catalogDescriptor?.runPolicy) {
-        expect(chatCatalogAllowedRunStatuses(catalogDescriptor)).toContain(run.status);
-        continue;
-      }
+      if (catalogDescriptor?.runPolicy) continue;
       expect(run.status).toBe(
         expectedStops.get(run.id) ?? (stopCase && run.status === "cancelled"
           ? "cancelled"

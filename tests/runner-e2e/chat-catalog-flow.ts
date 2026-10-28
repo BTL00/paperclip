@@ -3,7 +3,7 @@ import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
 import { chatQueryWithAttachments, resolveChatQueryAttachments, verifyChatQueryAttachments, type ChatQueryAttachmentReceipt } from "./chat-query-attachments.js";
-import { chatCatalogRunStatusAllowed, gradeChatCatalogRuns } from "./chat-catalog-run-policy.js";
+import { chatCatalogRunStatusAllowed, gradeChatCatalogRuns, createChatCatalogFinalRunVerifier } from "./chat-catalog-run-policy.js";
 import { chatCatalogCaseFingerprint, normalizedChatCatalogExecution } from "./chat-catalog-fingerprint.js";
 import { expect } from "@playwright/test";
 import { pollUntil } from "./api.js";
@@ -176,6 +176,8 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     for (const check of persisted.grade.checks) input.check?.(check.id, check.passed, check.detail);
     await input.capture("chat-catalog-result", scenario.id, "chat-catalog-result.png");
     expect(chatCatalogNativePhaseIsTimely(context), "Original selected native observation budget includes complete final proof").toBe(true);
+    return createChatCatalogFinalRunVerifier({ implementation, companyId: input.fixtures.company.id,
+      leadId: input.fixtures.agent.id, observation });
   } catch (error) {
     failed = true;
     throw error;

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { gradeChatCatalogRuns, chatCatalogAllowedRunStatuses, assertExpectedWorkerCancellation, chatCatalogRunStatusAllowed } from "./chat-catalog-run-policy.js";
+import { gradeChatCatalogRuns, chatCatalogAllowedRunStatuses, assertExpectedWorkerCancellation, chatCatalogRunStatusAllowed, createChatCatalogFinalRunVerifier } from "./chat-catalog-run-policy.js";
 import type { ChatRun } from "./chat-flow.js";
 const succeeded: ChatRun = { id: "source-run", companyId: "company", agentId: "ceo", status: "succeeded", runtimeMode: "native", contextSnapshot: { issueId: "source" } };
 const worker: ChatRun = { id: "worker-run", companyId: "company", agentId: "worker", status: "running", runtimeMode: "native", contextSnapshot: { issueId: "task" } };
@@ -78,4 +78,31 @@ it("binds cancellation proof presence through the actual lazy registry loader", 
   await expect(loadChatCatalogImplementation(descriptor, async () => ({ cases: [{ ...implementation, expectedCancelledWorkerRun: undefined }] }))).rejects.toThrow("cancellation proof");
   const wrongDescriptor = { ...descriptor, scenarioId: "tasks.assignment-conflict" };
   await expect(loadChatCatalogImplementation(wrongDescriptor, async () => ({ cases: [{ ...implementation, scenarioId: wrongDescriptor.scenarioId }] }))).rejects.toThrow("cancellation proof");
+});
+
+
+it("retains the executable cancellation proof at the outer final-run boundary", () => {
+  const v = reassignment();
+  const verify = createChatCatalogFinalRunVerifier({ implementation: v.implementation, companyId: scope.companyId,
+    leadId: scope.leadId, observation: v.observation });
+  expect(verify(scope.source, v.runs).passed).toBe(true);
+  // JSON declarations cannot replace the executable independent proof callback.
+  expect(() => createChatCatalogFinalRunVerifier({ implementation: JSON.parse(JSON.stringify(v.implementation)),
+    companyId: scope.companyId, leadId: scope.leadId, observation: v.observation })).toThrow("cancellation proof");
+  for (const run of [
+    { ...v.stopped, errorCode: "user_cancelled" },
+    { ...v.stopped, companyId: "foreign" },
+    { ...v.stopped, resultJson: { ...v.stopped.resultJson, nativeCancellation: { ...(v.stopped.resultJson!.nativeCancellation as object), dispatchState: "pending" } } },
+  ]) expect(verify(scope.source, v.runs.map(row => row.id === run.id ? run : row)).passed).toBe(false);
+  expect(verify(scope.source, [...v.runs, { ...v.stopped, id: "new-cancellation" }]).passed).toBe(false);
+  expect(verify({ ...scope.source, id: "different-source" }, v.runs).passed).toBe(false);
+});
+
+it("keeps an ordinary ownership-denial boundary strict without a cancellation declaration", () => {
+  const implementation = { expectedRunCount: 2,
+    runPolicy: { kind: "source-settled-with-active-work" as const, maximumActiveWorkerRuns: 1 } };
+  const verify = createChatCatalogFinalRunVerifier({ implementation, companyId: scope.companyId,
+    leadId: scope.leadId, observation: undefined });
+  expect(verify(scope.source, [succeeded, worker]).passed).toBe(true);
+  expect(verify(scope.source, [succeeded, { ...worker, status: "cancelled" }]).passed).toBe(false);
 });

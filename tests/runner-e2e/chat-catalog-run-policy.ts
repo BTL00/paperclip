@@ -80,3 +80,17 @@ export function gradeChatCatalogRuns(input: {
   }
   return { passed: checks.every(check => check.passed), checks };
 }
+
+
+export type ChatCatalogFinalRunVerifier = (source: ChatIssue | undefined, runs: ChatRun[]) => ChatCatalogGrade;
+
+/** Preserve the loaded case's proof callback for a fresh outer ledger read. */
+export function createChatCatalogFinalRunVerifier(input: {
+  implementation: Parameters<typeof gradeChatCatalogRuns>[0]["implementation"];
+  companyId: string;
+  leadId: string;
+  observation: unknown;
+}): ChatCatalogFinalRunVerifier {
+  assertExpectedWorkerCancellation(input.implementation);
+  return (source, runs) => gradeChatCatalogRuns({ ...input, source, runs });
+}
