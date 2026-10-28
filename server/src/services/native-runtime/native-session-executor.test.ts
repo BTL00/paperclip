@@ -6831,7 +6831,7 @@ describe("native startup restart detachment", () => {
 });
 
 describe("native terminal-turn accounting", () => {
-  it("keeps Cursor Cloud facade zero counters unpriced and incomplete in both result and persisted usage", async () => {
+  it.each(["turn.completed", "turn.interrupted"])("settles proven Cursor Cloud terminal accounting as complete and unpriced (%s)", async eventType => {
     const current = { ...execution, binding: { ...execution.binding, runId: "cursor-cloud-unpriced-accounting" },
       provider: { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
         schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture" }],
@@ -6842,20 +6842,122 @@ describe("native terminal-turn accounting", () => {
       await accountingEvents.committed!({ eventType: "item.completed", turnId: "cloud-turn", payload: {
         kind: "usage", usage: { runDelta: zero, runDeltaComplete: true },
       } } as unknown as PrpEvent);
-      return { result: { summary: "Cloud work finished" }, terminal: { runTerminalState: "succeeded" }, turnId: "cloud-turn",
+      await accountingEvents.committed!({ eventType, turnId: "cloud-turn", payload: { error: null, status: eventType.slice("turn.".length) } } as unknown as PrpEvent);
+      return { result: { summary: eventType === "turn.interrupted" ? "Waiting for an answer" : "Cloud work finished" }, terminal: { runTerminalState: "succeeded" }, turnId: "cloud-turn",
         normalizedSessionId: current.session.normalizedSessionId, providerSessionId: "remote-cloud-agent",
         driverKind: "cursor_cloud_api", driverVersion: "cursor-cloud-v1", nativeEventCount: 1,
         highestContiguousSourceSeq: 1, usage: { runDelta: zero, runDeltaComplete: true } };
     });
     const result = await executePaperclipNativeSession({ db: leaseDb(current), execution: current,
       runnerInstanceId: "cloud-accounting-controller", onUsage });
-    expect(result).toMatchObject({ usageComplete: false, costUsd: null, costStatus: "unpriced", provider: "cursor", biller: "cursor",
+    expect(result).toMatchObject({ usageComplete: true, costUsd: null, costStatus: "unpriced", provider: "cursor", biller: "cursor",
       billingType: "unknown", resultJson: { providerAccounting: { usage: null, cost: null, externallyBilled: true } } });
     expect(result.usage).toBeUndefined();
     expect(result.costUsdExact).toBeUndefined();
-    expect(onUsage).toHaveBeenLastCalledWith(expect.objectContaining({ complete: false, costUsd: null, costStatus: "unpriced" }));
+    expect(onUsage).toHaveBeenLastCalledWith(expect.objectContaining({ complete: true, costUsd: null, costStatus: "unpriced" }));
     expect(onUsage.mock.calls.at(-1)![0].usage).toBeUndefined();
   });
+
+  it.each(["missing", "foreign-turn", "unproven", "ack-only", "recovered"])("keeps Cursor Cloud accounting bound to a proven matching terminal (%s)", async proof => {
+    const current = { ...execution, binding: { ...execution.binding, runId: `cloud-terminal-${proof}` },
+      provider: { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
+        schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture" }],
+      } } } as NativeExecutionInput;
+    const terminal = { eventType: "turn.interrupted", turnId: proof === "foreign-turn" ? "prior-turn" : "cloud-turn",
+      payload: { error: null, status: "interrupted", ...(proof === "unproven" ? { providerTerminalObserved: false } : {}) } } as unknown as PrpEvent;
+    const onUsage = vi.fn(async (_receipt: AdapterUsageCheckpoint) => {});
+    state.execute.mockReset().mockImplementationOnce(async () => {
+      if (["foreign-turn", "unproven"].includes(proof)) await accountingEvents.committed!(terminal);
+      if (proof === "ack-only") await accountingEvents.committed!({ eventType: "item.completed", turnId: "cloud-turn",
+        payload: { kind: "interrupt_acknowledgement", acknowledged: true } } as unknown as PrpEvent);
+      return { result: { summary: "Waiting for an answer" }, terminal: { runTerminalState: "succeeded" }, turnId: "cloud-turn",
+        normalizedSessionId: current.session.normalizedSessionId, providerSessionId: "cloud-agent", driverKind: "cursor_cloud_api",
+        driverVersion: "cursor-cloud-v1", nativeEventCount: 1, highestContiguousSourceSeq: 1, usage: null };
+    });
+    const result = await executePaperclipNativeSession({ db: leaseDb(current, {}, {}, [], {}, "running", proof === "recovered" ? [terminal] : []),
+      execution: current, runnerInstanceId: `cloud-terminal-${proof}`, onUsage });
+    expect(result.usageComplete).toBe(proof === "recovered");
+    expect(onUsage).toHaveBeenLastCalledWith(expect.objectContaining({ complete: proof === "recovered", costStatus: "unpriced", costUsd: null }));
+    expect(result.usage).toBeUndefined();
+  });
+
+  it("settles Cursor Cloud terminal receipts through the real ledger and scoped budget policies", async () => {
+    const tables = await import("@paperclipai/db");
+    const { eq } = await import("drizzle-orm");
+    const { startRecoveryPostgres } = await import("../../__tests__/helpers/recovery-postgres.js");
+    const { createRunUsageRecorder } = await vi.importActual<typeof import("../usage-receipts.js")>("../usage-receipts.js");
+    const { accountRunCost } = await import("../run-cost-accounting.js");
+    const { budgetService } = await import("../budgets.js");
+    const { reserveRunBudget } = await import("../budget-reservations.js");
+    const database = await startRecoveryPostgres("cursor-accounting-");
+    const db = tables.createDb(database.connectionString);
+    const directory = await mkdtemp(join(tmpdir(), "cursor-accounting-receipts-"));
+    try {
+      let scenarioIndex = 0;
+      for (const scenario of ["complete-allow", "complete-block", "question-allow", "question-block", "missing", "foreign-turn", "unproven", "capture-failed", "replaced"]) {
+        const companyId = randomUUID(), agentId = randomUUID(), runId = randomUUID(), issueId = randomUUID(), contractId = randomUUID();
+        const policy = scenario.endsWith("block") ? "block" : "allow";
+        const proven = !["missing", "foreign-turn", "unproven"].includes(scenario);
+        const ready = proven && !["capture-failed", "replaced"].includes(scenario);
+        await db.insert(tables.companies).values({ id: companyId, name: "Cursor accounting", issuePrefix: `CA${String.fromCharCode(65 + scenarioIndex++)}` });
+        await db.insert(tables.agents).values({ id: agentId, companyId, name: "Cloud", adapterType: "paperclip_runner", status: "active" });
+        await db.insert(tables.issues).values({ id: issueId, companyId, title: "Cloud accounting", status: "in_progress", assigneeAgentId: agentId });
+        await db.insert(tables.completionContracts).values({ id: contractId, companyId, issueId, revision: 1, schemaVersion: "paperclip.completion-contract.v1",
+          policyVersion: "v1", risk: "low", completionAuthority: "agent", incompleteCriteriaPolicy: "block", contractJson: {},
+          canonicalSha256: "a".repeat(64), createdByActorType: "user", createdByActorId: "fixture" });
+        await db.insert(tables.heartbeatRuns).values({ id: runId, companyId, agentId, nativeIssueId: issueId,
+          completionContractId: contractId, status: "running", runtimeMode: "native", costAccountingPending: true,
+          usageJson: scenario === "capture-failed" ? { accountingCaptureFailed: true } : {} });
+        await db.insert(tables.budgetPolicies).values(["company", "agent"].map(scopeType => ({ companyId,
+          scopeType, scopeId: scopeType === "company" ? companyId : agentId, metric: "billed_cents", windowKind: "calendar_month_utc",
+          amount: 1000, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: policy })));
+        const recorder = await createRunUsageRecorder(db, { companyId, runId, adapterType: "paperclip_runner" }, join(directory, runId));
+        if (scenario === "replaced") await createRunUsageRecorder(db, { companyId, runId, adapterType: "paperclip_runner" }, join(directory, `${runId}-replacement`));
+        const current = { ...execution, binding: { ...execution.binding, companyId, agentId, runId, issueId },
+          provider: { kind: "cursor_cloud", model: "explicit-cloud-model", cursorCloud: {
+            schema: "paperclip.cursor-cloud.config.v1", repos: [{ url: "https://github.com/acme/fixture" }],
+          } } } as NativeExecutionInput;
+        const turnId = `cloud-${scenario}`;
+        state.execute.mockReset().mockImplementationOnce(async () => {
+          if (scenario !== "missing") await accountingEvents.committed!({
+            eventType: scenario.startsWith("complete") ? "turn.completed" : "turn.interrupted", turnId: scenario === "foreign-turn" ? "prior-cloud-turn" : turnId,
+            payload: { error: null, status: scenario.startsWith("complete") ? "completed" : "interrupted",
+              ...(scenario === "unproven" ? { providerTerminalObserved: false } : {}) },
+          } as unknown as PrpEvent);
+          return { result: { summary: scenario.startsWith("question") ? "Waiting for an answer" : "Cloud finished" },
+            terminal: { runTerminalState: "succeeded" }, turnId, normalizedSessionId: current.session.normalizedSessionId,
+            providerSessionId: "cloud-agent", driverKind: "cursor_cloud_api", driverVersion: "cursor-cloud-v1",
+            nativeEventCount: 1, highestContiguousSourceSeq: 1, usage: null };
+        });
+        const checkpoints: AdapterUsageCheckpoint[] = [];
+        const result = await executePaperclipNativeSession({ db: leaseDb(current), execution: current,
+          runnerInstanceId: `cloud-${scenario}`, onUsage: async checkpoint => { checkpoints.push(checkpoint); await recorder.capture(checkpoint); } });
+        await recorder.complete(result);
+        expect(result.usageComplete, scenario).toBe(proven);
+        expect(checkpoints.every(checkpoint => checkpoint.usage === undefined && checkpoint.costUsd === null && checkpoint.costStatus === "unpriced"), scenario).toBe(true);
+        const [before] = await db.select().from(tables.heartbeatRuns).where(eq(tables.heartbeatRuns.id, runId));
+        expect(before.usageJson?.accountingReceiptReady, scenario).toBe(ready);
+        const [nativeResult] = await db.insert(tables.nativeRunResults).values({ companyId, issueId, runId, completionContractId: contractId,
+          serverFingerprint: scenario, schemaStatus: "accepted", resultJson: {}, canonicalSha256: "b".repeat(64) }).returning();
+        await db.insert(tables.nativeRunFinalizations).values({ companyId, issueId, runId, phase: "committed", resultId: nativeResult.id });
+        await db.update(tables.heartbeatRuns).set({ status: "succeeded", finishedAt: new Date(),
+          resultJson: scenario.startsWith("question") ? { runLiveness: { outcome: "governed_response_waiting" } } : {} }).where(eq(tables.heartbeatRuns.id, runId));
+        expect(await accountRunCost(db, runId, {}, new Map()), scenario).toBe(ready);
+        const [settled] = await db.select().from(tables.heartbeatRuns).where(eq(tables.heartbeatRuns.id, runId));
+        expect(settled.costAccountingPending, scenario).toBe(!ready);
+        const ledger = await db.select().from(tables.costEvents).where(eq(tables.costEvents.heartbeatRunId, runId));
+        expect(ledger, scenario).toHaveLength(ready ? 1 : 0);
+        if (ready) expect(ledger[0], scenario).toMatchObject({ costStatus: "unpriced", billingType: "unknown" });
+        const block = await budgetService(db).getInvocationBlock(companyId, agentId);
+        if (ready && policy === "allow") {
+          expect(block, scenario).toBeNull();
+          const nextRun = randomUUID();
+          await db.insert(tables.heartbeatRuns).values({ id: nextRun, companyId, agentId, status: "queued", runtimeMode: "native" });
+          await expect(reserveRunBudget(db, companyId, nextRun, null)).resolves.toMatchObject({ reused: false });
+        } else expect(block, scenario).not.toBeNull();
+      }
+    } finally { await db.$client.end(); await database.cleanup(); await rm(directory, { recursive: true, force: true }); }
+  }, 90_000);
 
   it.each([false, true])("prices only complete direct Claude API turn accounting (%s)", async complete => {
     const { rehydrateRunnerdUsageNotification } = await import("@paperclipai/paperclip-runner/live");
