@@ -9,7 +9,7 @@ export function gradeTeams(value: unknown) {
     && o.reply.includes(team.name) && team.agentSlugs.every(slug => o.reply.toLowerCase().includes(slug.toLowerCase().replaceAll("-", " "))
       || o.reply.toLowerCase().includes(slug.toLowerCase())), "The response names the real package and every included role.");
   c.add("package-requirements-described", !!team && Array.isArray(team.requiredSkills) && Array.isArray(team.envInputs)
-    && (team.requiredSkills.length === 0 || new RegExp(`\\b${team.requiredSkills.length}\\s+(?:required\\s+|catalog\\s+)?skills?\\b`, "i").test(o.reply))
+    && describesTeamSkillRequirements(team, o.reply)
     && team.envInputs.every(input => o.reply.includes(input.key)), "Visible skill and configuration requirements are included in the explanation.");
   c.add("no-premature-installation", JSON.stringify(o.state.installedBefore) === JSON.stringify(o.state.installedAfter)
     && JSON.stringify(o.state.agentIdsBefore) === JSON.stringify(o.state.agentIdsAfter)
@@ -50,3 +50,25 @@ export const teamExternalCases = ["find-team", "preview-install"].map(id => defi
     return observeExternal(ctx, state);
   },
 }));
+
+export function describesTeamSkillRequirements(team: Pick<CatalogTeam, "requiredSkills">, reply: string): boolean {
+  const plain = reply.replace(/[*`]/g, "");
+  const numbers: Record<string, number> = { no: 0, zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+  for (const match of plain.matchAll(/\b(\d+|no|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:(?:required|catalog)\s+)?skills?\b/gi)) {
+    if ((numbers[match[1]!.toLowerCase()] ?? Number(match[1])) !== team.requiredSkills.length) return false;
+  }
+  const leaf = (ref: string) => ref.split("/").at(-1)!;
+  const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const clauses = plain.split(/[.;\n]|\b(?:but|however)\b/i).filter(Boolean);
+  return team.requiredSkills.every(skill => {
+    const refs = [...new Set([skill.ref, skill.catalogSkillKey].filter((ref): ref is string => !!ref))];
+    const short = leaf(skill.catalogSkillKey ?? skill.ref);
+    const unambiguous = team.requiredSkills.filter(other => leaf(other.catalogSkillKey ?? other.ref) === short).length === 1;
+    const aliases = [...refs, ...(unambiguous ? [short, short.replaceAll("-", " ")] : [])];
+    const identity = `(?<![\\w/.-])(?:${aliases.map(escaped).join("|")})(?![\\w/.-])`;
+    const mentions = new RegExp(identity, "i");
+    const negated = new RegExp(`\\b(?:do(?:es)? not|don't|doesn't|never)(?:\\s+(?:ever|actually|really|even))?\\s+(?:require|need|include|use)\\b[^.;]*${identity}|\\b(?:skip|omit|exclude|without)\\s+(?:the\\s+)?${identity}|${identity}\\s+(?:(?:is|are)\\s+)?(?:not required|optional|unnecessary)\\b`, "i");
+    return clauses.some(clause => mentions.test(clause) && !negated.test(clause))
+      && !clauses.some(clause => negated.test(clause));
+  });
+}
