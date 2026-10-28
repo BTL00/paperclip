@@ -3136,6 +3136,7 @@
   {
     "scenarioId": "gateways-profiles.inspect-gateway-error",
     "sourceFiles": [
+      "chat-catalog-domains/gateway-public-receipt.ts",
       "chat-catalog-domains/external-gateway-error.ts",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
@@ -3150,7 +3151,7 @@
       "../../ui/src/App.tsx",
       "chat-scenarios/gateways-profiles.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "oracleVersion": "paperclip.chat-catalog.gateway-public-receipt.v2",
     "expectedRunCount": 3,
     "expectedHumanMessageCount": 1,
     "minimumRunCount": 3,
@@ -4725,9 +4726,10 @@
     "sourceFiles": [
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/runtime-runs-adapters.ts",
-      "chat-scenarios/runs-adapters.yaml"
+      "chat-scenarios/runs-adapters.yaml",
+      "chat-catalog-domains/model-option-catalog.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "oracleVersion": "paperclip.chat-catalog.model-options.scoped-catalog.v3",
     "coverageGaps": [],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,

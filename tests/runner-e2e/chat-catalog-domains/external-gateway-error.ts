@@ -25,6 +25,7 @@ import { collectRunEvents } from "../run-observations.js";
 import { isValidNativePrpEnvelope } from "../native-event-envelope.js";
 import { privateScanJson } from "./external-secret-scan.js";
 
+import { observedRedactedPublicReceipt } from "./gateway-public-receipt.js";
 const providers = new WeakMap<ChatCatalogContext, NotesProvider>();
 type Row = Record<string, unknown>;
 const object = (value: unknown): Row =>
@@ -355,7 +356,9 @@ export const gatewayErrorExternalCases = [
       minimumRunCount: 3,
       expectedHumanMessageCount: 1,
       attemptTimeoutMs: 660000,
+      oracleVersion: "paperclip.chat-catalog.gateway-public-receipt.v2",
       sourceFiles: [
+        "chat-catalog-domains/gateway-public-receipt.ts",
         "chat-catalog-domains/external-gateway-error.ts",
         "chat-catalog-domains/external-provider.ts",
         "chat-catalog-domains/external-support.ts",
@@ -475,8 +478,10 @@ export const gatewayErrorExternalCases = [
                 `/api/heartbeat-runs/${run.id}/events?afterSeq=${afterSeq}&limit=1000`,
               ),
             );
-            if (observedMorganReceiptRead(events, report))
-              state.canonicalReadMorganReceipt = true;
+            if (observedMorganReceiptRead(events, report) || observedRedactedPublicReceipt(events, object(report), reports.map(object), {
+              companyId: o.companyId, leadId: o.leadId, canonicalRunId: run.id, workerId: String(state.morganId),
+              workerTaskId: String(state.morganTaskId), workerRunId: String(state.morganRunId),
+            })) state.canonicalReadMorganReceipt = true;
           }
         return { ...o, state };
       },
