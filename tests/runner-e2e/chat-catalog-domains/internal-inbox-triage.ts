@@ -3,7 +3,7 @@ import { createIssueThreadInteractionSchema } from "../../../packages/shared/src
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { RunnerApiHttpError } from "../api.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { makeDefinition } from "./internal-definition.js";
 import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
@@ -97,7 +97,7 @@ function triageCase(scenarioId: string): ChatCatalogCase {
     if (!browser || !ctx.input.privateSecrets) throw new Error("Personal triage requires authenticated independent people and private credential redaction");
     other = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
     try {
-      await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, other, ctx.input.privateSecrets, "operator");
+      await enrollPrerequisitePerson(ctx, other, "operator");
       const session = await ctx.input.api.get<{ user?: { id: string } }>("/api/auth/get-session");
       if (!session.user?.id) throw new Error("Personal inbox target is not a real authenticated human");
       const p = await project(ctx); const originalTasks: Entity[] = [];

@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { makeDefinition, fixtureWorker } from "./internal-definition.js";
 import { project, task, entity, observation, checks, observeInternal, hasLink, sameTask, type Entity, type InternalObservation } from "./internal-support.js";
 import { pollUntil } from "../api.js";
@@ -21,7 +21,7 @@ export async function observerPerson(ctx: ChatCatalogContext) {
   const browser = ctx.input.page.context().browser();
   if (!browser || !ctx.input.privateSecrets) throw new Error("Independent authenticated observer requires a browser and attempt-private redaction sink");
   const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
-  try { await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer"); }
+  try { await enrollPrerequisitePerson(ctx, observer, "viewer"); }
   catch (error) { await observer.dispose(); throw error; }
   return observer;
 }

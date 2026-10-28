@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { checks } from "./internal-support.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { identityDefinition, identityObservation, observeIdentity, probeAgentPermission, waitForReply } from "./identity-support.js";
 
 interface Session { user: { id: string; name: string; image?: string | null } }
@@ -28,7 +28,7 @@ export const profileIdentityCases: readonly ChatCatalogCase[] = [identityDefinit
   const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
   observers.set(ctx, observer);
   try {
-    await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets);
+    await enrollPrerequisitePerson(ctx, observer);
     await updateOwnProfile(ctx, "Alex Former");
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" });
     const company = await ctx.input.api.get<{ name: string }>(`/api/companies/${ctx.input.fixtures.company.id}`);

@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { checks, entity, observation, observeInternal, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
 interface Revision extends Entity { createdByUserId?: string | null }
 interface ConcurrentRestore extends InternalObservation { phaseReply: string }
@@ -64,7 +64,7 @@ export function withRestoreConcurrency(primary: ChatCatalogCase): ChatCatalogCas
     sourceFiles: [...primary.sourceFiles, "chat-catalog-domains/internal-restore-concurrency.ts", "chat-catalog-domains/identity-auth.ts"],
     async setup(ctx) { const browser = ctx.input.page.context().browser(); if (!browser || !ctx.input.privateSecrets) throw new Error("Concurrent editor context requires actual authenticated people and private credential redaction");
       editor = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Casey" });
-      try { await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, editor, ctx.input.privateSecrets, "operator"); return { ...await primary.setup(ctx), editorId: editor.id }; }
+      try { await enrollPrerequisitePerson(ctx, editor, "operator"); return { ...await primary.setup(ctx), editorId: editor.id }; }
       catch (error) { await editor.dispose(); editor = undefined; throw error; } },
     grade: value => gradeConcurrentRestore(value, primary.grade),
     async act(ctx, state) {

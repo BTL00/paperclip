@@ -16,7 +16,7 @@ import {
 } from "./identity-support.js";
 import {
   createAuthenticatedPerson,
-  enrollAuthenticatedPerson,
+  enrollPrerequisitePerson,
 } from "./identity-auth.js";
 import { privateBrowserEntry } from "./external-private-browser.js";
 import { secretTestEndpoint } from "./external-secret-endpoint.js";
@@ -204,12 +204,7 @@ export const personalSecretExternalCases = [
       });
       let endpoint: PrivateFixture["endpoint"] | undefined;
       try {
-        await enrollAuthenticatedPerson(
-          ctx.input.api,
-          ctx.input.fixtures.company.id,
-          other,
-          secrets,
-        );
+        await enrollPrerequisitePerson(ctx, other);
         const definition = await ctx.input.api.post<UserSecretDefinition>(
           `${root(ctx)}/user-secret-definitions`,
           {

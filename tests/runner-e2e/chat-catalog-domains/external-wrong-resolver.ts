@@ -3,7 +3,7 @@ import {expect} from "@playwright/test";
 import type {ChatCatalogContext} from "../chat-catalog-contract.js";
 import type {ConnectionIntentInteraction} from "../../../packages/shared/src/types/issue.js";
 import {pollUntil} from "../api.js";
-import {createAuthenticatedPerson,enrollAuthenticatedPerson} from "./identity-auth.js";
+import {createAuthenticatedPerson,enrollPrerequisitePerson} from "./identity-auth.js";
 import {openStandingChat,waitForReply} from "./identity-support.js";
 import {definition,externalObservation,observeExternal,checks,root,verifyRenderedReply} from "./external-support.js";
 import type {Entity} from "./internal-support.js";
@@ -27,7 +27,7 @@ export const wrongResolverExternalCases=[definition("connection-setup.wrong-pers
  const session=await ctx.input.api.get<{user:{id:string}}>("/api/auth/get-session");if(!session.user?.id||session.user.id==="local-board")throw new Error("Actual signed-in other member is required");
  const alex=await createAuthenticatedPerson({api:ctx.input.api,browser,secrets,name:"Alex"});people.set(ctx,alex);
  try{
-  await enrollAuthenticatedPerson(ctx.input.api,ctx.input.fixtures.company.id,alex,secrets);
+  await enrollPrerequisitePerson(ctx, alex);
   for(const scope of [{scopeType:"company",scopeId:ctx.input.fixtures.company.id},{scopeType:"agent",scopeId:ctx.input.fixtures.agent.id}])await ctx.input.api.post(`${root(ctx)}/budgets/policies`,{...scope,amount:500,hardStopEnabled:true,isActive:true,unpricedUsagePolicy:"allow"});
   if((await ctx.input.api.get<{connections:unknown[]}>(`${root(ctx)}/tools/connections`)).connections.length)throw new Error("Wrong resolver requires no existing Notion account");
   const response=await alex.request(`${root(ctx)}/issues`,"POST",{title:"Alex's launch notes",status:"todo",assigneeAgentId:ctx.input.fixtures.agent.id,description:"Read my Notion and summarize the current launch notes. I have not connected my Notion account yet."});

@@ -4,7 +4,7 @@ import { pollUntil } from "../api.js";
 import { checks, project, entity, hasLink, putDocument } from "./internal-support.js";
 import { identityDefinition, identityObservation, observeIdentity, openStandingChat, readAgentResource, waitForReply, type Interaction } from "./identity-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 const audiencePeople = new WeakMap<ChatCatalogContext, Awaited<ReturnType<typeof createAuthenticatedPerson>>>();
 
 async function cards(ctx: ChatCatalogContext) {
@@ -144,7 +144,7 @@ export const questionIdentityCases = [
     const renamed = await ctx.input.page.context().request.patch(`${ctx.input.api.baseURL}/api/auth/profile`, { data: { name: "Alex" }, headers: { Origin: ctx.input.api.baseURL } });
     if (!renamed.ok()) throw new Error("Synthetic Alex profile setup failed");
     const riley = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets, name: "Riley" }); audiencePeople.set(ctx, riley);
-    await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, riley, secrets);
+    await enrollPrerequisitePerson(ctx, riley);
     const source = await openStandingChat(ctx);
     const original = await ctx.input.api.post<Interaction>(`/api/issues/${source.id}/interactions`, createIssueThreadInteractionSchema.parse({
       kind: "request_confirmation", title: "Riley's website proposal", resolverPolicy: "human_only", addresseeUserId: riley.id,

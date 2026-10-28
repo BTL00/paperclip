@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { checks, entity, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
@@ -51,7 +51,7 @@ function completionGate(): ChatCatalogCase {
     const browser = ctx.input.page.context().browser();
     if (!browser || !ctx.input.privateSecrets) throw new Error("Independent reviewer fixture requires a real authenticated browser and secret redactor");
     reviewer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
-    await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, reviewer, ctx.input.privateSecrets, "operator");
+    await enrollPrerequisitePerson(ctx, reviewer, "operator");
     const worker = await fixtureWorker(ctx); const p = await project(ctx);
     const root = `/api/companies/${ctx.input.fixtures.company.id}`;
     for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }])

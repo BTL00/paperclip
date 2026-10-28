@@ -563,3 +563,21 @@ Runner hook performs it. Only synthetic source bytes and proof JSON enter the
 existing private attempt evidence and registered-artifact verification pipeline.
 A failed attempt remains retained. These development checks are not staging or
 Slack qualification, and they do not publish trusted archives or credentials.
+
+## Authenticated prerequisite people
+
+Twenty explicitly selected OpenCode/local chat journeys use ordinary public
+signup and instance-admin company-access management to prepare a fresh second
+person. The setup verifies the administrator's real session, assigns only the
+requested company and its existing operator/viewer role grants, and independently
+reads the saved membership and grant attribution. The person's own session must
+prove company access and denial of instance administration. Setup consumes the
+original observation clock and neither dispatches native work nor performs the
+human action under evaluation. Private-resource and other-person boundaries
+remain part of each journey's independent oracle.
+
+Actual invitation journeys retain the invitation/acceptance path and its logger
+qualification prerequisite. This alternative does not qualify that path, create
+an instance administrator, bypass route authorization, or change retained failed
+outcomes. Passwords and cookies remain in the existing private session registry;
+the setup receipt contains only public identity, role, grant keys and statuses.

@@ -3,7 +3,7 @@ import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { McpConnection } from "../../../packages/shared/src/public-mcp.js";
 import { connect, mcp, type ToolResult } from "../public-mcp-client.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { prepareAssistantSetup } from "./external-assistant-connections.js";
 import { definition, externalObservation, observeExternal, root, checks, verifyRenderedReply } from "./external-support.js";
 import { waitForReply } from "./identity-support.js";
@@ -38,7 +38,7 @@ export const assistantConsentExternalCases = [definition("assistant-connections.
   const viewer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets, name: "Viewer Casey" }); people.set(ctx, viewer);
   try {
     const caller = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
-    await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, viewer, secrets, "viewer");
+    await enrollPrerequisitePerson(ctx, viewer, "viewer");
     const marker = `Viewer allowed fixture ${randomBytes(12).toString("hex")}`;
     const task = await ctx.input.api.post<{ id: string; title: string; description: string }>(`${root(ctx)}/issues`, { title: "Viewer consent sample task", description: marker, status: "backlog" });
     return { viewerId: viewer.id, chatCallerId: caller.user.id, phaseBoundary: "operator-chat-to-viewer-browser-consent", taskId: task.id, taskBefore: task, marker, forbiddenTitle: `Forbidden viewer task ${ctx.input.nonce}` };

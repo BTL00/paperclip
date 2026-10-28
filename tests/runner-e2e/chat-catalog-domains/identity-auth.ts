@@ -1,3 +1,6 @@
+import type { ChatCatalogContext } from "../chat-catalog-contract.js";
+import type { CompanyMemberRecord, CompanyMembersResponse, UserCompanyAccessResponse } from "../../../packages/shared/src/types/access.js";
+import { grantsForHumanRole } from "../../../server/src/services/company-member-roles.js";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -98,4 +101,53 @@ export async function enrollAuthenticatedPerson(api: RunnerApi, companyId: strin
   const companiesResponse = await person.request("/api/companies");
   if (!companiesResponse.ok || !(await companiesResponse.json() as Array<{ id: string }>).some(row => row.id === companyId)) throw new Error("Approved person cannot read the intended company");
   return { userId: person.id, companyId, inviteId: invite.id, joinRequestId: pending[0]!.id };
+}
+
+export const prerequisiteMembershipScenarioIds = Object.freeze([
+  "assistant-connections.consent-read-only", "connection-setup.wrong-person-resolves",
+  "documents-artifacts.private-download", "documents-artifacts.restore-document",
+  "inbox-search.archive-done", "inbox-search.notification-audience", "inbox-search.restore-archive", "inbox-search.show-decisions",
+  "navigation-preferences.broken-link", "navigation-preferences.dismiss-announcement", "navigation-preferences.edit-profile", "navigation-preferences.quick-search", "navigation-preferences.sidebar-order",
+  "projects.private-project", "projects.share-project", "questions-and-approvals.wrong-reviewer", "secrets.personal-secret",
+  "tasks.completion-with-gate", "tasks.private-task", "tasks.share-private-task",
+]);
+export async function enrollPrerequisitePerson(ctx: ChatCatalogContext, person: Awaited<ReturnType<typeof createAuthenticatedPerson>>, role: "operator" | "viewer" = "operator") {
+  if (!prerequisiteMembershipScenarioIds.includes(ctx.scenario.id) || ctx.input.execution.id !== `chat-features.runner-opencode.local.${ctx.scenario.id}` || !["operator", "viewer"].includes(role))
+    throw new Error("Public prerequisite membership is not admitted for this scenario or role");
+  const deadline = ctx.observationDeadlineAt;
+  const remaining = () => { const now = Date.now(); if (!Number.isFinite(deadline) || deadline! <= now) throw new Error("Original prerequisite observation budget exhausted or missing"); return Math.min(15000, deadline! - now); };
+  const { api, fixtures } = ctx.input, companyId = fixtures.company.id;
+  const read = async <T>(route: string) => { const value = await api.get<T>(route, { timeout: remaining() }); remaining(); return value; };
+  const personal = async (route: string) => { remaining(); const response = await person.request(route); remaining(); return response; };
+  const health = await read<{ deploymentMode: string }>("/api/health");
+  if (health.deploymentMode !== "authenticated") throw new Error("Public membership requires real authenticated sessions");
+  const session = await read<{ user: { id: string } }>("/api/auth/get-session");
+  if (!session.user?.id || session.user.id === person.id || session.user.id === "local-board") throw new Error("Distinct real first-admin authority is required");
+  const admin = await read<UserCompanyAccessResponse>(`/api/admin/users/${session.user.id}/company-access`);
+  if (admin.user?.id !== session.user.id || admin.user.isInstanceAdmin !== true) throw new Error("Authenticated fixture administrator authority was not verified");
+  const targetBefore = await read<UserCompanyAccessResponse>(`/api/admin/users/${person.id}/company-access`);
+  if (targetBefore.user?.id !== person.id || targetBefore.user.isInstanceAdmin !== false || targetBefore.companyAccess.length !== 0) throw new Error("Prerequisite person must be a fresh non-admin user");
+  const own = await personal("/api/auth/get-session");
+  if (own.status !== 200) { await own.body?.cancel(); throw new Error("Prerequisite person's real session unavailable"); }
+  if (((await own.json()) as { user?: { id?: string } }).user?.id !== person.id) throw new Error("Prerequisite session belongs to another person");
+  const before = await personal(`/api/companies/${companyId}`), beforeStatus = before.status; await before.body?.cancel();
+  if (![403, 404].includes(beforeStatus)) throw new Error("Fresh person already has company access or denial proof failed");
+  remaining(); const assigned = await api.putSensitive<UserCompanyAccessResponse>(`/api/admin/users/${person.id}/company-access`, { companyIds: [companyId] }); remaining();
+  const membership = assigned.companyAccess.find(row => row.companyId === companyId);
+  if (assigned.user?.id !== person.id || assigned.user.isInstanceAdmin !== false || assigned.companyAccess.length !== 1 || membership?.principalId !== person.id || membership.principalType !== "user" || membership.status !== "active" || membership.membershipRole !== "operator") throw new Error("Public company access response did not establish the exact prerequisite member");
+  const grants = grantsForHumanRole(role);
+  remaining(); await api.patchSensitive<CompanyMemberRecord>(`/api/companies/${companyId}/members/${membership.id}/role-and-grants`, { membershipRole: role, status: "active", grants }); remaining();
+  const members = await read<CompanyMembersResponse>(`/api/companies/${companyId}/members`), actual = members.members.find(row => row.id === membership.id);
+  const keys = (rows: Array<{ permissionKey: string; scope?: Record<string, unknown> | null }>) => rows.map(row => `${row.permissionKey}:${JSON.stringify(row.scope ?? null)}`).sort().join("\n");
+  if (!actual || actual.companyId !== companyId || actual.principalId !== person.id || actual.principalType !== "user" || actual.membershipRole !== role || actual.status !== "active" || keys(actual.grants) !== keys(grants) || actual.grants.some(row => row.companyId !== companyId || row.principalId !== person.id || row.principalType !== "user" || row.grantedByUserId !== session.user.id)) throw new Error("Persisted prerequisite role or grants differ from the public requested contract");
+  const targetAfter = await read<UserCompanyAccessResponse>(`/api/admin/users/${person.id}/company-access`);
+  if (targetAfter.user?.id !== person.id || targetAfter.user.isInstanceAdmin !== false || targetAfter.companyAccess.length !== 1 || targetAfter.companyAccess[0]?.id !== membership.id || targetAfter.companyAccess[0]?.companyId !== companyId || targetAfter.companyAccess[0]?.membershipRole !== role || targetAfter.companyAccess[0]?.status !== "active") throw new Error("Prerequisite membership or non-admin identity changed after role assignment");
+  const allowed = await personal(`/api/companies/${companyId}`);
+  if (allowed.status !== 200) { await allowed.body?.cancel(); throw new Error("Real prerequisite person cannot read its company"); }
+  if (((await allowed.json()) as { id?: string }).id !== companyId) throw new Error("Real prerequisite person read another company");
+  const denied = await personal("/api/admin/users"), deniedStatus = denied.status; await denied.body?.cancel();
+  if (deniedStatus !== 403) throw new Error("Prerequisite person acquired instance authority or denial proof failed");
+  const receipt = { userId: person.id, companyId, membershipId: membership.id, role, grantKeys: grants.map(row => row.permissionKey).sort(), authentication: "real-person-session", administrator: "verified-instance-admin", enrollment: "public-company-access", beforeStatus, companyReadStatus: 200, instanceAdminReadStatus: deniedStatus };
+  remaining(); await ctx.input.evidence("identity-public-prerequisite-membership.json", receipt); remaining();
+  return receipt;
 }

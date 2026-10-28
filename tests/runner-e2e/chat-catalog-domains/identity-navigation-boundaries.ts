@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { RunnerApiHttpError } from "../api.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { checks, entity, project, sameTask, task, type Entity } from "./internal-support.js";
 import { identityDefinition, identityObservation, observeIdentity, openStandingChat, probeAgentPermission, waitForReply } from "./identity-support.js";
 
@@ -64,7 +64,7 @@ export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
     const browser = ctx.input.page.context().browser(); if (!browser || !ctx.input.privateSecrets) throw new Error("Missing independent real-user setup");
     const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" }); observers.set(ctx, observer);
     try {
-      await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer");
+      await enrollPrerequisitePerson(ctx, observer, "viewer");
       const denial = await observer.request(`/api/issues/${restricted.id}`); const observerRestrictedStatus = denial.status; await denial.body?.cancel();
       return { project: p, stale, similar, restricted, restrictedMarker, stalePath: path, deletedStatus: await status(ctx, `/api/issues/${stale.id}`), observerRestrictedStatus };
     } catch (error) { await observer.dispose(); observers.delete(ctx); throw error; }
@@ -97,7 +97,7 @@ export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
     const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" }); observers.set(ctx, observer);
     try {
       const otherCompany = await ctx.input.api.post<Entity & { issuePrefix: string }>("/api/companies", { name: `Birch announcements ${ctx.input.nonce}` }); otherCompanies.set(ctx, otherCompany.id);
-      await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer");
+      await enrollPrerequisitePerson(ctx, observer, "viewer");
       const before = await observer.request("/api/announcements/current"); const observerPublication = await before.json() as Publication | null;
       const invalid = await observer.request(`/api/announcements/${encodeURIComponent(publication.id)}/dismiss`, "POST", { companyId: otherCompany.id });
       const invalidAuditCompanyStatus = invalid.status; await invalid.body?.cancel();

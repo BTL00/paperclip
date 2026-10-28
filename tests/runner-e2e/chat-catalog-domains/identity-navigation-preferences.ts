@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { checks, entity, hasLink, project, task, verifyInternalResult } from "./internal-support.js";
 import { identityDefinition, identityObservation, waitForReply, probeAgentPermission } from "./identity-support.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 const searchObservers = new WeakMap<ChatCatalogContext, Awaited<ReturnType<typeof createAuthenticatedPerson>>>();
 
@@ -65,7 +65,7 @@ export const navigationIdentityCases = [
     if (!browser || !ctx.input.privateSecrets) throw new Error("Quick search audience requires actual authenticated browser identities");
     const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" }); searchObservers.set(ctx, observer);
     try {
-      await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets, "viewer");
+      await enrollPrerequisitePerson(ctx, observer, "viewer");
       const privateTask = await task(ctx, "Launch private acquisition", state.project.id, { visibility: "private", description: `Private launch note ${ctx.input.nonce}` });
       return { ...state, privateTask, observerId: observer.id };
     } catch (error) { await observer.dispose(); searchObservers.delete(ctx); throw error; }

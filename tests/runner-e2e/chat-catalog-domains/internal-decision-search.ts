@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { makeDefinition } from "./internal-definition.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { mainPerson } from "./internal-privacy.js";
 import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 interface Request extends Entity { addresseeUserId?: string; resolvedByUserId?: string; result?: unknown; payload?: unknown; decidedByUserId?: string | null }
@@ -53,7 +53,7 @@ function showDecisions(): ChatCatalogCase {
     if (!browser || !ctx.input.privateSecrets) throw new Error("Decision audiences require an independent signed-in human and private credential redaction");
     riley = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" });
     try {
-      await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, riley, ctx.input.privateSecrets, "operator");
+      await enrollPrerequisitePerson(ctx, riley, "operator");
       const p = await project(ctx); const t = await task(ctx, "Riley launch question", p.id);
       const history = await task(ctx, "Completed launch information", p.id);
       const question = (title: string, addresseeUserId: string) => createIssueThreadInteractionSchema.parse({ kind: "ask_user_questions", title, resolverPolicy: "human_only", addresseeUserId, continuationPolicy: "none",

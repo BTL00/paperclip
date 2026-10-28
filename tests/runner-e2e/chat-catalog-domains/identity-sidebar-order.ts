@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { checks, entity, project } from "./internal-support.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { identityDefinition, identityObservation, probeAgentPermission, waitForReply } from "./identity-support.js";
 type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
 const observers = new WeakMap<ChatCatalogContext, Person>();
@@ -40,7 +40,7 @@ export const sidebarOrderIdentityCases: readonly ChatCatalogCase[] = [identityDe
   const endpoint = `/api/companies/${ctx.input.fixtures.company.id}/sidebar-preferences/me`;
   await ctx.input.api.putSensitive(endpoint, { orderedIds: [first.id, launch.id] });
   const observer = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets: ctx.input.privateSecrets, name: "Riley" }); observers.set(ctx, observer);
-    await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, observer, ctx.input.privateSecrets);
+    await enrollPrerequisitePerson(ctx, observer);
     const saved = await observer.request(endpoint, "PUT", { orderedIds: [first.id, launch.id] }); if (!saved.ok) throw new Error("Riley's public sidebar fixture failed"); await saved.body?.cancel();
     const before = await observer.request(endpoint); if (!before.ok) throw new Error("Riley sidebar read failed");
     const observerBefore = (await before.json() as Order).orderedIds;
