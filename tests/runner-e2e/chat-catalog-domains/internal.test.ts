@@ -27,11 +27,23 @@ function valid(scenario: string): InternalObservation {
     }
     case "documents-artifacts.find-artifact": {
       const deliveryAt = "2026-10-21T12:00:00.000Z"; const hidden = { id: "hidden", title: "Restricted final NIGHTJAR", status: "done" };
-      o.tasks[0] = { ...o.tasks[0]!, status: "done" }; const current = { ...o.tasks[0], completedAt: deliveryAt }; o.state.task = structuredClone(o.tasks[0]); o.tasks.push(hidden);
-      const file = { id: "file", issueId: "task", assetId: "asset", issueCommentId: "delivery", sha256: "a".repeat(64), contentPath: "/api/attachments/file/content", createdAt: "2026-10-26T12:00:00.000Z" };
-      Object.assign(o.state, { privateTask: hidden, privateMarker: hidden.title, privateAttachment: { id: "hidden-file", assetId: "hidden-asset" }, finalAttachment: file, finalHash: file.sha256, deliveryAt, weekStart: Date.parse("2026-10-19T00:00:00Z"), weekEnd: Date.parse("2026-10-26T00:00:00Z"), originalTasks: structuredClone(o.tasks), distractors: [hidden] });
-      Object.assign(o, { currentSource: current, finalAttachment: file, downloadedHash: file.sha256, deliveryComments: [{ id: "delivery", createdAt: deliveryAt, body: `Final approved website delivered, SHA256 ${file.sha256}.` }], searchStatus: 200, searchResults: [{ id: "task" }], privateFileStatus: 403 });
-      o.activity = [{ id: "import", action: "company.imported", createdAt: "2026-10-26T12:00:01.000Z" }]; o.links.push("/api/attachments/file/content?download=1"); o.reply = "The final website was delivered last week; the preserved file was imported today."; break;
+      const current = { ...o.tasks[0]!, title: "Final launch website delivery", status: "done", completedAt: deliveryAt };
+      o.tasks = [current, hidden]; o.state.task = structuredClone(current);
+      const body = "<!doctype html><html><body><h1>Final approved launch website</h1><p>Original October delivery.</p></body></html>";
+      const file = { id: "file", companyId: "company", issueId: "task", assetId: "asset", issueCommentId: "delivery",
+        originalFilename: "final-website.html", byteSize: Buffer.byteLength(body), sha256: createHash("sha256").update(body).digest("hex"),
+        contentPath: "/api/attachments/file/content", createdAt: "2026-10-26T12:00:00.000Z" };
+      const delivery = { id: "delivery", issueId: "task", authorUserId: "owner", createdAt: deliveryAt,
+        body: `Final approved website delivered, SHA256 ${file.sha256}.` };
+      const history = [{ issueId: current.id, comments: [delivery], attachments: [file] }, { issueId: hidden.id, comments: [], attachments: [] }];
+      Object.assign(o.state, { privateTask: hidden, privateMarker: hidden.title, privateAttachment: { id: "hidden-file", assetId: "hidden-asset" },
+        finalAttachment: structuredClone(file), finalHash: file.sha256, deliveryAt, weekStart: Date.parse("2026-10-19T00:00:00Z"),
+        weekEnd: Date.parse("2026-10-26T00:00:00Z"), originalTasks: structuredClone(o.tasks), originalHistory: structuredClone(history), distractors: [hidden] });
+      Object.assign(o, { chatIssueId: "chat", currentSource: current, finalAttachment: file, downloadedHash: file.sha256,
+        returnedFiles: [{ attachment: structuredClone(file), downloadedHash: createHash("sha256").update(body).digest("hex"), byteSize: Buffer.byteLength(body) }],
+        sourceHistory: structuredClone(history), deliveryComments: [delivery], searchStatus: 200, searchResults: [{ id: "task" }], privateFileStatus: 403 });
+      o.activity = [{ id: "import", action: "company.imported", createdAt: "2026-10-26T12:00:01.000Z" }];
+      o.links.push("/api/attachments/file/content?download=1"); o.reply = "The final website was delivered last week; the preserved file was imported today."; break;
     }
     case "documents-artifacts.produce-download":
     case "documents-artifacts.revise-delivery": {
@@ -272,7 +284,7 @@ function valid(scenario: string): InternalObservation {
     }
     case "documents-artifacts.resolve-feedback": {
       o.state.pricingThread = { id: "pricing" }; o.state.siblingThread = { id: "sibling" }; o.state.originalRevisionId = "v1"; o.state.supportText = "Support remains unchanged.";
-      const body = "The entire team pays a monthly total of $19. Support remains unchanged.";
+      const body = "$19 monthly total for the entire team, not per user. Support remains unchanged.";
       o.documents = [{ id: "doc", key: "plan", body, latestRevisionId: "v2" }]; o.revisions = [{ id: "v2", body, createdByAgentId: "ceo" }];
       o.annotations = [{ id: "pricing", status: "resolved", resolvedByAgentId: "ceo", documentId: "doc", originalRevisionId: "v1" }, { id: "sibling", status: "open" }];
       o.activity = [{ ...event("issue.document_updated", "task"), createdAt: "2026-10-26T12:00:00Z" },
