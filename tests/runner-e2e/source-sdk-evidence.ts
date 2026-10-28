@@ -96,8 +96,8 @@ export async function retainPreparedSourceSdk(input: { repositoryRoot: string; t
     await writeFile(path.join(destination, "receipt.json"), receiptBytes, { flag: "wx", mode: 0o600 });
   } catch (error) { await rm(destination, { recursive: true, force: true }); throw error; }
 }
-export async function copyRetainedSourceSdk(root: string, executionId: string, sourceRevision: string | null, uploadDir: string, knownSecrets: readonly string[], repositoryRoot = path.resolve(import.meta.dirname, "../..")) {
-  if (!selected([executionId])) return;
+export async function verifyRetainedSourceSdk(root: string, executionId: string, sourceRevision: string | null, knownSecrets: readonly string[], repositoryRoot = path.resolve(import.meta.dirname, "../..")) {
+  if (!selected([executionId])) throw new Error("Source SDK retained selection mismatch");
   if (await realpath(staging(root)) !== staging(root)) throw new Error("Source SDK retained custody invalid");
   const secrets = diagnosticSecrets(knownSecrets).values, files = await boundedTree(staging(root));
   const receiptFile = files.find(row => row.file === "receipt.json"); if (!receiptFile) throw new Error("Source SDK retained receipt missing");
@@ -114,6 +114,11 @@ export async function copyRetainedSourceSdk(root: string, executionId: string, s
     if (JSON.stringify(await scanner.audit()) !== JSON.stringify(receipt.scanAudit)) throw new Error("Source SDK public observations changed");
     checkSecret(receiptFile.bytes, secrets);
   } else for (const file of files) checkSecret(file.bytes, secrets);
+  return { receipt, files };
+}
+export async function copyRetainedSourceSdk(root: string, executionId: string, sourceRevision: string | null, uploadDir: string, knownSecrets: readonly string[], repositoryRoot = path.resolve(import.meta.dirname, "../..")) {
+  if (!selected([executionId])) return;
+  const { files } = await verifyRetainedSourceSdk(root, executionId, sourceRevision, knownSecrets, repositoryRoot);
   const destination = path.join(uploadDir, SOURCE_SDK_DIAGNOSTICS); await mkdir(destination, { recursive: true, mode: 0o700 });
   for (const file of files) {
     const filename = path.join(destination, retainedPath(file.file)); await mkdir(path.dirname(filename), { recursive: true, mode: 0o700 });

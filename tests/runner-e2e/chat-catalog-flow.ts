@@ -1,3 +1,4 @@
+import { assertSdkCanaryFingerprintMatches } from "./sdk-canary-prefixture.js";
 import { collectConversationLinks, type ConversationLinkInput } from "./chat-rendered-links.js";
 import { chatCatalogAgentIsReady, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
 import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
@@ -22,6 +23,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
   const descriptor = findChatCatalogCase(scenario.id);
   if (!descriptor) throw new Error(`No executable chat scenario: ${scenario.id}`);
   const fingerprint = chatCatalogCaseFingerprint(descriptor, normalizedChatCatalogExecution(input.execution));
+  assertSdkCanaryFingerprintMatches(input.execution, fingerprint);
   const implementation = await loadChatCatalogImplementation(descriptor);
   if (implementation.companionSurface) return runScopedCompanionSurface(context, implementation, fingerprint);
   const slack = implementation.journeyKind === "native-slack-thread";

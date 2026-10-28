@@ -588,3 +588,21 @@ evidence secret finding withholds all screenshots for that attempt. The launcher
 retains a closed withholding reason and removes public markers while preserving
 original private PNG bytes and hashes. Later cleanup labels and empty sanitized
 export scans cannot clear this decision; the publisher and gallery enforce it.
+
+
+### SDK canary compiled fingerprint admission
+
+The source-local `plugins.use-plugin-tool` canary verifies the existing startup
+build and private retention before any live fixture can create an agent or run
+its hello. The gate binds the authenticated 500 Git inputs and restored lock,
+compiler/helper identities, both target certificates and complete 1611-file
+compiled manifests. It preserves every privacy scan and raw observation.
+
+The normal case fingerprint is deferred until those genuine compiled bytes are
+available in that same real scenario startup. A complete non-null fingerprint
+and source closure must be retained privately before fixtures. The later normal
+definition must match it. Missing or changed proof fails before fixture/model
+work. A failed framework start still consumes that attempt; this gate adds no
+retry, diagnostic operation, allowance or grading exception. The other five SDK
+cases remain subject to their separate admission holds. Local declaration-only
+metadata carries null compiled digests and makes no runtime qualification claim.
