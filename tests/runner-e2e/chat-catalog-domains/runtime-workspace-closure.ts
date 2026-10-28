@@ -4,7 +4,7 @@ import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { openStandingChat } from "./identity-support.js";
 import { checks, sameTask, type Entity } from "./internal-support.js";
-import { savedTaskWorkspace } from "./runtime-workspaces.js";
+import { enableTaskWorkspaceView, savedTaskWorkspace } from "./runtime-workspaces.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime } from "./runtime-support.js";
 type Artifact = Awaited<ReturnType<typeof readRegisteredArtifacts>>[number];
 interface Workspace extends Entity { sourceIssueId?: string | null; rootIssueId?: string | null; cwd?: string; repoUrl?: string | null; branchName?: string | null; closedAt?: string | null }
@@ -33,6 +33,7 @@ export function gradeWorkspaceClosure(value: unknown) {
   return c.result();
 }
 export const runtimeWorkspaceClosureCases = [runtimeDefinition("workspaces.close-and-reopen", async ctx => {
+  await enableTaskWorkspaceView(ctx);
   const state = await savedTaskWorkspace(ctx, { artifact: true }); const id = state.workspaceBefore.workspace.id;
   const other = await savedTaskWorkspace(ctx, { workerName: "Riley" });
   await ctx.input.api.patch(`/api/issues/${other.task.id}`, { title: "Unrelated retained notes" });

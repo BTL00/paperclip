@@ -4,7 +4,7 @@ import path from "node:path";
 import { pollUntil } from "../api.js";
 import { sendChatMessage } from "../chat-flow.js";
 import { checks, type Entity } from "./internal-support.js";
-import { savedTaskWorkspace } from "./runtime-workspaces.js";
+import { enableTaskWorkspaceView, savedTaskWorkspace } from "./runtime-workspaces.js";
 import { runtimeDefinition, runtimeObservation, observeRuntime } from "./runtime-support.js";
 import type { WorkspaceRuntimeService } from "../../../packages/shared/src/types/workspace-runtime.js";
 import type { WorkspaceOperation } from "../../../packages/shared/src/types/workspace-operation.js";
@@ -38,6 +38,7 @@ export function gradePreview(value: unknown) {
 }
 export const runtimePreviewCases = [runtimeDefinition("workspaces.preview-service", async ctx => {
   if (ctx.input.execution.environment.id !== "local") throw new Error("Owned loopback website preview fixture requires the actual local target");
+  await enableTaskWorkspaceView(ctx);
   const state = await savedTaskWorkspace(ctx, { html: true }); const cwd = await realpath(state.workspaceBefore.workspace.cwd);
   const root = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT;
   if (!root || !cwd.startsWith(`${await realpath(root)}${path.sep}`)) throw new Error("Preview fixture escaped the isolated task directory");
