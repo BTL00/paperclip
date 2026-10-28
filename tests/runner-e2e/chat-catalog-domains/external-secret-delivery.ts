@@ -322,7 +322,6 @@ export const secretDeliveryExternalCases = [
         "../../server/src/services/agent-instance-secrets.ts",
         "../../server/src/services/agent-lifecycle-driver.ts",
         "../../server/src/services/heartbeat/run-preparation.ts",
-        "../../cli/dist/index.js",
         "../../cli/src/index.ts",
         "../../cli/node_modules/tsx/dist/loader.mjs",
         "chat-catalog-domains/external-plugin-sdk-mirror.ts",

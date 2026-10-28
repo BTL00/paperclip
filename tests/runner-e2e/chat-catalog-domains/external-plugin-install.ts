@@ -33,7 +33,7 @@ export const pluginInstallExternalCases = [definition("plugins.install-plugin", 
     return { pluginKey: fixture.key, syntheticPackage: true, agentInstallStatus };
   } catch (error) { fixtures.delete(ctx); await fixture.close(); throw error; }
 }, gradePluginInstall, {
-  sourceFiles: ["chat-catalog-domains/external-plugin-install.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/dist/index.js", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
+  sourceFiles: ["chat-catalog-domains/external-plugin-install.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/node_modules/tsx/dist/loader.mjs", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx);
     const fixture = fixtures.get(ctx); if (!fixture) throw new Error("Vetted package fixture is missing");

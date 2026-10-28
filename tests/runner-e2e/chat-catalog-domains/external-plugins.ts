@@ -58,7 +58,7 @@ export const pluginExternalCases = ["configure-plugin", "disable-plugin"].map(id
       resultPath: `/${ctx.input.fixtures.company.issuePrefix}/company/settings/instance/plugins/${plugin.id}`, resultLabel: "Website Preview Eval" };
   } catch (error) { fixtures.delete(ctx); await fixture.close(); throw error; }
 }, gradePluginManagement, {
-  sourceFiles: ["chat-catalog-domains/external-plugins.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/dist/index.js", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
+  sourceFiles: ["chat-catalog-domains/external-plugins.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/node_modules/tsx/dist/loader.mjs", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx);
     const before = await ctx.input.api.get<PluginRecord>(`/api/plugins/${state.pluginId}`);
