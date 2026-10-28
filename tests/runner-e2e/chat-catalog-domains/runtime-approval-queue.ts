@@ -1,11 +1,11 @@
 import { expect } from "@playwright/test";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import type { ActivityEvent } from "../../../packages/shared/src/types/activity.js";
 import type { IssueQueuedCommentQueue, IssueThreadInteraction } from "../../../packages/shared/src/types/issue.js";
 import { pollUntil } from "../api.js";
 import { submitTaskReply } from "../user-actions.js";
 import { checks, type Entity } from "./internal-support.js";
-import { prepareRuntimeWorkerGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
+import { prepareRuntimeWorkerGate, readRuntimeTaskGate, releaseRuntimeWorker } from "./runtime-busy-worker.js";
 import { runtimeQueueCases } from "./runtime-queue.js";
 import { runtimeDefinition, observeRuntime, runtimeObservation } from "./runtime-support.js";
 export function acornNamingDirection(reply: string) {
@@ -41,11 +41,11 @@ export function gradeApprovalQueue(value: unknown) {
   return c.result();
 }
 export const runtimeApprovalQueueCases = [runtimeDefinition("steering.approval-delivery", async ctx => {
-  const prepared = await prepareRuntimeWorkerGate(ctx), root = `/api/companies/${ctx.input.fixtures.company.id}`;
+  const prepared = await prepareRuntimeWorkerGate(ctx, { taskBound: true }), root = `/api/companies/${ctx.input.fixtures.company.id}`;
   const task = await ctx.input.api.post<Entity>(`${root}/issues`, { title: "Website naming task", status: "todo", assigneeAgentId: prepared.worker.id,
-    description: `We need a product name before continuing the website. During this actual native run, create exactly one pending ask_user_questions interaction using the supported public issue interaction API, authenticated as yourself with this actual run identity. Use idempotencyKey naming-${ctx.input.nonce}, title Website product name, continuationPolicy wake_assignee, and payload {version:1,supersedeOnUserComment:false,questionSet:{schema:"paperclip.question_set.v1",title:"Website product name",submitLabel:"Submit answers",questions:[{id:"name",prompt:"What is the product name?",answerMode:"text",required:true}]}}. This is an ordinary durable task question, not an artificial provider runtime-request receipt. Do not choose a name or create another interaction. After the real question is saved, run node ${JSON.stringify(prepared.gate.scriptPath)} once and wait for its actual output. Then save the returned pending-work note as a task document and finish this current turn normally, leaving queued human answers for normal continuation. On a later normal continuation, read the real submitted name response, save a non-plan website-delivery document using that name and a short semantic website outline, and complete the same task.` });
+    description: `We need a product name before continuing the website. During this actual native run, create exactly one pending ask_user_questions interaction using the supported public issue interaction API, authenticated as yourself with this actual run identity. Use idempotencyKey naming-${ctx.input.nonce}, title Website product name, continuationPolicy wake_assignee, and payload {version:1,supersedeOnUserComment:false,questionSet:{schema:"paperclip.question_set.v1",title:"Website product name",submitLabel:"Submit answers",questions:[{id:"name",prompt:"What is the product name?",answerMode:"text",required:true}]}}. This is an ordinary durable task question, not an artificial provider runtime-request receipt. Do not choose a name or create another interaction. After the real question is saved, run ${prepared.gate.command} once and wait for its actual output. Then save the returned pending-work note as a task document and finish this current turn normally, leaving queued human answers for normal continuation. On a later normal continuation, read the real submitted name response, save a non-plan website-delivery document using that name and a short semantic website outline, and complete the same task.` });
   const waiting = await pollUntil({ label: "Real native naming question while worker waits in its own tool process", deadlineAt: Date.now() + 180_000,
-    load: async () => ({ runs: await ctx.allRuns(), ready: await readFile(prepared.gate.ready, "utf8").catch(() => ""), questions: await ctx.input.api.get<IssueThreadInteraction[]>(`/api/issues/${task.id}/interactions`) }),
+    load: async () => ({ runs: await ctx.allRuns(), ready: await readRuntimeTaskGate(ctx, prepared.gate, task.id, prepared.worker.id), questions: await ctx.input.api.get<IssueThreadInteraction[]>(`/api/issues/${task.id}/interactions`) }),
     accept: v => v.runs.length === 1 && v.runs[0]?.agentId === prepared.worker.id && v.runs[0].status === "running" && v.ready === "waiting"
       && v.questions.length === 1 && v.questions[0]?.kind === "ask_user_questions" && v.questions[0].status === "pending" && v.questions[0].createdByAgentId === prepared.worker.id && v.questions[0].sourceRunId === v.runs[0].id,
     reject: v => v.runs.length > 1 || v.runs.some(row => ["failed", "cancelled", "succeeded", "timed_out"].includes(row.status)) ? "The actual question fixture did not reach its running pending-input boundary" : undefined });
