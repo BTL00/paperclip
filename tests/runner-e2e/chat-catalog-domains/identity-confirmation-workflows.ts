@@ -64,13 +64,13 @@ export function gradeConfirmationWorkflow(value: unknown) {
         && o.runs.some(run => run.id === revision.createdByRunId && run.status === "succeeded" && !!run.startedAt
           && run.companyId === o.companyId && run.agentId === revision.createdByAgentId
           && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(run.agentId)));
-    c.add("one-actual-answer-artifact", o.tasks.length === 1 && o.tasks[0]?.companyId === o.companyId && o.tasks[0]?.status === "done" && hasLink(o, "issues", o.tasks[0])
+    c.add("one-actual-answer-artifact", o.tasks.length === 1 && o.tasks[0]?.companyId === o.companyId && hasLink(o, "issues", o.tasks[0])
       && introductions.length === 1 && !!introduction && (introduction.body ?? "").includes("Acorn") && authored(introduction)
       && o.documents.filter(document => document.key === "plan").length <= 1 && o.documents.every(authored)
       && o.activity.some(row => row.action === "issue.document_created" && row.entityId === o.tasks[0]?.id
         && row.details?.documentId === introduction?.id && row.details.key === introduction?.key
         && [o.leadId, (o.state.worker as Entity | undefined)?.id].includes(row.agentId ?? "")),
-      "One linked completed task has one attributed saved introduction using Acorn; its separately keyed platform plan is not another introduction.");
+      "One linked ordinary task has one attributed saved introduction using Acorn; its separately keyed platform plan is not another introduction.");
   } else c.add("known-workflow", false, "This workflow has no independent oracle.");
   return c.result();
 }

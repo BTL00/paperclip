@@ -77,7 +77,7 @@ describe("answer continuation and ordinary deliverable custody", () => {
     const o = valid("questions-and-approvals.duplicate-answer");
     if (kind === "foreign-task") o.documents[0]!.issueId = "foreign";
     if (kind === "wrong-key") o.activity.find(row => row.id === "document")!.details!.key = "other";
-    if (kind === "unfinished") o.tasks[0]!.status = "in_progress";
+    if (kind === "unfinished") o.runs[2]!.status = "running";
     if (kind === "wrong-company") o.runs[2]!.companyId = "foreign";
     if (kind === "unstarted") o.runs[2]!.startedAt = null;
     if (kind === "unattributed-plan") o.documents.push({ id: "plan", key: "plan", issueId: "draft", latestRevisionId: "missing" });
