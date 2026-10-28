@@ -92,7 +92,7 @@ function defaults(): ChatCatalogCase {
     const held = await pollUntil({ label: "Real prior active Launch checkout", deadlineAt: Date.now() + 150000,
       load: async () => ({ task: await ctx.input.api.get<Entity & { executionRunId?: string }>(`/api/issues/${t.id}`), runs: await ctx.allRuns() }),
       accept: row => gate!.calls.length > 0 && row.runs.length === 1 && row.runs[0]?.status === "running" && row.task.executionRunId === row.runs[0]?.id });
-    await ctx.input.evidence("chat-catalog-project-defaults-prerequisite-timeout.json", { heldWorkerId: worker.id, heldWorkerTimeoutSec: 420, canonicalTimeoutSec: 120, futureWorkerTimeoutSec: 120, canonicalStageBoundMs: 150000, futureProbeBoundMs: 180000, attemptBoundMs: 660000 });
+    await ctx.input.evidence("chat-catalog-project-defaults-prerequisite-timeout.json", { heldWorkerId: worker.id, heldWorkerTimeoutSec: 420, canonicalTimeoutSec: CHAT_NATIVE_TIMEOUT_POLICY.savedAgentTimeoutSec, futureWorkerTimeoutSec: CHAT_NATIVE_TIMEOUT_POLICY.savedAgentTimeoutSec, canonicalStageBoundMs: 150000, futureProbeBoundMs: 180000, attemptBoundMs: 660000 });
     return { project: p, goal: g, checklist, task: held.task, worker, futureWorker, activeRunId: held.runs[0]!.id, originalEnv: (p as Entity & { env?: unknown }).env ?? null };
   }, gradeProjectDefaults);
   return { ...base, expectedRunCount: 3, minimumRunCount: 3, attemptTimeoutMs: 660000, runPolicy: { kind: "source-settled-with-active-work", maximumActiveWorkerRuns: 1 },
