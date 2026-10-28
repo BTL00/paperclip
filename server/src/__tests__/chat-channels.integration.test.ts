@@ -61595,7 +61595,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         await db.insert(companyObservability).values({ companyId, revision: randomUUID(), enabled: true,
           destination: { provider: "otlp", endpointBaseUrl: "https://collector.example/otel" },
           capture: { userPrompts: false, assistantResponses: false, toolDetails: false, toolContent: false } });
-        const [agent] = await db.update(agents).set({ adapterConfig: { provider: "opencode", model: "openrouter/synthetic", homeMode: "preconfigured" } })
+        const [agent] = await db.update(agents).set({ adapterConfig: { provider: "acpx", acpxAgent: "pi", model: "synthetic", homeMode: "preconfigured" } })
           .where(eq(agents.id, agentId)).returning();
         const [run] = await readHeartbeatRunsById(f.runId);
         const prepared = await prepareHeartbeatExecutionConfiguration(db, { run, agent,
