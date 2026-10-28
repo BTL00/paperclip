@@ -125,7 +125,7 @@ import { observeInternal } from "./internal-support.js";
 
 export function meaningfulOrchidPlan(body: string): boolean {
   const clauses = body.replace(/[*_`]/g, "").split(/[.!?;\n]|\b(?:but|however|instead)\b|\band\s+(?=(?:do not|don't|never|skip|omit|exclude|no need))/i).filter(Boolean);
-  const negativeDirective = /\b(?:do not|don't|never)(?:\s+(?:ever|actually|really|even))?\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b|\b(?:skip|omit|exclude)\b|\bno need to\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b/i;
+  const negativeDirective = /\b(?:do not|don't|never|(?:must|should|will|can|shall)\s+not)(?:\s+(?:ever|actually|really|even))?\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b|\b(?:skip|omit|exclude)\b|\bno need to\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b/i;
   const requirements = [
     /\b(?:implement|build|develop)\b/i,
     /\b(?:test|verify|verification|validation)\b/i,

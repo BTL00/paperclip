@@ -4,6 +4,7 @@ import { grade_documents_artifacts, meaningfulOrchidPlan } from "./internal-docu
 it.each([
   "Implement Orchid in a single responsive page with accessible signup. Verify keyboard navigation and mobile layout.",
   "Implement Orchid in a single responsive page with accessible signup and do not add unrelated registration flows. Verify keyboard navigation and mobile layout.",
+  "Implement Orchid in a single responsive page with accessible signup. Verify keyboard navigation and mobile layout. The team must not sacrifice accuracy. A previous unrelated site did not support mobile devices.",
   "Develop one accessible web page for Orchid registration, using responsive breakpoints. Test keyboard navigation and mobile presentation.",
   "Build an accessible single-page Orchid signup website with responsive layout. Verify keyboard navigation and mobile layout; never sacrifice accuracy for brevity.",
   "Implement a single responsive page for Orchid with accessible signup. Do not build multiple pages. Verify keyboard navigation and mobile layout.",
@@ -17,6 +18,7 @@ it.each([
   "Implement Orchid in a single responsive page with accessible signup. Verify keyboard navigation and mobile layout. Build multiple pages instead.",
   "Do not implement a single responsive page for Orchid with accessible signup. Develop multiple pages. Verify keyboard navigation and mobile layout.",
   "Implement Orchid in a single responsive page with accessible signup. Verify keyboard navigation and mobile layout. Never ever include mobile support.",
+  "Implement Orchid in a single responsive page with accessible signup. Verify keyboard navigation and mobile layout. The website must not support mobile devices.",
   "Implement Orchid in a single responsive page without signup. Verify keyboard navigation, accessibility and mobile layout.",
   "Implement Orchid in a single responsive page with accessible signup. No need to test keyboard or mobile layout.",
 ])("rejects missing, foreign or contradictory requirements: %s", body => {
