@@ -1,4 +1,4 @@
-import { chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
+import { chatCatalogAgentIsReady, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "./chat-catalog-contract.js";
 import { chatNativeTimeoutEvidence } from "./chat-native-timeout-policy.js";
 import { completeNativeSlackFileConditional, dispatchNativeSlackIngress, prepareNativeSlackOtherThread, slackOtherThreadBoundaryMatches, slackNativeRunCheck } from "./chat-slack-ingress.js";
 import { runScopedCompanionSurface } from "./chat-companion-surface.js";
@@ -93,7 +93,7 @@ export async function runChatCatalogFlow(context: ChatCatalogContext) {
     if (implementation.setupPolicy?.readiness !== "preserve-scenario") for (const agent of agents) await pollUntil({ label: `catalog agent readiness ${agent.id}`,
       deadlineAt: Math.min(deadlineAt, Date.now() + 45_000), intervalMs: 500,
       load: () => input.api.get<{ lifecycleState: string; status: string; lifecycleError?: string }>(`/api/agents/${agent.id}`),
-      accept: value => value.lifecycleState === "ready" && ["idle", "active"].includes(value.status),
+      accept: chatCatalogAgentIsReady,
       reject: value => value.lifecycleError ? "Agent setup failed; diagnostic details withheld" : undefined,
     });
     const scopes = [{ scopeType: "company", scopeId: input.fixtures.company.id },

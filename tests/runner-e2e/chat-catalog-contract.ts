@@ -3,6 +3,12 @@ import type { CredentialName } from "./types.js";
 import type { ChatExternalInputRequirement } from "./chat-private-inputs.js";
 import type { ChatScenario } from "./chat-feature-cases.js";
 
+/** Lifecycle readiness permits an already-busy worker; this is not run completion proof. */
+export function chatCatalogAgentIsReady(value: { lifecycleState?: string | null; status?: string | null; lifecycleError?: unknown }): boolean {
+  return value.lifecycleState === "ready" && !value.lifecycleError
+    && ["idle", "active", "running"].includes(value.status ?? "");
+}
+
 export interface ChatCatalogCheck { id: string; passed: boolean; detail: string }
 export interface ChatCatalogGrade { passed: boolean; checks: ChatCatalogCheck[] }
 export interface ChatCatalogContext {
