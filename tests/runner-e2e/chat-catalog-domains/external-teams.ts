@@ -67,7 +67,7 @@ export function describesTeamSkillRequirements(team: Pick<CatalogTeam, "required
     const aliases = [...refs, ...(unambiguous ? [short, short.replaceAll("-", " ")] : [])];
     const identity = `(?<![\\w/.-])(?:${aliases.map(escaped).join("|")})(?![\\w/.-])`;
     const mentions = new RegExp(identity, "i");
-    const negated = new RegExp(`\\b(?:do(?:es)? not|don't|doesn't|never)(?:\\s+(?:ever|actually|really|even))?\\s+(?:require|need|include|use)\\b[^.;]*${identity}|\\b(?:skip|omit|exclude|without)\\s+(?:the\\s+)?${identity}|${identity}\\s+(?:(?:is|are)\\s+)?(?:not required|optional|unnecessary)\\b`, "i");
+    const negated = new RegExp(`\\b(?:do(?:es)? not|don't|doesn't|never)(?:\\s+(?:ever|actually|really|even))?\\s+(?:require|need|include|use)\\b[^.;]*${identity}|\\b(?:skip|omit|exclude|without)\\s+(?:the\\s+)?${identity}|${identity}\\s+(?:(?:is|are)\\s+)?(?:not (?:required|needed|necessary)|optional|unnecessary)\\b`, "i");
     return clauses.some(clause => mentions.test(clause) && !negated.test(clause))
       && !clauses.some(clause => negated.test(clause));
   });

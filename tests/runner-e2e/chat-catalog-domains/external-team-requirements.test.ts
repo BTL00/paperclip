@@ -8,6 +8,7 @@ const team: Pick<CatalogTeam, "requiredSkills"> = { requiredSkills: keys.map(ref
 const list = "github-pr-workflow, qa-acceptance, task-planning, and doc-maintenance";
 it.each([
   `It requires ${list}. Accounts still need configuration.`,
+  `Required: ${list}. A previous unrelated package did not require qa-acceptance. An optional formatter is not needed.`,
   `Four required skills: ${list}.`,
   `Required: ${keys.join(", ")}.`,
   "Requirements: GitHub PR workflow, QA acceptance, task planning and doc maintenance. They do not prove accounts are ready.",
@@ -21,6 +22,7 @@ it.each([
   `No required skills. Available examples are ${list}.`,
   `It does not require ${list}.`,
   `It requires ${list}. qa-acceptance is optional.`,
+  `Required: ${list}. qa-acceptance is not needed.`,
   `It requires ${list}. Never ever include doc-maintenance.`,
 ])("rejects missing, foreign, contradictory or falsely counted requirements: %s", reply => {
   expect(describesTeamSkillRequirements(team, reply)).toBe(false);
