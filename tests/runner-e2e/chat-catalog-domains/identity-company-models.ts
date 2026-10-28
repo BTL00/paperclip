@@ -8,6 +8,8 @@ import type { CostSummary } from "../../../packages/shared/src/types/cost.js";
 import { checks } from "./internal-support.js";
 import { identityDefinition, identityObservation, observeIdentity, probeAgentPermission, waitForReply } from "./identity-support.js";
 
+export const requestedAuxiliaryServiceModel = "deepseek/deepseek-v4.1-flash-1017";
+
 type Settings = DecisionModelSettings | PromptInjectionPreventionSettings | FastResponseSettings;
 const fastExperiments = new WeakMap<ChatCatalogContext, boolean>();
 const specs = [
@@ -25,6 +27,10 @@ export function gradeCompanyModel(value: unknown) {
     && o.state.testHttpStatus === 200 && o.state.visibleTestReceipt === true,
     "The canonical chat leaves the disabled board-managed service unchanged; the actual human settings controls save the intended grant and the result survives reload.");
   c.add("honest-human-settings-guidance", /settings|connections/i.test(o.reply) && !/\bI(?:'ve| have)?\s+(?:enabled|configured|turned on|tested)\b/i.test(o.reply), "The chat names the human settings surface and does not claim a board-only change or test it could not perform.");
+  if (["companies.prompt-injection-guard", "companies.fast-responses"].includes(o.scenarioId)) {
+    c.add("requested-service-model-persisted-before-test", o.state.modelBeforeTest === requestedAuxiliaryServiceModel && saved?.model === requestedAuxiliaryServiceModel,
+      "The actual public human configuration uses the requested OpenRouter API model before service testing and after readback; default auxiliary models are not substituted.");
+  }
   if (o.scenarioId === "companies.configure-decision-model") {
     const result = o.state.testResult as DecisionResult | undefined; const history = o.state.history as DecisionHistoryEntry[] | undefined;
     c.add("actual-decision-test-and-ledger", (saved as DecisionModelSettings | undefined)?.model === DECISION_MODELS.openrouter.id
@@ -43,7 +49,7 @@ export function gradeCompanyModel(value: unknown) {
   } else if (o.scenarioId === "companies.fast-responses") {
     const result = o.state.testResult as FastResponseTestResult | undefined; const history = o.state.history as Array<DecisionHistoryEntry & { publicationStatus: string }> | undefined;
     c.add("actual-fast-response-receipt", !!result && result.status === "succeeded" && !!result.text.trim() && result.durationMs >= 0 && !!history?.some(row => row.id === result.invocationId
-      && row.connectionId === connection?.id && row.responsibleUserId === o.state.humanId && row.feature === "settings.test" && row.finishedAt != null
+      && row.connectionId === connection?.id && row.model === requestedAuxiliaryServiceModel && row.responsibleUserId === o.state.humanId && row.feature === "settings.test" && row.finishedAt != null
       && row.inputTokens === result.usage.inputTokens && row.outputTokens === result.usage.outputTokens && row.costStatus === result.usage.costStatus),
       "The real settings test generates an actual model acknowledgement and matching durable usage/failure history; elapsed worker time alone cannot qualify.");
     c.add("acknowledgement-is-not-work", /acknowledg|receipt|quick|fast/i.test(o.reply) && !/\b(?:work|task)\s+(?:is|has been)\s+(?:finished|completed|started)/i.test(o.reply), "The response does not present a fast acknowledgement as task completion or proof of worker execution.");
@@ -74,13 +80,19 @@ export const companyModelIdentityCases: readonly ChatCatalogCase[] = specs.map(s
     await waitForReply(ctx); const root = `/api/companies/${ctx.input.fixtures.company.id}`; const source = ctx.input.page.url();
     state.afterReplyEnabled = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings.enabled;
     state.agentWriteStatus = await probeAgentPermission(ctx, `${root}/${spec.path}`, "PUT", { enabled: true, connectionId: (state.connection as AiManagedConnectionSummary).id, grantId: (state.connection as AiManagedConnectionSummary).grantId,
-      ...(spec.path === "decision-model" ? { allowBackground: false } : spec.path === "fast-response" ? { model: "openai/gpt-oss-120b", allowSponsored: false } : { model: "openai/gpt-oss-safeguard-20b" }) });
+      ...(spec.path === "decision-model" ? { allowBackground: false } : spec.path === "fast-response" ? { model: requestedAuxiliaryServiceModel, allowSponsored: false } : { model: requestedAuxiliaryServiceModel }) });
     state.agentTestStatus = await probeAgentPermission(ctx, `${root}/${spec.path}/test`, "POST", {});
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/company/settings/connections`, { waitUntil: "domcontentloaded" });
     const section = spec.path === "decision-model" ? ctx.input.page.locator('section[aria-labelledby="decision-model-heading"]') : ctx.input.page.getByRole("region", { name: spec.section, exact: true });
     await section.getByRole("button", { name: (state.connection as AiManagedConnectionSummary).name, exact: true }).click();
+    if (spec.path !== "decision-model") await section.getByLabel("Model", { exact: true }).fill(requestedAuxiliaryServiceModel);
     await section.getByRole("switch", { name: spec.toggle, exact: true }).setChecked(true);
     await section.getByRole("button", { name: spec.save, exact: true }).click();
+    if (spec.path !== "decision-model") {
+      const persisted = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings;
+      expect(persisted.model, "Requested auxiliary model saved before any service test").toBe(requestedAuxiliaryServiceModel);
+      state.modelBeforeTest = persisted.model;
+    }
     await expect(section.getByRole("button", { name: spec.test, exact: true })).toBeEnabled();
     const before = await ctx.input.api.get<CostSummary>(`${root}/costs/summary`);
     const response = ctx.input.page.waitForResponse(row => row.request().method() === "POST" && new URL(row.url()).pathname === `${root}/${spec.path}/test`);
@@ -89,7 +101,9 @@ export const companyModelIdentityCases: readonly ChatCatalogCase[] = specs.map(s
     await expect(section.locator('[role="status"],[role="alert"]').last()).toBeVisible(); state.visibleTestReceipt = true;
     state.testCostEvents = (await ctx.input.api.get<CostSummary>(`${root}/costs/summary`)).eventCount - before.eventCount;
     state.saved = (await ctx.input.api.get<{ settings: Settings }>(`${root}/${spec.path}`)).settings;
-    await ctx.input.page.reload({ waitUntil: "domcontentloaded" }); await expect(section.getByRole("switch", { name: spec.toggle, exact: true })).toBeChecked(); state.persistedAfterReload = true;
+    await ctx.input.page.reload({ waitUntil: "domcontentloaded" }); await expect(section.getByRole("switch", { name: spec.toggle, exact: true })).toBeChecked();
+    if (spec.path !== "decision-model") await expect(section.getByLabel("Model", { exact: true })).toHaveValue(requestedAuxiliaryServiceModel);
+    state.persistedAfterReload = true;
     if (spec.path !== "prompt-injection-prevention") state.history = await ctx.input.api.get<DecisionHistoryEntry[]>(`${root}/${spec.path}/history?limit=100`);
     await ctx.input.evidence("identity-company-model-test.json", { service: spec.path, connectionId: (state.connection as AiManagedConnectionSummary).id, saved: state.saved, result: state.testResult,
       history: state.history, independentlyAddedCostEvents: state.testCostEvents, nativeChatRunUsedAsServiceProof: false });
