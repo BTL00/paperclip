@@ -77,7 +77,7 @@ it("forwards real metadata with parent-held auth, strips content and isolates co
   const address = upstream.address(); if (!address || typeof address === "string") throw new Error("Missing fixture address");
   const sink = await startOpenCodePerformanceDiagnostics({
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${address.port}/v1/traces`,
-    OTEL_EXPORTER_OTLP_TRACES_HEADERS: `Authorization=${encodeURIComponent("Bearer synthetic-upstream-secret")},x-auth_token=synthetic-header-secret`,
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: `Authorization=${encodeURIComponent("Bearer synthetic-upstream-secret")},x-auth_token=${encodeURIComponent("synthetic-header-café")}`,
     OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company,paperclip.agent.id=agent,paperclip.observability.revision=revision",
   }, false);
   const nativeSpan = span("ai.streamText", { traceId: "1".repeat(32), spanId: "2".repeat(16), parentSpanId: "3".repeat(16), status: { code: 2, message: "private" } });
@@ -89,7 +89,7 @@ it("forwards real metadata with parent-held auth, strips content and isolates co
     expect((await post()).status).toBe(200);
     await expect.poll(() => received.length).toBe(1);
     expect(received[0]!.authorization).toBe("Bearer synthetic-upstream-secret");
-    expect(received[0]!.token).toBe("synthetic-header-secret");
+    expect(received[0]!.token).toBe("synthetic-header-café");
     const body = received[0]!.body as {resourceSpans: Array<{resource: unknown; scopeSpans: Array<{spans: unknown[]}>}>};
     expect(body.resourceSpans[0]!.scopeSpans[0]!.spans).toEqual([{ traceId: nativeSpan.traceId, spanId: nativeSpan.spanId,
       parentSpanId: nativeSpan.parentSpanId, name: nativeSpan.name, startTimeUnixNano: nativeSpan.startTimeUnixNano,
@@ -155,4 +155,10 @@ it("bounds each export batch without permanently exhausting later session export
     for (let index = 0; index < 3; index++) { expect((await post(129)).status).toBe(200); await expect.poll(() => sizes.length).toBe(index + 1); }
     expect(sizes).toEqual([128, 128, 128]); expect(diagnostics).toEqual(["batch_limit"]);
   } finally { await sink.close(); await new Promise<void>(resolve => { upstream.close(() => resolve()); upstream.closeAllConnections(); }); }
+});
+
+it("rejects non-ByteString collector headers before declaring the sink available", async () => {
+  await expect(startOpenCodePerformanceDiagnostics({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://collector.internal/v1/traces",
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: `Authorization=${encodeURIComponent("synthetic-header-Ā")}`,
+    OTEL_RESOURCE_ATTRIBUTES: "paperclip.company.id=company,paperclip.agent.id=agent,paperclip.observability.revision=revision" }, false)).rejects.toThrow();
 });

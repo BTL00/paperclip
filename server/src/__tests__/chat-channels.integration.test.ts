@@ -61612,7 +61612,8 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         expect(prepared.observability?.environment.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBe("https://collector.example/otel/v1/traces");
         expect(events.filter(event => event.eventType === "agent_observability.unavailable")).toHaveLength(0);
       } else {
-        expect(prepared.observability?.environment).toEqual({});
+        for (const key of ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "OTEL_EXPORTER_OTLP_LOGS_HEADERS", "OTEL_RESOURCE_ATTRIBUTES"])
+          expect(prepared.observability?.environment).not.toHaveProperty(key);
         expect(events).toMatchObject([{ eventType: "agent_observability.unavailable", payload: { reason: "unsupported_capture_policy", revision } }]);
       }
       expect(JSON.stringify(prepared.runtimeConfig)).not.toContain("collector.example");

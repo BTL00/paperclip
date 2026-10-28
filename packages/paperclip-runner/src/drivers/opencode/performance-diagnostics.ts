@@ -148,6 +148,7 @@ function openCodeTraceDestination(environment: NodeJS.ProcessEnv | undefined) {
     if (split < 1 || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || /[\r\n\0]/.test(value)) throw new Error("Invalid OpenCode trace headers");
     headers[name] = value;
   }
+  new Headers(headers);
   const attributes = [{ key: "service.name", value: { stringValue: "opencode" } }];
   const required = new Set(["paperclip.company.id", "paperclip.agent.id", "paperclip.observability.revision"]);
   for (const entry of (environment?.OTEL_RESOURCE_ATTRIBUTES ?? "").split(",")) {
