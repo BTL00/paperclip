@@ -20,6 +20,8 @@ it("binds actual public shapes without details to exact saved comments and commo
 it.each([
  ["wrong principal",(o:ReturnType<typeof example>)=>{o[1].principalId="alex";}],
  ["wrong signed-in session",(o:ReturnType<typeof example>)=>{o[1].sessionPrincipalId="other";}],
+ ["prior comment boundary",(o:ReturnType<typeof example>)=>{o.forEach(p=>p.baselineCommentIds.push("older-unobserved-comment"));}],
+ ["prior comment audit",(o:ReturnType<typeof example>)=>{o.forEach(p=>p.baselineActivityIds.push("audit-1"));}],
  ["capture overflow",(o:ReturnType<typeof example>)=>{o[0].overflow=true;}],
  ["missing recipient event",(o:ReturnType<typeof example>)=>{o[1].frames.pop();}],
  ["different received event ID",(o:ReturnType<typeof example>)=>{o[1].frames[0]!.eventId=99;}],

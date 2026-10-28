@@ -58,6 +58,7 @@ async function armProbe(probe: ObserverProbe) {
   finally { await session.dispose(); }
   if (personId !== probe.principalId) throw new Error("Notification observer session principal mismatch");
   const rows = await publicProbeRows(probe);
+  if (rows.comments.length || rows.activity.some(row => row.action === "issue.comment_added")) throw new Error("Notification observer requires the fresh comment boundary before the participation control");
   probe.baseline = { sessionPrincipalId: probe.principalId, activityIds: rows.activity.map(row => String(row.id)), commentIds: rows.comments.map(row => String(row.id)) };
   probe.frames.length = 0;
 }

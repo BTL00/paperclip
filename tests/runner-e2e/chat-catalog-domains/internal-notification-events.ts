@@ -28,6 +28,7 @@ export function bindNotificationPublicEvents(companyId: string, taskId: string, 
   const reject = (reason: string) => ({ complete: false, reason, frames: [[], []] as NotificationBoundFrame[][] });
   if (!companyId || !taskId || observers[0].principalId === observers[1].principalId
     || observers.some(o => !o.principalId || o.principalId !== o.sessionPrincipalId || o.overflow)) return reject("principal-or-capture-invalid");
+  if (observers.some(o => o.baselineCommentIds.length || o.activity.some(a => o.baselineActivityIds.includes(String(a.id)) && a.entityType === "issue" && a.entityId === taskId && a.action === "issue.comment_added"))) return reject("not-a-fresh-comment-boundary");
   const normalized = [];
   for (const observer of observers) {
     if (new Set(observer.frames.map(f => f.eventId)).size !== observer.frames.length) return reject("duplicate-public-event");
