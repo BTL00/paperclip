@@ -5267,7 +5267,8 @@
     "scenarioId": "status-cards.refresh-card",
     "sourceFiles": [
       "chat-catalog-domains/integrator-status-cards.ts",
-      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/status-card-work-failure.ts",
+      "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-definition.ts",
@@ -5275,7 +5276,7 @@
       "chat-catalog-domains/integrator-support.ts",
       "chat-scenarios/status-cards.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.status-card.required-work-failure.v2",
     "expectedRunCount": 7,
     "expectedHumanMessageCount": 4,
     "turnTimeoutMs": 120000,
@@ -5283,8 +5284,7 @@
     "runPolicy": {
       "kind": "terminal-counts",
       "terminalStatusCounts": {
-        "failed": 1,
-        "succeeded": 6
+        "succeeded": 7
       }
     },
     "modulePath": "./chat-catalog-domains/integrator-status-cards.js",
