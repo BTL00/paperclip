@@ -2,7 +2,15 @@
 
 Updated: 2026-10-27. This is the single progress record for [the saved goal](2026-10-26-chat-catalog-eval-goal.md). Exact frozen requests, ownership, readiness, attempt histories and provenance live in [the campaign manifest](../../tests/runner-e2e/chat-campaign-manifest.json). This record distinguishes authored code from live acceptance.
 
-## Current state
+## Refreshed execution checkpoint — 2026-10-28 UTC
+
+- **User steering:** PR #17949 is merged. Resume real human chat feature commands on a freshly verified merged baseline; prioritize a small sensible pilot before wider runs, then continue toward broad passing coverage. No new numerical threshold or reset of failed-attempt budgets is implied.
+- **Fresh source preparation:** the composed candidate is based on verified production `39e811c9c5226979fce42e052a27cfb28301018a`, including merged custody commit `38d08847`. Final eval source is still being composed and reviewed; no new-baseline pilot result is credited yet. Proposed controls are `cli-operations.create-from-cli` and `agents.change-manager`; unused initials are `projects.create-project`, `projects.project-work`, and `projects.archive-project`. Exact intents and actual admission remain separate from this proposal.
+- **Preserved historical remote results:** [the official final34 report](https://d1p6rlowie26tp.cloudfront.net/runner-e2e/campaigns/gha-40584967834-1-final34-report/) records the previous lane: 57 distinct measured scenarios, 6 passed, 51 failed, 187 unrun; 62 attempts (6 passed, 56 failed). That run intentionally stopped for the shared key-custody finding after 34 admitted results. Its 120 unadmitted selections consumed no ordinal. Prior production50b and earlier mixed-baseline results are historical for this refreshed baseline; their passes do not become new-baseline evidence.
+- **Evidence custody:** the former ignored private ledger directory is currently unavailable. Selected pilot history is being recovered from the published immutable 244-ID coverage and actual retained result bytes; unavailable private provenance is explicitly unknown. Do not reconstruct attempts from conversation memory. Accepted boundary/overview/preview candidates remain preserved by named Git refs; the comment fix already exists in the prior eval source. Do not integrate the whole semantic branch: the summarizer predicate remains unresolved and unaccepted.
+
+## Earlier status checkpoints (historical)
+
 
 - **First remote feedback-loop timing:**run40530790741 spanned15:25:15–16:18:09UTC (52m54s). Retained workflow facts: authorization queue≈8m03s, lockfile queue6m12s, catalog queue3m44s, AWS build queue16m40s plus build3m38s, paid case queue10m19s plus worker2m34s. These stage durations are not additive causal attribution or model runtime. Actual host/Docker qualified; the first framework attempt then failed agent-readiness setup before the canonical query.
 

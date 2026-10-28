@@ -2,6 +2,14 @@
 
 Date: 2026-10-26
 
+## Refreshed user steering — 2026-10-28 UTC
+
+The user merged credential-custody PR #17949 and asked to resume meaningful human chat feature journeys on the freshly verified merged production baseline. Prioritize sensible evals and a small passing pilot before wider runs, then continue toward broad passing coverage. Exercise real human commands, actual agent execution and independently verified product outcomes; fixture setup must not perform the tested action. No new numerical success threshold or blanket retry budget is introduced by this update.
+
+The proposed pilot uses two previous genuine passes as explicitly requested new-baseline controls, plus three unused useful project/task journeys. Preserve all earlier attempts and correction limits. The prior production50b measurements are historical evidence for this refreshed baseline, not new proof: no old pass silently carries into the new rate. Record the exact new production/eval-source/model identity and actual results before crediting anything. Unmerged core dependencies remain blocked; the summarizer predicate correction remains unaccepted.
+
+GitHub Actions on the existing AWS fleet and the requested OpenCode/OpenRouter model remain the execution lane. Use the existing Evals history and renderer. The original goal and earlier steering below remain preserved where not superseded.
+
 ## Authoritative user steering — 2026-10-27
 
 The existing Evals website and family renderer/history are the primary delivery surface: [Evals hub](https://pages.paperclip.ing/evals/) and [Product E2E history](https://d1p6rlowie26tp.cloudfront.net/runner-e2e/). Retire the separate custom local HTML as the delivery approach; retain it only as historical evidence. The [published historical partial Codex campaign](https://d1p6rlowie26tp.cloudfront.net/runner-e2e/campaigns/historical-local-codex-chat-catalog-20261027-158measured-86unrun/) contains158 actually measured IDs,17 original initial passes,141 first-attempt failures and159 retained measurements;86 IDs remain unrun in that historical lane. These are original one-time local outcomes, not current-source/OpenCode qualification. There are238 callback implementations without declared gaps and six incomplete or blocked journeys. All244 are registered, but registration and prerequisite probes do not establish complete intended E2E coverage or verified behavior.
