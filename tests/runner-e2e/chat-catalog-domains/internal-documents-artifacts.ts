@@ -124,8 +124,28 @@ function resolveFeedback(): ChatCatalogCase {
 import { observeInternal } from "./internal-support.js";
 
 export function meaningfulOrchidPlan(body: string): boolean {
-  return /\b(?:implement|build|develop)\b/i.test(body) && /\b(?:test|verify|verification|validation)\b/i.test(body)
-    && /\bOrchid\b/i.test(body) && /\b(?:single|one)[- ]page\b/i.test(body)
-    && /\b(?:signup|sign.up|registration)\b/i.test(body) && /\b(?:accessible|accessibility|labels?|semantic)\b/i.test(body)
-    && /\b(?:responsive|breakpoints?)\b/i.test(body) && /\bkeyboard\b/i.test(body) && /\bmobile\b/i.test(body);
+  const clauses = body.replace(/[*_`]/g, "").split(/[.!?;\n]|\b(?:but|however|instead)\b|\band\s+(?=(?:do not|don't|never|skip|omit|exclude|no need))/i).filter(Boolean);
+  const negativeDirective = /\b(?:do not|don't|never)(?:\s+(?:ever|actually|really|even))?\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b|\b(?:skip|omit|exclude)\b|\bno need to\s+(?:build|implement|develop|include|add|provide|support|verify|test|check|make|use|preserve)\b/i;
+  const requirements = [
+    /\b(?:implement|build|develop)\b/i,
+    /\b(?:test|verify|verification|validation)\b/i,
+    /\bOrchid\b/i,
+    /\b(?:single|one)(?:[- ]+[a-z]+){0,3}[- ]+page\b/i,
+    /\b(?:signup|sign.up|registration)\b/i,
+    /\b(?:accessible|accessibility|labels?|semantic)\b/i,
+    /\b(?:responsive|breakpoints?)\b/i,
+    /\bkeyboard\b/i,
+    /\bmobile\b/i,
+  ];
+  if (!requirements.every(fact => clauses.some(clause => fact.test(clause) && !negativeDirective.test(clause)))) return false;
+  const features = requirements.slice(3);
+  if (clauses.some(clause => {
+    const directive = negativeDirective.exec(clause);
+    if (!directive) return false;
+    const target = clause.slice(directive.index + directive[0].length).trim();
+    return features.some(fact => new RegExp(`^(?:(?:a|an|the|any|our|this)\\s+)?${fact.source}`, "i").test(target));
+  })) return false;
+  if (/\bwithout\s+(?:(?:any|the)\s+)?(?:signup|registration|accessibility|labels?|responsive(?:ness)?|keyboard|mobile)\b/i.test(body)) return false;
+  return !clauses.some(clause => /\b(?:multi[- ]page|multiple\s+pages|separate\s+pages)\b/i.test(clause)
+    && !negativeDirective.test(clause) && !/\b(?:not|no|without|avoid)\s+(?:a\s+)?(?:multi[- ]page|multiple\s+pages|separate\s+pages)\b/i.test(clause));
 }
