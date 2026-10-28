@@ -187,8 +187,14 @@ async function probeRemoteNativeCodex(options: {
   });
 }
 
-export async function testNativeRunnerAuthentication(context: AdapterEnvironmentTestContext, provider: "codex", model: string | null): Promise<AdapterEnvironmentTestResult> {
+export async function testNativeRunnerAuthentication(context: AdapterEnvironmentTestContext, provider: "codex" | "opencode", model: string | null): Promise<AdapterEnvironmentTestResult> {
   const remote = context.executionTarget?.kind === "remote";
+  if (provider === "opencode" && remote) {
+    return { adapterType: "paperclip_runner", status: "fail", testedAt: new Date().toISOString(), checks: [{
+      code: "opencode_native_remote_probe_unsupported", level: "error",
+      message: "Native OpenCode account verification is not yet supported in the selected remote environment.",
+    }] };
+  }
   const configured = context.config.env;
   const environment: Record<string, string> = Object.fromEntries([
     ...(remote ? [] : PROBE_TRANSPORT_ENV_KEYS.flatMap(key => typeof process.env[key] === "string" ? [[key, process.env[key]!]] : [])),
@@ -250,7 +256,7 @@ export async function testNativeRunnerAuthentication(context: AdapterEnvironment
       });
     }
     if (receipt.helloProbePassed !== true || receipt.provider !== provider || typeof receipt.effectiveModel !== "string" || !receipt.effectiveModel.trim() || receipt.effectiveModel === "unknown" || (model !== null && receipt.effectiveModel !== model)
-      || receipt.providerDriver !== "codex_app_server") throw new Error("The selected native runtime returned an incompatible account or model verification receipt.");
+      || receipt.providerDriver !== (provider === "opencode" ? "opencode_server" : "codex_app_server")) throw new Error("The selected native runtime returned an incompatible account or model verification receipt.");
     return { adapterType: "paperclip_runner", status: "pass", testedAt: new Date().toISOString(), checks: [{ code: `${provider}_hello_probe_passed`, level: "info",
       message: `The native ${provider} runtime verified the selected account and model in ${remote ? "the selected environment" : "the Paperclip host"}.` }] };
   } catch (error) {
