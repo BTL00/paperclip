@@ -16,7 +16,8 @@ export function touchSkillPackage(directory: string) {
  * check. Version projections and run pins have their own existing retention. */
 export async function trimSkillPackageCache(db: Db, companyId: string, directory: string,
   verifyDurable: (id: string, signal: AbortSignal) => Promise<boolean>,
-  removeVerified: (action: () => Promise<void>) => Promise<void> = action => action()) {
+  removeVerified: (action: () => Promise<void>) => Promise<void> = action => action(), cancellation?: AbortSignal) {
+  cancellation?.throwIfAborted();
   const parent = path.dirname(directory);
   await ensureSkillCacheDirectory(parent);
   const contents = await fs.readdir(parent, { withFileTypes: true });
@@ -51,7 +52,8 @@ export async function trimSkillPackageCache(db: Db, companyId: string, directory
   const entries = candidates.filter(entry => entry !== null);
   let bytes = entries.reduce((total, entry) => total + entry.bytes, 0);
   let count = entries.length;
-  const signal = AbortSignal.timeout(10_000);
+  const timeout = AbortSignal.timeout(10_000);
+  const signal = cancellation ? AbortSignal.any([cancellation, timeout]) : timeout;
   let attempted = 0;
   for (const entry of entries.sort((a, b) => a.lastUsed - b.lastUsed)) {
     if (bytes <= MAX_BYTES && count <= MAX_PACKAGES) break;

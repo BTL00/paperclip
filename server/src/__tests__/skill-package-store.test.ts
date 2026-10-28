@@ -1,4 +1,5 @@
 import { skillPackageWork } from "../services/skill-package-work.js";
+import * as packageCache from "../services/skill-package-cache.js";
 import * as recovery from "../services/skill-package-recovery.js";
 import type { GitHubRead } from "../services/github-skill-source.js";
 import { randomUUID } from "node:crypto";
@@ -544,6 +545,35 @@ describe.skipIf(!support.supported)("external skill packages", () => {
       expect((await reading)[0]!.content).toBe(changed[0]!.content);
       expect((await fs.stat(paths.directory)).isDirectory()).toBe(true);
     } finally { clearTimeout(timeout); release(); await Promise.allSettled([reading, warming]); }
+  });
+
+  it("bounds cold response lifetimes while cleanup is waiting without blocking warm preparation", async () => {
+    const fixtures = [await fixture(), await fixture(), await fixture()];
+    let bothEntered!: () => void;
+    const started = new Promise<void>(resolve => { bothEntered = resolve; });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let decoded = 0;
+    const trim = vi.spyOn(packageCache, "trimSkillPackageCache").mockImplementation(async () => {
+      if (++decoded === 2) bothEntered();
+      await blocked;
+    });
+    const reads = fixtures.slice(0, 2).map(f => f.store.versionFiles(f.skills[0]!.version));
+    const storageRead = vi.spyOn(storage, "getObject");
+    try {
+      await started;
+      reads.push(fixtures[2]!.store.versionFiles(fixtures[2]!.skills[0]!.version));
+      expect((await fixtures[0]!.resolve()).every(entry => entry.sourceStatus === "available")).toBe(true);
+      // Let the third metadata/manifest read settle. Its archive and response
+      // must remain queued while two decoded responses are owned by cleanup.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(decoded).toBe(2);
+      const third = (await fixtures[2]!.store.descriptor(fixtures[2]!.companyId, fixtures[2]!.id)).storage!;
+      expect(storageRead.mock.calls.filter(call => call[1] === third.archiveKey)).toHaveLength(0);
+      release();
+      expect((await Promise.all(reads)).every(files => files[0]!.path === "SKILL.md")).toBe(true);
+      expect(trim).toHaveBeenCalledTimes(3);
+    } finally { release(); await Promise.allSettled(reads); }
   });
 
   it("bounds concurrent cached inventories while leaving warm turn preparation responsive", async () => {

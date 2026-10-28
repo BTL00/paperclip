@@ -91,6 +91,8 @@ function sharedFlight<T>(db: Db, key: string, cancellation: AbortSignal | undefi
 }
 type PackageIoQueue = { active: number; waiting: Array<() => void> };
 const storageIo: PackageIoQueue = { active: 0, waiting: [] };
+// A decoded cold response remains owned until its post-fill cleanup finishes.
+const coldResponses: PackageIoQueue = { active: 0, waiting: [] };
 // Bound local response buffers independently so stalled storage does not prevent
 // verified cached reads, including reads inside an existing DB transaction.
 const inventoryIo: PackageIoQueue = { active: 0, waiting: [] };
@@ -324,12 +326,17 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
     }
     if (!await verifySkillPackageDirectory(staging, manifest.files)) throw new Error("Restored skill package does not match its manifest");
   }
-  // Admin reads and retention verification own a scratch directory. They never
-  // wait for or hold the lock used to prepare and pin an agent's warm files.
+  // Archive reads and verification own private scratch space outside the warm
+  // preparation lock. Administrative reads briefly try that lock to publish.
   async function withIsolatedPackage<T>(companyId: string, id: string,
     consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery = true, cancellation?: AbortSignal, cacheRead = false) {
     const signal = cancellation ? AbortSignal.any([cancellation, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000);
     signal.throwIfAborted();
+    const read = () => readIsolatedPackage(companyId, id, consume, allowRecovery, signal, cacheRead);
+    return cacheRead ? withPackageIo(read, signal, coldResponses) : read();
+  }
+  async function readIsolatedPackage<T>(companyId: string, id: string,
+    consume: (root: string, manifest: SkillPackageManifest) => Promise<T>, allowRecovery: boolean, signal: AbortSignal, cacheRead: boolean) {
     const row = await descriptor(companyId, id);
     const manifest = await manifestFor(row, signal);
     let published = false;
@@ -371,8 +378,9 @@ export function skillPackageStore(db: Db, suppliedStorage?: StorageService, cach
         async remove => {
           try { await withSkillVersionCacheLock(cacheOwner, companyId, remove, true); }
           catch (error) { if (!(error instanceof SkillCacheBusy)) throw error; }
-        });
+        }, signal);
     }
+    signal.throwIfAborted();
     return result;
   }
   async function materialize(row: Descriptor, manifest: SkillPackageManifest) {
