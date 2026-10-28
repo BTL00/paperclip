@@ -6,7 +6,7 @@ import { CODEX_CHATGPT_MODEL_REJECTION_RE, codexChatGptRetirementHint } from "@p
 import { copyBackCodexAuth } from "@paperclipai/adapter-codex-local/server";
 import type { AdapterEnvironmentTestContext, AdapterEnvironmentTestResult } from "@paperclipai/adapter-utils";
 import { ADAPTER_AUTH_MISSING_CHECK_CODE } from "@paperclipai/shared";
-import { probeNativeRunnerEnvironment, resolveSourceCodexHome } from "../../vendor/paperclip-runner/index.js";
+import { configuredEnvironmentProjection, probeNativeRunnerEnvironment, resolveSourceCodexHome } from "../../vendor/paperclip-runner/index.js";
 import { resolvePaperclipRunnerBinary, resolveRemotePaperclipRunnerBinary } from "./native-codex-runner.js";
 import { readLocalAiCredentialFile } from "../local-ai-credential-file.js";
 import { createNativeSshCommandRunner } from "./native-ssh-command-runner.js";
@@ -193,6 +193,7 @@ export async function testNativeRunnerAuthentication(context: AdapterEnvironment
     return { adapterType: "paperclip_runner", status: "fail", testedAt: new Date().toISOString(), checks: [{
       code: "opencode_native_remote_probe_unsupported", level: "error",
       message: "Native OpenCode account verification is not yet supported in the selected remote environment.",
+      hint: "Use a local environment for this native test, or select Legacy runner in Advanced.",
     }] };
   }
   const configured = context.config.env;
@@ -211,6 +212,16 @@ export async function testNativeRunnerAuthentication(context: AdapterEnvironment
   let runtimeDirectory: string | undefined;
   let sourceAuthJson: string | undefined;
   try {
+    if (provider === "opencode") {
+      const selected = Object.fromEntries(Object.entries(configured && typeof configured === "object" && !Array.isArray(configured) ? configured : {})
+        .filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+      Object.assign(environment, configuredEnvironmentProjection(selected));
+      // The downstream OpenCode sanitizer merges host defaults. Explicit empty
+      // values fence its credential/routing/bridge keys when this account did not supply them.
+      for (const key of ["OPENROUTER_API_KEY", "PAPERCLIP_AI_PROVIDER_KEY", "PAPERCLIP_AI_PROVIDER_URL", "PAPERCLIP_NATIVE_MCP_NAME", "PAPERCLIP_NATIVE_MCP_URL", "PAPERCLIP_NATIVE_MCP_TOKEN"]) {
+        if (!Object.hasOwn(environment, key)) environment[key] = "";
+      }
+    }
     if (provider === "codex") {
       const { buildNativeProviderEnvironment } = await import("./native-session-executor.js");
       sourceCodexHome = context.managedAiCredentialHome ?? resolveSourceCodexHome(buildNativeProviderEnvironment(environment));

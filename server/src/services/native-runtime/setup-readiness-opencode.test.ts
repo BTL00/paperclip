@@ -4,7 +4,8 @@ import type { AdapterEnvironmentTestContext } from "@paperclipai/adapter-utils";
 const mocks = vi.hoisted(() => ({ probe: vi.fn(), binary: vi.fn(), sourceHome: vi.fn(), readCredential: vi.fn(), copyBack: vi.fn() }));
 vi.mock("@paperclipai/adapter-codex-local", () => ({ CODEX_CHATGPT_MODEL_REJECTION_RE: /never-match/, codexChatGptRetirementHint: () => null }));
 vi.mock("@paperclipai/adapter-codex-local/server", () => ({ copyBackCodexAuth: mocks.copyBack }));
-vi.mock("../../vendor/paperclip-runner/index.js", () => ({ probeNativeRunnerEnvironment: mocks.probe, resolveSourceCodexHome: mocks.sourceHome }));
+vi.mock("../../vendor/paperclip-runner/index.js", async () => ({ probeNativeRunnerEnvironment: mocks.probe, resolveSourceCodexHome: mocks.sourceHome,
+  configuredEnvironmentProjection: (await import("../../../../packages/paperclip-runner/src/configured-environment.js")).configuredEnvironmentProjection }));
 vi.mock("./native-codex-runner.js", () => ({ resolvePaperclipRunnerBinary: mocks.binary, resolveRemotePaperclipRunnerBinary: vi.fn() }));
 vi.mock("../local-ai-credential-file.js", () => ({ readLocalAiCredentialFile: mocks.readCredential }));
 vi.mock("./native-ssh-command-runner.js", () => ({ createNativeSshCommandRunner: vi.fn() }));
@@ -12,6 +13,12 @@ vi.mock("@paperclipai/adapter-utils/runner-connectivity", () => ({ resolvePaperc
 vi.mock("./native-runner-execution-driver.js", () => ({ createNativeRunnerExecutionDriver: vi.fn() }));
 vi.mock("./native-session-executor.js", () => ({ buildNativeProviderEnvironment: (environment: Record<string, string>) => environment }));
 import { testNativeRunnerAuthentication } from "./setup-readiness.js";
+import { createCapabilityRunnerdProviderEnvironment } from "../../../../packages/paperclip-runner/src/live/runnerd-codex-transport.js";
+function providerEnvironment(environment: NodeJS.ProcessEnv) {
+  return createCapabilityRunnerdProviderEnvironment({ provider: "opencode", options: { environment },
+    identity: { runnerInstanceId: "probe", environmentLeaseId: "lease", runId: "run", normalizedSessionId: "session", turnId: "turn", itemId: "item" },
+    codexHome: "/synthetic/codex", runtimeContextPath: "/synthetic/context", hasRuntimeContext: false });
+}
 const model = "openrouter/deepseek/deepseek-v4.1-flash-1017";
 const context = (extra: Partial<AdapterEnvironmentTestContext> = {}): AdapterEnvironmentTestContext => ({ companyId: "company-1", adapterType: "paperclip_runner", config: { env: { OPENROUTER_API_KEY: "synthetic-selected-account" } }, ...extra });
 const receipt = () => ({ provider: "opencode", providerDriver: "opencode_server", effectiveModel: model, helloProbePassed: true });
@@ -63,4 +70,36 @@ it("keeps the existing local Codex provider, model and effort contract", async (
   mocks.probe.mockImplementation(async options => { await options.onCleanupConfirmed(); return { provider: "codex", providerDriver: "codex_app_server", effectiveModel: "gpt-6.1-sol", helloProbePassed: true }; });
   const result = await testNativeRunnerAuthentication(context({ config: { env: { OPENAI_API_KEY: "synthetic-selected-codex" }, modelReasoningEffort: "low" } }), "codex", "gpt-6.1-sol");
   expect(result.status).toBe("pass"); expect(mocks.probe.mock.calls[0][0]).toMatchObject({ provider: "codex", model: "gpt-6.1-sol", reasoningEffort: "low", timeoutMs: 45_000 });
+});
+
+it.each([undefined, "", "invalid-selected-key"])("never substitutes the ambient account for selected key %j at the actual provider boundary", async selected => {
+  vi.stubEnv("OPENROUTER_API_KEY", "synthetic-valid-host-account");
+  let downstream: NodeJS.ProcessEnv | undefined;
+  mocks.probe.mockImplementation(async options => {
+    downstream = providerEnvironment(options.environment);
+    await options.onCleanupConfirmed(); throw new Error("authentication failed");
+  });
+  expect((await testNativeRunnerAuthentication(context({ config: { env: selected === undefined ? {} : { OPENROUTER_API_KEY: selected } } }), "opencode", model)).status).toBe("fail");
+  expect(downstream).toBeDefined(); expect(downstream!.OPENROUTER_API_KEY).toBe(selected ?? "");
+  expect(downstream!.OPENROUTER_API_KEY).not.toBe("synthetic-valid-host-account");
+});
+it("carries only explicitly configured custom provider settings through the actual sanitizer", async () => {
+  vi.stubEnv("UNSELECTED_GATEWAY_KEY", "synthetic-ambient-gateway");
+  const configured = { OPENROUTER_API_KEY: "synthetic-selected-account", CUSTOM_GATEWAY_TOKEN: "synthetic-selected-gateway", OPENCODE_CONFIG_CONTENT: "synthetic-provider-settings", PAPERCLIP_CONFIGURED_ENV_KEYS: '["UNSELECTED_GATEWAY_KEY"]' };
+  mocks.probe.mockImplementation(async options => {
+    const downstream = providerEnvironment(options.environment);
+    expect(downstream.CUSTOM_GATEWAY_TOKEN).toBe(configured.CUSTOM_GATEWAY_TOKEN);
+    expect(downstream.OPENCODE_CONFIG_CONTENT).toBe(configured.OPENCODE_CONFIG_CONTENT);
+    expect(downstream.UNSELECTED_GATEWAY_KEY).toBeUndefined();
+    await options.onCleanupConfirmed(); return receipt();
+  });
+  expect((await testNativeRunnerAuthentication(context({ config: { env: configured } }), "opencode", model)).status).toBe("pass");
+});
+
+it("does not inherit host provider routes or native bridge authority at the actual boundary", async () => {
+  for (const key of ["PAPERCLIP_AI_PROVIDER_KEY", "PAPERCLIP_AI_PROVIDER_URL", "PAPERCLIP_NATIVE_MCP_NAME", "PAPERCLIP_NATIVE_MCP_URL", "PAPERCLIP_NATIVE_MCP_TOKEN"]) vi.stubEnv(key, "synthetic-host-value");
+  let downstream: NodeJS.ProcessEnv | undefined;
+  mocks.probe.mockImplementation(async options => { downstream = providerEnvironment(options.environment); await options.onCleanupConfirmed(); return receipt(); });
+  expect((await testNativeRunnerAuthentication(context(), "opencode", model)).status).toBe("pass");
+  for (const key of ["PAPERCLIP_AI_PROVIDER_KEY", "PAPERCLIP_AI_PROVIDER_URL", "PAPERCLIP_NATIVE_MCP_NAME", "PAPERCLIP_NATIVE_MCP_URL", "PAPERCLIP_NATIVE_MCP_TOKEN"]) expect(downstream![key]).toBe("");
 });
