@@ -9,9 +9,14 @@ export function recordedTaskUnits(reply: string, target: Entity, knownTasks: Ent
     if (!line.trim()) { current = undefined; continue; }
     if (/^\s*(?:[-*]|\d+\.|#{1,6})\s/.test(line)) current = undefined;
     for (const sentence of line.split(/(?<=[.!?;])\s+/)) {
-      const identifiers = knownTasks.filter(task => mentions(sentence, task.identifier) || new RegExp(`/issues/${escape(task.id)}(?![\\w-])`, "i").test(sentence));
-      const explicitIdentifiers = sentence.match(/(?<![\w-])[A-Z][A-Z0-9]*-\d+(?![\w-])/gi) ?? [];
-      let subjects = identifiers.length ? identifiers : explicitIdentifiers.length ? [] : knownTasks.filter(task => mentions(sentence, task.title));
+      const prose = sentence.replace(/(?:https?:\/\/|(?<![\w])\/)[^\s)\x60\]>]+/gi, "");
+      const companyPrefixes = knownTasks.flatMap(task => task.identifier?.match(/^(.+-)\d+$/)?.[1]?.toLowerCase() ?? []);
+      const explicitIdentifiers = (prose.match(/(?<![\w-])[A-Z][A-Z0-9]*-\d+(?![\w-])/gi) ?? [])
+        .filter(value => companyPrefixes.some(prefix => value.toLowerCase().startsWith(prefix)));
+      const textIdentifiers = knownTasks.filter(task => mentions(prose, task.identifier));
+      const urlIdentifiers = knownTasks.filter(task => [task.id, task.identifier].some(id => !!id && new RegExp(`/issues/${escape(id)}(?![\\w-])`, "i").test(sentence)));
+      const identifiers = textIdentifiers.length ? textIdentifiers : explicitIdentifiers.length ? [] : urlIdentifiers;
+      let subjects = identifiers.length ? identifiers : explicitIdentifiers.length ? [] : knownTasks.filter(task => mentions(prose, task.title));
       if (!identifiers.length) subjects = subjects.filter(task => !subjects.some(other => other.id !== task.id && other.title !== task.title && other.title?.includes(task.title ?? "")));
       const ids = [...new Set(subjects.map(task => task.id))];
       if (ids.length === 1) { current = { taskId: ids[0]!, text: sentence }; units.push(current); }

@@ -41,8 +41,11 @@ describe("recorded overview blocker and per-task state grounding", () => {
 });
 describe("actual work/reference roles and explicit negative related-work context", () => {
   it("accepts recorded work/reference table roles and a visibly linked but explicitly unrelated accessible task", () => { expect(gradeIntegratorRelatedWork(related()).passed).toBe(true); });
+  it("retains harmless external references with title-grounded actual work", () => { const v=related();v.reply="The main Investigation task is done after change PR-123.\nIts reference Mobile follow-up remains backlog.\nACN-3 is explicitly unrelated and has no case link."; expect(gradeIntegratorRelatedWork(v).passed).toBe(true); });
   it("accepts a direct denial of case membership", () => { const v=related();v.reply=v.reply.replace("has a similar title but is explicitly unrelated and has no case link", "is not part of this case"); expect(gradeIntegratorRelatedWork(v).passed).toBe(true); });
   it.each([
+    ["wrong local identifier despite correct identifier URL", (v: ReturnType<typeof related>) => { v.reply = v.reply.replace("ACN-1 Investigation", "[ACN-9 Investigation](/ACN/issues/ACN-1)"); }],
+    ["wrong local identifier despite copied title and correct URL", (v: ReturnType<typeof related>) => { v.reply = v.reply.replace("ACN-1 Investigation", "[ACN-9 Investigation](/ACN/issues/primary)"); }],
     ["foreign primary identifier with copied title", (v: ReturnType<typeof related>) => { v.reply = v.reply.replace("ACN-1 Investigation", "ACN-9 Investigation"); }],
     ["foreign reference identifier with copied title", (v: ReturnType<typeof related>) => { v.reply = v.reply.replace("ACN-2 Mobile follow-up", "ACN-9 Mobile follow-up"); }],
     ["swapped primary role", (v: ReturnType<typeof related>) => { v.reply = v.reply.replace("ACN-1 Investigation | work", "ACN-1 Investigation | reference"); }],
