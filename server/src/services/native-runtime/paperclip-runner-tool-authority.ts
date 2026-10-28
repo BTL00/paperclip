@@ -1,3 +1,4 @@
+import { runnerApiProviderResponse } from "./runner-api-provider-response.js";
 import { priorRecoveryApiReceipt } from "../recovery-effect-receipts.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "../delivery-work-notifications.js";
 import { caseHandoffService } from "../case-handoffs.js";
@@ -935,7 +936,7 @@ export class PaperclipRunnerToolAuthority {
       await tx.update(heartbeatRuns).set({ resultJson: { ...resultJson, apiToolReceipts: receipts } }).where(eq(heartbeatRuns.id, this.binding.runId));
       return null;
     });
-    if (prior) return prior.result;
+    if (prior) return runnerApiProviderResponse(operation.operationId, prior.result, bound.company.issuePrefix);
     const result = await execute();
     const storedResult = provider
       ? { encryptedResult: (await provider.createSecret({ value: JSON.stringify(result) })).material }
@@ -956,7 +957,7 @@ export class PaperclipRunnerToolAuthority {
       receipts[key] = { digest, operationId: operation.operationId, state: "completed", ...storedResult };
       await tx.update(heartbeatRuns).set({ resultJson: { ...resultJson, apiToolReceipts: receipts } }).where(eq(heartbeatRuns.id, this.binding.runId));
     });
-    return result;
+    return runnerApiProviderResponse(operation.operationId, result, bound.company.issuePrefix);
   }
 
   async #readToolResult(value: unknown): Promise<unknown> {
@@ -1290,7 +1291,7 @@ export class PaperclipRunnerToolAuthority {
     const privacy = await authorizationService(this.db).decide({ actor: this.#privacyActor(row.run), action: "issue:read",
       resource: { type: "issue", companyId: this.binding.companyId, issueId: row.issue.id } });
     if (!privacy.allowed) throw forbidden("The task is no longer available to this run");
-    return row;
+    return { ...row, company };
   }
 
   async #resolveReview(value: unknown) {
