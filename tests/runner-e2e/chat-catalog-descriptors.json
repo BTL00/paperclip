@@ -4631,13 +4631,15 @@
     "scenarioId": "routines.read-history",
     "sourceFiles": [
       "chat-catalog-domains/integrator-routine-history.ts",
-      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/routine-history-work-failure.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-definition.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/integrator-support.ts",
       "chat-scenarios/routines.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.integrator.routine-work-failure.v2",
     "expectedRunCount": 3,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
@@ -4645,12 +4647,12 @@
     "runPolicy": {
       "kind": "terminal-counts",
       "terminalStatusCounts": {
-        "failed": 1,
-        "succeeded": 2
+        "succeeded": 3
       }
     },
     "modulePath": "./chat-catalog-domains/integrator-routine-history.js",
-    "exportName": "integratorRoutineHistoryCases"
+    "exportName": "integratorRoutineHistoryCases",
+    "authentication": "human-session"
   },
   {
     "scenarioId": "routines.run-now",

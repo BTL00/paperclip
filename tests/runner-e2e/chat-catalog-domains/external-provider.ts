@@ -1,11 +1,11 @@
 import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { listenOnFetchAllowedPort } from "../../e2e/fetch-allowed-port.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { root } from "./external-support.js";
 
 export interface Tool { name: string; title: string; description: string; readOnly: boolean }
-export interface ProviderCall { method: string; name?: string; authorized: boolean; arguments?: Record<string, unknown>; sequence: number }
+export interface ProviderCall { method: string; name?: string; authorized: boolean; arguments?: Record<string, unknown>; sequence: number; requestIdSha256?: string; responseHttpStatus?: number; toolError?: boolean }
 export async function startNotesProvider(marker: string, options: { nonDestructiveWrites?: boolean } = {}) {
   const token = randomBytes(32).toString("hex");
   const calls: ProviderCall[] = []; let writeResult: string | undefined; let failWrites = false;
@@ -19,8 +19,8 @@ export async function startNotesProvider(marker: string, options: { nonDestructi
       for await (const part of req) { length += part.length; if (length > 65_536) throw new Error("Request too large"); parts.push(part); }
       const message = JSON.parse(Buffer.concat(parts).toString("utf8") || "{}");
       const authorized = req.headers.authorization === `Bearer ${token}`;
-      calls.push({ method: message.method ?? "unknown", name: message.params?.name, authorized,
-        arguments: message.params?.arguments, sequence: calls.length });
+      const call: ProviderCall = { method: message.method ?? "unknown", name: message.params?.name, authorized,
+        arguments: message.params?.arguments, sequence: calls.length, requestIdSha256: createHash("sha256").update(String(message.id)).digest("hex") }; calls.push(call);
       if (!authorized) { res.writeHead(401); res.end(); return; }
       let result: unknown = {};
       if (message.method === "initialize") result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "paperclip-eval-synthetic-notes", version: "1.0.0" } };
@@ -33,6 +33,7 @@ export async function startNotesProvider(marker: string, options: { nonDestructi
         else { if (!tool.readOnly) writeResult = message.params?.arguments?.text;
           result = { content: [{ type: "text", text: tool.readOnly ? marker : `Saved synthetic launch update: ${writeResult ?? ""}` }] }; }
       }
+      call.responseHttpStatus = 200; call.toolError = !!(result as { isError?: boolean }).isError;
       res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id ?? null, result }));
     } catch { res.writeHead(400); res.end(); }
   });
