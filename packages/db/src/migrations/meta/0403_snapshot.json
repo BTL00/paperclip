@@ -1,5 +1,5 @@
 {
-  "id": "5e1d060c-9659-4a9a-afd8-7d7145b33da2",
+  "id": "e21e38de-5a82-473f-b81e-e96eff5ef4c8",
   "prevId": "6ce76555-38d9-4074-873f-db02c546e2c6",
   "version": "7",
   "dialect": "postgresql",
@@ -9689,6 +9689,34 @@
           "method": "btree",
           "with": {}
         },
+        "chat_actions_github_stale_head_idx": {
+          "name": "chat_actions_github_stale_head_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "endpoint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(\"payload\"->'event'->>'deliveryId')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"chat_actions\".\"kind\" = 'github_review_check'\n        and \"chat_actions\".\"status\" = 'cancelled' and \"chat_actions\".\"result\"->>'code' = 'stale_head'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "chat_actions_github_check_work_idx": {
           "name": "chat_actions_github_check_work_idx",
           "columns": [
@@ -13209,6 +13237,22 @@
         }
       },
       "indexes": {
+        "chat_github_reviews_projection_work_idx": {
+          "name": "chat_github_reviews_projection_work_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"chat_github_reviews\".\"state\" in ('queued', 'running')\n      and \"chat_github_reviews\".\"assessment\" is null\n      and \"chat_github_reviews\".\"delivery_id\" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "chat_github_reviews_delivery_uq": {
           "name": "chat_github_reviews_delivery_uq",
           "columns": [
@@ -18958,46 +19002,7 @@
           "name": "file_inventory",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "storage": {
-          "name": "storage",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "upload": {
-          "name": "upload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "restore": {
-          "name": "restore",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "migration_at": {
-          "name": "migration_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "maintenance_at": {
-          "name": "maintenance_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "restore_retry_at": {
-          "name": "restore_retry_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -19025,38 +19030,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "company_skill_snapshots_migration_idx": {
-          "name": "company_skill_snapshots_migration_idx",
-          "columns": [
-            {
-              "expression": "migration_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"company_skill_repository_snapshots\".\"migration_at\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "company_skill_snapshots_maintenance_idx": {
-          "name": "company_skill_snapshots_maintenance_idx",
-          "columns": [
-            {
-              "expression": "maintenance_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"company_skill_repository_snapshots\".\"maintenance_at\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -19949,25 +19922,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "package_snapshot_id": {
-          "name": "package_snapshot_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "package_file_map": {
-          "name": "package_file_map",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "migration_at": {
-          "name": "migration_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
         "revision_number": {
           "name": "revision_number",
           "type": "integer",
@@ -20026,52 +19980,6 @@
         }
       },
       "indexes": {
-        "company_skill_versions_migration_idx": {
-          "name": "company_skill_versions_migration_idx",
-          "columns": [
-            {
-              "expression": "migration_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"company_skill_versions\".\"migration_at\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "company_skill_versions_package_snapshot_idx": {
-          "name": "company_skill_versions_package_snapshot_idx",
-          "columns": [
-            {
-              "expression": "package_snapshot_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "company_skill_versions_repository_snapshot_idx": {
-          "name": "company_skill_versions_repository_snapshot_idx",
-          "columns": [
-            {
-              "expression": "repository_snapshot_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "company_skill_versions_skill_revision_idx": {
           "name": "company_skill_versions_skill_revision_idx",
           "columns": [
@@ -20176,19 +20084,6 @@
           "tableTo": "company_skill_repository_snapshots",
           "columnsFrom": [
             "repository_snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "company_skill_versions_package_snapshot_id_company_skill_repository_snapshots_id_fk": {
-          "name": "company_skill_versions_package_snapshot_id_company_skill_repository_snapshots_id_fk",
-          "tableFrom": "company_skill_versions",
-          "tableTo": "company_skill_repository_snapshots",
-          "columnsFrom": [
-            "package_snapshot_id"
           ],
           "columnsTo": [
             "id"
@@ -20635,78 +20530,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.skill_package_deletions": {
-      "name": "skill_package_deletions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "archive_key": {
-          "name": "archive_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "manifest_key": {
-          "name": "manifest_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "delete_after": {
-          "name": "delete_after",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "skill_package_deletions_due_idx": {
-          "name": "skill_package_deletions_due_idx",
-          "columns": [
-            {
-              "expression": "delete_after",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

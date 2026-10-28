@@ -10,7 +10,7 @@ locally authored/edited packages and unproven legacy packages keep a durable cop
 ## Automatic upgrade
 
 No data-migration command is required. The normal schema upgrade applies migration
-0403 (`0403_sad_captain_america.sql`). External writes and automatic conversion are enabled by default. Startup
+0404 (`0404_clumsy_leo.sql`). External writes and automatic conversion are enabled by default. Startup
 restores pending work from indexed `migration_at` / `maintenance_at` columns. The
 shared delivery coordinator converts four snapshots and four versions per batch,
 reading one legacy body at a time. It verifies the hash, uploads, reads the objects
