@@ -1,7 +1,26 @@
+import { pollUntil } from "../api.js";
+import { remainingIdentityObservationBudget } from "./identity-support.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { makeDefinition, fixtureWorker } from "./internal-definition.js";
 import { checks, entity, hasLink, observation, project, sameTask, task, type Entity } from "./internal-support.js";
 
+interface InventoryOwner extends Entity { companyId?: string; lifecycleState?: string; lifecycleVersion?: number; lifecycleHolds?: string[]; lifecycleError?: unknown }
+export interface InventoryOwnerPause { before: InventoryOwner; requested: InventoryOwner }
+export function inventoryOwnerWasReady(owner: InventoryOwner, companyId: string, id: string) {
+  return owner.id === id && owner.companyId === companyId && owner.lifecycleState === "ready"
+    && ["idle", "active", "running"].includes(owner.status ?? "") && !owner.lifecycleError
+    && Number.isSafeInteger(owner.lifecycleVersion) && owner.lifecycleVersion! >= 0 && Number.isSafeInteger(owner.lifecycleVersion! + 2)
+    && Array.isArray(owner.lifecycleHolds) && owner.lifecycleHolds.length === 0;
+}
+export function inventoryOwnerPauseRetained(receipt: InventoryOwnerPause | undefined, current: InventoryOwner, companyId: string, id: string) {
+  if (!receipt || !inventoryOwnerWasReady(receipt.before, companyId, id)) return false;
+  const { before, requested } = receipt;
+  const held = (row: InventoryOwner) => row.id === id && row.companyId === companyId && row.status === "paused" && !row.lifecycleError
+    && Array.isArray(row.lifecycleHolds) && row.lifecycleHolds.length === 1 && row.lifecycleHolds[0] === "manual";
+  return held(requested) && held(current) && current.lifecycleState === "paused" && current.lifecycleVersion === before.lifecycleVersion! + 2
+    && (requested.lifecycleState === "pausing" && requested.lifecycleVersion === before.lifecycleVersion! + 1
+      || requested.lifecycleState === "paused" && requested.lifecycleVersion === current.lifecycleVersion);
+}
 export function gradeOpenInventory(value: unknown) {
   const c = checks(); const o = observation(value);
   c.add("independent-inventory", !!o && Array.isArray(o.state.originalTasks), "The independently saved multi-page inventory is required.");
@@ -57,10 +76,20 @@ function openInventory(): ChatCatalogCase {
     await ctx.input.api.patch(`/api/agents/${secondWorker.id}`, { name: "Riley" });
     // Existing ownership is prerequisite state. Pause both owners before seeding
     // actionable statuses so preparing an inventory never starts provider work.
-    await ctx.input.api.post(`/api/agents/${worker.id}/pause`);
-    await ctx.input.api.post(`/api/agents/${secondWorker.id}/pause`);
+    remainingIdentityObservationBudget(ctx);
+    const deadlineAt = ctx.observationDeadlineAt!;
+    const companyId = ctx.input.fixtures.company.id;
+    const ownerPauseReceipts: InventoryOwnerPause[] = [];
+    if ((await ctx.allRuns()).length) throw new Error("Inventory prerequisites unexpectedly admitted work");
     for (const id of [worker.id, secondWorker.id]) {
-      if ((await ctx.input.api.get<Entity>(`/api/agents/${id}`)).status !== "paused") throw new Error("Inventory owner pause did not persist");
+      const before = await ctx.input.api.get<InventoryOwner>(`/api/agents/${id}`);
+      if (!inventoryOwnerWasReady(before, companyId, id)) throw new Error("Inventory owner was not genuinely ready before manual pause");
+      const requested = await ctx.input.api.post<InventoryOwner>(`/api/agents/${id}/pause`);
+      const receipt = { before, requested }; ownerPauseReceipts.push(receipt);
+      await pollUntil({ label: "Actual inventory owner manual pause completes", deadlineAt,
+        load: () => ctx.input.api.get<InventoryOwner>(`/api/agents/${id}`),
+        accept: row => Date.now() < deadlineAt && inventoryOwnerPauseRetained(receipt, row, companyId, id),
+        reject: row => row.lifecycleError ? "Inventory owner pause failed" : undefined });
     }
     const originalTasks: Entity[] = [];
     for (let index = 0; index < 501; index++) {
@@ -69,16 +98,21 @@ function openInventory(): ChatCatalogCase {
     }
     originalTasks.push(await task(ctx, "Completed launch work", p.id, { status: "done" }), await task(ctx, "Cancelled launch work", p.id, { status: "cancelled" }),
       await task(ctx, "Unrelated experiment", other.id));
-    return { project: p, originalTasks, workerIds: [worker.id, secondWorker.id], ownerLabels: { [worker.id]: "Morgan", [secondWorker.id]: "Riley", unassigned: "Unassigned" } };
+    remainingIdentityObservationBudget(ctx);
+    if ((await ctx.allRuns()).length) throw new Error("Seeding the paused-owner inventory unexpectedly admitted work");
+    return { project: p, originalTasks, workerIds: [worker.id, secondWorker.id], ownerPauseReceipts, ownerLabels: { [worker.id]: "Morgan", [secondWorker.id]: "Riley", unassigned: "Unassigned" } };
   }, gradeOpenInventory);
   return { ...base, sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-task-inventory.ts"], attemptTimeoutMs: 600_000,
     setupPolicy: { readiness: "preserve-scenario", invariantCheckIds: ["inventory-owners-paused", "lead-ready"] },
     async verifySetup(ctx, state) {
       const c = checks();
       const lead = await ctx.input.api.get<Entity & { lifecycleState: string }>(`/api/agents/${ctx.input.fixtures.agent.id}`);
-      const owners = await Promise.all((state.workerIds as string[]).map(id => ctx.input.api.get<Entity & { lifecycleState: string }>(`/api/agents/${id}`)));
-      c.add("inventory-owners-paused", owners.length === 2 && owners.every(row => row.status === "paused" && row.lifecycleState === "ready"),
-        "The existing inventory owners are genuinely ready but paused so prerequisite task statuses admit no provider work.");
+      const ids = state.workerIds as string[];
+      const owners = await Promise.all(ids.map(id => ctx.input.api.get<InventoryOwner>(`/api/agents/${id}`)));
+      const receipts = state.ownerPauseReceipts as InventoryOwnerPause[] | undefined;
+      c.add("inventory-owners-paused", ids.length === 2 && new Set(ids).size === 2 && receipts?.length === 2
+        && owners.every((row, index) => inventoryOwnerPauseRetained(receipts[index], row, ctx.input.fixtures.company.id, ids[index]!)),
+        "Both actual owners were ready before manual pause and retain their exact completed paused lifecycle, version and manual hold; no provider work is admitted.");
       c.add("lead-ready", lead.lifecycleState === "ready" && ["idle", "active"].includes(lead.status ?? ""), "The CEO remains ready for the canonical inventory query.");
       return c.result();
     },
