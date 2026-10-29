@@ -31,6 +31,12 @@ reader is the rollback floor; an older binary needs rehydrated database contents
 Use durable, backed-up local storage or S3-compatible storage for authored packages.
 The extracted cache is not that storage backend.
 
+Deleting an editable file or folder keeps a temporary copy outside the skill until
+the transaction commits. Upload or database failures restore the original subtree,
+including binary files, permissions, empty folders and files omitted from inventory.
+Successful deletions remove the temporary copy; historical versions retain their
+existing package bytes.
+
 The optional `server/scripts/migrate-skill-packages.ts` command remains available for
 diagnostics and controlled batches. It defaults to dry run, supports
 `--phase=snapshots|versions|orphans|deletions`, `--company=<uuid>`, `--limit=1..50`,

@@ -4891,63 +4891,90 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     input: CompanySkillFileDeleteRequest,
     actor: SkillActor | null = null,
   ): Promise<CompanySkillFileDeleteResult> {
-    return withSkillFileMutation(companyId, skillId, async (skill, tx) => {
+    let backup: { directory: string; source: string; copy: string } | undefined;
+    let needsRestore = false;
+    async function restore() {
+      if (!backup || !needsRestore) return;
+      await fs.cp(backup.copy, backup.source, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
+      needsRestore = false;
+    }
+    try {
+      const result = await withSkillFileMutation(companyId, skillId, async (skill, tx) => {
+        const source = deriveSkillSourceInfo(skill);
+        if (!source.editable || skill.sourceType !== "local_path") {
+          throw unprocessable(source.editableReason ?? "This skill cannot be edited.");
+        }
 
-      const source = deriveSkillSourceInfo(skill);
-      if (!source.editable || skill.sourceType !== "local_path") {
-        throw unprocessable(source.editableReason ?? "This skill cannot be edited.");
-      }
+        const normalizedPath = normalizePortablePath(input.path);
+        if (!normalizedPath) {
+          throw unprocessable("Skill file path is required.");
+        }
 
-      const normalizedPath = normalizePortablePath(input.path);
-      if (!normalizedPath) {
-        throw unprocessable("Skill file path is required.");
-      }
+        const deletedPaths = input.target === "folder"
+          ? skill.fileInventory
+            .map((entry) => normalizePortablePath(entry.path))
+            .filter((entryPath) => entryPath.startsWith(`${normalizedPath}/`))
+          : skill.fileInventory
+            .map((entry) => normalizePortablePath(entry.path))
+            .filter((entryPath) => entryPath === normalizedPath);
 
-      const deletedPaths = input.target === "folder"
-        ? skill.fileInventory
-          .map((entry) => normalizePortablePath(entry.path))
-          .filter((entryPath) => entryPath.startsWith(`${normalizedPath}/`))
-        : skill.fileInventory
-          .map((entry) => normalizePortablePath(entry.path))
-          .filter((entryPath) => entryPath === normalizedPath);
-
-      if (deletedPaths.length === 0) {
-        throw notFound(input.target === "folder" ? "Skill folder not found" : "Skill file not found");
-      }
-      if (deletedPaths.includes("SKILL.md")) {
-        throw unprocessable("SKILL.md cannot be deleted.");
-      }
-
-      const absolutePath = resolveLocalSkillFilePath(skill, normalizedPath);
-      if (!absolutePath) throw notFound("Skill file not found");
-
-      await fs.rm(absolutePath, {
-        recursive: input.target === "folder",
-        force: false,
-      }).catch((error) => {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        if (deletedPaths.length === 0) {
           throw notFound(input.target === "folder" ? "Skill folder not found" : "Skill file not found");
         }
-        throw error;
-    });
+        if (deletedPaths.includes("SKILL.md")) {
+          throw unprocessable("SKILL.md cannot be deleted.");
+        }
 
-    await tx
-      .update(companySkills)
-      .set({ updatedAt: new Date() })
-      .where(eq(companySkills.id, skill.id));
+        const absolutePath = resolveLocalSkillFilePath(skill, normalizedPath);
+        if (!absolutePath) throw notFound("Skill file not found");
 
-    const inventory = await refreshEditedSkillInventory(skill, tx);
-    await createVersion(companyId, skillId, {
-      label: input.target === "folder" ? `Deleted ${normalizedPath}/` : `Deleted ${normalizedPath}`,
-    }, actor, { database: tx, skipInventoryRefresh: true, skill, fileInventory: inventory });
+        // Keep the entire subtree, including unlisted files and empty folders.
+        // A temporary directory outside the skill also supports imported roots
+        // on other filesystems without adding the backup to its inventory.
+        const directory = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skill-delete-"));
+        backup = { directory, source: absolutePath, copy: path.join(directory, "source") };
+        await fs.cp(absolutePath, backup.copy, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true })
+          .catch((error) => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+              throw notFound(input.target === "folder" ? "Skill folder not found" : "Skill file not found");
+            }
+            throw error;
+          });
 
-    return {
-      skillId: skill.id,
-      path: normalizedPath,
-      target: input.target,
-      deletedPaths,
-    };
-    });
+        try {
+          needsRestore = true;
+          await fs.rm(absolutePath, { recursive: input.target === "folder", force: false });
+          await tx
+            .update(companySkills)
+            .set({ updatedAt: new Date() })
+            .where(eq(companySkills.id, skill.id));
+
+          const inventory = await refreshEditedSkillInventory(skill, tx);
+          await createVersion(companyId, skillId, {
+            label: input.target === "folder" ? `Deleted ${normalizedPath}/` : `Deleted ${normalizedPath}`,
+          }, actor, { database: tx, skipInventoryRefresh: true, skill, fileInventory: inventory });
+
+          return { skillId: skill.id, path: normalizedPath, target: input.target, deletedPaths };
+        } catch (error) {
+          // Restore before releasing the mutation lock so a queued edit cannot
+          // observe missing files or be overwritten by rollback.
+          await restore();
+          throw error;
+        }
+      });
+      needsRestore = false;
+      return result;
+    } catch (error) {
+      // Retain the backup until the transaction itself has committed.
+      await restore();
+      throw error;
+    } finally {
+      if (backup && !needsRestore) {
+        await fs.rm(backup.directory, { recursive: true, force: true }).catch(error => {
+          logger.warn({ err: error, companyId, skillId }, "Skill file deletion backup cleanup failed");
+        });
+      }
+    }
   }
 
   async function installUpdate(companyId: string, skillId: string, options: { force?: boolean } = {}): Promise<CompanySkill | null> {

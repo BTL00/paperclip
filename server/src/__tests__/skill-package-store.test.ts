@@ -247,6 +247,50 @@ describe.skipIf(!support.supported)("external skill packages", () => {
     expect(await skillPackageStore(db, storage).versionFiles(converted!)).toEqual([{ ...files[0]!, path: "SKILL.md" }]);
   });
 
+  it.each(["file", "folder"] as const)("restores a deleted %s when the replacement package upload fails", async target => {
+    const companyId = await company();
+    vi.spyOn(storageModule, "getStorageService").mockReturnValue(storage);
+    const service = companySkillService(db);
+    const skill = await service.createLocalSkill(companyId, { name: "Delete rollback", slug: "delete-rollback", markdown: "# Keep the skill\n" });
+    const binary = Buffer.from([0, 255, 7, 128]);
+    await service.updateFile(companyId, skill.id, "bundle/probe.sh", "#!/bin/sh\nprintf kept\n", null, { executable: true });
+    await service.updateFile(companyId, skill.id, "bundle/nested/data.bin", binary.toString("base64"), null, { encoding: "base64" });
+    await service.updateFile(companyId, skill.id, "keep.txt", "Unrelated file\n");
+    const root = skill.sourceLocator!;
+    await fs.chmod(path.join(root, "bundle/probe.sh"), 0o751);
+    await fs.mkdir(path.join(root, "bundle/empty"));
+    await fs.mkdir(path.join(root, "bundle/.git"));
+    await fs.writeFile(path.join(root, "bundle/.git/local-state"), "Unlisted bytes\n");
+    const [before] = await db.select().from(companySkills).where(eq(companySkills.id, skill.id));
+    const versionsBefore = await db.select({ id: companySkillVersions.id }).from(companySkillVersions)
+      .where(eq(companySkillVersions.companySkillId, skill.id));
+    const input = { path: target === "file" ? "bundle/probe.sh" : "bundle", target };
+    const upload = vi.spyOn(storage, "putFile").mockRejectedValue(new Error("Object storage unavailable"));
+    try {
+      await expect(service.deleteFile(companyId, skill.id, input)).rejects.toThrow("Object storage unavailable");
+      expect(upload).toHaveBeenCalled();
+    } finally { upload.mockRestore(); }
+    expect(await fs.readFile(path.join(root, "bundle/probe.sh"), "utf8")).toBe("#!/bin/sh\nprintf kept\n");
+    expect((await fs.stat(path.join(root, "bundle/probe.sh"))).mode & 0o777).toBe(0o751);
+    expect(await fs.readFile(path.join(root, "bundle/nested/data.bin"))).toEqual(binary);
+    expect((await fs.stat(path.join(root, "bundle/empty"))).isDirectory()).toBe(true);
+    expect(await fs.readFile(path.join(root, "bundle/.git/local-state"), "utf8")).toBe("Unlisted bytes\n");
+    const [after] = await db.select().from(companySkills).where(eq(companySkills.id, skill.id));
+    expect(after).toEqual(before);
+    expect(await db.select({ id: companySkillVersions.id }).from(companySkillVersions)
+      .where(eq(companySkillVersions.companySkillId, skill.id))).toEqual(versionsBefore);
+    // Failed uploads keep a durable claim for reconciliation. Simulate its
+    // expiry before retrying the same package with recovered storage.
+    await db.update(snapshots).set({ upload: sql`jsonb_set(${snapshots.upload}, '{expiresAt}', to_jsonb(${new Date(0).toISOString()}::text))` })
+      .where(and(eq(snapshots.companyId, companyId), sql`${snapshots.upload} is not null`));
+    const deleted = await service.deleteFile(companyId, skill.id, input);
+    expect(deleted.deletedPaths).toContain("bundle/probe.sh");
+    await expect(fs.stat(path.join(root, input.path))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await fs.readFile(path.join(root, "keep.txt"), "utf8")).toBe("Unrelated file\n");
+    expect((await service.getVersion(companyId, skill.id, before!.currentVersionId!))!.fileInventory)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ path: "bundle/probe.sh", executable: true })]));
+  });
+
   it("expires an unused Git package and reacquires its exact bytes without a migration command", async () => {
     const f = await fixture(true);
     const recipe = { version: 1 as const, sourceId: randomUUID(), repositoryId: "123", repositoryUrl: "https://github.com/acme/skills",
