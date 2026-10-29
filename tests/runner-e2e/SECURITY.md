@@ -588,3 +588,16 @@ evidence secret finding withholds all screenshots for that attempt. The launcher
 retains a closed withholding reason and removes public markers while preserving
 original private PNG bytes and hashes. Later cleanup labels and empty sanitized
 export scans cannot clear this decision; the publisher and gallery enforce it.
+
+The isolated `onboarding.new-company` native1017 candidate keeps its original
+source-company chat and ordinary human company creation. Only its credential
+setup runs in the existing standalone private child. It uses the real saved
+company's public `agents/new` route, same first-agent setup ID, personal
+OpenRouter account grant, exact local environment, native hello and public hire.
+No draft/localStorage write, legacy CLI fallback or source-company account
+substitution is allowed. Partial created connection IDs are retained privately
+for public cleanup before the new company is removed. Native probe usage stays
+unknown outside heartbeat accounting, never zero. This candidate includes only
+the focused local native-probe prerequisite from core PR18103; all candidate
+outcomes are separate from frozen39e qualification. Source acceptance is not
+permission to run the unused initial.

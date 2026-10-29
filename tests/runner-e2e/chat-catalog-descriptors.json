@@ -3688,11 +3688,13 @@
   },
   {
     "requiredCredentials": [
-      "OPENAI_API_KEY"
+      "OPENROUTER_API_KEY"
     ],
     "scenarioId": "onboarding.new-company",
     "sourceFiles": [
       "chat-catalog-domains/identity-new-company.ts",
+      "chat-catalog-domains/identity-new-company-native.ts",
+      "chat-catalog-domains/identity-new-company-native-proof.ts",
       "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-private-browser.ts",
       "chat-catalog-domains/identity-private-browser-worker.ts",

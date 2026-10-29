@@ -3,6 +3,7 @@ import path from "node:path";
 import { chromium, test, expect } from "@playwright/test";
 import type { PrivateIdentityOperation, PrivateIdentityReceipt } from "./identity-private-browser.js";
 import { runIdentityWizardInPrivateBrowser } from "./identity-wizard.js";
+import { runNativeNewCompanyInPrivateBrowser } from "./identity-new-company-native.js";
 let privateValues: string[] = [];
 async function main(): Promise<PrivateIdentityReceipt> {
   try { test.info(); throw new Error("Attached Test worker refused"); } catch (error) { if (error instanceof Error && error.message === "Attached Test worker refused") throw error; }
@@ -11,7 +12,7 @@ async function main(): Promise<PrivateIdentityReceipt> {
   privateValues = [...input.cookies.map(cookie => cookie.value), ...(input.kind === "sign-in" ? [input.password] : [input.credential])].filter(Boolean);
   const origin = new URL(input.origin);
   if (origin.hostname !== "127.0.0.1" || origin.protocol !== "http:" || new URL(input.startPath, origin).origin !== origin.origin) throw new Error("Private identity target must be a disposable loopback instance");
-  if (!["sign-in", "wizard", "observability", "canary-failure"].includes(input.kind)) throw new Error("Unknown finite identity operation");
+  if (!["sign-in", "wizard", "new-company-native", "observability", "canary-failure"].includes(input.kind)) throw new Error("Unknown finite identity operation");
   const browser = await chromium.launch({ headless: true, ...(input.executablePath ? { executablePath: input.executablePath } : {}), ...(input.channel ? { channel: input.channel } : {}) });
   try {
     const context = await browser.newContext({ baseURL: origin.origin }); await context.addCookies(input.cookies); const page = await context.newPage(); page.setDefaultTimeout(30_000);
@@ -34,6 +35,11 @@ async function main(): Promise<PrivateIdentityReceipt> {
       await page.getByLabel("Email", { exact: true }).fill(input.email); await page.getByLabel("Password", { exact: true }).fill(input.password);
       await page.getByRole("button", { name: "Sign In", exact: true }).click(); await expect(page).toHaveURL(new URL(input.returnPath, origin).href);
       await writeFile(path.join(directory, "storage.json"), JSON.stringify(await context.storageState()), { mode: 0o600 });
+    } else if (input.kind === "new-company-native") {
+      const connections: Array<{ companyId: string; connectionId: string; grantId: string }> = [];
+      receipt.newCompany = await runNativeNewCompanyInPrivateBrowser({ ...input, page, onCompany() {}, onConnection() {},
+        async registerCompany(company) { await writeFile(path.join(directory, "company.json"), JSON.stringify({ id: company.id }), { mode: 0o600 }); },
+        async registerConnection(companyId, connectionId, grantId) { connections.push({ companyId, connectionId, grantId }); await writeFile(path.join(directory, "connections.json"), JSON.stringify(connections), { mode: 0o600 }); }, evidence: async () => {} });
     } else if (input.kind === "wizard") {
       receipt.wizard = await runIdentityWizardInPrivateBrowser({ ...input, page, onCompany: company => { void company; },
         async registerCompany(company) { await writeFile(path.join(directory, "company.json"), JSON.stringify({ id: company.id }), { mode: 0o600 }); }, evidence: async () => {} });
