@@ -8,7 +8,7 @@ import type { HarnessSession } from "../../contracts/harness-driver.js";
 import type { PrpEvent } from "../../protocol/replay-contract.js";
 import type { CursorCloudCreateInput, CursorCloudFollowupInput, CursorCloudRun, CursorCloudSseEvent } from "./cloud-client.js";
 import { CursorCloudClient, CursorCloudClientError } from "./cloud-client.js";
-import { cursorCloudDigest } from "./checkpoint.js";
+import { CursorCloudCheckpointStore, cursorCloudDigest } from "./checkpoint.js";
 import { semanticCanonicalJson } from "../semantic-tool-receipt.js";
 import { CursorCloudDriver, cursorCloudDriverDescriptor, type CursorCloudDriverOptions, type CursorCloudSessionHandle } from "./cursor-cloud-driver.js";
 
@@ -78,6 +78,26 @@ async function acknowledgeTerminal(session: CursorCloudSessionHandle) {
   await session.acknowledgeTerminalDelivery(pending);
 }
 
+function distinctFollowup(peer: Peer) {
+  peer.createRun.mockImplementation(async (_id, input) => {
+    peer.request = input; peer.native = { ...peer.native!, id: "run-22222222-2222-4222-8222-222222222222", status: "RUNNING" };
+    return { run: { ...peer.native } };
+  });
+}
+
+async function savedCheckpoint(root: string, session: CursorCloudSessionHandle) {
+  await session.snapshot();
+  return JSON.parse(await readFile(join(root, (await readdir(root)).find(name => /^checkpoint-.*\.json$/.test(name))!), "utf8"));
+}
+
+async function nextAuthority(f: Awaited<ReturnType<typeof fixture>>) {
+  await acknowledgeTerminal(f.session);
+  await f.session.attachRun!({ runId: "paperclip-followup" });
+  const next = await f.session.startTurn({ message: { role: "user", text: "Next task" } });
+  await waitFor(() => f.events.some(event => event.turnId === next.turnId && event.eventType === "item.delta"));
+  return { next, checkpoint: await savedCheckpoint(f.root, f.session), eventCount: f.events.length };
+}
+
 async function rpc(path: string, body: unknown, token = "private-relay-token", session?: string): Promise<{ status: number; value: any; session?: string }> {
   return new Promise((accept, reject) => {
     const req = request({ socketPath: path, path: "/mcp", method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json", ...(session ? { "Mcp-Session-Id": session } : {}) } }, response => {
@@ -141,6 +161,217 @@ describe("Cursor Cloud native driver", () => {
     expect(checkpoint.instructionsDigest).toBe(cursorCloudDigest(requests[0]!.body.prompt.text.slice(0, -`\n\nPaperclip task:\n${task}`.length)));
     const { prompt: submittedPrompt, model, mode, mcpServers } = sent.body;
     expect(checkpoint.requestDigest).toBe(cursorCloudDigest(semanticCanonicalJson({ prompt: submittedPrompt, model, mode, mcpServers })));
+  });
+
+  it.each(["observer", "reconcile", "recovery"] as const)("keeps a delayed old %s result outside the next turn authority", async source => {
+    const peer = new Peer();
+    const oldRead = deferred<CursorCloudRun>();
+    const reading = deferred();
+    const followupRunId = "run-22222222-2222-4222-8222-222222222222";
+    peer.createRun.mockImplementation(async (_id, input) => {
+      peer.request = input;
+      peer.native = { ...peer.native!, id: followupRunId, status: "RUNNING" };
+      return { run: { ...peer.native } };
+    });
+    peer.streamRun = async function* (_agent, providerRunId, options = {}) {
+      if (providerRunId === runId && source === "observer") return;
+      yield { id: providerRunId === runId ? "old-cursor" : "new-cursor", event: "assistant", data: { text: "Current stream." } };
+      if (!options.signal?.aborted) await new Promise<void>(accept => options.signal?.addEventListener("abort", () => accept(), { once: true }));
+    };
+    const holdRead = () => peer.getRun.mockImplementationOnce(async () => { reading.resolve(); return oldRead.promise; });
+    if (source === "observer") holdRead();
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await peer.created.promise;
+    const previous = { ...peer.native!, status: "FINISHED" as const, result: "Old final result." };
+    let session = f.session;
+    let events = f.events;
+    let reconciled: Promise<unknown> | undefined;
+    if (source !== "observer") {
+      await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+      if (source === "recovery") {
+        const snapshot = await session.snapshot(); await session.detachControllerForRestart!(); await f.pump;
+        holdRead();
+        session = (await new CursorCloudDriver(f.options).recoverSession(snapshot)).session!;
+        sessions.push(session); events = [];
+        void (async () => { for await (const event of session.events()) events.push(event); })();
+      } else {
+        holdRead(); reconciled = session.reconcile!();
+      }
+    }
+    await reading.promise;
+    await session.interrupt!();
+    await acknowledgeTerminal(session);
+    await session.attachRun!({ runId: "paperclip-followup" });
+    const next = await session.startTurn({ message: { role: "user", text: "Second task" } });
+    await waitFor(() => events.some(event => event.turnId === next.turnId && event.eventType === "item.delta"));
+    await session.snapshot();
+    const checkpointPath = join(f.root, (await readdir(f.root)).find(name => /^checkpoint-.*\.json$/.test(name))!);
+    const before = JSON.parse(await readFile(checkpointPath, "utf8"));
+    const eventCount = events.length;
+    oldRead.resolve(previous);
+    await reconciled;
+    await new Promise<void>(accept => setImmediate(accept));
+    await session.snapshot();
+    expect(JSON.parse(await readFile(checkpointPath, "utf8"))).toEqual(before);
+    expect(await session.read()).toMatchObject({ agentId: previous.agentId, runId: followupRunId, turnId: next.turnId, phase: "running", pendingTerminalDelivery: null });
+    expect(events.slice(eventCount)).toEqual([]);
+    await session.interrupt!();
+    expect(await session.read()).toMatchObject({ runId: followupRunId, phase: "terminal", pendingTerminalDelivery: { providerRunId: followupRunId, turnId: next.turnId, status: "CANCELLED" } });
+    expect(events.filter(event => event.turnId === next.turnId && event.eventType === "turn.interrupted")).toHaveLength(1);
+  });
+
+  it.each(["assistant", "tool_call", "error"] as const)("discards an old %s stream continuation without disturbing the new observer", async kind => {
+    const peer = new Peer(); distinctFollowup(peer);
+    const release = deferred();
+    const waiting = deferred();
+    const streams: Array<{ runId: string; signal?: AbortSignal }> = [];
+    peer.streamRun = async function* (_agent, providerRunId, options = {}) {
+      streams.push({ runId: providerRunId, signal: options.signal });
+      if (providerRunId === runId) {
+        waiting.resolve(); await release.promise;
+        if (kind === "error") throw new CursorCloudClientError("http_error", { status: 410 });
+        yield { id: "stale-cursor", event: kind, data: kind === "assistant" ? { text: "Stale assistant." } : { callId: "stale-tool", name: "old_tool", status: "completed" } };
+        return;
+      }
+      yield { id: "current-cursor", event: "assistant", data: { text: "Current assistant." } };
+      if (!options.signal?.aborted) await new Promise<void>(accept => options.signal?.addEventListener("abort", () => accept(), { once: true }));
+    };
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await waiting.promise;
+    await f.session.interrupt!();
+    const next = await nextAuthority(f);
+    release.resolve(); await new Promise<void>(accept => setImmediate(accept));
+    expect(await savedCheckpoint(f.root, f.session)).toEqual(next.checkpoint);
+    expect(f.events.slice(next.eventCount)).toEqual([]);
+    expect(streams.map(stream => stream.runId)).toEqual([runId, peer.native!.id]);
+    expect(streams[1]!.signal!.aborted).toBe(false);
+    await f.session.interrupt!();
+    expect((await f.session.read()).pendingTerminalDelivery).toMatchObject({ providerRunId: peer.native!.id, turnId: next.next.turnId });
+  });
+
+  it.each(["response", "rejection"] as const)("ignores an old create %s after another reconciler proves its terminal", async outcome => {
+    const peer = new Peer(); distinctFollowup(peer);
+    const released = deferred();
+    const create = peer.createAgent.getMockImplementation()!;
+    peer.createAgent.mockImplementationOnce(async input => {
+      const response = await create(input); await released.promise;
+      if (outcome === "rejection") throw new CursorCloudClientError("http_error", { status: 422 });
+      return response;
+    });
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await peer.created.promise;
+    peer.getRun.mockResolvedValueOnce({ ...peer.native!, status: "FINISHED" });
+    await f.session.reconcile!();
+    const next = await nextAuthority(f);
+    released.resolve(); await new Promise<void>(accept => setImmediate(accept));
+    expect(await savedCheckpoint(f.root, f.session)).toEqual(next.checkpoint);
+    expect(f.events.slice(next.eventCount)).toEqual([]);
+    await f.session.interrupt!();
+    expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: peer.native!.id, turnId: next.next.turnId } });
+  });
+
+  it("does not bind an old pending Agent read over a newer Run", async () => {
+    const peer = new Peer(); peer.failCreate = true; distinctFollowup(peer);
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await peer.created.promise;
+    await waitFor(() => f.events.some(event => event.payload.code === "cursor_cloud_remote_state_unknown"));
+    const getAgent = peer.getAgent.getMockImplementation()!;
+    const oldAgent = await getAgent(peer.native!.agentId);
+    const released = deferred<typeof oldAgent>(); const reading = deferred();
+    peer.getAgent.mockImplementationOnce(async () => { reading.resolve(); return released.promise; });
+    const oldReconcile = f.session.reconcile!(); await reading.promise;
+    peer.getRun.mockResolvedValueOnce({ ...peer.native!, status: "FINISHED" });
+    await f.session.reconcile!();
+    const next = await nextAuthority(f);
+    released.resolve(oldAgent); await oldReconcile;
+    expect(await savedCheckpoint(f.root, f.session)).toEqual(next.checkpoint);
+    expect(f.events.slice(next.eventCount)).toEqual([]);
+    await f.session.interrupt!();
+    expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: peer.native!.id, turnId: next.next.turnId } });
+  });
+
+  it("keeps an old interrupt from cancelling or clearing the next turn Stop", async () => {
+    const peer = new Peer(); distinctFollowup(peer);
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    const previous = { ...peer.native! };
+    const oldRead = deferred<CursorCloudRun>(), reading = deferred();
+    peer.getRun.mockImplementationOnce(async () => { reading.resolve(); return oldRead.promise; });
+    const oldStop = f.session.interrupt!(); await reading.promise;
+    peer.getRun.mockResolvedValueOnce({ ...previous, status: "FINISHED" });
+    await f.session.reconcile!();
+    const next = await nextAuthority(f);
+    const currentRead = deferred<CursorCloudRun>(), currentReading = deferred();
+    peer.getRun.mockImplementationOnce(async () => { currentReading.resolve(); return currentRead.promise; });
+    const currentStop = f.session.interrupt!(); await currentReading.promise;
+    const before = await savedCheckpoint(f.root, f.session);
+    oldRead.resolve(previous); await oldStop;
+    expect(await savedCheckpoint(f.root, f.session)).toEqual(before);
+    expect(peer.cancelRun).not.toHaveBeenCalled();
+    const readCount = peer.getRun.mock.calls.length;
+    const duplicateStop = f.session.interrupt!();
+    await new Promise<void>(accept => setImmediate(accept));
+    expect(peer.getRun).toHaveBeenCalledTimes(readCount);
+    currentRead.resolve({ ...peer.native! }); await Promise.all([currentStop, duplicateStop]);
+    expect(peer.cancelRun).toHaveBeenCalledTimes(1);
+    expect(peer.cancelRun).toHaveBeenCalledWith(previous.agentId, peer.native!.id, expect.anything());
+    expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: peer.native!.id, turnId: next.next.turnId } });
+  });
+
+  it("registers the new turn launch before Stop can enter its initial checkpoint await", async () => {
+    const peer = new Peer(); distinctFollowup(peer);
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "First task" } }); await peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    await f.session.interrupt!(); await acknowledgeTerminal(f.session);
+    const held = deferred(), release = deferred(), stoppingWritten = deferred();
+    const originalWrite = CursorCloudCheckpointStore.prototype.write;
+    const write = vi.spyOn(CursorCloudCheckpointStore.prototype, "write").mockImplementation(function(value) {
+      const persisted = originalWrite.call(this, value);
+      if (value.phase === "creating") return persisted.then(async () => { held.resolve(); await release.promise; });
+      if (value.phase === "stopping") void persisted.then(() => stoppingWritten.resolve());
+      return persisted;
+    });
+    try {
+      const started = f.session.startTurn({ message: { role: "user", text: "Second task" } }); await held.promise;
+      const stopped = f.session.interrupt!(); await stoppingWritten.promise;
+      expect(peer.createRun).not.toHaveBeenCalled();
+      release.resolve();
+      const next = await started; await stopped;
+      expect(peer.cancelRun).toHaveBeenCalledTimes(2);
+      expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: peer.native!.id, turnId: next.turnId, status: "CANCELLED" } });
+    } finally { release.resolve(); write.mockRestore(); }
+  });
+
+  it("retains a confirmed same-turn Run when its delayed create rejects", async () => {
+    const peer = new Peer();
+    const release = deferred();
+    const create = peer.createAgent.getMockImplementation()!;
+    peer.createAgent.mockImplementationOnce(async input => { await create(input); await release.promise; throw new CursorCloudClientError("http_error", { status: 422 }); });
+    const f = await fixture(peer);
+    await f.session.startTurn({ message: { role: "user", text: "Current task" } }); await peer.created.promise;
+    await f.session.reconcile!();
+    const before = await savedCheckpoint(f.root, f.session);
+    release.resolve();
+    await waitFor(() => f.events.some(event => event.payload.code === "cursor_cloud_remote_state_unknown"));
+    const after = await savedCheckpoint(f.root, f.session);
+    expect(after).toEqual({ ...before, sourceSequence: before.sourceSequence + 1 });
+    expect(f.events.some(event => event.eventType === "turn.failed")).toBe(false);
+    await f.session.interrupt!();
+    expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: runId } });
+  });
+
+  it.each(["agent", "run"] as const)("keeps a current terminal with a mismatched %s identity fenced", async identity => {
+    const f = await fixture();
+    await f.session.startTurn({ message: { role: "user", text: "Current task" } }); await f.peer.created.promise;
+    await waitFor(() => f.events.some(event => event.eventType === "item.delta"));
+    const before = await savedCheckpoint(f.root, f.session);
+    f.peer.getRun.mockResolvedValueOnce({ ...f.peer.native!, status: "FINISHED", ...(identity === "agent" ? { agentId: "bc-different" } : { id: "run-22222222-2222-4222-8222-222222222222" }) });
+    await expect(f.session.reconcile!()).rejects.toThrow("confirmed Agent/Run identity");
+    expect(await savedCheckpoint(f.root, f.session)).toEqual(before);
+    await f.session.interrupt!();
+    expect(await f.session.read()).toMatchObject({ phase: "terminal", pendingTerminalDelivery: { providerRunId: runId } });
   });
 
   it("refuses expired relay authority before remote work while retaining idle recovery for cleanup", async () => {
