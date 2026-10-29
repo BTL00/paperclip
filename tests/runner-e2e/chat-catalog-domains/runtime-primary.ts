@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { checks, type Entity } from "./internal-support.js";
-import { createAuthenticatedPerson, enrollAuthenticatedPerson } from "./identity-auth.js";
+import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { probeAgentPermission, waitForReply } from "./identity-support.js";
 import { runtimeDefinition, runtimeWorker, runtimeObservation, observeRuntime, openRuntimeAgentProfile, type RuntimeAgent } from "./runtime-support.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -42,10 +42,19 @@ export const runtimePrimaryCases = [runtimeDefinition("agents.choose-primary", a
   if (primaryBefore.primaryAgentId !== ctx.input.fixtures.agent.id) throw new Error("Catalog requires an existing primary agent");
   const worker = await runtimeWorker(ctx);
   const person = await createAuthenticatedPerson({ api: ctx.input.api, browser, secrets, name: "Second primary reader" }); people.set(ctx, person);
-  await enrollAuthenticatedPerson(ctx.input.api, ctx.input.fixtures.company.id, person, secrets);
-  const otherCompany = await ctx.input.api.post<Entity>("/api/companies", { name: `Other primary company ${ctx.input.nonce}` });
-  return { worker, primaryBefore, otherCompany, otherPersonBefore: await personPrimary(person, ctx.input.fixtures.company.id),
-    otherCompanyBefore: await ctx.input.api.get<Primary>(endpoint(otherCompany.id)) };
+  let otherCompany: Entity | undefined;
+  try {
+    await enrollPrerequisitePerson(ctx, person, "operator");
+    otherCompany = await ctx.input.api.post<Entity>("/api/companies", { name: `Other primary company ${ctx.input.nonce}` });
+    return { worker, primaryBefore, otherCompany, otherPersonBefore: await personPrimary(person, ctx.input.fixtures.company.id),
+      otherCompanyBefore: await ctx.input.api.get<Primary>(endpoint(otherCompany.id)) };
+  } catch (error) {
+    people.delete(ctx);
+    const cleanup = await Promise.allSettled([person.dispose(), ...(otherCompany
+      ? [ctx.input.api.delete(`/api/companies/${otherCompany.id}`, { allowNotFound: true })] : [])]);
+    if (cleanup.some(result => result.status === "rejected")) throw new AggregateError([error, ...cleanup.filter(result => result.status === "rejected").map(result => result.reason)], "Primary prerequisite setup cleanup failed");
+    throw error;
+  }
 }, gradePrimary, {
   authentication: "human-session",
   sourceFiles: ["chat-catalog-domains/runtime-primary.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/agents.yaml"],

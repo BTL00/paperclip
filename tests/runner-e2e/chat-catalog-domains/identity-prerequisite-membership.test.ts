@@ -75,6 +75,6 @@ it("a slow public access write cannot reset the original clock or start role/gra
   await expect(enrollPrerequisitePerson(f.ctx, f.person)).rejects.toThrow("budget"); expect(f.writes).toHaveLength(1); expect(f.api.patchSensitive).not.toHaveBeenCalled(); expect(f.evidence).not.toHaveBeenCalled();
 });
 it("the closed allowlist contains no access/invitation scenarios", () => {
-  expect(prerequisiteMembershipScenarioIds).toHaveLength(22);
+  expect(prerequisiteMembershipScenarioIds).toHaveLength(23);
   expect(prerequisiteMembershipScenarioIds.some(id => id.startsWith("access."))).toBe(false);
 });
