@@ -7,6 +7,7 @@ import { ensureSkillCacheDirectory, touchSkillVersionCache, withSkillVersionCach
 import { measureRunPhase } from "./execution-preparation-timing.js";
 import { verifyExistingBundledSkillRelease } from "./bundled-skill-release-validation.js";
 import { retainProjectSkillAccess, skillAccessService } from "./skill-access.js";
+import { assertLocalImportOutsideSkillPackageCache } from "./skill-local-import-boundary.js";
 import type { AuthorizationActor } from "./authorization.js";
 import { updateAgentConfigurationInTransaction } from "./agent-configuration-transaction.js";
 import { logger } from "../middleware/logger.js";
@@ -2992,6 +2993,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
         code: "skill_source_validation_failed",
       });
     }
+    await assertLocalImportOutsideSkillPackageCache(sourceRealPath, resolveManagedSkillsRoot(companyId));
     const projectRows = await projects.list(companyId);
     const configuredRoots = [
       resolveManagedSkillsRoot(companyId),

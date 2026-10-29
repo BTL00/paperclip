@@ -131,6 +131,9 @@ pending delete/existence requests; incomplete cleanup retains the receipt for re
   verification budget per fill. This is a soft limit during a storage outage: cleanup preserves
   the last recoverable copy. Version projections retain the existing pin-aware cleanup.
   Abandoned package staging directories receive a one-hour crash grace.
+- Internal package caches, their files, and containing directories cannot be
+  imported as local skill sources. Fork the installed skill to retain its original
+  access restrictions.
 
 Each entrypoint still has a self-contained runtime tree, and remote staging can
 duplicate those trees. This change does not introduce a new runner transport format
