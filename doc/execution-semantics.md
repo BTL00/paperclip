@@ -57,16 +57,16 @@ existing behavior.
 ### Native transport completion and work results
 
 A successful OpenCode transport turn does not prove that its work is complete.
-If the turn has no accepted semantic result and no nonblank final assistant text,
+If the turn has no accepted semantic result and no nonblank cached assistant text,
 Runner reports the work outcome as `needs_review`, with unknown completion
 criteria and no invented agent-message evidence. The transport outcome remains
 successful. The summary states that task completion is unverified; it does not
 invent a reviewer, approval, retry, or another executor. Existing task and review
 ownership remain authoritative.
 
-Accepted semantic receipts and actual final assistant text retain their existing
-completion behavior. This distinction does not turn reasoning or progress text
-into a final response.
+Accepted semantic receipts and existing nonblank cached assistant text retain
+their completion behavior. This change does not select a final channel or alter
+which provider messages enter that cache.
 
 ## 2. Assignee Semantics
 

@@ -656,7 +656,7 @@ fn terminal_events(
     let cancelled = matches!(event_type, "turn.cancelled" | "turn.interrupted");
     let provider = state.config.provider.as_str();
     // A successful transport turn is not evidence that textless work is done.
-    // Keep accepted semantic results and actual final text authoritative.
+    // Preserve accepted semantic results and existing cached assistant text.
     let unresolved_completion = provider == "opencode"
         && succeeded
         && state.active_provider_result_fingerprint.is_none()
