@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { EmailPublicationSummary, EmailThreadSummary } from "../../../packages/shared/src/types/email.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
-import { sendChatMessage } from "../chat-flow.js";
+import { sendChatMessage, type ChatRun } from "../chat-flow.js";
 import { pollUntil } from "../api.js";
 import { collectRunEvents } from "../run-observations.js";
 import { checks, type Entity } from "./internal-support.js";
@@ -21,6 +21,41 @@ export function gradeOutboundEmail(value: unknown) {
  c.add("one-real-provider-message-despite-authentic-network-duplicate", s.independentProviderCount === 1 && s.originalProviderReceiptMatched === true && s.authenticDuplicateBound === true && s.duplicateReleased === true && s.finalIndependentProviderCount === 1 && s.oneSavedPublication === true, "One actual official sent receipt is replayed byte-for-byte once at the selected network boundary; actual provider and persisted publication checks still prove one email.");
  c.add("linked-task-thread-and-truthful-reported-outcome", s.actualThreadLinked === true && s.factualReplyBound === true && truthfulEmailOutcome(String(s.factualReply), String(s.actualOutcome)), "The saved returned conversation remains linked to the delegated task; a later run-attributed chat answer reports real acceptance and distinguishes unproven delivery.");
  return c.result();
+}
+type OutboundTask = Entity & { workMode?: string; originKind?: string; originId?: string | null; originRunId?: string | null; originFingerprint?: string | null };
+type OutboundRun = ChatRun & { issueId?: string | null; wakeupRequestId?: string | null };
+type OutboundActivity = Entity & { runId?: string | null; entityType?: string };
+/** Standing-chat create_task creates ordinary work with parentId=null. Bind its actual public provenance, not an invented hierarchy. */
+export function outboundOrdinaryHandoff(input: { companyId: string; sourceId: string; leadId: string; personId: string; setupRunId: string;
+ tasks: OutboundTask[]; runs: OutboundRun[]; comments: Entity[]; activity: OutboundActivity[] }) {
+ const { companyId, sourceId, leadId, personId, setupRunId, tasks, runs, comments, activity } = input;
+ if (![companyId, sourceId, leadId, personId, setupRunId].every(value => typeof value === "string" && value.length > 0)) return undefined;
+ const human = comments.filter(row => !row.authorAgentId);
+ if (human.length !== 2 || human.some(row => row.authorUserId !== personId)) return undefined;
+ const canonical = runs.filter(row => row.id !== setupRunId && row.companyId === companyId && row.agentId === leadId && row.runtimeMode === "native"
+  && row.contextSnapshot?.issueId === sourceId && Array.isArray(row.contextSnapshot.wakeCommentIds) && row.contextSnapshot.wakeCommentIds.includes(human[1]!.id));
+ if (canonical.length !== 1) return undefined;
+ const candidates = tasks.flatMap(work => {
+  if ((work.parentId != null && work.parentId !== sourceId) || work.id === sourceId || work.companyId !== companyId || work.workMode !== "standard" || work.createdByAgentId !== leadId || work.assigneeAgentId !== leadId
+   || work.originKind !== "manual" || work.originRunId !== canonical[0]!.id) return [];
+  const created = activity.filter(row => row.companyId === companyId && row.entityType === "issue" && row.entityId === work.id && row.action === "issue.created"
+   && row.actorType === "agent" && row.actorId === leadId && row.agentId === leadId && row.runId === canonical[0]!.id);
+  const admitted = runs.filter(row => row.companyId === companyId && row.agentId === leadId && row.runtimeMode === "native" && row.issueId === work.id
+   && !!row.wakeupRequestId && row.contextSnapshot?.issueId === work.id
+   && row.contextSnapshot.wakeSource === "assignment" && row.contextSnapshot.wakeReason === "issue_assigned");
+  if (admitted.length !== 1) return [];
+  const producer = admitted[0]!.contextSnapshot?.source;
+  const protocol = producer === "paperclip_runner.create_task" && admitted[0]!.contextSnapshot?.parentIssueId === (work.parentId ?? null) && work.originId?.startsWith(`paperclip-runner:create-task:${sourceId}:`)
+   && work.originId.length > `paperclip-runner:create-task:${sourceId}:`.length && /^[a-f0-9]{64}$/.test(work.originFingerprint ?? "")
+   && created.some(row => row.details?.source === "paperclip_runner_protocol");
+  const publicIssueCreate = producer === "issue.create" && created.some(row => row.details?.source === undefined);
+  return protocol || publicIssueCreate ? [{ work, run: admitted[0]!, canonical: canonical[0]! }] : [];
+ });
+ return candidates.length === 1 ? candidates[0] : undefined;
+}
+export function outboundThreadMatches(thread: EmailThreadSummary, emailTask: Entity, workId: string, companyId: string, leadId: string, endpointId: string) {
+ return emailTask.companyId === companyId && emailTask.parentId === workId && emailTask.assigneeAgentId === leadId && thread.issueId === emailTask.id
+  && thread.endpoint.id === endpointId && thread.endpoint.companyId === companyId && thread.endpoint.assignedAgentId === leadId && thread.endpoint.status === "active";
 }
 const requirement = externalRequirements["chat-channels.outbound-email"]!;
 export const runtimeOutboundEmailCases = [runtimeDefinition("chat-channels.outbound-email", async ctx => {
@@ -45,13 +80,18 @@ export const runtimeOutboundEmailCases = [runtimeDefinition("chat-channels.outbo
  async act(ctx, s) {
   const api = ctx.input.api, companyId = ctx.input.fixtures.company.id, sourceId = String(s.sourceId), endpointId = (s.endpoint as { id: string }).id;
   const sent = await pollUntil({ label: "Actual delegated task sends the authorized launch draft and returns ordinary completion", deadlineAt: Date.now() + 360000, load: async () => {
-   await ctx.refreshIssue(); const runs = await ctx.allRuns(), tasks = await api.get<Entity[]>(`/api/companies/${companyId}/issues`), work = tasks.find(row => row.parentId === sourceId && row.assigneeAgentId === ctx.input.fixtures.agent.id), emails = work ? tasks.filter(row => row.parentId === work.id) : [], threads = await Promise.all(emails.map(row => api.get<EmailThreadSummary | null>(`/api/companies/${companyId}/email/tasks/${row.id}`))); return { runs, tasks, work, thread: threads.filter((row): row is EmailThreadSummary => !!row)[0] };
+   await ctx.refreshIssue(); const runs = await ctx.allRuns(), tasks = await api.get<OutboundTask[]>(`/api/companies/${companyId}/issues`);
+   const [comments, activity] = await Promise.all([api.get<Entity[]>(`/api/issues/${sourceId}/comments?order=asc`), api.get<OutboundActivity[]>(`/api/companies/${companyId}/activity?limit=1000`)]);
+   const handoff = outboundOrdinaryHandoff({ companyId, sourceId, leadId: ctx.input.fixtures.agent.id, personId: String(s.personId ?? ""), setupRunId: String(s.setupRunId ?? ""), tasks, runs, comments, activity });
+   const work = handoff?.work, emails = work ? tasks.filter(row => row.parentId === work.id && row.companyId === companyId) : [];
+   const threads = await Promise.all(emails.map(async emailTask => { const thread = await api.get<EmailThreadSummary | null>(`/api/companies/${companyId}/email/tasks/${emailTask.id}`); return thread && outboundThreadMatches(thread, emailTask, work!.id, companyId, ctx.input.fixtures.agent.id, endpointId) ? thread : undefined; }));
+   const matching = threads.filter((row): row is EmailThreadSummary => !!row); return { runs, tasks, work, handoff, thread: matching.length === 1 ? matching[0] : undefined };
   }, accept: v => ctx.issue()?.conversationState === "waiting" && v.runs.length === 4 && v.runs.every(row => row.status === "succeeded") && v.work?.status === "done" && v.thread?.publications.length === 1 && ["sent", "delivered"].includes(v.thread.publications[0]!.outcome), reject: v => v.runs.length > 4 ? "Email delegation exceeded its declared causal run bound" : undefined });
-  const thread = sent.thread!, publication = await api.get<EmailPublicationSummary>(`/api/companies/${companyId}/email/deliveries/${thread.publications[0]!.id}`), work = sent.work!, run = sent.runs.find(row => row.contextSnapshot?.issueId === work.id), request = publication.request!;
+  const thread = sent.thread!, publication = await api.get<EmailPublicationSummary>(`/api/companies/${companyId}/email/deliveries/${thread.publications[0]!.id}`), work = sent.work!, run = sent.handoff!.run, request = publication.request!;
   s.emailTaskId = thread.issueId; s.workTaskId = work.id; s.publicationId = publication.id; s.actualOutcome = publication.outcome;
   s.actualDraftTransmitted = normalized(request.text).includes(normalized(String(s.draft))); s.feedbackRequested = /feedback|review|thoughts|comments|suggestions|what (?:do you|you) think/i.test(request.text);
   s.exactAuthorizedRecipient = JSON.stringify(request.to) === JSON.stringify([(s.emailRecipient as { email: string }).email]) && !request.cc?.length && !request.bcc?.length;
-  s.normalTaskBound = work.companyId === companyId && (work as Entity & { workMode?: string }).workMode === "standard" && work.parentId === sourceId && work.assigneeAgentId === ctx.input.fixtures.agent.id && !!run && run.agentId === work.assigneeAgentId && run.runtimeMode === "native";
+  s.normalTaskBound = !!sent.handoff && sent.handoff.work.id === work.id && sent.handoff.run.id === run.id;
   const events = run ? await collectRunEvents<{ seq?: number; eventType?: string; payload?: unknown }>((afterSeq, limit) => api.get(`/api/heartbeat-runs/${run.id}/events?afterSeq=${afterSeq}&limit=${limit}`)) : []; s.actualNativeSendBound = actualOriginalEmailSend(events, { companyId, taskId: work.id, endpointId, publicationId: publication.id });
   const direct = await inspectOwnedEmailPublication(ctx, publication, String(s.startedAt)); s.independentProviderCount = direct.matchedSent?.length; s.originalProviderReceiptMatched = direct.originalMessageMatched;
   const duplicateRequest = duplicateRequests.get(ctx)!, root = process.env.PAPERCLIP_RUNNER_E2E_TEMP_ROOT!;
@@ -66,7 +106,7 @@ export const runtimeOutboundEmailCases = [runtimeDefinition("chat-channels.outbo
   s.factualReplyBound = human.length === 3 && human[2]?.body === followup && factual.contextSnapshot?.issueId === sourceId && Array.isArray(factual.contextSnapshot.wakeCommentIds) && factual.contextSnapshot.wakeCommentIds.length === 1 && factual.contextSnapshot.wakeCommentIds[0] === human[2]?.id;
   s.factualReply = comments.filter(row => row.createdByRunId === factual.id && row.authorAgentId === ctx.input.fixtures.agent.id).map(row => row.body).join("\n");
   s.nativeLedgerCausal = !!canonical && !!run && completion.length === 1 && new Set([s.setupRunId, canonical.id, run.id, completion[0]!.id, factual.id]).size === 5 && final.every(row => [s.setupRunId, canonical.id, run.id, completion[0]!.id, factual.id].includes(row.id));
-  const saved = await api.get<EmailThreadSummary>(`/api/companies/${companyId}/email/tasks/${thread.issueId}`), emailTask = await api.get<Entity>(`/api/issues/${thread.issueId}`); const ordinary = (await api.get<Array<Entity & { workMode?: string }>>(`/api/companies/${companyId}/issues`)).filter(row => row.workMode !== "chat"); s.oneSavedPublication = saved.publications.length === 1 && saved.publications[0]?.id === publication.id && ordinary.length === 2 && ordinary.every(row => [work.id, thread.issueId].includes(row.id)); s.actualThreadLinked = emailTask.companyId === companyId && emailTask.parentId === work.id && saved.conversationId === publication.conversationId && saved.endpoint.id === endpointId;
+  const saved = await api.get<EmailThreadSummary>(`/api/companies/${companyId}/email/tasks/${thread.issueId}`), emailTask = await api.get<Entity>(`/api/issues/${thread.issueId}`); const ordinary = (await api.get<Array<Entity & { workMode?: string }>>(`/api/companies/${companyId}/issues`)).filter(row => row.workMode !== "chat"); s.oneSavedPublication = saved.publications.length === 1 && saved.publications[0]?.id === publication.id && ordinary.length === 2 && ordinary.every(row => [work.id, thread.issueId].includes(row.id)); s.actualThreadLinked = outboundThreadMatches(saved, emailTask, work.id, companyId, ctx.input.fixtures.agent.id, endpointId) && saved.conversationId === publication.conversationId;
   const last = await inspectOwnedEmailPublication(ctx, publication, String(s.startedAt)); s.finalIndependentProviderCount = last.matchedSent?.length;
   (s.providerProbes as unknown[]).push(...[direct, last].map(row => ({ phase: "actual-outbound-provider-receipt", directProviderProbeCount: row.directProviderProbeCount, status: "verified", usage: "unavailable", cost: "unavailable" })));
  },

@@ -84,11 +84,12 @@ function valid(scenario: string): InternalObservation {
       o.links = ["/ACORN/activity/commentary"]; o.reply = "I cannot browse board-only commentary. You can inspect the attributed feedback in the human commentary view."; break;
     }
     case "inbox-search.show-decisions": {
-      const pending = { id: "question", status: "pending", addresseeUserId: "riley" }; const completed = { id: "complete", status: "answered", resolvedByUserId: "owner", result: { answers: ["received"] } };
-      const history = { id: "history", title: "Completed launch information", status: "backlog" }; const hiring = { id: "hire", status: "pending" };
+      const pending = { id: "question", companyId: o.companyId, issueId: o.tasks[0]!.id, status: "pending", addresseeUserId: "riley", effectiveResolverPolicy: "human_only" }; const completed = { id: "complete", status: "answered", resolvedByUserId: "owner", result: { answers: ["received"] } };
+      const history = { id: "history", title: "Completed launch information", status: "backlog" }; const hiring = { id: "hire", companyId: o.companyId, status: "pending" };
       o.tasks[0]!.title = "Riley launch question"; o.state.task = structuredClone(o.tasks[0]); o.tasks.push(history);
       Object.assign(o.state, { ownerId: "owner", rileyId: "riley", historyTask: structuredClone(history), hiring: structuredClone(hiring), pendingQuestion: structuredClone(pending), completedQuestion: structuredClone(completed) });
-      Object.assign(o, { hiring, pendingQuestion: pending, completedQuestion: completed, visibleAttention: { items: [{ subject: { id: "hire" } }, { subject: { id: "question" }, resolverAudience: { addresseeUserId: "riley", effectiveResolverPolicy: "human_only" } }] }, permissionStatus: 403 });
+      Object.assign(o, { hiring, pendingQuestion: pending, completedQuestion: completed, visibleAttention: { companyId: o.companyId, items: [{ subject: { id: "hire" } }] }, resolverUserId: "riley",
+        resolverAttention: { companyId: o.companyId, items: [{ subject: { id: "question" }, relatedIssue: { id: o.tasks[0]!.id }, resolverAudience: { addresseeUserId: "riley", effectiveResolverPolicy: "human_only" } }] }, permissionStatus: 403 });
       o.links.push("/ACORN/issues/history", "/ACORN/approvals/hire");
       o.reply = "Launch designer: pending approval for you as human operator.\nRiley launch question: waiting for Riley to answer.\nCompleted launch information: answered history, no action remains."; break;
     }

@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
+import { projectMarkdownToText } from "../../../packages/shared/src/document-anchors.js";
 import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { checks, entity, observation, observeInternal, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
 interface Revision extends Entity { createdByUserId?: string | null }
@@ -93,13 +94,18 @@ export function withRestoreConcurrency(primary: ChatCatalogCase): ChatCatalogCas
       return { ...o, phaseReply: comments.filter(row => row.authorAgentId === o.leadId && !ids.has(row.createdByRunId ?? "") && o.runs.some(run => run.id === row.createdByRunId)).map(row => row.body ?? "").join("\n") }; },
     async verifyResult(ctx, state, value) {
       const o = value as ConcurrentRestore; const t = entity(state, "task"); const doc = o.documents.find(row => row.key === "plan");
-      if (!doc?.latestRevisionNumber) throw new Error("Missing actual current document revision"); const source = ctx.input.page.url();
+      if (!doc?.latestRevisionNumber || typeof doc.body !== "string") throw new Error("Missing actual current document revision"); const source = ctx.input.page.url();
+      const current = await ctx.input.api.get<Entity>(`/api/issues/${t.id}/documents/plan`);
+      if (current.id !== doc.id || current.issueId !== t.id || current.key !== "plan" || current.latestRevisionId !== doc.latestRevisionId
+        || current.latestRevisionNumber !== doc.latestRevisionNumber || current.body !== doc.body) throw new Error("Current task document identity, revision or bytes changed before UI verification");
       const returned = o.links.find(href => hasLink({ ...o, links: [href] }, "issues", t));
       try {
-        await ctx.input.page.goto(new URL(returned ?? `/${ctx.input.fixtures.company.issuePrefix}/issues/${t.identifier ?? t.id}`, o.origin).href, { waitUntil: "domcontentloaded" });
+        const target = new URL(returned ?? `/${ctx.input.fixtures.company.issuePrefix}/issues/${t.identifier ?? t.id}`, o.origin); target.hash = "#document-plan";
+        await ctx.input.page.goto(target.href, { waitUntil: "domcontentloaded" });
         await expect(ctx.input.page.getByRole("heading", { name: t.title!, exact: true }).first()).toBeVisible();
-        const expand = ctx.input.page.getByRole("button", { name: "Expand plan document", exact: true }); if (await expand.isVisible()) await expand.click();
-        await expect(ctx.input.page.getByRole("button", { name: `rev ${doc.latestRevisionNumber}`, exact: true }).first()).toBeVisible();
+        const plan = ctx.input.page.getByTestId("issue-plan-document"); await expect(plan).toBeVisible();
+        await expect(plan.getByText(new RegExp(`^Revision ${doc.latestRevisionNumber}\\b`)).first()).toBeVisible();
+        await expect(plan).toContainText(projectMarkdownToText(doc.body).text);
         await ctx.input.evidence("chat-catalog-concurrent-plan-current-revision-opened.json", { taskId: t.id, revisionId: doc.latestRevisionId, revisionNumber: doc.latestRevisionNumber, url: ctx.input.page.url() });
       } finally { await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" }); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible(); }
     },

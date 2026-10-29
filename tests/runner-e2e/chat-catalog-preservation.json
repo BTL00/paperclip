@@ -65,6 +65,14 @@
     {
       "name": "task-two-public-prerequisites",
       "sourceRevision": "ef45d57ab8919854e7203ee789f6441db1470b87"
+    },
+    {
+      "name": "document-restore-decision-audience",
+      "sourceRevision": "8bf05430d65f1bd354b3eceea4e6a7963aca6a6c"
+    },
+    {
+      "name": "outbound-standing-native-provenance",
+      "sourceRevision": "7db3308ea4e48f4d87130e384a672b1ebd5f5394"
     }
   ],
   "productionPrerequisites": [
@@ -119,7 +127,7 @@
     "attempts": "All original raw grades, source fingerprints, ordinals, usage, billing, privacy and cleanup remain bound to their original measurements. Exhausted cases remain exhausted.",
     "sidebarOrdering": "The frozen legacy Projects manual-order surface is absent from both current39e layouts. No injected classic UI, fabricated ordering or feature revival is included."
   },
-  "preservationParentRevision": "063925683cd79590f3c5a9e32d741607b8096fbb",
+  "preservationParentRevision": "372b192327e6a02c6ab3da4961521b8632a60fb6",
   "latestAcceptedEvalOnlyOverlays": {
     "sdk-two-public-setup": {
       "sourceRevision": "8cb209e726237644f1312d2385da460083d0a035",
@@ -136,6 +144,30 @@
         "task-coordination.delegate-with-context"
       ],
       "contracts": "Actual ready-to-paused owners/version/manual holds with original deadline/no work; owned human browser Origin on original exact attachment upload with unchanged production guard."
+    },
+    "document-restore-decision-audience": {
+      "sourceRevision": "8bf05430d65f1bd354b3eceea4e6a7963aca6a6c",
+      "scenarioIds": [
+        "documents-artifacts.restore-document",
+        "inbox-search.show-decisions"
+      ],
+      "contracts": "Exact public document id/task/key/revision/bytes plus actual Plans UI identity; independently authenticated addressed Riley pending-decision feed with explicit owner/Riley principal guards. Actual returned final failures stay exhausted and source preservation does not change outcomes."
+    },
+    "outbound-standing-native-provenance": {
+      "sourceRevision": "7db3308ea4e48f4d87130e384a672b1ebd5f5394",
+      "scenarioIds": [
+        "chat-channels.outbound-email"
+      ],
+      "contracts": "Canonical source-human/native run, actual ordinary task creating actor/originRunId, public creation audit and unique native assignment admission. Standing-chat parentNULL and actual public issue.create omitted parent projection supported; explicit email-child/thread/endpoint and all original provider-receipt/duplicate/draft controls preserved. Authorized AgentMail input remains an external gate."
     }
-  }
+  },
+  "ordinaryComposedHeadRuntimeQualification": 0,
+  "excludedCandidatePrerequisitesUnchanged": [
+    18103,
+    18105,
+    18033,
+    17917,
+    17848
+  ],
+  "acceptedSourceDoesNotCureSpentRawFailures": true
 }

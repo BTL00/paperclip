@@ -34,6 +34,21 @@ the real board mutation guard and exact company/task/comment/byte checks. Neithe
 overlay changes canonical messages, native/human counts, overall caps or an
 exhausted case's result. The production core fixes remain excluded.
 
+The document and decision-audience overlay preserves exact public document
+identity, revision and bytes through the shipped Plans control, and reads a
+pending addressed decision through the actual authenticated recipient's feed.
+It requires both the owner and recipient identities. Its measured final failures
+remain unchanged and exhausted; source preservation gives them no new cycle.
+
+The outbound-email observer accepts ordinary standing-chat work with a null
+parent only when the canonical source run, creator, public audit and real native
+assignment admission agree. It also preserves the supported public issue-create
+wake shape. The email task still links explicitly to that work and the exact
+owned thread/endpoint; original draft, recipient, native send, provider receipt,
+duplicate and truthful delivery checks remain. Actual authorized AgentMail
+resources and input delivery are separate prerequisites, with no source-only
+runtime pass or implicit credential-transfer permission.
+
 Readiness is separate from importability. Declared unsupported fresh contexts,
 public capability/profile gaps and external resource/authorization requirements
 remain explicit. The preserved plugin configure/disable fixture still has a known
