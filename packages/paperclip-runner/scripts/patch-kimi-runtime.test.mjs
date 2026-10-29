@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
@@ -236,6 +237,21 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
     return;
   }
   const { tsImport } = await import("tsx/esm/api");
+  const selectorPeer = process.env.PAPERCLIP_TEST_KIMI_FAULT_SELECTOR_PEER === "1";
+  let compiledFactory;
+  if (selectorPeer) {
+    assert.equal(process.platform, "darwin"); assert.equal(process.arch, "arm64");
+    const cli = join(packageRoot, "dist/cli/acpx-runtime-sidecar.cjs");
+    const compiled = await readFile(cli, "utf8");
+    const boundary = "var lines = (0, import_node_readline.createInterface)({";
+    const at = compiled.indexOf(boundary);
+    assert.ok(at > 0 && compiled.lastIndexOf(boundary) === at && Buffer.byteLength(compiled) <= 16 * 1024 * 1024);
+    const module = { exports: {} };
+    new Function("require", "module", "exports", "__filename", "__dirname", compiled.slice(0, at).replace(/^#![^\n]*\n/, "\n")
+      + "\nmodule.exports={verifyKimiInstallation,QUALIFIED_ACPX_PROFILES,acquireAcpxProviderLifetimeLease};")(
+      createRequire(cli), module, module.exports, cli, dirname(cli));
+    compiledFactory = module.exports;
+  }
   const [{ verifyKimiInstallation }, { QUALIFIED_ACPX_PROFILES }, { kimiManagedConfiguration }, instructionModule, { createKimiMessageProjection }, { normalizeAcpxPermission }] = await Promise.all([
     tsImport("../src/drivers/acpx/kimi-installation.ts", import.meta.url),
     tsImport("../src/drivers/acpx/qualified-profiles.ts", import.meta.url),
@@ -247,7 +263,7 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
   const { createAcpRuntime, createFileSessionStore } = await import(pathToFileURL(join(packageRoot, "node_modules/acpx/dist/runtime.js")));
   const root = await realpath(await mkdtemp(join(tmpdir(), "kimi-simulated-model-peer-")));
   const home = join(root, "home"), workspace = join(root, "workspace");
-  await mkdir(home); await mkdir(workspace);
+  await mkdir(home, { mode: 0o700 }); await mkdir(workspace);
   const instructions = "\nExact governance café 日本語 ${cwd} ${base_prompt}\nKeep the final LF.\n";
   const selectedModel = "kimi-for-coding";
   const binding = instructionModule.kimiInstructionBinding(instructions);
@@ -348,7 +364,7 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
       try {
         await Promise.all(owner.completions);
         assert.ok(Date.now() - started < 5_000, "native process cleanup is bounded");
-      } finally { clearTimeout(terminate); clearTimeout(kill); await owner.lease.close(); }
+      } finally { clearTimeout(terminate); clearTimeout(kill); await owner.lease.close(); await owner.fence?.close(); }
     }
   };
   try {
@@ -358,14 +374,17 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
       + "\n[loop_control]\nmax_attempts_per_step = 1\n";
     await writeFile(join(home, "config.toml"), config, { mode: 0o600 });
     process.env[keys[0]] = packageRoot; process.env[keys[1]] = join(packageRoot, "package.json");
-    const installation = await verifyKimiInstallation(QUALIFIED_ACPX_PROFILES.kimi);
+    const installation = compiledFactory
+      ? await compiledFactory.verifyKimiInstallation(compiledFactory.QUALIFIED_ACPX_PROFILES.kimi)
+      : await verifyKimiInstallation(QUALIFIED_ACPX_PROFILES.kimi);
     const store = createFileSessionStore({ stateDir: join(root, "acpx-state") });
     const spawnNative = (lease, owner) => {
       const child = lease.spawn([], { cwd: workspace, stdio: "pipe", env: { PATH: "/usr/bin:/bin", HOME: home,
         LANG: "C.UTF-8", CI: "1", NO_COLOR: "1", TERM: "dumb", KIMI_CODE_HOME: home,
         KIMI_API_KEY: "simulated-peer-not-a-credential", KIMI_CODE_NO_AUTO_UPDATE: "1", KIMI_DISABLE_TELEMETRY: "1",
         KIMI_CODE_WATCH: "0", KIMI_DISABLE_CRON: "1", PAPERCLIP_KIMI_INSTRUCTIONS: binding.payload,
-        PAPERCLIP_TASK_SCOPED: "assigned-task-canary" } });
+        PAPERCLIP_TASK_SCOPED: "assigned-task-canary", ...(selectorPeer ? { PAPERCLIP_FAULT_ENV_CANARY: "must-not-appear-in-observed-argv" } : {}) } },
+      owner.fence ? { credentialFenceFds: owner.fence.lifetimeFenceFds, activateCredentialFenceOwner: pid => owner.fence.activateLifetimeOwner(pid) } : undefined);
       owner.children.push(child);
       owner.completions.push(new Promise((resolve, reject) => { child.once("close", resolve); child.once("error", reject); }));
       return child;
@@ -373,7 +392,8 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
     const connect = async (resumeSessionId, sessionKey = "scripted-kimi-peer") => {
       const lease = await installation.openCommand();
       const admission = instructionModule.createKimiInstructionAdmission(instructions);
-      const owner = { lease, children: [], completions: [], handle: undefined, runtime: undefined, closed: false };
+      const fence = compiledFactory ? await compiledFactory.acquireAcpxProviderLifetimeLease({ agentHomeDirectory: home }) : undefined;
+      const owner = { lease, fence, children: [], completions: [], handle: undefined, runtime: undefined, closed: false };
       owners.push(owner);
       owner.runtime = createAcpRuntime({ cwd: workspace, sessionStore: store,
         agentRegistry: { resolve: () => "paperclip-verified-kimi-command", list: () => ["kimi"] },
@@ -501,6 +521,33 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
       };
       const nativeWorker = async owner => {
         assert.equal(owner.children.length, 1);
+        if (selectorPeer) {
+          const { readKimiLocalProcesses, selectKimiLocalTarget } = await tsImport("../../../tests/runner-e2e/kimi-local-provider-fault.ts", import.meta.url);
+          const { kimiFaultRuntimeContract } = await tsImport("../../../tests/runner-e2e/kimi-provider-fault-contract.ts", import.meta.url);
+          const table = await readProcessTable(); assert.ok(table);
+          const root = table.find(row => row.pid === process.pid); assert.ok(root && root.processGroupId === process.pid);
+          const tree = observeDescendantProcessTree(table, process.pid);
+          const observed = tree.members.map(row => row.process);
+          const processes = readKimiLocalProcesses(observed.map(row => row.pid));
+          assert.ok(!JSON.stringify(processes).includes("must-not-appear-in-observed-argv"));
+          const runId = process.argv[process.argv.indexOf("--run-id") + 1];
+          const input = { authority: { pid: root.pid, groupId: root.processGroupId, startedAt: root.started, runId },
+            journal: observed.map(row => ({ pid: row.pid, parent: row.parentPid, start: row.started })), processes,
+            workspacePath: workspace, guardLoaderSha256: kimiFaultRuntimeContract("darwin-arm64").guardLoaderSha256 };
+          const selected = selectKimiLocalTarget(input);
+          assert.equal(selected.target.command, "kimi-code");
+          assert.equal(selected.target.argv[0], "kimi-code");
+          assert.ok(selected.ancestry.some(row => row.pid === owner.children[0].pid));
+          for (const kind of ["missing", "foreign", "ambiguous"]) {
+            const wrong = structuredClone(input);
+            if (kind === "missing") wrong.processes = wrong.processes.filter(row => row.pid !== selected.target.pid);
+            if (kind === "foreign") wrong.processes.find(row => row.pid === selected.target.ppid).argv[2] = "foreign loader";
+            if (kind === "ambiguous") { const extra = { ...selected.target, pid: 2147483000 }; wrong.processes.push(extra); wrong.journal.push({ pid: extra.pid, parent: extra.ppid, start: new Date(Number(extra.startUs) / 1000).toISOString() }); }
+            assert.throws(() => selectKimiLocalTarget(wrong), /kimi_local_provider_fault:/);
+          }
+          owner.selectorInput = input;
+          return table.find(row => row.pid === selected.target.pid);
+        }
         const rootPid = owner.children[0].pid;
         const table = await readProcessTable();
         assert.ok(table);
@@ -541,7 +588,11 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
           await assert.rejects(access(path), { code: "ENOENT" });
           const worker = await nativeWorker(owner);
           if (boundary === "stop") await bounded(turn.cancel({ reason: "controlled pending permission Stop" }), "native Stop");
-          else process.kill(worker.pid, "SIGKILL");
+          else if (selectorPeer) {
+            const { terminateKimiLocalProvider } = await tsImport("../../../tests/runner-e2e/kimi-local-provider-fault.ts", import.meta.url);
+            const receipt = terminateKimiLocalProvider(owner.selectorInput);
+            assert.equal(receipt.target.pid, worker.pid); assert.equal(receipt.workerSignalled, false);
+          } else process.kill(worker.pid, "SIGKILL");
           const result = await bounded(turn.result, `${boundary} terminal result`);
           await bounded(drained, `${boundary} event drain`);
           if (peerFailure) throw peerFailure;
@@ -562,6 +613,7 @@ test("real pinned Kimi and ACPX exchange instructions/tools/denial/errors with a
       }
       assert.equal(modelRequests.length, 9);
       assert.equal(permissions.length, 6);
+      if (selectorPeer) t.diagnostic("Compiled production factories and real lifetime fences selected the exact native Kimi child despite ps rendering; actual title mutation and environment exclusion passed, missing/foreign/ambiguous targets were refused, and sealed-byte/inode/run-bound fault injection retired only the owned native tree");
       t.diagnostic("SIMULATED provider service; pending native Write permission Stop and exact observed native-worker SIGKILL both revoked host callbacks, suppressed stale allow responses, produced no file/model continuation, settled typed results and retired owned native processes; zero external model calls");
     }
   } finally {

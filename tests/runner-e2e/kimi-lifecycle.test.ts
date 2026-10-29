@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import { execFileSync, spawn } from "node:child_process";
 import { statSync, realpathSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assertSameKimiPending, observeKimiLifecyclePending, readKimiLifecycleSettlement } from "./kimi-lifecycle-evidence.js";
 import { dispatchKimiLifecycleAction } from "./kimi-lifecycle.js";
-import { readKimiLocalProcesses, selectKimiLocalTarget, type KimiLocalProcess } from "./kimi-local-provider-fault.js";
+import { KIMI_MAC_PROCESS_OBSERVER, readKimiLocalProcesses, selectKimiLocalTarget, type KimiLocalProcess } from "./kimi-local-provider-fault.js";
 
 type Row = Record<string, any>;
 const caller = { type: "board", userId: "local-board", source: "local_implicit" } as const;
@@ -184,10 +185,11 @@ function localFixture() {
   const timestamp = Date.parse("2026-10-28T00:00:00Z"), distribution = "/private/tmp/paperclip-acpx-native-fixture/distribution";
   const bootId = "12345678-1234-1234-1234-123456789abc", loader = "exact compiled guarded loader";
   const proc = (pid: number, ppid: number, executable: string, command: string): KimiLocalProcess => ({ pid, ppid, pgid: pid === 21 ? 21 : 22,
-    startUs: String(timestamp * 1000 + pid), executable, executableDev: "1", executableIno: String(pid), command, cwd: "/workspace", bootId });
+    startUs: String(timestamp * 1000 + pid), executable, executableDev: "1", executableIno: String(pid), command, argv: [executable], cwd: "/workspace", bootId });
   const processes = [proc(21, 1, "/runner", "/runner --run-id run --lifecycle-mode per_turn"),
     proc(22, 21, "/host-node", `/host-node --eval ${loader} ${distribution} .paperclip-native-entry.cjs 0 0 commonjs [] 0`),
     proc(23, 22, `${distribution}/node/bin/node`, "kimi-code")];
+  processes[1]!.argv = ["/host-node", "--eval", loader, distribution, ".paperclip-native-entry.cjs", "0", "0", "commonjs", "[]", "0"];
   const input = { authority: { pid: 21, groupId: 21, startedAt: new Date(timestamp).toISOString(), runId: "run" },
     journal: processes.map(row => ({ pid: row.pid, parent: row.ppid, start: new Date(timestamp).toISOString() })), processes, workspacePath: "/workspace", guardLoaderSha256: sha(loader) };
   return { input, select: () => selectKimiLocalTarget(input) };
@@ -197,11 +199,40 @@ describe("Kimi local native child selector", () => {
     const f = localFixture(); expect(f.select().target.pid).toBe(23);
     f.input.processes[2]!.command = "anything"; expect(f.select().target.pid).toBe(23);
   });
+  it("uses byte-exact loader argv even when ps renders a different command", () => {
+    const f = localFixture(); f.input.processes[1]!.command = "a rendered command that cannot preserve loader bytes";
+    expect(f.select().target.pid).toBe(23);
+  });
+  it("decodes exactly argc arguments and excludes the trailing environment", () => {
+    const source = KIMI_MAC_PROCESS_OBSERVER.slice(KIMI_MAC_PROCESS_OBSERVER.indexOf("def decode_arguments(data):"), KIMI_MAC_PROCESS_OBSERVER.indexOf("def arguments(pid):"));
+    const run = (bytes: Buffer) => execFileSync("/usr/bin/python3", ["-I", "-B", "-c", `import base64,json,struct,sys\n${source}\nprint(json.dumps(decode_arguments(base64.b64decode(sys.argv[1]))))`, bytes.toString("base64")], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const args = ["/node", "--eval", "line-one\nline-two", ""];
+    const header = Buffer.alloc(4); header.writeInt32LE(args.length);
+    const body = Buffer.from(`/node\0\0${args.join("\0")}\0CANARY=must-never-be-returned\0`);
+    const decoded = run(Buffer.concat([header, body])); expect(JSON.parse(decoded)).toEqual(args); expect(decoded).not.toContain("CANARY");
+    for (const count of [0, 129]) { const wrong = Buffer.from(header); wrong.writeInt32LE(count); expect(() => run(Buffer.concat([wrong, body]))).toThrow(); }
+    const changed = Buffer.from(header); changed.writeInt32LE(5);
+    expect(() => run(Buffer.concat([changed, Buffer.from(`/node\0\0${args.join("\0")}\0`) ]))).toThrow();
+    expect(() => run(Buffer.concat([header, Buffer.from("/node\0\0/node\0--eval\0truncated")]))).toThrow();
+    expect(() => run(Buffer.alloc(2))).toThrow();
+  });
+  it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("reads literal multiline argv without retaining a real child's environment", async () => {
+    const program = 'process.stdout.write("ready");setInterval(()=>{},1000)';
+    const literal = "line-one\nline-two";
+    const child = spawn(process.execPath, ["--eval", program, literal], { env: { PATH: "/usr/bin:/bin", CANARY: "must-never-be-returned" }, stdio: ["ignore", "pipe", "ignore"] });
+    const closed = new Promise(resolve => child.once("close", resolve));
+    try {
+      await new Promise(resolve => child.stdout!.once("data", resolve));
+      const rows = readKimiLocalProcesses([child.pid!]);
+      expect(rows[0]!.argv).toEqual([process.execPath, "--eval", program, literal]);
+      expect(JSON.stringify(rows)).not.toContain("must-never-be-returned");
+    } finally { child.kill("SIGTERM"); await closed; }
+  });
   it.each(["root", "foreign-loader", "wrong-entry", "unowned", "wrong-cwd", "boot", "cycle", "ambiguous"])("fails closed for %s", kind => {
     const f = localFixture();
     if (kind === "root") f.input.authority.runId = "other";
-    if (kind === "foreign-loader") f.input.processes[1]!.command = f.input.processes[1]!.command.replace("exact", "wrong");
-    if (kind === "wrong-entry") f.input.processes[1]!.command = f.input.processes[1]!.command.replace(".paperclip-native-entry.cjs", "foreign.cjs");
+    if (kind === "foreign-loader") f.input.processes[1]!.argv[2] = "wrong loader";
+    if (kind === "wrong-entry") f.input.processes[1]!.argv[4] = "foreign.cjs";
     if (kind === "unowned") f.input.journal.pop();
     if (kind === "wrong-cwd") f.input.processes[2]!.cwd = "/elsewhere";
     if (kind === "boot") f.input.processes[2]!.bootId = "foreign";

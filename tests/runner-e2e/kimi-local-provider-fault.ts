@@ -6,16 +6,40 @@ import { parseNativeAcpxDistributionEntries } from "../../packages/paperclip-run
 import { isPerTurnRunProcess, type RunProcessAuthority } from "./native-local-fixtures.js";
 import { expectedNativeBootstrap, expectedNativeModuleGuard, KIMI_FAULT_ENTRY, kimiFaultRuntimeContract } from "./kimi-provider-fault-contract.js";
 
-export interface KimiLocalProcess { pid: number; ppid: number; pgid: number; startUs: string; executable: string; executableDev: string; executableIno: string; command: string; cwd: string; bootId: string }
+export interface KimiLocalProcess { pid: number; ppid: number; pgid: number; startUs: string; executable: string; executableDev: string; executableIno: string; command: string; argv: string[]; cwd: string; bootId: string }
 interface JournalIdentity { pid: number; parent: number; start: string }
 const sha = (value: string | Buffer) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 function demand(value: unknown, code: string): asserts value { if (!value) throw new Error(`kimi_local_provider_fault:${code}`); }
-const MAC_OBSERVE = String.raw`import ctypes,json,os,subprocess,sys
+export const KIMI_MAC_PROCESS_OBSERVER = String.raw`import ctypes,json,os,struct,subprocess,sys
 class Bsd(ctypes.Structure):
  _fields_=[(n,ctypes.c_uint32) for n in ['flags','status','xstatus','pid','ppid','uid','gid','ruid','rgid','svuid','svgid','rfu']]+[('comm',ctypes.c_char*16),('name',ctypes.c_char*32)]+[(n,ctypes.c_uint32) for n in ['nfiles','pgid','pjobc','e_tdev','e_tpgid']]+[('nice',ctypes.c_int32),('start_sec',ctypes.c_uint64),('start_usec',ctypes.c_uint64)]
 lib=ctypes.CDLL('/usr/lib/libproc.dylib',use_errno=True)
 lib.proc_pidinfo.argtypes=[ctypes.c_int,ctypes.c_int,ctypes.c_uint64,ctypes.c_void_p,ctypes.c_int]
 lib.proc_pidpath.argtypes=[ctypes.c_int,ctypes.c_void_p,ctypes.c_uint32]
+kernel=ctypes.CDLL('/usr/lib/libSystem.B.dylib',use_errno=True)
+kernel.sysctl.argtypes=[ctypes.POINTER(ctypes.c_int),ctypes.c_uint,ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t),ctypes.c_void_p,ctypes.c_size_t]
+def decode_arguments(data):
+ if not 8<=len(data)<=2097152:raise RuntimeError('argv_size')
+ count=struct.unpack_from('i',data)[0]
+ if not 1<=count<=128:raise RuntimeError('argv_count')
+ at=data.find(b'\0',4)
+ if at<5:raise RuntimeError('argv_executable')
+ at+=1
+ while at<len(data) and data[at]==0:at+=1
+ result=[];total=0
+ for _ in range(count):
+  end=data.find(b'\0',at)
+  if end<0 or end-at>131072:raise RuntimeError('argv_truncated')
+  total+=end-at
+  if total>262144:raise RuntimeError('argv_bound')
+  result.append(data[at:end].decode('utf8'));at=end+1
+ return result
+def arguments(pid):
+ mib=(ctypes.c_int*3)(1,49,pid);size=ctypes.c_size_t()
+ if kernel.sysctl(mib,3,None,ctypes.byref(size),None,0)!=0 or not 8<=size.value<=2097152:raise RuntimeError('argv_size')
+ buf=ctypes.create_string_buffer(size.value)
+ if kernel.sysctl(mib,3,buf,ctypes.byref(size),None,0)!=0:raise RuntimeError('argv_read')
+ return decode_arguments(buf.raw[:size.value])
 def command(args,maximum=131072):
  r=subprocess.run(args,env={'PATH':'/usr/bin:/bin','LC_ALL':'C'},stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=2,check=True)
  if len(r.stdout)>maximum:raise RuntimeError('bound')
@@ -32,6 +56,7 @@ try:
   buf=ctypes.create_string_buffer(4096)
   if lib.proc_pidpath(pid,buf,len(buf))<=0:continue
   executable=buf.value.decode('utf8')
+  args=arguments(pid)
   cmd=command(['/bin/ps','-ww','-p',str(pid),'-o','command='])
   cwd=command(['/usr/sbin/lsof','-a','-p',str(pid),'-d','cwd','-Fn'],16384).splitlines()
   paths=[line[1:] for line in cwd if line.startswith('n')]
@@ -50,7 +75,7 @@ try:
   if len(devices)!=1 or len(inodes)!=1:raise RuntimeError('executable_inode')
   after=Bsd()
   if lib.proc_pidinfo(pid,3,0,ctypes.byref(after),size)!=size or any(getattr(after,key)!=getattr(info,key) for key in ['pid','ppid','pgid','start_sec','start_usec']):raise RuntimeError('changed')
-  out.append({'pid':pid,'ppid':info.ppid,'pgid':info.pgid,'startUs':str(info.start_sec*1000000+info.start_usec),'executable':executable,'executableDev':str(int(devices[0],16)),'executableIno':inodes[0],'command':cmd,'cwd':paths[0],'bootId':boot})
+  out.append({'pid':pid,'ppid':info.ppid,'pgid':info.pgid,'startUs':str(info.start_sec*1000000+info.start_usec),'executable':executable,'executableDev':str(int(devices[0],16)),'executableIno':inodes[0],'command':cmd,'argv':args,'cwd':paths[0],'bootId':boot})
  print(json.dumps(out,separators=(',',':')))
 except Exception:
  print(json.dumps({'error':'local_process_inspection_failed'}));sys.exit(1)
@@ -60,7 +85,7 @@ export function readKimiLocalProcesses(pids: readonly number[]): KimiLocalProces
   demand(process.platform === "darwin" && process.arch === "arm64", "supported_platform");
   let output: string;
   try {
-    output = execFileSync("/usr/bin/python3", ["-I", "-B", "-c", MAC_OBSERVE, JSON.stringify(pids)], {
+    output = execFileSync("/usr/bin/python3", ["-I", "-B", "-c", KIMI_MAC_PROCESS_OBSERVER, JSON.stringify(pids)], {
       env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, timeout: 15_000, maxBuffer: 2 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"], encoding: "utf8",
     });
   } catch { throw new Error("kimi_local_provider_fault:process_inspection_failed"); }
@@ -69,7 +94,8 @@ export function readKimiLocalProcesses(pids: readonly number[]): KimiLocalProces
     && Number.isSafeInteger(row.ppid) && row.ppid > 0 && Number.isSafeInteger(row.pgid) && row.pgid > 1
     && /^[1-9][0-9]{0,19}$/u.test(row.startUs) && /^[a-f0-9-]{36}$/u.test(row.bootId)
     && /^\d+$/u.test(row.executableDev) && /^\d+$/u.test(row.executableIno)
-    && [row.executable, row.command, row.cwd].every(value => typeof value === "string" && value.length > 0 && value.length <= 131072)), "process_shape");
+    && [row.executable, row.command, row.cwd].every(value => typeof value === "string" && value.length > 0 && value.length <= 131072)
+    && Array.isArray(row.argv) && row.argv.length > 0 && row.argv.length <= 128 && row.argv.every((value: unknown) => typeof value === "string" && !value.includes("\0") && Buffer.byteLength(value) <= 131072)), "process_shape");
   return rows;
 }
 
@@ -89,11 +115,9 @@ export function selectKimiLocalTarget(input: {
     if (!match) continue;
     const distribution = match[1]!, parent = byPid.get(candidate.ppid);
     if (!parent || parent.cwd !== input.workspacePath || parent.bootId !== root.bootId) continue;
-    const tail = ` ${distribution} .paperclip-native-entry.cjs 0 0 commonjs [] 0`;
-    const evalIndex = parent.command.indexOf(" --eval ");
-    if (evalIndex < 1 || !parent.command.endsWith(tail)) continue;
-    const loader = parent.command.slice(evalIndex + " --eval ".length, -tail.length);
-    if (sha(loader) !== input.guardLoaderSha256) continue;
+    if (!Array.isArray(parent.argv) || parent.argv.length !== 10 || parent.argv[1] !== "--eval" || parent.argv[3] !== distribution
+      || JSON.stringify(parent.argv.slice(4)) !== JSON.stringify([".paperclip-native-entry.cjs", "0", "0", "commonjs", "[]", "0"])
+      || sha(parent.argv[2]!) !== input.guardLoaderSha256) continue;
     const ancestry = [candidate]; let cursor = candidate;
     while (cursor.pid !== root.pid) {
       const next = byPid.get(cursor.ppid);

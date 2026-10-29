@@ -56,16 +56,16 @@ qualification passes. Provider registration does not migrate legacy agents.
 
 | Required gate | Environment | Observation | Verdict |
 | --- | --- | --- | --- |
-| Exact model and instructions | local and Daytona | Local driver/native metadata and live instruction-only nonce passed on profile2; final profile and product/Daytona evidence pending | partial |
-| Scoped tools and credentials | local and Daytona | Live semantic echo passed; controlled native/ACPX peer found and fixed argument and child-environment gaps; native v5 controlled peer passed; authenticated final profile pending | partial |
-| Ordinary setup | local and Daytona | Save/reopen/Test/run/reconnect with exact selection | unattempted |
-| Useful task | local and Daytona | Profile6 failed exact output framing; profile7 passed exact reply, accepted finish, durable Done and physical cleanup | partial |
-| Human input and Stop | local and Daytona | Durable semantic question/permission; deny and timely Stop prevent effects | unattempted |
-| Continuation and child loss | local and Daytona | Correct session/model/instructions; pending input expires; bounded retirement | unattempted |
-| Installed distribution | macOS arm64 and Linux x64 | Archived installed CJS setup/download/reuse/tamper checks passed; Linux metadata passed under emulation; final tarball and native image pending | partial |
-| Regression and repository checks | candidate revision | Full typecheck and focused checks passed before final profile; full tests interrupted by confirmed host semaphore exhaustion; final tests/build pending | partial |
+| Exact model and instructions | local and Daytona | Profile9 installed native create/load/model acknowledgments passed on both platforms; final authenticated product matrix remains incomplete | partial |
+| Scoped tools and credentials | local and Daytona | Native v6 controlled peer, isolated installed runtime, and real local pending Write passed; no ambient credential fallback | partial |
+| Ordinary setup | local and Daytona | Save/reopen/Test/run/reconnect and assigned skill still required; isolated hosted target now requested | unattempted |
+| Useful task | local and Daytona | Profile7 passed exact reply, accepted finish, durable Done and cleanup; final profile9 useful-task cells remain | partial |
+| Human input and Stop | local and Daytona | Profile9 local pending native Write Stop passed all eight matchers, required report evidence and cleanup | partial |
+| Continuation and child loss | local and Daytona | Installed native load passed; actual local loss observer needs exact Darwin argv repair before fault injection | partial |
+| Installed distribution | macOS arm64 and Linux x64 | Profile9 eighteen public tarballs, fresh installed CLI setup, offline reuse and installed ACP smoke passed; native Linux image smoke/export passed, publication pending | partial |
+| Regression and repository checks | candidate revision | Typecheck/build and both current PR CI suites passed; local full-suite failure and its separate successful three-case reproduction remain recorded | partial |
 
-Current totals: 0 fully passed, 5 partial, 3 unattempted of 8 gates.
+Current totals: 0 fully passed, 7 partial, 1 unattempted of 8 gates.
 Each gate's detailed cells and attempts will be recorded before qualification;
 these grouped gates are not a substitute for per-environment passing evidence.
 
@@ -73,63 +73,98 @@ The explicit-only `kimi-qualification` Product E2E suite has 20 required cells:
 message-marker, plan-revise-accept, ask-question, structured-question-resume,
 structured-question-restart-resume, file-edit-validate, continuity-restart, and
 stop-new-resume, native pending-permission Stop, and native pending-permission worker loss, each on local and Daytona. Each has one required repetition and
-zero automatic paid retries. The local message-marker cell passed on its third candidate attempt; the first
-two failures remain retained below. The other 19 cells are unattempted. The four
-native pending-permission Stop and child-loss cells are now registered and have
-provider-specific evidence and process selectors. Controlled native probes establish the provider
-boundary but do not replace product evidence. Assigned-skill behavior and ordinary
-setup/save/reopen/Test/run/reconnect remain required. Existing matrices are unchanged.
+zero automatic paid retries. Profile9 local Stop passed at source `821256d6` in
+campaign `local-2026-10-29T14-46-04-979Z`, run
+`91557abb-b9c0-422d-af1e-f0e82e948e96`. The subsequent loss cell reached a real
+unanswered Write, then correctly refused to signal a target whose rendered
+process arguments failed its exact loader hash. Its failed grade is retained.
+The remaining eight local cells and ten Daytona cells have not passed. Earlier
+profile7 marker evidence retains its own identity. Assigned-skill behavior and
+ordinary setup remain separate requirements.
+
+The Darwin observer correction changes qualification code only. It retains the
+exact compiled launcher hash, sealed native bytes, inode, ancestry and run birth
+checks while reading only the kernel argument count and those arguments. Its
+real compiled Kimi/ACPX loopback proof includes native process-title mutation,
+environment-canary exclusion, missing/foreign/ambiguous target rejection and
+owned shutdown. Provider profile, patch and image inputs are unchanged, so the
+accepted Stop remains an original `821256d6` measurement. The corrected loss
+cell and eight remaining local cells require fresh attempts; no failed grade is
+rewritten or promoted by the controlled peer.
 
 ## Current state
 
-As of 2026-10-29, the release remains unqualified. A real local profile7 task
-passed exact reply, durable Done and cleanup. No Daytona task has passed. The
-first profile8 Stop attempt reached a correct native Write approval, but the
-fixture expected fields intentionally absent before approval and never sent Stop.
-Its failed/cleanup-failure verdict is retained; a separate postmortem verified
-all 31 recorded owned processes retired, both ports closed and the unapproved
-file absent. The corrected oracle replayed all retained event rows successfully.
+As of 2026-10-29, Kimi9 remains pending and hidden from ordinary selection. Its
+command digest is `sha256:c42fa5361d53081a8bb497c35e1ee2f85e6c26d2e0d59fad14b93d16f810796b`,
+with native patch v6 and unchanged macOS/Linux closures. Dependent profiles are
+Pi34, Grok13 and Copilot81. Published master history takes precedence over
+conflicting unmerged candidate variants; original candidate bytes and commits
+remain on preserved backup refs.
 
-Restart cleanup removed worktree dependencies and generated outputs. The source
-snapshot is preserved on `codex/kimi-code-startup-preserved`. Reconciliation with
-current master preserves published historical provider fixtures over conflicting
-unmerged candidate variants. Those original candidate bytes remain in the
-preserved snapshot and original PR commits. The current candidate is Kimi9,
-with the same native v6 bytes and runtime closures as Kimi8; shared source changes
-require fresh acceptance. Dependent profiles are Pi34, Grok13 and Copilot81.
+The foundation PR #18028 at `08a5516b` and product PR #18029 at `821256d6`
+have fresh Greptile 5/5, no unresolved threads, and green CI. They remain draft
+because real acceptance is incomplete. Full typecheck and build passed. The
+local full test command failed three AI-connection cases after a first 15-second
+timeout, then accumulated an idle-transaction/TRUNCATE wait chain in the unchanged
+Git-expiration suite. The three connection cases passed separately without
+source changes. The full command was interrupted after recording the lock chain;
+all owned processes and its database port were independently verified stopped.
+This is not a full local test pass or an established explanation of every failure.
 
-Remaining critical path: build the frozen candidate, run the corrected ten local
-cells, export the native Linux image through existing private S3 permissions,
-push it with local operator credentials, run ten Daytona cells, and verify
-ordinary setup/assigned skills plus final PR checks. An attempted IAM permission
-change was rejected before execution. That policy remains unchanged; the export
-route requires no new trust or permission. No successful image push or Daytona
-sandbox is claimed.
+Material local attempts remain distinct:
 
-Provider, distribution, and product registration are implemented and pending live
-qualification. Three delegates own native protocol/probes, distribution/image
-delivery, and product admission/database test infrastructure. The lead owns
-integration, the full-stack campaign, and PR delivery. The next critical gate is
-the explicit local/Daytona cells on frozen profile8 after the passing local
-profile7 slice and the native permission correction. Production admission stays pending.
+- The first profile9 Stop attempt failed its outdated final UI oracle. Inspection
+  also found duplicated partial assistant text; the provider-neutral consumer now
+  respects the existing nested progress marker. Its retained event regression
+  demonstrated red then green.
+- A later Stop passed all behavior/cleanup checks but failed report packaging:
+  custom screenshot filenames did not satisfy the existing `final-state.png`
+  contract. Two capture names were corrected, with positive and missing-final
+  packager checks. The original grade remains failed.
+- One replacement failed before provider admission because two of its three
+  credential-home quorum ports belonged to unrelated listeners dating from
+  October 4 and 21. The guard correctly refused ownership. Foreign processes
+  were untouched, and separate scoped cleanup verified our processes retired.
+- The next local Stop passed behavior, report evidence and physical cleanup in
+  33.8 seconds. The following provider-loss attempt reached an unanswered Write
+  but refused fault injection: macOS `ps` renders loader bytes differently from
+  the pinned argv. An unpaid real guarded-native probe reproduced that exact
+  hash divergence. The observer is being repaired to read only argc-bounded argv,
+  retaining exact byte hashes and rejecting ambiguous, foreign or changed owners.
 
-The full test attempt was interrupted after a separate probe reproduced macOS
-SysV semaphore exhaustion: PostgreSQL `semget(...,17,03600)` returned ENOSPC.
-The host had 87,364 of 87,381 semaphores allocated. No shared processes or IPC
-resources were changed. An owned Docker PostgreSQL18.6 database is available for
-tests that support `PAPERCLIP_TEST_DATABASE_URL`; this cannot establish embedded
-database coverage. Its owner is this chat; remove it after qualification.
+Profile9 distribution proof now covers eighteen actual public-layout tarballs,
+a clean scripts-disabled consumer, fresh installed CLI setup through the admitted
+Node/npm proxy, network-denied reuse, unchanged lockfile and installed native ACP
+create/load/model/EOF. No developer login home, refresh token, private database
+override or model prompt was used for that packaging proof.
 
-Dedicated isolated build resources now exist: Kimi-owned CodeBuild project,
-role, bucket, logs and public candidate ECR repository. The first profile7 job
-was stopped after 33 seconds of pre-build when the permission gap was found. It
-produced no image. The profile8 retry needs the corrected frozen pushed source SHA.
-The job receives no GitHub or provider credentials, has concurrency1 and a
-30-minute build limit, and verifies the installed native closure before publishing.
-Daytona acceptance still requires the resulting immutable image digest. The old
-authorized test key returned HTTP401 without creating a sandbox. The replacement
-key in the user-authorized secret file passed an SDK read-only authentication
-probe; no sandbox was created and no credential values are retained here.
+The native Linux image was built from frozen source `5f4c9edc`; later source
+changes affect UI and test observers, with image inputs unchanged. An initial
+export timed out after image construction and saved no smoke proof. The corrected
+job `14af59a4-93be-4f83-990e-e308625ab1cc` completed in 9m40s with timestamped
+stages, independently saved native smoke proof and a streaming compressed export.
+Image ID is `sha256:139869415cdd7c7cd2a59f21626b8bdbbe0088f17209abf8cdda4f6a80b99718`;
+content identity is `4560ebf62a9640e43aff893b1a6dd497746eeb2787732818b62acd911cdb0b7b`.
+Create/load instruction acknowledgments and bounded EOF passed without prompts or
+credentials. Local collection verified the full archive, source, profile,
+closure, pack and daemon hashes. Candidate publication is in progress. No Daytona
+task has passed. All build failures are retained; the rejected IAM expansion
+was never applied and no operator/provider token was sent to CodeBuild.
+
+The user additionally requested hosted verification and confirmed an isolated
+workspace at `https://kimi.test.paperclip.app`. It was created through the normal
+Cloud UI under the existing authorized owner; the shared QA identity lease was
+left untouched. It is provisioning on a known baseline, not yet the Kimi build.
+Use the maintained Core preview deployment for this unmerged branch, record its
+exact serving SHA/image, and qualify the Kimi user journey there. This does not
+certify the private Cloud UI composition. No production or fleet-default change
+is in scope.
+
+Critical path: finish the corrected local loss and remaining local cells; publish
+the verified immutable Linux image and run ten Daytona cells; then promote via a
+new immutable profile only after required qualification, verify affected final
+artifacts/image and ordinary setup/assigned skills, deploy the exact candidate to
+the isolated test workspace, complete its hosted journey, and finish the PR stack.
 
 ## Evidence and first divergences
 
