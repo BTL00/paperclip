@@ -13637,7 +13637,7 @@ async function createRunnerdBackendWithinSessionClaim(
         ...effectiveRunnerEnvironmentBase,
         PAPERCLIP_WORKSPACE_CWD: input.execution.workspace.cwd,
       };
-  const archiveContinuityState = async () => {
+  const archiveContinuityState = async (previous?: PersistedNativeSession) => {
     if (hasRetainedWarmTransitionEvidence(root)) {
       throw new Error("native_runner_warm_transition_recovery_unproven");
     }
@@ -13645,6 +13645,7 @@ async function createRunnerdBackendWithinSessionClaim(
     const archiveToken = `${archivedAt}-${randomUUID()}`;
     const archiveRoot = resolve(root, "continuity-breaks", archiveToken);
     mkdirSync(archiveRoot, { recursive: true, mode: 0o700 });
+    await cursorCloudRuntime?.archiveCheckpoint(archiveRoot, previous);
     noteNativeRunnerEvidence(archivedAt);
     for (const name of [
       "control-plane",
@@ -14139,11 +14140,11 @@ async function createRunnerdBackendWithinSessionClaim(
         return { ...result, session };
       } catch (error) { cursorCloudRuntime?.unregister(); throw error; }
     },
-    openReplacementSession: async (sessionInput) => {
+    openReplacementSession: async (sessionInput, previous) => {
       await measureNativeRunnerSpan(
         input.trace,
         "provider.session.archive_before_replacement",
-        archiveContinuityState,
+        () => archiveContinuityState(previous),
         { parentName: "native.session.execute" },
       );
       cursorCloudRuntime?.register();

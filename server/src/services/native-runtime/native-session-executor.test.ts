@@ -11664,6 +11664,17 @@ describe("runnerd provider runtime wiring", () => {
     return options;
   }
 
+  async function cursorCloudTestDriver(current: NativeExecutionInput, environment: NodeJS.ProcessEnv, client?: unknown) {
+    const sourceUrl = new URL("../../../../packages/paperclip-runner/src/drivers/cursor-cloud/cursor-cloud-driver.ts", import.meta.url);
+    const { CursorCloudDriver } = await import(sourceUrl.href);
+    const { binding, ...config } = JSON.parse(await readFile(environment.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!, "utf8"));
+    return new CursorCloudDriver({ model: "explicit-cloud-model", config, binding, environment,
+      runtimeDirectory: dirname(environment.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!), instructions: "Controlled replacement test.",
+      relay: { url: environment.PAPERCLIP_CURSOR_CLOUD_RELAY_URL!, token: environment.PAPERCLIP_CURSOR_CLOUD_RELAY_TOKEN!,
+        socketPath: environment.PAPERCLIP_CURSOR_CLOUD_RELAY_SOCKET_PATH!, expiresAt: Number(environment.PAPERCLIP_CURSOR_CLOUD_RELAY_EXPIRES_AT) },
+      dynamicToolHandler: async () => { throw new Error("Unexpected tool call"); }, client: client as never });
+  }
+
   it("binds Core API tools to the selected private controller listener", async () => {
     const previous = Object.fromEntries(["PAPERCLIP_API_URL", "PAPERCLIP_LISTEN_HOST", "PAPERCLIP_LISTEN_PORT", "PORT"]
       .map(key => [key, process.env[key]]));
@@ -11742,6 +11753,63 @@ describe("runnerd provider runtime wiring", () => {
     expect(resolveNativeProviderEnvironment(current.provider, undefined, { CURSOR_API_KEY: "ambient-key" })).toEqual({});
   });
 
+  it.each(["settled", "active", "foreign", "unacknowledged", "live-owner"] as const)("archives the settled Cloud checkpoint before a real fresh-session replacement: %s", async mode => {
+    cursorCloudOrigin();
+    const current = cursorCloudExecution("fresh-replacement");
+    let driver: Awaited<ReturnType<typeof cursorCloudTestDriver>>;
+    const openSession = vi.fn(async () => driver.openSession({ runId: current.binding.runId,
+      normalizedSessionId: current.session.normalizedSessionId!, workingDirectory: current.workspace.cwd! }));
+    state.createBackend.mockReturnValueOnce({ kind: "test", openSession } as never);
+    const backend = await createRunnerdBackend({ db: leaseDb(current), execution: current,
+      runnerInstanceId: "cursor-replacement-controller", runnerEnvironment: { CURSOR_API_KEY: "synthetic-cursor-key" } });
+    const environment = cursorCloudTransportOptions().environment!;
+    const runtimeDirectory = dirname(environment.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!);
+    const root = dirname(runtimeDirectory);
+    const native = { id: "run-11111111-1111-4111-8111-111111111111", agentId: "", status: mode === "active" ? "RUNNING" : "ERROR",
+      createdAt: "2026-10-29T00:00:00Z", updatedAt: "2026-10-29T00:00:00Z" };
+    const createAgent = vi.fn(async (input: { agentId: string }) => { native.agentId = input.agentId; return { run: { ...native } }; });
+    driver = await cursorCloudTestDriver(current, environment, { createAgent, getRun: async () => ({ ...native }), streamRun: async function* () {} });
+    const prior = await driver.openSession({ runId: current.binding.runId, normalizedSessionId: current.session.normalizedSessionId!, workingDirectory: current.workspace.cwd! });
+    await prior.startTurn({ message: { role: "user", text: "Fail the controlled turn." } });
+    await vi.waitFor(async () => expect((await prior.read()).phase).toBe(mode === "active" ? "running" : "terminal"));
+    if (mode !== "active" && mode !== "unacknowledged") await prior.acknowledgeTerminalDelivery((await prior.read()).pendingTerminalDelivery as { turnId: string; receiptId: string });
+    const snapshot = await prior.snapshot();
+    if (mode === "active") await prior.detachControllerForRestart!();
+    else await prior.close({ reason: "confirmed failed terminal" });
+    const liveOwner = mode === "live-owner" ? (await driver.recoverSession(snapshot)).session! : null;
+    const checkpointName = (await readdir(runtimeDirectory)).find(name => /^checkpoint-.*\.json$/.test(name))!;
+    const checkpoint = await readFile(join(runtimeDirectory, checkpointName), "utf8");
+    const configBytes = await readFile(environment.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!, "utf8");
+    const capability = await readFile(join(runtimeDirectory, "relay-capability.json"), "utf8");
+    await writeFile(join(environment.PAPERCLIP_CURSOR_CLOUD_ARTIFACT_ROOT!, "keep.txt"), "Retained artifact");
+    for (const name of ["runner", "control-plane"]) { await mkdir(join(root, name), { recursive: true, mode: 0o700 }); await writeFile(join(root, name, "retained.txt"), name); }
+    const replacementInput = { identity: { ...current.binding, sessionId: current.session.normalizedSessionId }, workingDirectory: current.workspace.cwd };
+    const previous = { backendKind: "test", driverKind: "cursor_cloud_api", sessionId: current.session.normalizedSessionId,
+      identity: { ...current.binding, sessionId: current.session.normalizedSessionId, ...(mode === "foreign" ? { companyId: "foreign-company" } : {}) },
+      providerSessionId: current.session.normalizedSessionId, activeTurnId: null, pendingRuntimeRequests: [], terminal: { runTerminalState: "failed" }, semanticResult: null };
+    if (mode !== "settled") {
+      try {
+        await expect(backend.openReplacementSession!(replacementInput as never, previous as never)).rejects.toThrow();
+        expect(openSession).not.toHaveBeenCalled(); expect(createAgent).toHaveBeenCalledOnce();
+        expect(await readFile(join(runtimeDirectory, checkpointName), "utf8")).toBe(checkpoint);
+        for (const name of ["runner", "control-plane"]) expect(await readFile(join(root, name, "retained.txt"), "utf8")).toBe(name);
+        expect((await cloudRelayProbe(current, environment)).status).toBe(401);
+      } finally { await liveOwner?.close({ reason: "replacement refusal test complete" }); }
+      return;
+    }
+    const replaced = await backend.openReplacementSession!(replacementInput as never, previous as never);
+    try {
+      expect(openSession).toHaveBeenCalledOnce();
+      expect(createAgent).toHaveBeenCalledOnce();
+      expect(JSON.parse(await readFile(join(runtimeDirectory, checkpointName), "utf8"))).toMatchObject({ phase: "idle", agentId: null, runId: null });
+      const archives = await readdir(join(root, "continuity-breaks")); expect(archives).toHaveLength(1);
+      expect(await readFile(join(root, "continuity-breaks", archives[0]!, "cursor-cloud", checkpointName), "utf8")).toBe(checkpoint);
+      expect(await readFile(environment.PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH!, "utf8")).toBe(configBytes);
+      expect(await readFile(join(runtimeDirectory, "relay-capability.json"), "utf8")).toBe(capability);
+      expect(await readFile(join(environment.PAPERCLIP_CURSOR_CLOUD_ARTIFACT_ROOT!, "keep.txt"), "utf8")).toBe("Retained artifact");
+    } finally { await replaced.close({ reason: "replacement test complete" }); }
+  });
+
   it.each(["open-failed", "replacement-failed", "recover-failed", "recover-missing", "close", "cancel", "detach"] as const)(
     "revokes Cursor Cloud relay admission after %s and admits an exact retry", async ending => {
       cursorCloudOrigin();
@@ -11763,7 +11831,13 @@ describe("runnerd provider runtime wiring", () => {
       environment = cursorCloudTransportOptions().environment!;
       expect((await cloudRelayProbe(current, environment)).status).toBe(401);
       if (ending === "open-failed") await expect(backend.openSession({} as never)).rejects.toThrow("cloud-open-fixture-failed");
-      else if (ending === "replacement-failed") await expect(backend.openReplacementSession!({} as never, {} as never)).rejects.toThrow("cloud-open-fixture-failed");
+      else if (ending === "replacement-failed") {
+        const driver = await cursorCloudTestDriver(current, environment);
+        const prior = await driver.openSession({ runId: current.binding.runId, normalizedSessionId: current.session.normalizedSessionId!, workingDirectory: current.workspace.cwd! });
+        await prior.close({ reason: "pristine replacement fixture" });
+        await expect(backend.openReplacementSession!({} as never, { sessionId: current.session.normalizedSessionId,
+          identity: { ...current.binding, sessionId: current.session.normalizedSessionId } } as never)).rejects.toThrow("cloud-open-fixture-failed");
+      }
       else if (ending === "recover-failed") await expect(backend.recoverSession!({} as never, { signal: new AbortController().signal })).rejects.toThrow("cloud-recover-fixture-failed");
       else if (ending === "recover-missing") expect(await backend.recoverSession!({} as never, { signal: new AbortController().signal })).toMatchObject({ recovered: false });
       else {

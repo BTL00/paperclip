@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { heartbeatRuns, type Db } from "@paperclipai/db";
 import { loadConfig } from "../../config.js";
-import { CURSOR_CLOUD_DEFAULT_TIMEOUT_MS, type NativeExecutionInput } from "../../vendor/paperclip-runner/index.js";
+import { archiveCursorCloudSessionCheckpoint, CURSOR_CLOUD_DEFAULT_TIMEOUT_MS, type NativeExecutionInput, type PersistedNativeSession } from "../../vendor/paperclip-runner/index.js";
 import { createRemoteMcpRelayToken, registerRemoteMcpRelay, remoteMcpRelayUrl } from "./remote-mcp-relay.js";
 
 export function resolveCursorCloudPublicOrigin(): string | undefined {
@@ -82,8 +82,16 @@ export function prepareCursorCloudRuntime(input: {
       return run?.status === "running" && run.runtimeMode === "native" && (!input.authorityCurrent || input.authorityCurrent());
     } });
   };
+  const archiveCheckpoint = async (archiveRoot: string, previous: PersistedNativeSession | undefined) => {
+    if (!previous?.identity || previous.sessionId !== binding.normalizedSessionId || previous.identity.companyId !== execution.binding.companyId
+      || previous.identity.agentId !== execution.binding.agentId || previous.identity.issueId !== execution.binding.issueId) throw new Error("cursor_cloud_replacement_binding_mismatch");
+    await archiveCursorCloudSessionCheckpoint({ runtimeDirectory: directory, driverSessionId: previous.sessionId,
+      ownerRunId: previous.identity.runId, binding: { companyId: execution.binding.companyId, agentId: execution.binding.agentId,
+        issueId: execution.binding.issueId, normalizedSessionId: binding.normalizedSessionId }, socketPath,
+      archiveDirectory: join(archiveRoot, "cursor-cloud") });
+  };
   const unregister = () => { release?.(); release = undefined; };
-  return { register, unregister, environment: { ...input.environment,
+  return { register, unregister, archiveCheckpoint, environment: { ...input.environment,
     PAPERCLIP_CURSOR_CLOUD_ARTIFACT_ROOT: artifactRoot, PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH: configPath, PAPERCLIP_CURSOR_CLOUD_RELAY_SOCKET_PATH: socketPath,
     PAPERCLIP_CURSOR_CLOUD_RELAY_TOKEN: capability.token, PAPERCLIP_CURSOR_CLOUD_RELAY_URL: url,
     PAPERCLIP_CURSOR_CLOUD_RELAY_EXPIRES_AT: String(capability.expiresAt),

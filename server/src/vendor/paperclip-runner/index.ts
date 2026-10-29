@@ -192,3 +192,5 @@ export const resolveGrokDisableWebSearch = runner.resolveGrokDisableWebSearch;
 
 export const CursorCloudClient = runner.CursorCloudClient;
 export const parseNativeCursorCloudConfig = runner.parseNativeCursorCloudConfig;
+
+export const archiveCursorCloudSessionCheckpoint = runner.archiveCursorCloudSessionCheckpoint;
