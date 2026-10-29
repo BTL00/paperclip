@@ -218,6 +218,37 @@ describe("project workspace host-path floor", () => {
     setManagedSandboxOnly(false);
   });
 
+  it("accepts a Daytona project environment without enabling checkout isolation", async () => {
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    setManagedSandboxOnly(true);
+    mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona", disk: 30 } });
+    mockProjectService.update.mockResolvedValue(buildProject({ executionWorkspacePolicy: { enabled: false, environmentId } }));
+    const app = await createApp();
+    const res = await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId } });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockProjectService.update).toHaveBeenCalledWith("project-1", { executionWorkspacePolicy: { enabled: false, environmentId } });
+    expect(mockLogActivity).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: "project.updated" }));
+  });
+
+  it.each(["missing", "archived", "fake"])("rejects a %s project environment before saving", async state => {
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    mockEnvironmentService.getById.mockResolvedValue(state === "missing" ? null : {
+      id: environmentId, driver: "sandbox", status: state === "archived" ? "archived" : "active", config: { provider: "fake" },
+    });
+    const app = await createApp();
+    const res = await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId } });
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+    expect(mockProjectService.update).not.toHaveBeenCalled();
+  });
+
+  it("clears a project environment without requiring the old target to exist", async () => {
+    mockProjectService.update.mockResolvedValue(buildProject({ executionWorkspacePolicy: { enabled: false, environmentId: null } }));
+    const app = await createApp();
+    const res = await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId: null } });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockEnvironmentService.getById).not.toHaveBeenCalled();
+  });
+
   it("creates a project workspace with a cwd when the policy is off", async () => {
     const app = await createApp();
     const res = await request(app)

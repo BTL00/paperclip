@@ -57,6 +57,7 @@ export interface HeartbeatEnvironmentSelectionInput {
     responsibleUserId: string | null;
   };
   policy: {
+    taskProjectEnvironmentId?: string | null;
     trustPreset: TrustPresetResolution;
     requestedExecutionWorkspaceMode: ParsedExecutionWorkspaceMode;
     isolatedWorkspacesEnabled: boolean;
@@ -197,6 +198,7 @@ export async function selectHeartbeatEnvironment(db: Db, input: HeartbeatEnviron
   const environmentResolution = resolveExecutionWorkspaceEnvironmentId({
     lowTrustIssueEnvironmentId: trustPreset.kind === "low_trust_review"
       ? parseIssueExecutionWorkspaceSettings(issueContext?.executionWorkspaceSettings, {includeEnvironmentId: true})?.environmentId : null,
+    projectEnvironmentId: isDotRun ? null : input.policy.taskProjectEnvironmentId,
     agentDefaultEnvironmentId: agent.defaultEnvironmentId,
     instanceDefaultEnvironmentId:
       resolvedInstanceSettings.defaultEnvironmentId ?? null,

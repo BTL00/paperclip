@@ -13,6 +13,37 @@ Paperclip now presents this as a workspace-command model:
 
 ## Project runtime configuration
 
+### Project execution environment
+
+With Environments enabled, open a project's Configuration tab and choose its
+**Environment**. This selects where the project's tasks execute. It works
+without a codebase and without isolated checkouts. **Inherit agent / instance
+default** clears the project choice.
+
+The selection order is an explicit low-trust task sandbox, the task's project,
+the agent default, the instance default, then Local. Managed-sandbox-only and
+forced Kubernetes restrictions still apply. Personal external-assistant
+controllers keep their own placement. The task's project supplies this default
+even when the task uses another project's files. A selected target that is
+missing, archived, or unauthorized fails execution instead of silently falling
+back to another computer.
+
+Configure CPU, RAM, disk, credentials and images on the environment itself in
+Settings → Environments. Several projects can select the same environment.
+For example, keep a standard Daytona environment and create a second coding
+environment with `disk: 30` (GiB), then select it on code-heavy projects.
+Daytona applies resource settings when creating from an image. When creating
+from a snapshot, the sandbox inherits the snapshot's allocation; changing a
+disk field does not enlarge that snapshot. Platform-managed environment
+configuration is maintained by the platform; create a separate environment for
+project-specific sizing.
+
+Configuration changes affect later run placement and new sandbox acquisition.
+They do not resize an existing sandbox or move a running process. Existing
+recovery and lease identity checks remain in force.
+
+### Workspace commands
+
 You can define how to run a project on the project workspace itself.
 
 - Project workspace runtime config describes the services and jobs available for that project checkout.

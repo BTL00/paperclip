@@ -173,6 +173,15 @@ remaining operations before qualifying the whole capability.
 Gaps: Choosing among permitted targets differs from creating/configuring host targets;
 test authorized and denied selection.
 
+Project environment defaults use the existing protected project update and
+`executionWorkspacePolicy.environmentId`; this adds no environment-management
+permission. Task project placement overrides agent and instance defaults even
+without isolated checkouts. Low-trust and instance restrictions still govern
+execution, and the runtime rechecks target availability and company bindings.
+Source coverage includes the project selection resolver and assembled heartbeat
+tests; live agent assignment permissions require their own permitted/denied
+identity evidence.
+
 Scoped plugin execution update: `paperclip_runner` supports a saved plugin
 environment through the server-selected lease and the SDK `environmentTask` RPC.
 This is an execution path, not a new agent-callable management endpoint. Host

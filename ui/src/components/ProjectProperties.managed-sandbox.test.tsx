@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Project, ProjectCodebase } from "@paperclipai/shared";
+import type { Environment, Project, ProjectCodebase } from "@paperclipai/shared";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,16 +84,17 @@ afterEach(() => {
 });
 
 /** Pass `null` for `experimentalSettings` to render with the policy unresolved. */
-function render(project: Project, experimentalSettings: Record<string, unknown> | null) {
+function render(project: Project, experimentalSettings: Record<string, unknown> | null, environments: Environment[] = [], onFieldUpdate = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   if (experimentalSettings) {
     client.setQueryData(queryKeys.instance.experimentalSettings, experimentalSettings);
   }
+  client.setQueryData(queryKeys.environments.list("company-1"), environments);
   act(() => {
     root.render(
       <QueryClientProvider client={client}>
         <TooltipProvider>
-          <ProjectProperties project={project} onFieldUpdate={vi.fn()} getFieldSaveState={() => "idle"} onArchive={noop} />
+          <ProjectProperties project={project} onFieldUpdate={onFieldUpdate} getFieldSaveState={() => "idle"} onArchive={noop} />
         </TooltipProvider>
       </QueryClientProvider>,
     );
@@ -162,5 +163,51 @@ describe("ProjectProperties — local folder under the managed-sandbox-only poli
 
     const pathInput = container.querySelector('input[placeholder="/absolute/path/to/workspace"]');
     expect(pathInput).toBeNull();
+  });
+});
+
+describe("ProjectProperties project environment", () => {
+  const coding: Environment = { id: "coding-env", name: "Daytona Paperclip Coding", description: null,
+    driver: "sandbox", status: "active", config: { provider: "daytona", disk: 30 }, envVars: {},
+    metadata: null, createdAt: new Date(), updatedAt: new Date() };
+
+  it("saves a project environment without enabling isolated checkouts", () => {
+    const project = makeProject(makeCodebase());
+    project.executionWorkspacePolicy = { enabled: false, sharedWorkspaceConcurrency: "serialize" };
+    const save = vi.fn();
+    render(project, { enableEnvironments: true, enableIsolatedWorkspaces: false }, [coding], save);
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Project environment"]');
+    expect(select).not.toBeNull();
+    act(() => {
+      select!.value = coding.id;
+      select!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(save).toHaveBeenCalledWith("execution_workspace_environment", { executionWorkspacePolicy: {
+      enabled: false, sharedWorkspaceConcurrency: "serialize", environmentId: coding.id,
+    } });
+  });
+
+  it("shows a saved selection and clears it to inheritance", () => {
+    const project = makeProject(makeCodebase());
+    project.executionWorkspacePolicy = { enabled: false, environmentId: coding.id };
+    const save = vi.fn();
+    render(project, { enableEnvironments: true }, [coding], save);
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Project environment"]');
+    expect(select?.value).toBe(coding.id);
+    act(() => {
+      select!.value = "";
+      select!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(save).toHaveBeenCalledWith("execution_workspace_environment", { executionWorkspacePolicy: {
+      enabled: false, environmentId: null,
+    } });
+  });
+
+  it("shows an unavailable saved environment instead of displaying inheritance", () => {
+    const project = makeProject(makeCodebase());
+    project.executionWorkspacePolicy = { enabled: false, environmentId: "removed-env" };
+    render(project, { enableEnvironments: true }, [coding]);
+    expect(container.querySelector<HTMLSelectElement>('select[aria-label="Project environment"]')?.value).toBe("removed-env");
+    expect(container.textContent).toContain("Unavailable environment");
   });
 });
