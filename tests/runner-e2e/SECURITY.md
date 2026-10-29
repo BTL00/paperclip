@@ -606,3 +606,12 @@ work. A failed framework start still consumes that attempt; this gate adds no
 retry, diagnostic operation, allowance or grading exception. The other five SDK
 cases remain subject to their separate admission holds. Local declaration-only
 metadata carries null compiled digests and makes no runtime qualification claim.
+
+Preview-tool fixture discovery uses the installed manifest key for the board
+registry filter and verifies the returned database UUID and exact namespaced
+`preview` name. Enabled setup must expose exactly one tool. Disable verification
+requires the same selected record to be disabled and its actual key-filtered
+inventory to be empty; an enabled positive precedes that removal check. Agent
+discovery remains under its existing UUID-filtered authorized catalog. This
+identity correction does not release or rerun the exhausted SDK canary, change
+SDK/compiler/scanner behavior, or authorize the other five cases.

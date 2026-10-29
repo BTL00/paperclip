@@ -3767,6 +3767,7 @@
     "scenarioId": "plugins.configure-plugin",
     "sourceFiles": [
       "chat-catalog-domains/external-plugins.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -3789,6 +3790,7 @@
     "scenarioId": "plugins.disable-plugin",
     "sourceFiles": [
       "chat-catalog-domains/external-plugins.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -3833,6 +3835,7 @@
     "scenarioId": "plugins.use-plugin-tool",
     "sourceFiles": [
       "chat-catalog-domains/external-plugin-tool.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
