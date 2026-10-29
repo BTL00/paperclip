@@ -35,7 +35,10 @@ Deleting an editable file or folder keeps a temporary copy outside the skill unt
 the transaction commits. Upload or database failures restore the original subtree,
 including binary files, permissions, empty folders and files omitted from inventory.
 Successful deletions remove the temporary copy; historical versions retain their
-existing package bytes.
+existing package bytes. If the commit reply is lost, recovery checks the saved
+version under the mutation lock before restoring. A committed deletion stays
+deleted. If the database is unavailable or the skill has since changed, recovery
+preserves the backup and logs its location instead of overwriting newer work.
 
 The optional `server/scripts/migrate-skill-packages.ts` command remains available for
 diagnostics and controlled batches. It defaults to dry run, supports

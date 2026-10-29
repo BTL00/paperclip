@@ -4892,6 +4892,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     actor: SkillActor | null = null,
   ): Promise<CompanySkillFileDeleteResult> {
     let backup: { directory: string; source: string; copy: string } | undefined;
+    let mutation: { slug: string; sourceLocator: string | null; previousVersionId: string | null; savedVersionId?: string } | undefined;
     let needsRestore = false;
     async function restore() {
       if (!backup || !needsRestore) return;
@@ -4933,6 +4934,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
         // on other filesystems without adding the backup to its inventory.
         const directory = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skill-delete-"));
         backup = { directory, source: absolutePath, copy: path.join(directory, "source") };
+        mutation = { slug: skill.slug, sourceLocator: skill.sourceLocator, previousVersionId: skill.currentVersionId };
         await fs.cp(absolutePath, backup.copy, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true })
           .catch((error) => {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -4943,16 +4945,22 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
 
         try {
           needsRestore = true;
-          await fs.rm(absolutePath, { recursive: input.target === "folder", force: false });
+          await fs.rm(absolutePath, { recursive: input.target === "folder", force: false }).catch(error => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+              throw notFound(input.target === "folder" ? "Skill folder not found" : "Skill file not found");
+            }
+            throw error;
+          });
           await tx
             .update(companySkills)
             .set({ updatedAt: new Date() })
             .where(eq(companySkills.id, skill.id));
 
           const inventory = await refreshEditedSkillInventory(skill, tx);
-          await createVersion(companyId, skillId, {
+          const version = await createVersion(companyId, skillId, {
             label: input.target === "folder" ? `Deleted ${normalizedPath}/` : `Deleted ${normalizedPath}`,
           }, actor, { database: tx, skipInventoryRefresh: true, skill, fileInventory: inventory });
+          mutation.savedVersionId = version.id;
 
           return { skillId: skill.id, path: normalizedPath, target: input.target, deletedPaths };
         } catch (error) {
@@ -4965,8 +4973,27 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       needsRestore = false;
       return result;
     } catch (error) {
-      // Retain the backup until the transaction itself has committed.
-      await restore();
+      if (needsRestore && mutation) {
+        const attempted = mutation;
+        try {
+          // A lost commit reply does not prove rollback. Reacquire the same
+          // locks before checking its outcome or touching the source again.
+          await db.transaction(async tx => {
+            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${companyId}:${attempted.slug}`}, 0))`);
+            const [current] = await tx.select({ slug: companySkills.slug, sourceLocator: companySkills.sourceLocator,
+              currentVersionId: companySkills.currentVersionId }).from(companySkills)
+              .where(and(eq(companySkills.companyId, companyId), eq(companySkills.id, skillId))).for("update");
+            if (current?.slug !== attempted.slug || current.sourceLocator !== attempted.sourceLocator) return;
+            if (current.currentVersionId === attempted.savedVersionId) needsRestore = false;
+            else if (current.currentVersionId === attempted.previousVersionId) await restore();
+          });
+        } catch (recoveryError) {
+          logger.warn({ err: recoveryError, companyId, skillId }, "Skill deletion transaction outcome could not be checked");
+        }
+        if (needsRestore) {
+          logger.warn({ companyId, skillId, backupDirectory: backup?.directory }, "Skill deletion backup retained; outcome is unknown or skill changed");
+        }
+      }
       throw error;
     } finally {
       if (backup && !needsRestore) {

@@ -291,6 +291,63 @@ describe.skipIf(!support.supported)("external skill packages", () => {
       .toEqual(expect.arrayContaining([expect.objectContaining({ path: "bundle/probe.sh", executable: true })]));
   });
 
+  it.each(["committed", "rolled_back", "newer_edit", "unavailable"] as const)("reconciles a lost deletion commit reply when %s", async outcome => {
+    const companyId = await company();
+    vi.spyOn(storageModule, "getStorageService").mockReturnValue(storage);
+    const service = companySkillService(db);
+    const skill = await service.createLocalSkill(companyId, { name: "Commit reply", slug: "commit-reply", markdown: "# Keep\n" });
+    await service.updateFile(companyId, skill.id, "notes.txt", "Original notes\n");
+    await service.updateFile(companyId, skill.id, "keep.txt", "Keep\n");
+    const before = (await service.getById(companyId, skill.id))!;
+    let deletionFinished = false;
+    let backupDirectory: string | undefined;
+    const mkdtemp = fs.mkdtemp.bind(fs);
+    vi.spyOn(fs, "mkdtemp").mockImplementation(async (...args) => {
+      const directory = await mkdtemp(...args);
+      if (String(args[0]).includes("paperclip-skill-delete-")) backupDirectory = directory as string;
+      return directory;
+    });
+    const ambiguousDb = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property === "transaction") return async (callback: (tx: any) => Promise<any>, ...options: any[]) => {
+          if (deletionFinished && outcome === "unavailable") throw new Error("Database unavailable");
+          const result = await target.transaction(async tx => {
+            const value = await callback(tx);
+            if (value?.deletedPaths) {
+              deletionFinished = true;
+              if (outcome === "rolled_back") throw new Error("Lost commit reply");
+            }
+            return value;
+          }, ...options);
+          if (!result?.deletedPaths) return result;
+          if (outcome === "newer_edit") await service.updateFile(companyId, skill.id, "notes.txt", "Newer edit\n");
+          throw new Error("Lost commit reply");
+        };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    try {
+      await expect(companySkillService(ambiguousDb, { packageDb: db }).deleteFile(companyId, skill.id,
+        { path: "notes.txt", target: "file" })).rejects.toThrow("Lost commit reply");
+      expect(deletionFinished).toBe(true);
+      const [saved] = await db.select().from(companySkills).where(eq(companySkills.id, skill.id));
+      if (outcome === "rolled_back") {
+        expect(saved!.currentVersionId).toBe(before.currentVersionId);
+        expect(await fs.readFile(path.join(skill.sourceLocator!, "notes.txt"), "utf8")).toBe("Original notes\n");
+      } else if (outcome === "newer_edit") {
+        expect(await fs.readFile(path.join(skill.sourceLocator!, "notes.txt"), "utf8")).toBe("Newer edit\n");
+      } else {
+        expect(saved!.currentVersionId).not.toBe(before.currentVersionId);
+        await expect(fs.stat(path.join(skill.sourceLocator!, "notes.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+      }
+      if (outcome === "unavailable" || outcome === "newer_edit") {
+        expect(await fs.readFile(path.join(backupDirectory!, "source"), "utf8")).toBe("Original notes\n");
+      } else await expect(fs.stat(backupDirectory!)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      if (backupDirectory) await fs.rm(backupDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("expires an unused Git package and reacquires its exact bytes without a migration command", async () => {
     const f = await fixture(true);
     const recipe = { version: 1 as const, sourceId: randomUUID(), repositoryId: "123", repositoryUrl: "https://github.com/acme/skills",
