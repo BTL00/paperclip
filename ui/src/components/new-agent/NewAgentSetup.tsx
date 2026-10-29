@@ -705,7 +705,7 @@ function Setup({
         agentId: created?.id,
         adapterType: requestAdapterType,
         providerAdapter: brandType,
-        ...(["codex_local", "claude_local", "opencode_local", "pi_local"].includes(adapterType) && (qualified || runner !== "auto") ? { runner: qualified?.runner ?? runner } : {}),
+        ...(["codex_local", "claude_local", "opencode_local", "pi_local", "cursor_cloud"].includes(adapterType) && (qualified || runner !== "auto") ? { runner: qualified?.runner ?? runner } : {}),
         adapterConfig: config,
         testCredentials: pendingCredentials(nextConnection),
         aiConnection: runtimeAiBinding ?? nextConnection?.aiConnection,
@@ -760,7 +760,7 @@ function Setup({
         role: created.role,
         reportsTo: created.reportsTo,
         adapterType: requestAdapterType,
-        ...(["codex_local", "claude_local", "opencode_local", "pi_local"].includes(adapterType) && runner !== "auto" ? { runner } : {}),
+        ...(["codex_local", "claude_local", "opencode_local", "pi_local", "cursor_cloud"].includes(adapterType) && runner !== "auto" ? { runner } : {}),
         adapterConfig: config,
         defaultEnvironmentId:
           environmentOverride ||

@@ -868,6 +868,26 @@ describe("New agent setup", () => {
     }));
     expect(JSON.stringify(api.hire.mock.calls)).not.toContain("native-cursor-test-key");
   });
+  it("preserves the ordinary Cursor Cloud Advanced Runner choice through test and finish", async () => {
+    adapterApi.list.mockImplementation(async () => state.adapters.map((adapter: any) => adapter.type === "cursor_cloud"
+      ? { ...adapter, supportedRunners: ["legacy", "paperclip"], defaultRunner: "legacy" } : adapter));
+    await render("cursor_cloud");
+    await act(async () => [...container.querySelectorAll("summary")].find(item => item.textContent === "Advanced")!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Runner"]')!.click());
+    await act(async () => document.querySelector<HTMLButtonElement>('[role="option"][data-value="paperclip"]')!.click());
+    await settle();
+    await fill("GitHub repository", "https://github.com/acme/repo");
+    await fill("Branch", "feature");
+    await fill("CURSOR_API_KEY", "ordinary-cursor-test-key");
+    await fill("Model", "caller-custom-model");
+    await click("Run test");
+    expect(api.testEnvironment).toHaveBeenLastCalledWith("company-1", "cursor_cloud", expect.objectContaining({
+      runner: "paperclip", adapterConfig: expect.objectContaining({ model: "caller-custom-model" }),
+    }));
+    await click("Finish setup");
+    expect(api.hire).toHaveBeenCalledWith("company-1", expect.objectContaining({ adapterType: "cursor_cloud", runner: "paperclip" }));
+    expect(JSON.stringify(api.hire.mock.calls)).not.toContain("ordinary-cursor-test-key");
+  });
   it("requires a new Cursor Cloud key even when organization and personal keys exist", async () => {
     secrets.list.mockResolvedValue([{ id: "existing", key: "CURSOR_API_KEY", name: "Cursor", status: "active" }]);
     secrets.listMyUserSecrets.mockResolvedValue([{ definition: { key: "CURSOR_API_KEY" }, secret: { id: "personal-key" } }]);
