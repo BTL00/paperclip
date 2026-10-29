@@ -2769,6 +2769,13 @@ impl CodexCommandExecutor {
                 next_state.config.include_skill_instructions = config.include_skill_instructions;
                 upgraded_skill_config = true;
             }
+            if next_state.config.provider == "cursor_cloud"
+                && config.provider == "cursor_cloud"
+                && self.provider.is_none()
+                && next_state.lifecycle == "prepared"
+            {
+                next_state.config.instructions = config.instructions.clone();
+            }
             if config != next_state.config {
                 return Err(DurableRunnerError::invalid(
                     "run.attach cannot change the durable Codex provider profile",
@@ -4245,11 +4252,16 @@ impl CodexCommandExecutor {
             let receipt = receipt.ok_or_else(|| {
                 DurableRunnerError::invalid("Cursor Cloud remote termination receipt is missing")
             })?;
-            self.state
-                .as_mut()
-                .expect("provider state is present")
-                .provider_termination_receipt = Some(receipt);
-            self.save_state()?;
+            let mut next = self.state.clone().expect("provider state is present");
+            next.provider_termination_receipt = Some(receipt);
+            if next.lifecycle == "session_open"
+                && next.active_provider_turn_id.is_none()
+                && !next.ambiguous_turn_start_pending
+            {
+                next.lifecycle = "prepared".to_owned();
+            }
+            self.persist_state(&next)?;
+            self.state = Some(next);
         }
         Ok(())
     }
@@ -5700,6 +5712,142 @@ mod tests {
             executor.state = Some(state);
             assert!(
                 executor.attach_run(&payload).is_err(),
+                "must reject {change}"
+            );
+            assert!(executor.provider.is_none());
+            assert_eq!(
+                serde_json::to_value(executor.state.as_ref().unwrap()).unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn cursor_cloud_cold_attachment_refreshes_only_instructions() {
+        let directory = std::env::temp_dir().join(format!(
+            "paperclip-cloud-cold-instructions-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let mut state = cursor_cloud_result_state();
+        state.active_provider_turn_id = None;
+        state.provider_process_generation = 1;
+        state.lifecycle = "prepared".to_owned();
+        state.config.instructions = "Previous instructions".to_owned();
+        let mut config = state.config.clone();
+        config.instructions = "Current instructions".to_owned();
+        let mut executor = CodexCommandExecutor::new(&directory);
+        executor.state = Some(state);
+        executor.attach_run(&json!({"provider": config})).unwrap();
+        let rebound = executor.state.as_ref().unwrap();
+        assert_eq!(rebound.config, config);
+        assert_eq!(rebound.lifecycle, "prepared");
+        assert_eq!(rebound.thread_id.as_deref(), Some("thread-1"));
+        assert_eq!(rebound.provider_process_generation, 1);
+        assert!(executor.provider.is_none());
+        let persisted: CodexProviderState =
+            serde_json::from_slice(&fs::read(executor.state_path()).unwrap()).unwrap();
+        assert_eq!(persisted.config, config);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn cursor_cloud_missing_owned_process_cannot_manufacture_cold_readiness() {
+        for mode in [
+            "settled",
+            "active",
+            "ambiguous",
+            "closed",
+            "reconciliation_required",
+        ] {
+            let mut state = cursor_cloud_result_state();
+            state.active_provider_turn_id = None;
+            state.lifecycle = "session_open".to_owned();
+            state.provider_termination_receipt = Some(json!({"remoteStopped": true}));
+            match mode {
+                "active" => state.active_provider_turn_id = Some("still-active".to_owned()),
+                "ambiguous" => state.ambiguous_turn_start_pending = true,
+                "closed" | "reconciliation_required" => state.lifecycle = mode.to_owned(),
+                _ => (),
+            }
+            let before = serde_json::to_value(&state).unwrap();
+            let mut executor = CodexCommandExecutor::new("unused-cloud-no-owned-process");
+            executor.state = Some(state);
+            let result = executor.stop_owned_provider();
+            assert_eq!(result.is_ok(), mode == "settled" || mode == "closed");
+            assert_eq!(
+                serde_json::to_value(executor.state.as_ref().unwrap()).unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn cursor_cloud_instruction_refresh_preserves_profile_and_settlement_fences() {
+        let mut settled = cursor_cloud_result_state();
+        settled.active_provider_turn_id = None;
+        settled.provider_process_generation = 1;
+        settled.lifecycle = "prepared".to_owned();
+        for change in [
+            "session_open",
+            "active",
+            "ambiguous",
+            "pending",
+            "queued",
+            "model",
+            "command",
+            "args",
+            "provider",
+            "non_cloud",
+            "cwd",
+            "provider_session",
+            "generation_missing",
+        ] {
+            let mut state = settled.clone();
+            let mut config = state.config.clone();
+            config.instructions = "Current instructions".to_owned();
+            match change {
+                "session_open" => state.lifecycle = "session_open".to_owned(),
+                "active" => state.active_provider_turn_id = Some("still-active".to_owned()),
+                "ambiguous" => state.ambiguous_turn_start_pending = true,
+                "pending" | "queued" => {
+                    let event = PolledEvent {
+                        executor_event_id: "undelivered-result".to_owned(),
+                        event_type: "run.result.proposed".to_owned(),
+                        priority: EventPriority::P0,
+                        payload: json!({}),
+                    };
+                    if change == "pending" {
+                        state.pending_events.push_back(event);
+                    } else {
+                        state.queued_events.push_back(event);
+                    }
+                }
+                "model" => config.model = Some("different-model".to_owned()),
+                "command" => config.command = PathBuf::from("different-command"),
+                "args" => config.args.push("different-argument".to_owned()),
+                "provider" => {
+                    config.provider = "codex".to_owned();
+                    config.driver = "codex_app_server".to_owned();
+                }
+                "non_cloud" => {
+                    state.config.provider = "codex".to_owned();
+                    state.config.driver = "codex_app_server".to_owned();
+                    config.provider = "codex".to_owned();
+                    config.driver = "codex_app_server".to_owned();
+                }
+                "cwd" => config.cwd = std::env::temp_dir().to_string_lossy().into_owned(),
+                "provider_session" => {
+                    config.provider_session_id = Some("foreign-session".to_owned())
+                }
+                "generation_missing" => state.provider_process_generation = 0,
+                _ => unreachable!(),
+            }
+            let before = serde_json::to_value(&state).unwrap();
+            let mut executor = CodexCommandExecutor::new("unused-cloud-rejected-attachment");
+            executor.state = Some(state);
+            assert!(
+                executor.attach_run(&json!({"provider": config})).is_err(),
                 "must reject {change}"
             );
             assert!(executor.provider.is_none());

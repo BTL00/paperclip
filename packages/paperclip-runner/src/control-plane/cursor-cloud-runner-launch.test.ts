@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { request } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -314,3 +314,204 @@ it.each([0, 18_000])("delivers an applied Cloud question and courtesy-interrupt 
 it.each([0, 18_000])("settles a governed Cloud question after its allowed cancellation latency (%ims)", async terminalDelayMs => {
   await cloudQuestionHandoff(terminalDelayMs, true);
 }, 45_000);
+
+async function cloudColdAuthorityRotation(instructions: string, validShutdown = true) {
+  const root = await mkdtemp("/tmp/cc-cold-rotation-");
+  const runtime = join(root, "cloud");
+  const stateDirectory = join(root, "session");
+  const configPath = join(runtime, "config.json");
+  const socketPath = join(root, "mcp.sock");
+  const proxyPath = join(root, "cloud-proxy.cjs");
+  const fetchLog = join(root, "fetches.jsonl");
+  const remoteStatePath = join(root, "remote.json");
+  buildPrivateCursorCloudProxy(proxyPath);
+  const fixture = Buffer.from(`;(() => {
+    const assert = require('node:assert/strict'), fs = require('node:fs');
+    if (!${JSON.stringify(validShutdown)}) {
+      const write = process.stdout.write;
+      process.stdout.write = function(chunk, ...args) {
+        try { const frame = JSON.parse(String(chunk)); if (frame.result?.remoteStopped === true) { frame.result.remoteStopped = false; chunk = JSON.stringify(frame) + '\\n'; } } catch {}
+        return write.call(this, chunk, ...args);
+      };
+    }
+    const path = ${JSON.stringify(remoteStatePath)}, now = '2026-10-29T00:00:00Z';
+    const read = () => fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : { agentId: null, runs: [] };
+    const write = state => fs.writeFileSync(path, JSON.stringify(state), { mode: 0o600 });
+    const json = value => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
+    const agent = state => ({ id: state.agentId, status: 'ACTIVE', env: { type: 'cloud' }, url: 'https://cursor.com/agents/' + state.agentId, createdAt: now, updatedAt: now, latestRunId: state.runs.at(-1).id });
+    globalThis.fetch = async (input, init = {}) => {
+      const target = new URL(String(input)); assert.equal(target.origin, 'https://api.cursor.com');
+      const method = init.method ?? 'GET', state = read();
+      const body = init.body ? JSON.parse(String(init.body)) : null;
+      fs.appendFileSync(${JSON.stringify(fetchLog)}, JSON.stringify({ method, path: target.pathname, body, pid: process.pid }) + '\\n', { mode: 0o600 });
+      if (method === 'POST' && (target.pathname === '/v1/agents' || target.pathname === '/v1/agents/' + state.agentId + '/runs')) {
+        if (target.pathname === '/v1/agents') { assert.equal(state.agentId, null); state.agentId = body.agentId; }
+        const run = { id: 'run-' + String(state.runs.length + 1).padStart(8, '0') + '-2222-4222-8222-222222222222', agentId: state.agentId, status: 'RUNNING', createdAt: now, updatedAt: now };
+        state.runs.push(run); write(state); return json({ agent: agent(state), run });
+      }
+      if (method === 'GET' && target.pathname === '/v1/agents/' + state.agentId) return json(agent(state));
+      const run = state.runs.find(run => target.pathname.startsWith('/v1/agents/' + state.agentId + '/runs/' + run.id));
+      assert.ok(run, 'request must bind the retained Agent and an exact Run');
+      if (target.pathname.endsWith('/stream') && method === 'GET') return new Response(new ReadableStream({ start(controller) {
+        init.signal?.addEventListener('abort', () => { try { controller.close(); } catch {} }, { once: true });
+      } }), { headers: { 'content-type': 'text/event-stream' } });
+      if (target.pathname.endsWith('/cancel') && method === 'POST') { run.status = 'FINISHED'; write(state); return json({ id: run.id }); }
+      if (target.pathname.endsWith('/' + run.id) && method === 'GET') return json(run);
+      throw new Error('Unexpected controlled Cloud request');
+    };
+  })();\n`);
+  const builtProxy = await readFile(proxyPath);
+  const firstLine = builtProxy.indexOf(10) + 1;
+  await writeFile(proxyPath, Buffer.concat([builtProxy.subarray(0, firstLine), fixture, builtProxy.subarray(firstLine)]), { mode: 0o600 });
+  await mkdir(runtime, { mode: 0o700 });
+  const normalizedSessionId = "cloud-cold-session";
+  const cursorCloud = { schema: "paperclip.cursor-cloud.config.v1" as const, repos: [{ url: "https://github.com/example/repo" }] };
+  await writeFile(configPath, JSON.stringify({ ...cursorCloud, binding: { companyId: "company", agentId: "agent", issueId: "issue", normalizedSessionId } }), { mode: 0o600 });
+  const identity = { runnerInstanceId: "runner-cloud-cold", environmentLeaseId: "lease-cloud-cold", runId: "00000000-0000-4000-8000-000000000771", normalizedSessionId, turnId: "turn-first", itemId: "item-first" };
+  const nextIdentity = { ...identity, runId: "00000000-0000-4000-8000-000000000772", turnId: "turn-second", itemId: "item-second" };
+  const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object", properties: {}, additionalProperties: false } });
+  const environment = (token: string, runId: string) => ({ PATH: process.env.PATH, CURSOR_API_KEY: "synthetic-key",
+    PAPERCLIP_CURSOR_CLOUD_CONFIG_PATH: configPath, PAPERCLIP_CURSOR_CLOUD_ARTIFACT_ROOT: join(runtime, "artifacts"),
+    PAPERCLIP_CURSOR_CLOUD_RELAY_SOCKET_PATH: socketPath, PAPERCLIP_CURSOR_CLOUD_RELAY_TOKEN: token,
+    PAPERCLIP_CURSOR_CLOUD_RELAY_URL: `https://relay.example.test/mcp/native-runs/${runId}`, PAPERCLIP_CURSOR_CLOUD_RELAY_EXPIRES_AT: String(Date.now() + 60_000) });
+  const options = { provider: "cursor_cloud" as const, cursorCloud, stateDirectory, runnerBinary: defaultCapabilityRunnerdBinary(),
+    cursorCloudProxyPath: proxyPath, cursorCloudProxySha256: `sha256:${createHash("sha256").update(await readFile(proxyPath)).digest("hex")}`,
+    lifecyclePolicy: { mode: "per_turn" as const } };
+  const mcp = (token: string, body: Record<string, unknown>, sessionId?: string): Promise<{ status: number; sessionId?: string; value: any }> => new Promise((accept, reject) => {
+    const req = request({ socketPath, path: "/mcp", method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json", ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}) } }, response => {
+      let text = ""; response.on("data", chunk => { text += chunk; });
+      response.on("end", () => {
+        try { accept({ status: response.statusCode!, sessionId: response.headers["mcp-session-id"] as string | undefined, value: text ? JSON.parse(text) : null }); }
+        catch (error) { reject(error); }
+      });
+    });
+    req.on("error", reject); req.end(JSON.stringify({ jsonrpc: "2.0", ...body }));
+  });
+  const first = createRunnerdCodexTransport({ ...options, prpIdentity: identity, environment: environment("token-first", identity.runId) });
+  const bundles = [first];
+  let secondAuthority: DurablePrpControlPlane | undefined;
+  try {
+    await first.transport.request("thread/start", { cwd: root, model: "pinned-model", baseInstructions: "FIRST instruction grant", dynamicTools: [tool("first_tool")] });
+    await first.transport.request("turn/start", { input: [{ type: "text", text: "Ask before proceeding." }] });
+    await vi.waitFor(async () => expect(JSON.parse(await readFile(remoteStatePath, "utf8")).runs).toHaveLength(1));
+    await first.transport.request("turn/interrupt", {});
+    for await (const event of first.transport.notifications()) if (event.method === "turn/completed") break;
+    if (!validShutdown) {
+      await first.transport.close();
+      const unconfirmed = JSON.parse(await readFile(join(stateDirectory, "runner", "codex-provider-state.json"), "utf8"));
+      expect(unconfirmed.lifecycle).not.toBe("prepared");
+      expect(unconfirmed).not.toHaveProperty("providerTerminationReceipt");
+      expect(first.evidence().runnerExited).toBe(true);
+      await expect(stat(socketPath)).rejects.toHaveProperty("code", "ENOENT");
+      return;
+    }
+    await first.transport.close();
+    expect(first.evidence().runnerExited).toBe(true);
+    await expect(stat(socketPath)).rejects.toHaveProperty("code", "ENOENT");
+    const sameAuthority = createRunnerdCodexTransport({ ...options, prpIdentity: identity,
+      environment: environment("token-first", identity.runId), baseInstructions: "Must not replace same-authority instructions",
+      resumeProviderSession: { driverSessionId: normalizedSessionId, providerSessionId: normalizedSessionId } });
+    bundles.push(sameAuthority);
+    await expect(sameAuthority.transport.request("thread/read", {})).resolves.toMatchObject({ thread: { id: normalizedSessionId } });
+    expect(JSON.parse(await readFile(join(stateDirectory, "runner", "codex-provider-state.json"), "utf8")).config.instructions).toBe("FIRST instruction grant");
+    const sameControl = JSON.parse(await readFile(join(stateDirectory, "control-plane", "control-plane-state.json"), "utf8"));
+    expect(sameControl.runAttachTemplate.provider.instructions).toBe("FIRST instruction grant");
+    expect(sameControl.commands.some((command: { type: string }) => command.type === "run.attach")).toBe(false);
+    expect(JSON.parse(await readFile(remoteStatePath, "utf8")).runs).toHaveLength(1);
+    await sameAuthority.transport.close();
+    expect(sameAuthority.evidence().runnerExited).toBe(true);
+    const priorRunnerBytes = await readFile(join(stateDirectory, "runner", "runner-state.json"));
+    const priorCoreBytes = await readFile(join(stateDirectory, "control-plane", "control-plane-state.json"));
+    const stopped = JSON.parse(await readFile(join(stateDirectory, "runner", "codex-provider-state.json"), "utf8"));
+    expect(stopped.lifecycle).toBe("prepared");
+    expect(stopped.providerTerminationReceipt).toMatchObject({ remoteStopped: true });
+    expect(JSON.parse(priorRunnerBytes.toString()).lifecycle).toBe("suspended");
+    const checkpointName = (await readdir(runtime)).find(name => /^checkpoint-[a-f0-9]{64}\.json$/u.test(name))!;
+    const priorCheckpoint = JSON.parse(await readFile(join(runtime, checkpointName), "utf8"));
+    expect(priorCheckpoint).toMatchObject({ phase: "terminal", ownerRunId: identity.runId, pendingTerminalDelivery: null });
+    const baselineRoot = join(root, "baseline");
+    await cp(stateDirectory, baselineRoot, { recursive: true });
+    const second = createRunnerdCodexTransport({ ...options, prpIdentity: nextIdentity,
+      environment: environment("token-second", nextIdentity.runId), baseInstructions: instructions, resumeDynamicTools: [tool("second_tool")],
+      controlPlaneRegistration: async core => { secondAuthority = core; await core.start(); return { release: () => undefined }; } });
+    bundles.push(second);
+    const handler = vi.fn(async () => ({ success: true, contentItems: [{ type: "inputText", text: "current-tool-response" }] }));
+    second.transport.setServerRequestHandler(handler);
+    if (instructions === "") {
+      await expect(second.transport.request("thread/read", {})).rejects.toThrow("Cursor Cloud instructions are empty");
+      expect((secondAuthority!.store.state.runAttachTemplate!.provider as Record<string, unknown>).instructions).toBe("");
+      expect(JSON.parse(await readFile(remoteStatePath, "utf8")).runs).toHaveLength(1);
+      return;
+    }
+    await expect(second.transport.request("thread/read", {})).resolves.toMatchObject({ thread: { id: normalizedSessionId } });
+    expect(JSON.parse(await readFile(join(runtime, checkpointName), "utf8"))).toMatchObject({ ownerRunId: nextIdentity.runId, agentId: priorCheckpoint.agentId, runId: priorCheckpoint.runId });
+    const archives = await readdir(join(stateDirectory, "authority-epochs"));
+    expect(archives).toHaveLength(1);
+    const archive = join(stateDirectory, "authority-epochs", archives[0]!);
+    expect(await readFile(join(archive, "runner-state.json"))).toEqual(priorRunnerBytes);
+    expect(await readFile(join(archive, "control-plane", "control-plane-state.json"))).toEqual(priorCoreBytes);
+    await second.transport.request("turn/start", { input: [{ type: "text", text: "Continue from the answer." }] });
+    await vi.waitFor(async () => expect(JSON.parse(await readFile(remoteStatePath, "utf8")).runs).toHaveLength(2));
+    const retired = await mcp("token-first", { id: 0, method: "initialize" });
+    expect(retired.status).toBe(401);
+    const initialized = await mcp("token-second", { id: 0, method: "initialize" });
+    const catalog = await mcp("token-second", { id: 1, method: "tools/list" }, initialized.sessionId);
+    expect(catalog.value.result.tools.map((entry: { name: string }) => entry.name)).toContain("second_tool");
+    expect(catalog.value.result.tools.map((entry: { name: string }) => entry.name)).not.toContain("first_tool");
+    const response = await mcp("token-second", { id: 2, method: "tools/call", params: { name: "second_tool", arguments: {} } }, initialized.sessionId);
+    expect(JSON.stringify(response.value)).toContain("current-tool-response");
+    expect(handler).toHaveBeenCalledOnce();
+    await second.transport.request("turn/interrupt", {});
+    for await (const event of second.transport.notifications()) if (event.method === "turn/completed") break;
+    await second.transport.close();
+    expect(second.evidence().runnerExited).toBe(true);
+    await expect(stat(socketPath)).rejects.toHaveProperty("code", "ENOENT");
+    const calls = (await readFile(fetchLog, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const creates = calls.filter(call => call.method === "POST" && (call.path === "/v1/agents" || call.path.endsWith("/runs")));
+    expect(creates).toHaveLength(2);
+    expect(creates[0].path).toBe("/v1/agents");
+    expect(creates[1].path).toBe(`/v1/agents/${priorCheckpoint.agentId}/runs`);
+    expect(creates[1].pid).not.toBe(creates[0].pid);
+    expect(creates.map(call => call.body.model)).toEqual([{ id: "pinned-model" }, { id: "pinned-model" }]);
+    expect(creates[1].body.prompt.text).toContain(instructions);
+    expect((secondAuthority!.store.state.runAttachTemplate!.provider as Record<string, unknown>).instructions).toBe(instructions);
+    expect(JSON.parse(await readFile(join(stateDirectory, "runner", "codex-provider-state.json"), "utf8")).config.instructions).toBe(instructions);
+    expect(creates[1].body.prompt.text).not.toContain("FIRST instruction grant");
+    expect(creates[1].body.mcpServers).toEqual([{ name: "paperclip", type: "http", url: `https://relay.example.test/mcp/native-runs/${nextIdentity.runId}`, headers: { Authorization: "Bearer token-second" } }]);
+    const remote = JSON.parse(await readFile(remoteStatePath, "utf8"));
+    expect(new Set(remote.runs.map((run: { id: string }) => run.id)).size).toBe(2);
+    expect(remote.runs.every((run: { status: string }) => run.status === "FINISHED")).toBe(true);
+    for (const mode of ["warm", "unsettled", "cross-binding", "external", "managed", "agentcore"] as const) {
+      const guardRoot = join(root, `guard-${mode}`);
+      await cp(baselineRoot, guardRoot, { recursive: true });
+      if (mode === "warm") {
+        const state = JSON.parse(priorCoreBytes.toString()); state.warmTransition = {};
+        await writeFile(join(guardRoot, "control-plane", "control-plane-state.json"), JSON.stringify(state));
+      }
+      if (mode === "unsettled") {
+        const state = JSON.parse(priorRunnerBytes.toString()); state.lifecycle = "ready";
+        await writeFile(join(guardRoot, "runner", "runner-state.json"), JSON.stringify(state));
+      }
+      const guard = createRunnerdCodexTransport({ ...options, stateDirectory: guardRoot,
+        provider: mode === "managed" ? "claude_managed" : mode === "agentcore" ? "aws_agentcore" : "cursor_cloud",
+        prpIdentity: mode === "cross-binding" ? { ...nextIdentity, normalizedSessionId: "foreign-session" } : nextIdentity,
+        ...(mode === "external" ? { readRunnerState: async () => JSON.parse(priorRunnerBytes.toString()) } : {}),
+        environment: environment("token-second", nextIdentity.runId), baseInstructions: instructions });
+      bundles.push(guard);
+      await expect(guard.transport.request("thread/read", {})).rejects.toThrow({ warm: "native_runner_warm_transition_requires_exact_owned_endpoint", unsettled: "native_runner_authority_rotation_requires_settled_state", "cross-binding": "PRP recovery identity does not match the durable session binding", external: "native_runner_prp_run_rotation_unavailable", managed: "native_runner_prp_run_rotation_unavailable", agentcore: "native_runner_prp_run_rotation_unavailable" }[mode]);
+      await guard.transport.close();
+    }
+  } finally {
+    for (const bundle of bundles.reverse()) await bundle.transport.close().catch(() => undefined);
+    await secondAuthority?.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+it.each([{ label: "revised", instructions: "SECOND instruction grant" }, { label: "empty grant rejected", instructions: "" }])("cold-rotates Cloud authority with the same native Agent and current run grants ($label)", async ({ instructions }) => {
+  await cloudColdAuthorityRotation(instructions);
+}, 40_000);
+
+it("retains an unconfirmed Cloud shutdown without manufacturing cold readiness", async () => {
+  await cloudColdAuthorityRotation("Current instructions", false);
+}, 30_000);
