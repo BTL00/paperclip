@@ -5,8 +5,9 @@ import { makeDefinition } from "./internal-definition.js";
 import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { mainPerson } from "./internal-privacy.js";
 import { checks, entity, hasLink, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
-interface Request extends Entity { addresseeUserId?: string; resolvedByUserId?: string; result?: unknown; payload?: unknown; decidedByUserId?: string | null }
-interface DecisionObservation extends InternalObservation { hiring: Request; pendingQuestion?: Request; completedQuestion?: Request; visibleAttention: unknown; permissionStatus: number }
+interface Request extends Entity { addresseeUserId?: string; resolvedByUserId?: string; result?: unknown; payload?: unknown; decidedByUserId?: string | null; effectiveResolverPolicy?: string }
+interface DecisionObservation extends InternalObservation { hiring: Request; pendingQuestion?: Request; completedQuestion?: Request; visibleAttention: unknown; resolverAttention?: unknown; resolverUserId?: string; permissionStatus: number }
+interface AttentionFeed { companyId?: string; items?: Array<{ subject?: { id?: string }; relatedIssue?: { id?: string }; resolverAudience?: { addresseeUserId?: string | null; effectiveResolverPolicy?: string } }> }
 function approvalLink(o: InternalObservation, id: string) {
   return o.links.some(href => { try { const u = new URL(href, o.origin); return u.origin === o.origin && u.pathname.split("/").slice(-2).join("/") === `approvals/${id}`; } catch { return false; } });
 }
@@ -18,12 +19,15 @@ export function gradeDecisionSearch(value: unknown) {
   const c = checks(); const o = observation(value) as DecisionObservation | undefined;
   c.add("actual-source-decision-state", !!o && !!o.hiring && !!o.pendingQuestion && !!o.completedQuestion && o.visibleAttention !== undefined, "Actual hiring, addressed question, answered history and human-visible attention records are required.");
   if (!o || !o.hiring || !o.pendingQuestion || !o.completedQuestion) return c.result();
-  const feed = o.visibleAttention as { items?: Array<{ subject?: { id?: string }; resolverAudience?: { addresseeUserId?: string | null; effectiveResolverPolicy?: string } }> };
+  const feed = o.visibleAttention as AttentionFeed | undefined; const resolverFeed = o.resolverAttention as AttentionFeed | undefined;
   const hire = o.state.hiring as Request; const pending = o.state.pendingQuestion as Request; const done = o.state.completedQuestion as Request;
   const t = o.state.task as Entity; const history = o.state.historyTask as Entity;
-  c.add("visible-sources-and-real-resolver", Array.isArray(feed?.items) && feed.items.some(row => row.subject?.id === hire?.id)
-    && feed.items.some(row => row.subject?.id === pending?.id && row.resolverAudience?.addresseeUserId === o.state.rileyId && row.resolverAudience?.effectiveResolverPolicy === "human_only")
-    && o.state.rileyId !== o.state.ownerId, "The real human-visible queue contains both pending sources and the server-evaluated audience names the other human as question resolver.");
+  c.add("visible-sources-and-real-resolver", feed?.companyId === o.companyId && Array.isArray(feed.items) && feed.items.some(row => row.subject?.id === hire?.id)
+    && !feed.items.some(row => row.subject?.id === pending?.id) && resolverFeed?.companyId === o.companyId && Array.isArray(resolverFeed.items)
+    && resolverFeed.items.some(row => row.subject?.id === pending?.id && row.relatedIssue?.id === t.id && row.resolverAudience?.addresseeUserId === o.state.rileyId && row.resolverAudience?.effectiveResolverPolicy === "human_only")
+    && o.resolverUserId === o.state.rileyId && o.state.rileyId !== o.state.ownerId && o.hiring.companyId === o.companyId
+    && o.pendingQuestion.companyId === o.companyId && o.pendingQuestion.issueId === t.id && o.pendingQuestion.effectiveResolverPolicy === "human_only",
+    "The current person's queue retains the hiring decision and excludes Riley's addressed question; Riley's independently authenticated queue and the accessible public question bind its exact source and human resolver.");
   c.add("list-does-not-resolve", o.hiring.id === hire?.id && o.hiring.status === "pending" && !o.hiring.decidedByUserId && JSON.stringify(o.hiring.payload) === JSON.stringify(hire.payload)
     && o.pendingQuestion.id === pending?.id && o.pendingQuestion.status === "pending" && !o.pendingQuestion.result && JSON.stringify(o.pendingQuestion.payload) === JSON.stringify(pending.payload)
     && o.pendingQuestion.addresseeUserId === o.state.rileyId && o.completedQuestion.id === done?.id && o.completedQuestion.status === "answered"
@@ -71,15 +75,18 @@ function showDecisions(): ChatCatalogCase {
   }, gradeDecisionSearch);
   return { ...base, authentication: "human-session", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-decision-search.ts", "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts", "../../packages/shared/src/validators/issue.ts"],
     async observe(ctx, state): Promise<DecisionObservation> {
-      if (!key) throw new Error("Missing attempt-private decision probe");
+      if (!key || !riley || riley.id !== state.rileyId || riley.id === state.ownerId) throw new Error("Missing distinct authenticated decision resolver or attempt-private probe");
       const o = await observeInternal(ctx, state); const root = `/api/companies/${o.companyId}`;
-      const [hiring, pendingRows, completedRows, visibleAttention] = await Promise.all([
+      const [hiring, pendingRows, completedRows, visibleAttention, resolverAttention] = await Promise.all([
         ctx.input.api.get<Request>(`/api/approvals/${entity(state, "hiring").id}`), ctx.input.api.get<Request[]>(`/api/issues/${entity(state, "task").id}/interactions`),
         ctx.input.api.get<Request[]>(`/api/issues/${entity(state, "historyTask").id}/interactions`), ctx.input.api.get(`${root}/attention?all=true&includeDismissed=true`),
+        (async () => { const response = await riley!.request(`${root}/attention?all=true&includeDismissed=true`, "GET");
+          if (!response.ok) { await response.body?.cancel(); throw new Error("The actual addressed person's public decision queue is unavailable"); }
+          return response.json(); })(),
       ]);
       const url = new URL(`${root}/attention?all=true`, ctx.input.api.baseURL);
       const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${key.token}` } }); await response.body?.cancel();
-      return { ...o, hiring, pendingQuestion: pendingRows.find(row => row.id === entity(state, "pendingQuestion").id), completedQuestion: completedRows.find(row => row.id === entity(state, "completedQuestion").id), visibleAttention, permissionStatus: response.status };
+      return { ...o, hiring, pendingQuestion: pendingRows.find(row => row.id === entity(state, "pendingQuestion").id), completedQuestion: completedRows.find(row => row.id === entity(state, "completedQuestion").id), visibleAttention, resolverAttention, resolverUserId: riley.id, permissionStatus: response.status };
     },
     async verifyResult(ctx, state, value) {
       const o = value as DecisionObservation; await base.verifyResult(ctx, state, value); const source = ctx.input.page.url();
