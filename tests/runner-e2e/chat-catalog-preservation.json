@@ -82,10 +82,15 @@
   "knownUnqualifiedFixtureFindings": [
     {
       "scenarioIds": [
-        "plugins.configure-plugin",
         "plugins.disable-plugin"
       ],
-      "finding": "The preserved fixture sends a secret_ref object to an apiKey schema declared string with secret-ref format. The public validator requires the secure secret UUID string. These spent failures are retained; this preservation change does not repair or rerun them."
+      "finding": "The preserved fixture sends a secret_ref object to an apiKey schema declared string with secret-ref format. The returned final reached this setup request and received HTTP400; the public validator requires the secure secret UUID string. This spent failure is retained without repair or rerun."
+    },
+    {
+      "scenarioIds": [
+        "plugins.configure-plugin"
+      ],
+      "finding": "The returned final stopped earlier at the initial-identity wait. Its later UI/configuration leg was not exercised. The preserved object-vs-string secret-ref expectation is therefore a source-only finding for that later leg, not attribution of the observed failure. The spent raw failure remains unchanged without rerun."
     }
   ],
   "readinessLimits": {

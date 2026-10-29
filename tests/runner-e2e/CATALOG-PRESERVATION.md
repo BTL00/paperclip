@@ -23,8 +23,12 @@ Readiness is separate from importability. Declared unsupported fresh contexts,
 public capability/profile gaps and external resource/authorization requirements
 remain explicit. The preserved plugin configure/disable fixture still has a known
 secret-ref schema mismatch: it sends an object where its public string schema
-requires a secret UUID. Its spent failures are not repaired, erased or rerun by
-this consolidation. Other measured failures retain their actual interpretation.
+requires a secret UUID. Disable's returned final reached that setup request and
+received HTTP 400. Configure's returned final stopped earlier while waiting for
+the initial chat response; its later UI/configuration leg was not exercised, so
+the schema mismatch there is a source finding. Both spent raw failures remain
+unchanged and are not rerun by this consolidation. Other measured failures retain
+their actual interpretation.
 
 Every historical result remains attached to its original source revision, full
 fingerprint, provider/model/build/database evidence, ordinal, usage, cost, privacy
