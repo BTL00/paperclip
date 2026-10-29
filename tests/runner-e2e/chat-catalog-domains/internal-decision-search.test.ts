@@ -19,9 +19,10 @@ describe("decision source and resolver calibration", () => {
   it("rejects wrong source or foreign links", () => { const o = validDecisionSearch(); o.links[0] = "https://foreign.test/RUN/approvals/hire"; expect(gradeDecisionSearch(o).passed).toBe(false); });
   it("rejects universal resolution claims", () => { const o = validDecisionSearch(); o.reply += "\nYou can approve every visible item."; expect(gradeDecisionSearch(o).passed).toBe(false); });
   it("rejects changed completed answer and board-feed privilege substitution", () => { const o = validDecisionSearch(); o.completedQuestion.result.answers = ["changed"]; expect(gradeDecisionSearch(o).passed).toBe(false); const admin = validDecisionSearch(); admin.permissionStatus = 200; expect(gradeDecisionSearch(admin).passed).toBe(false); });
-  it.each(["missing-resolver-feed", "foreign-feed", "borrowed-user", "wrong-source", "wrong-task", "wrong-resolver", "wrong-policy", "current-user-leak", "foreign-question"])("rejects incorrect independent audience custody: %s", kind => {
+  it.each(["missing-resolver-feed", "missing-principal", "foreign-feed", "borrowed-user", "wrong-source", "wrong-task", "wrong-resolver", "wrong-policy", "current-user-leak", "foreign-question"])("rejects incorrect independent audience custody: %s", kind => {
     const o = validDecisionSearch();
     if (kind === "missing-resolver-feed") Object.assign(o, { resolverAttention: undefined });
+    if (kind === "missing-principal") { Object.assign(o.state, { rileyId: undefined }); Object.assign(o, { resolverUserId: undefined }); Object.assign(o.pendingQuestion, { addresseeUserId: undefined }); Object.assign(o.resolverAttention.items[0]!.resolverAudience, { addresseeUserId: undefined }); }
     if (kind === "foreign-feed") o.resolverAttention.companyId = "foreign";
     if (kind === "borrowed-user") o.resolverUserId = "owner";
     if (kind === "wrong-source") o.resolverAttention.items[0]!.subject.id = "other-question";

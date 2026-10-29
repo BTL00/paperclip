@@ -25,6 +25,7 @@ export function gradeDecisionSearch(value: unknown) {
   c.add("visible-sources-and-real-resolver", feed?.companyId === o.companyId && Array.isArray(feed.items) && feed.items.some(row => row.subject?.id === hire?.id)
     && !feed.items.some(row => row.subject?.id === pending?.id) && resolverFeed?.companyId === o.companyId && Array.isArray(resolverFeed.items)
     && resolverFeed.items.some(row => row.subject?.id === pending?.id && row.relatedIssue?.id === t.id && row.resolverAudience?.addresseeUserId === o.state.rileyId && row.resolverAudience?.effectiveResolverPolicy === "human_only")
+    && typeof o.state.rileyId === "string" && o.state.rileyId.length > 0 && typeof o.state.ownerId === "string" && o.state.ownerId.length > 0
     && o.resolverUserId === o.state.rileyId && o.state.rileyId !== o.state.ownerId && o.hiring.companyId === o.companyId
     && o.pendingQuestion.companyId === o.companyId && o.pendingQuestion.issueId === t.id && o.pendingQuestion.effectiveResolverPolicy === "human_only",
     "The current person's queue retains the hiring decision and excludes Riley's addressed question; Riley's independently authenticated queue and the accessible public question bind its exact source and human resolver.");
