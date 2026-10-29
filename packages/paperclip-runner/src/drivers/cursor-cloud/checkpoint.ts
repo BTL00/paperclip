@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { semanticCanonicalJson } from "../semantic-tool-receipt.js";
+import { parseCursorCloudBinding, type CursorCloudBinding } from "./config.js";
+import { releaseCursorCloudStaleSocket } from "./stale-socket.js";
 
 export const cursorCloudDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -150,4 +153,57 @@ export class CursorCloudCheckpointStore {
     await unlink(this.#lockPath);
     this.#lockToken = null;
   }
+}
+
+export async function archiveCursorCloudSessionCheckpoint(input: {
+  runtimeDirectory: string;
+  driverSessionId: string;
+  ownerRunId: string;
+  binding: CursorCloudBinding;
+  socketPath: string;
+  archiveDirectory: string;
+}): Promise<void> {
+  const binding = parseCursorCloudBinding(input.binding);
+  if (!input.ownerRunId || !isAbsolute(input.archiveDirectory) || !isAbsolute(input.socketPath)) throw new Error("Cursor Cloud replacement requires exact private bindings");
+  const archiveDirectory = resolve(input.archiveDirectory);
+  const sessionRoot = dirname(resolve(input.runtimeDirectory));
+  const archiveRelative = relative(sessionRoot, archiveDirectory);
+  const escapes = (path: string) => path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
+  if (!archiveRelative || escapes(archiveRelative) || !escapes(relative(resolve(input.runtimeDirectory), archiveDirectory))) {
+    throw new Error("Cursor Cloud checkpoint archive must be separate state inside the admitted session root");
+  }
+  const store = new CursorCloudCheckpointStore(input.runtimeDirectory, input.driverSessionId);
+  await store.acquire();
+  try {
+    const checkpoint = await store.read();
+    if (!checkpoint) throw new Error("Cursor Cloud replacement checkpoint is missing");
+    const bound = checkpoint.driverSessionId === input.driverSessionId && checkpoint.normalizedSessionId === binding.normalizedSessionId
+      && checkpoint.ownerRunId === input.ownerRunId && checkpoint.bindingDigest === cursorCloudDigest(semanticCanonicalJson(binding));
+    const pristine = checkpoint.phase === "idle" && checkpoint.agentId === null && checkpoint.runId === null && checkpoint.turnId === null && checkpoint.terminalStatus === null
+      && checkpoint.sourceSequence === 0 && checkpoint.lastEventId === null && checkpoint.lastEventFingerprints.length === 0
+      && checkpoint.requestedAgentId === null && checkpoint.idempotencyKey === null && checkpoint.requestDigest === null && checkpoint.acceptedCompletion === null;
+    const terminal = checkpoint.phase === "terminal" && typeof checkpoint.agentId === "string" && checkpoint.agentId.length > 0
+      && typeof checkpoint.runId === "string" && checkpoint.runId.length > 0 && typeof checkpoint.turnId === "string" && checkpoint.turnId.length > 0
+      && ["FINISHED", "ERROR", "CANCELLED", "EXPIRED"].includes(checkpoint.terminalStatus ?? "");
+    if (!bound || (!pristine && !terminal) || checkpoint.pendingOperation !== null || checkpoint.pendingTerminalDelivery !== null || checkpoint.deadlineAt !== null) {
+      throw new Error("Cursor Cloud replacement checkpoint is active, ambiguous or outside the admitted session");
+    }
+    await releaseCursorCloudStaleSocket(input.socketPath, store.recoveredDeadOwner);
+    await mkdir(archiveDirectory, { recursive: true, mode: 0o700 });
+    for (let directory = archiveDirectory; ; directory = dirname(directory)) {
+      const stat = await lstat(directory);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Cursor Cloud checkpoint archive must be owned and private (0700)");
+      const handle = await open(directory, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
+      try { await handle.sync(); } finally { await handle.close(); }
+      if (directory === sessionRoot) break;
+    }
+    const destination = join(archiveDirectory, basename(store.path));
+    try { await lstat(destination); throw new Error("Cursor Cloud checkpoint archive already exists"); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    await rename(store.path, destination);
+    for (const directory of [archiveDirectory, input.runtimeDirectory]) {
+      const handle = await open(directory, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
+      try { await handle.sync(); } finally { await handle.close(); }
+    }
+  } finally { await store.release(); }
 }
