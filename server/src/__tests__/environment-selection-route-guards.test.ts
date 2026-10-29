@@ -64,10 +64,10 @@ vi.mock("../services/index.js", () => ({
   accessService: () => ({
     canUser: vi.fn(),
     decide: vi.fn(async (input: { action: string }) => ({
-      allowed: ["project:read", "project:write_workspace", "issue:read"].includes(input.action),
+      allowed: ["project:read", "project:write_workspace", "tasks:assign", "issue:read"].includes(input.action),
       action: input.action,
-      reason: ["project:read", "project:write_workspace", "issue:read"].includes(input.action) ? "allow_explicit_grant" : "deny_missing_grant",
-      explanation: ["project:read", "project:write_workspace", "issue:read"].includes(input.action) ? "Allowed by test default." : "Missing permission.",
+      reason: ["project:read", "project:write_workspace", "tasks:assign", "issue:read"].includes(input.action) ? "allow_explicit_grant" : "deny_missing_grant",
+      explanation: ["project:read", "project:write_workspace", "tasks:assign", "issue:read"].includes(input.action) ? "Allowed by test default." : "Missing permission.",
     })),
     hasPermission: vi.fn(),
   }),

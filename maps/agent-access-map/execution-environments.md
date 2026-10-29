@@ -175,8 +175,9 @@ test authorized and denied selection.
 
 Project environment defaults use `executionWorkspacePolicy.environmentId`.
 Changing or clearing the choice requires `project:write_workspace`
-(`tasks:assign` authority), including a whole-policy replacement or project
-creation with a selected target. This adds no environment-management
+(`tasks:assign` authority), including a whole-policy replacement. Project
+creation with a selected target checks `tasks:assign` directly because no
+project exists yet. This adds no environment-management
 permission. Task project placement overrides agent and instance defaults even
 without isolated checkouts. Low-trust and instance restrictions still govern
 execution. Save and run admission check company bindings; lease creation checks

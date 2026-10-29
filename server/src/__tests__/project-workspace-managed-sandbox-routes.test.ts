@@ -109,7 +109,7 @@ function registerModuleMocks() {
   }));
 }
 
-async function createApp() {
+async function createApp(actorOverrides: Record<string, unknown> = {}) {
   const [{ projectRoutes }, { errorHandler }] = await Promise.all([
     vi.importActual<typeof import("../routes/projects.js")>("../routes/projects.js"),
     vi.importActual<typeof import("../middleware/index.js")>("../middleware/index.js"),
@@ -124,6 +124,7 @@ async function createApp() {
       companyIds: ["company-1"],
       source: "local_implicit",
       isInstanceAdmin: false,
+      ...actorOverrides,
     };
     next();
   });
@@ -279,11 +280,28 @@ describe("project workspace host-path floor", () => {
 
   it("requires write authority to create a project with an environment", async () => {
     const environmentId = "11111111-1111-4111-8111-111111111111";
-    mockAccessService.decide.mockImplementation(async input => ({ allowed: input.action !== "project:write_workspace", explanation: "Workspace write permission required." }));
+    mockAccessService.decide.mockImplementation(async input => ({ allowed: !["project:write_workspace", "tasks:assign"].includes(input.action), explanation: "Workspace write permission required." }));
     mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona" } });
     const app = await createApp();
     await request(app).post("/api/companies/company-1/projects").send({ name: "Project", executionWorkspacePolicy: { enabled: false, environmentId } }).expect(403);
     expect(mockProjectService.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { source: "local_implicit", isInstanceAdmin: false },
+    { source: "cloud_tenant", isInstanceAdmin: true },
+  ])("creates a project with an environment using real authorization (%j)", async actorOverrides => {
+    const { accessService } = await vi.importActual<typeof import("../services/access.js")>("../services/access.js");
+    // These administrator paths do not query the database. Keep the real
+    // authorization dispatch so missing creation-time context cannot be mocked away.
+    const access = accessService({} as Parameters<typeof accessService>[0]);
+    mockAccessService.decide.mockImplementation(access.decide);
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona" } });
+    const app = await createApp(actorOverrides);
+    const res = await request(app).post("/api/companies/company-1/projects").send({ name: "Project", executionWorkspacePolicy: { enabled: false, environmentId } });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockProjectService.create).toHaveBeenCalledWith("company-1", expect.objectContaining({ executionWorkspacePolicy: { enabled: false, environmentId } }));
   });
 
   it("creates a project workspace with a cwd when the policy is off", async () => {

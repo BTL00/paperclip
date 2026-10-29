@@ -75,3 +75,10 @@ public fixtures and the PR description.
   controls pass (977 tests). Route guard fixtures now model the required permission
   and company-binding lookup and pass all seven cases. Typecheck and build pass
   again after the review fixes.
+
+- A second review caught the creation-time permission context. Both local and
+  cloud administrator cases reproduced a 403 using the real authorization
+  service. Creation now checks the underlying assignment grant without an
+  existing project; updates retain project workspace policy enforcement. The
+  20-case route suite passes, as do the seven selection guards. Server typecheck
+  and build pass after this correction.

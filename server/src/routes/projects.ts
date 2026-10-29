@@ -175,7 +175,9 @@ export function projectRoutes(db: Db) {
 
   async function assertProjectWorkspaceWriteAllowed(req: Request, res: Response, project: { id?: string; companyId: string }) {
     const assigneeAgentId = req.actor.type === "agent" ? req.actor.agentId ?? null : null;
-    const decision = await access.decide({ actor: req.actor, action: "project:write_workspace",
+    // Before creation there is no project to authorize. Use the underlying
+    // assignment grant; existing projects also enforce their workspace policy.
+    const decision = await access.decide({ actor: req.actor, action: project.id ? "project:write_workspace" : "tasks:assign",
       resource: { type: "issue", companyId: project.companyId, projectId: project.id, assigneeAgentId },
       scope: { projectId: project.id, assigneeAgentId } });
     if (decision.allowed) return true;
