@@ -5,37 +5,60 @@ API client and this research/acceptance record. The lead owns integration,
 qualification, review, and the final handoff.
 
 Original source baseline: `25f1070fbdabd96b26cdf199e624a77905f3ca37`.
-Serving implementation branch: `codex/cursor-cloud-native-runner`.
+Current qualification checkout branch: `codex/cursor-cloud-qualified-base`.
 Target: a reviewable PR with experimental, local-first native Runner support.
 Merge, package publication, production rollout, and automatic conversion of
 existing agents are separate actions, not completed or implied by this record.
 
 Current delivery: [draft Runner core PR #18068](https://github.com/paperclipai/paperclip/pull/18068)
 and dependent [draft product PR #18069](https://github.com/paperclipai/paperclip/pull/18069).
-Neither PR is merged. Core code `9c54295c5060` has 57 clean check runs and
-Product code `146376c108f8` has 52 successful check runs. Both have a successful
-legacy Snyk status, fresh exact-head Greptile 5/5 and no open review threads.
-Those are code gates, not complete live acceptance.
+Neither PR is merged. This is the **2026-10-29 pre-qualification snapshot**,
+with production source `77b423471668d1ad55cbd4b66841d8a2b3acadf9` and Core
+`53112a12cbd8d4850ff6d88b9d739f93b49f28f9`. The latest candidate and live
+verdict belong in Product PR #18069's Verification section; keep the dated
+snapshots here as historical evidence. A later passing attempt never rewrites
+an earlier failed grade. Core has a fresh exact-head 5/5 review; current checks
+and final live qualification are still pending.
 
-The saved local trial passed fresh save/reload and real key/catalog Test on
-served source `ed4ef4796586`. Its manager was cleared through the ordinary UI,
-the cleared value persisted, and the agent is idle. The private local app and
-scoped callback listener remain running for test drive. Candidate
-`b18b743cd45d` retains its earlier ordinary Sonnet task and exact artifact pass.
-Continuation, replay and active Stop remain unqualified.
+The combined source contains the reviewed asynchronous Cloud authority fix,
+safe checkpoint retirement for fresh sessions, ordinary Advanced Runner setup
+forwarding, and the reproduced title-editor readiness/navigation fixes. Before
+this combined candidate, Product `b0296016d5be` passed recursive typecheck and
+build, and `3a4a7c558d73` passed all 1,000 native-session-executor tests.
+New focused checks passed: 25 Core checkpoint archive controls; 13 Product
+replacement/relay/non-Cloud controls; five relay/artifact cases; 341 UI cases,
+then 232 affected editor/detail cases after the cached-route fix; UI typecheck
+and token gates; and the unchanged original title-outage browser test. These
+are bounded code gates, not complete live acceptance. Build and typecheck the
+combined frozen source before another paid attempt.
 
-The terminal accounting and bounded cancellation repairs passed controlled
-integration checks. Later local infrastructure blocks and native create failures
-did not exercise a successful repaired live turn. Product attempts 7 and 9 each
-received HTTP 500 before an accepted Run. Minimal no-MCP creates also returned
-500 with Sonnet under both Bearer and Basic authentication, and with the
-catalog-supported `gpt-5.4-mini` alternative. Both auth schemes independently
-returned HTTP 200 for the same hashed user/key identity. Proposed Agent lookups
-returned 404; no accepted Run identity was returned. Auth scheme and a
-Sonnet-only explanation do not explain these observations. The underlying
-account, repository, provisioning or service cause is unknown. No further
-creates are planned. Keep both PRs draft; no release-readiness claim is made.
-All original failed and partial grades remain retained.
+The saved local trial retains the real private key binding, native Cloud runtime
+and explicit Sonnet model. Its earlier save/reload and key/catalog Test passed.
+The trial is temporarily paused to isolate the qualification bundle and callback
+port. Restore its ordinary idle state, serving candidate and callback listener
+after the live campaign, then retest ordinary setup and saved configuration.
+Candidate `b18b743cd45d` retains the earlier ordinary task and exact artifact
+passes. Continuation, full replay and active Stop remain unqualified at this
+snapshot; the next Sonnet-11 attempt has not been activated.
+
+Native create is working again. On 2026-10-29 a bare HTTP control and the unchanged
+client plus original observer each returned 201, completed the exact expected
+reply, and independently confirmed owned Agent/Run absence after deletion.
+The official [Multiple services degraded incident](https://status.x.ai/history?incident=automations%2Fps_d25569b21cabd283)
+covered Cloud Agents on 2026-10-28 from 21:15 to 23:13 UTC. The three late failed
+minimal controls occurred inside that window. This is the likely explanation
+for those HTTP 500 responses; request-level causation remains unproven. No
+credential, account, model, SDK, request-schema or header change was needed to
+restore successful creation.
+
+The tenth continuation attempt reached a successful first turn, answered its
+semantic question, committed a matching interrupted terminal and settled the
+explicitly unpriced accounting receipt. Its second local turn failed before a
+second native create at the local Runner authority-rotation boundary. The
+bounded cold-handoff repair passes real Rust/private-facade checks. The original
+failed/cleanup-failure grade remains retained. The next paid attempt requires
+exact source/artifact readiness; active Stop remains held until strict
+continuation/full replay passes. Both PRs stay draft while gates remain open.
 
 ## Release outcome and authority
 
@@ -116,8 +139,11 @@ available. Diagnose the first divergence before another paid attempt.
 
 ## Research dossier
 
-Research date: 2026-10-28. Public documentation is mutable; the inspected shipped
-SDK is exactly `@cursor/sdk@1.0.28`. Evidence labels below distinguish
+Research date: 2026-10-28, with a primary-source refresh on 2026-10-29. Public
+documentation is mutable; the original inspected shipped SDK is exactly
+`@cursor/sdk@1.0.28`. The refresh inspected `@cursor/sdk@1.2.0` and the unchanged
+OpenAPI digest below; it found no request-schema or transport change needed
+for the observed successful v1 creates. Evidence labels below distinguish
 **documented**, **source-observed**, **unverified**, and **product-qualified**.
 The dossier describes the inspected provider contract. Authenticated observations
 and exact product results are recorded separately in the ledger below.
@@ -236,16 +262,18 @@ evidence-impact decision before carrying a prior pass forward.
 
 | Gate | Local-first cell | Required independent observation | Candidate/attempts | Verdict | Next action/owner |
 | --- | --- | --- | --- | --- | --- |
-| C1 Setup | Fresh configure; save/reopen/Test/reconnect | Correct saved runtime/model/binding; useful credential failure; real account test; no launch merely on read | Latest served `ed4ef4796586`: save/reload retained native Runner, Cloud, explicit Sonnet and secret binding; real Test passed key/catalog access without a prompt, with only the authorized effective-model acknowledgment warning. Ordinary UI cleared the paused manager; readback is null and the agent is idle. Earlier failures remain retained | Passed on latest local trial | Keep the private app and scoped callback available; configuration Test does not prove native create succeeds |
+| C1 Setup | Fresh configure; save/reopen/Test/reconnect | Correct saved runtime/model/binding; useful credential failure; real account test; no launch merely on read | Served `ed4ef4796586` passed save/reload, explicit Sonnet and real key/catalog Test with only the authorized effective-model acknowledgment warning. Ordinary UI cleared the paused manager. The trial is temporarily paused during the current campaign. The ordinary Advanced Runner mapping is now repaired and controlled; its final browser acceptance remains pending | Passed on recorded saved trial | Restore the final app/callback, complete ordinary setup and reopen/Test; configuration Test does not prove native create succeeds |
 | C2 Task delivery | Ordinary task using real semantic tools | Provider activity; exact submitted content; authorized tool result; durable task finish accepted by controller; independently checked output; cleanup | `cursor-cloud-local-20261028-artifact-sonnet-2`, source `b18b743cd45d`, explicit `claude-sonnet-4-5`, all 8 matchers passed; result SHA-256 `eea3414ff54c7de99f4fc533cd4d88d415bc501dc56e95aa73a8c8f7fe09f270`; original failed campaigns retained below | Passed on recorded candidate | Assess pending recovery changes before carrying this pass forward |
-| C3 Continuation | Follow-up on existing task/session | Same Cloud agent, distinct Cloud run; current instructions/tool grants; visible reply and durable result without duplicate work | Four earlier failed live campaigns retain their original grades. Attempts 5/6/8 stopped at local infrastructure before native admission. Attempts 7/9 on `ed4ef4796586` each returned create HTTP 500 with no accepted Run; minimal no-MCP auth/model controls also returned 500. Controlled accounting and cancellation repairs pass | Unqualified; native create boundary blocked | Resolve the native create failure before another bounded live qualification; no automatic retry |
-| C4 Stop | Stop while provider work is actually pending | Cancel exact run; observe provider terminal state; close local resources; later relay calls/replays cannot mutate task; bounded observation recorded | No accepted latest native Run reached the actual pending-work boundary; controlled Stop/race checks remain separate proof | Unqualified; live cell unattempted | Requires a working native create and a real active-command Stop |
-| C5 Replay | Disconnect/reconnect and retention expiry | Resume cursor; stable order; no duplicate effect/reply; expired stream reconciles through known run without a new paid prompt | Earlier failed C3 campaigns retain one real cut and cursor reconnect with ordered unique events. Attempts 7/9 failed create before SSE or a cut, so they add no replay acceptance | Partial transport proof; unqualified | Requires normal two-turn completion on a candidate whose native create succeeds |
+| C3 Continuation | Follow-up on existing task/session | Same Cloud agent, distinct Cloud run; current instructions/tool grants; visible reply and durable result without duplicate work | Seven failed live campaigns (1/2/3/4/7/9/10) retain original grades. Attempts 5/6/8 stopped at local infrastructure. Sonnet-10 completed the first turn and accounting settlement but failed local authority rotation before a second native create; the cold-handoff repair passes controlled real-boundary checks. The separate stale-response repair passed 60 Cloud cases, including 14 old-driver red controls | Unqualified | Build and freeze the combined candidate, then one bounded Sonnet-11 attempt; no automatic paid retry |
+| C4 Stop | Stop while provider work is actually pending | Cancel exact run; observe provider terminal state; close local resources; later relay calls/replays cannot mutate task; bounded observation recorded | Supporting controlled cancellation and race checks pass; no live active-command Stop has been attempted | Unqualified; live cell unattempted | After C3/full C5 passes, verify real pending command identity before ordinary UI Stop |
+| C5 Replay | Disconnect/reconnect and retention expiry | Resume cursor; stable order; no duplicate effect/reply; expired stream reconciles through known run without a new paid prompt | Failed campaigns retain exact cuts/cursors and ordered unique events. Sonnet-10 recorded one cut, matching-cursor 200 reconnect and 61 unique ordered canonical events, but failed before second-turn admission | Partial transport proof; unqualified | Requires normal two-turn completion on the new frozen candidate |
 | C6 Artifact | Download provider-produced result | Listed relative artifact; safe retrieval; independently verified bytes; usable Paperclip result access after settlement; cleanup recorded | Same Sonnet-2 result as C2; one registered/downloaded artifact, exact 24-byte fixture and MIME verified; SHA-256 `475af2a29ebe3347d92d24efaa58ee6e50a96c1e25297a4410ea12407aa5c1d9`; exact owned Agent and Run each returned 404 after cleanup | Passed on recorded candidate | Keep the original artifact bytes/receipt and repeat if the output path changes |
 
-Current total: **3 passed on recorded candidates and 3 unqualified of 6
-required**. C1 passed on the latest saved trial; C2/C6 retain their original
-candidate identities. C4 has no live attempt. This is not a qualified release.
+Pre-qualification snapshot total: **3 passed on recorded candidates and 3
+unqualified of 6 required**. See Product PR #18069 Verification for the later
+current verdict. C1 retains its saved-trial candidate; C2/C6 retain their original
+candidate identities. C4 has no live attempt. At this snapshot the release was
+not qualified.
 A user-approved 30-day key now authenticates to the real Cloud model catalog and
 is bound privately in the ready local trial. The user approved the callback
 tunnel and access to the new private README-only fixture repository. Both are
@@ -288,20 +316,19 @@ Required supporting verification, reported separately from those six cells:
 
 | Item | Verified state | Owner | Exact next action |
 | --- | --- | --- | --- |
-| Research | Official docs and SDK 1.0.28 inspected; no live calls | Research owner | Keep findings tied to pinned client/candidate |
+| Research | Official docs and original SDK 1.0.28 inspected; SDK 1.2.0/OpenAPI refresh on October 29 confirms unchanged successful v1 requests | Research owner | Keep original and refreshed findings tied to their evidence dates |
 | Experimental exception | User-approved 2026-10-28 | Lead | Preserve honest admission/cost limits in product and PR |
 | API client | Implemented by client owner; supporting controlled wire proof reported separately | Client owner | Preserve exact pinned contract and run live acceptance |
-| Native driver/semantic relay | Controlled suites, packaging and current code CI/review passed; recorded C2 real tools passed | Lead | Preserve exact source/ownership fences while native create is blocked |
+| Native driver/semantic relay | Earlier real C2 tools passed; current cold-handoff repair passes real Rust/private-facade tests. Generation/authority fencing now passes 60 Cloud controls | Lead | Build and freeze the combined exact artifact identity |
 | Credentials/model/budget | Real key privately bound; catalog/repository access and hosted execution observed; scoped tunnel approved; cost unknown | Lead | Preserve explicit model and owned cleanup for each paid attempt |
-| Candidate/evidence | Core `9c54295c5060` and Product code `146376c108f8` have green CI/review; source `ed4ef4796586` passed package and saved-trial checks. Original failures, local infrastructure blocks and native create 500 controls remain retained. Both PRs stay draft | Lead | Native create must succeed before C3/C5/C4 qualification; no merge, publication or rollout |
+| Candidate/evidence | Production source `77b423471668`, Core `53112a12cbd8`; controlled repair gates above pass. Final combined build, current CI and live gates remain pending at this snapshot; both PRs draft | Lead | Freeze exact source/artifacts, run C3/full C5 then C4, prove private package closure and restore the trial; record the current ledger in Product PR Verification |
 
-The saved product Test and reconnect succeeded with real account/catalog access.
-The remaining boundary is native create HTTP 500, followed by continuation/replay
-and active Stop. Successful auth/catalog checks do not establish create
-entitlement or explain the failure. No further create diagnostics are planned
-in this handoff. Once the native create boundary becomes available, run one
-bounded native control, then exact-candidate C3 with full C5, then active C4.
-The release criteria remain unchanged.
+Native create is available again under unchanged requests. The remaining gates
+are exact-candidate artifact readiness, continuation/full replay, active
+Stop, current private package proof and the saved local trial restoration.
+Latest-head CI must also be green. A generic retained-Codex replay ACK test has
+an unchanged local failure; its bounded investigation is recorded below and
+must not be silently relabeled as passing.
 Each paid task must be small, have a known output,
 retain run/evidence identity, and have cleanup already wired. Diagnose the first
 divergence before another paid attempt. Record active jobs and cleanup obligations
@@ -335,7 +362,115 @@ an improved provider identity contract before stronger recovery claims.
 ## Local milestone evidence — 2026-10-28
 
 Entries below retain earlier state and pending decisions at each milestone.
-The current release decision is the finite acceptance ledger above.
+The ledger above is the dated pre-qualification snapshot; the later current
+release decision is recorded in Product PR #18069 Verification.
+
+### Native create recovery and local cold handoff — 2026-10-29
+
+The independent bare HTTP control returned 201/FINISHED with the exact expected
+31-byte reply. The paired original client/observer control did the same. Both
+had independently verified owned Agent and Run 404 responses after cleanup.
+Their comparison receipt SHA-256 is
+`4991f87568eb2619277ba062bb9b1c27d16eb5425edcf78e736e17b24d6e6d07`.
+The official incident window and these unchanged successful requests support a
+service-outage explanation for the earlier late 500 responses, without proving
+a request-level vendor root cause. Usage and cost remain unknown.
+
+Sonnet-10 on source `f7bfb75f794a567175d9938d2c8c0ad4dea4669a` reached
+first-turn success, one applied question answer, the matching canonical
+interrupted terminal and accounting-ready receipt sequence 4. The second local
+turn failed at `native_runner_prp_run_rotation_unavailable` before a second
+native create. One SSE cut and matching-cursor reconnect returned 200; 61 unique
+canonical events stayed ordered. The original FAIL/cleanup_failure result is
+retained with SHA-256
+`963c331d5061836560774d8ffc06d82a42d2c3a4ae2b9324e7ff9e9d89b3b2ff`.
+Later exact owned Agent/Run lookups returned 404; all six owned local process
+identities exited, the fixture PostgreSQL stopped and the callback port was
+released. Reconciliation does not rewrite the original grade.
+
+Repair `45ab2610fa7d1d2f9731cd88dcacb87e4c32c222` admits locally owned
+Cloud cold authority rotation separately from warm recovery. The new authority
+refreshes current instructions; same-authority recovery retains the admitted
+instructions. The Rust backend accepts that changed Cloud instruction field
+only after confirmed owned shutdown and a freshly validated receipt have
+atomically persisted durable prepared state. Every other provider-profile field
+remains exactly compared; ambiguous stop, foreign ownership and retained ACK
+debt stay fenced. Real Rust/private-facade cases verify distinct per-turn process
+and Run identity with the same Agent, fresh relay/tool grants and exact
+instruction serialization. The final merged candidate passed 9 facade cases,
+14 existing transport controls, 12 Cloud Rust and 7 native Cloud cases, and 107
+profile/history controls. Published identity bytes remain unchanged; new current
+identities account for the changed bound source inputs.
+
+One generic retained bare-Codex replay case failed at the existing two-second
+old-authority ACK fence (`native_cleanup_maintenance_unproven`); its cohort was
+18/19. The unchanged isolated case also failed using a pristine upstream Rust
+binary with the merged controller. Selected controller ACK and maintenance code
+is byte-identical to upstream. That mixed-controller experiment does not prove
+a full pristine baseline, and an instrumented diagnostic pass does not replace
+the unchanged failure. No timeout, guard, oracle or skip was changed. Generic
+ACK latency work is deferred; local verification remains nongreen for that
+case and latest-head CI is required.
+
+The Product `3a4a7c558d73` title-editor CI failure occurred after a successful
+heading click and before the first textarea fill. No outage or persistence
+assertion ran. Seven relevant source paths match pinned upstream; a loading
+readiness remount is a hypothesis awaiting deterministic reproduction. The
+separate Core review race allowed a delayed old native read to settle a newer
+turn. Repair `9283dcdb3207` passed 60 Cloud tests, including 14 controls that
+independently failed against the original driver. Captured logical/native
+authority fences launch, reads, stream output, errors and Stop. Controlled
+passes do not substitute for current live qualification.
+
+### Reviewed setup, fresh replacement and editor repairs — 2026-10-29
+
+Core `53112a12cbd8` adds the checkpoint owner's archive helper through the
+existing vendor boundary. It acquires the existing exclusive lock, validates the
+exact binding/session/owner and admits only pristine idle or confirmed terminal
+state with no pending create, deadline or terminal ACK debt. It archives only
+the exact checkpoint and durably syncs the destination chain. Live ownership,
+foreign/corrupt/missing or ambiguous state stays fenced. All 25 filesystem and
+lock controls passed; directory durability and pristine-history audit gaps were
+repaired before the commit. Published provider identities remain unchanged.
+
+Product `9550dc119d` calls that helper before moving generic continuity state.
+The real-driver server regression first failed with the original checkpoint
+already-exists error, then passed with exact old checkpoint preservation and a
+fresh Core session open. The 13-case cohort covers positive replacement,
+active/foreign/unacknowledged/live-owner refusal, relay cleanup and non-Cloud
+compatibility; five relay/artifact cases and direct server typecheck also passed.
+No PostgreSQL or real provider was used for these controls.
+
+Product `5d16e75d84` forwards ordinary Cursor Cloud Advanced Runner selection to
+both Run Test and Finish setup. Its regression first observed the missing
+Runner field. The same commit retains the active loading title editor until
+editing actually ends, using the existing InlineEditor editing callback for
+single-line edits. The unchanged Product and pinned upstream UI both reproduced
+the original editor replacement before the fix. The repaired actual-hook case
+retained the same connected/focused input and saved through the ordinary path.
+All 341 affected UI cases, UI typecheck and token gates passed. The unchanged
+browser case then edited a title through a simulated outage, recovered its write
+and preserved it on reload: 1/1 passed, 5.6 seconds, no retry. The initial command
+collected zero tests because of an anchored title filter; that harness failure
+is retained separately and is not a browser-test pass.
+
+Product `77b4234716` keys the early editor by issue. A separate red regression
+proved that navigation from actively edited A to cached B while preferences
+were pending reused A's input. The fixed case retires A, preserves B's own
+input/focus/draft through readiness and keeps A's stored draft separate, with no
+save on cancellation. The two affected files passed 232 tests, UI typecheck and
+token gates. The earlier unchanged browser pass retains its original patch
+identity; this later edit changes only cross-task editor lifetime.
+
+Earlier Core `314b9a2cc894` CI failed because a Rust integration constructor
+omitted the new optional launch-profile field. The separate test-only None fix
+passed workspace test compilation and the integration case, and Core `9283`
+Rust CI passed. Core `9283` also retained an unclassified decision-expiry timing
+failure (nextWakeAt 90 seconds earlier; 2,092 passed, one failed, four skipped).
+Product `b029` retained an E2E failure after a verified first continuation when
+the reloaded conversation was still loading; the later always-allow scenario
+never ran. Do not silently call these old failures green or infer a cause.
+Require the final exact-head checks and reviews.
 
 ### Final local handoff and unresolved native create — 2026-10-28
 
