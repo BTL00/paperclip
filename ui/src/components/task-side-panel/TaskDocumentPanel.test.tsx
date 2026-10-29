@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/client";
 import { TaskDocumentPanel } from "./TaskDocumentPanel";
+import { MemoryRouter } from "react-router-dom";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const mocks = vi.hoisted(() => ({ get: vi.fn(), revision: vi.fn() }));
@@ -21,7 +22,7 @@ afterEach(async () => { if (root) await act(async () => root!.unmount()); contai
 async function render(issueId = "task") {
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => { root!.render(<QueryClientProvider client={client}><TaskDocumentPanel issueId={issueId} documentKey="copy" revisionId="old" /></QueryClientProvider>); });
+  await act(async () => { root!.render(<MemoryRouter><QueryClientProvider client={client}><TaskDocumentPanel issueId={issueId} documentKey="copy" revisionId="old" /></QueryClientProvider></MemoryRouter>); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 describe("exact reviewed revision panel", () => {

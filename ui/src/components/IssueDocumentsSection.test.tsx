@@ -63,6 +63,9 @@ vi.mock("../api/auth", () => ({
 
 const mockLocation = vi.hoisted(() => ({ hash: "" }));
 vi.mock("@/lib/router", () => ({ useLocation: () => mockLocation }));
+vi.mock("./DocumentMarkdownBody", async () => ({
+  DocumentMarkdownBody: (await import("./MarkdownBody")).MarkdownBody,
+}));
 
 vi.mock("./MarkdownBody", () => ({
   MarkdownBody: ({

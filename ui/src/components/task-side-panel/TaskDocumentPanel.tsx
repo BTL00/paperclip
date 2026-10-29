@@ -5,11 +5,12 @@ import { FileQuestion, Loader2 } from "lucide-react";
 import { ApiError } from "@/api/client";
 import { issuesApi } from "@/api/issues";
 import { DocumentAnnotationsCountChip, IssueDocumentAnnotations } from "@/components/IssueDocumentAnnotations";
-import { MarkdownBody } from "@/components/MarkdownBody";
+import { DocumentMarkdownBody } from "@/components/DocumentMarkdownBody";
 import { QueryErrorState, useQueryView } from "@/components/QueryView";
 import { queryKeys } from "@/lib/queryKeys";
 import { documentDisplayTitle } from "@/lib/issue-artifacts";
 import { useLocation } from "@/lib/router";
+import { parseDocumentAnnotationHash } from "@/lib/document-annotation-hash";
 
 export function TaskDocumentPanel({
   issueId,
@@ -102,7 +103,10 @@ export function TaskDocumentPanel({
           onPanelOpenChange={setAnnotationPanelOpen}
           panelPlacement="popover"
         >
-          <MarkdownBody>{document.body}</MarkdownBody>
+          <DocumentMarkdownBody documentKey={document.key} revisionId={revisionId}
+            documentIssueId={parseDocumentAnnotationHash(location.hash)?.documentIssueId}>
+            {document.body}
+          </DocumentMarkdownBody>
         </IssueDocumentAnnotations>
       ) : (
         <p className="text-sm text-muted-foreground">Document is empty.</p>
