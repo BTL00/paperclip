@@ -7,6 +7,7 @@ import { stagePrivateDiagnostics, trackedPrivateSecrets, readPrivateDiagnosticSe
 import { sealStandardOriginalEvidence, sealManualResultEvidence, preserveOriginalFrameworkResult, type ManualPrivateHandoff } from "./manual-private-handoff.js";
 import { MANUAL_PRIVATE_EXECUTIONS, MANUAL_PRIVATE_PROTOCOL, manualCellKind } from "./manual-private-retention.js";
 import { packageEvidence } from "./evidence.js";
+import { canonicalGeneratedReportAsset, isTrustedGeneratedReportAsset } from "./manual-private-report-assets.js";
 
 const boundary = vi.hoisted(() => ({ reached: 0 }));
 // Any regression past the preflight guard stops before even host preparation;
@@ -138,6 +139,19 @@ it("preserves genuine available originals and required-file failure, then seals 
   await writeFile(path.join(resultDir, "result.json"), '{"status":"failed","failureClass":"cleanup_failure","cleanup":"failed"}');
   await sealManualResultEvidence(f.context, []);
   expect(JSON.parse(await readFile(path.join(f.root, "sealed-results/html-report/campaign/cell/result.json"), "utf8"))).toMatchObject({ cleanup: "failed", failureClass: "cleanup_failure" });
+});
+it.each(["normalized/assets/InterVariable.woff2", "html/trace/playwright-logo.svg"])("canonical report asset %s cannot enter the target standard-cell seal", async name => {
+  const f = await fixture(), canonical = canonicalGeneratedReportAsset(name);
+  expect(canonical).toBeDefined();
+  const data = await readFile(canonical!);
+  expect(await isTrustedGeneratedReportAsset(name, data)).toBe(true);
+  const resultSource = path.join(f.root, "results");
+  await mkdir(path.dirname(path.join(resultSource, name)), { recursive: true });
+  await writeFile(path.join(resultSource, name), data);
+  // The actual target launch never opts into the infrastructure report mode.
+  // A genuine producer asset must still fail its default standard-cell seal.
+  await expect(sealManualResultEvidence(f.context, [], resultSource)).rejects.toThrow("Unsupported packaged evidence carrier");
+  await expect(readFile(path.join(f.root, "sealed-results/result-evidence-inventory.json"))).rejects.toThrow();
 });
 it("actual launcher binds catch/cleanup/final seal to the private roots and real scans", async () => {
   const text = await readFile(new URL("./launch.ts", import.meta.url), "utf8");

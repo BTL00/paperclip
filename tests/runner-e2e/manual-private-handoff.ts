@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { packageEvidence, isStandardEvidencePath, isStandardEvidenceFile, type EvidencePackageResult } from "./evidence.js";
+import { canonicalGeneratedReportAsset, isTrustedGeneratedReportAsset } from "./manual-private-report-assets.js";
 import { assertSecretFree, normalizedSecrets } from "./redaction.js";
 import { MANUAL_PRIVATE_PROTOCOL, manualCellKind, type ManualRetentionIdentity } from "./manual-private-retention.js";
 
@@ -116,7 +117,7 @@ export async function sealStandardOriginalEvidence(input: {
   } catch (error) { await rm(out, { recursive: true, force: true }); throw error; }
 }
 
-export async function sealManualResultEvidence(context: ManualPrivateHandoff, secrets: readonly string[], source = path.join(context.root, "results")) {
+export async function sealManualResultEvidence(context: ManualPrivateHandoff, secrets: readonly string[], source = path.join(context.root, "results"), treeKind: "standard" | "generated-report" = "standard") {
   const root = await realpath(source), owned = await realpath(context.root);
   if (!root.startsWith(`${owned}${path.sep}`)) throw new Error("Packaged evidence escaped its owned root");
   const wrapper = path.join(context.root, "result-validation");
@@ -131,9 +132,18 @@ export async function sealManualResultEvidence(context: ManualPrivateHandoff, se
       assertSecretFree(name, scanSecrets, "private packaged evidence path");
       if (entry.isSymbolicLink() || !entry.isFile() && !entry.isDirectory() || name.split("/").length > 24) throw new Error("Invalid packaged evidence entry");
       if (entry.isDirectory()) { await visit(name); continue; }
-      if (!isStandardEvidenceFile(`html-report/${name}`)) throw new Error("Unsupported packaged evidence carrier");
-      const data = await readFile(path.join(root, name)); bytes += data.length;
-      if (bytes > 256 * 1024 * 1024 || records.length >= 4096) throw new Error("Complete packaged evidence exceeds allowance");
+      const standard = isStandardEvidenceFile(`html-report/${name}`);
+      if (!standard && (treeKind !== "generated-report" || !canonicalGeneratedReportAsset(name))) throw new Error("Unsupported packaged evidence carrier");
+      const file = path.join(root, name), metadata = await lstat(file);
+      if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error("Invalid packaged evidence entry");
+      if (metadata.size > 256 * 1024 * 1024 - bytes || records.length >= 4096) throw new Error("Complete packaged evidence exceeds allowance");
+      const data = await readFile(file);
+      if (!standard) {
+        if (!await isTrustedGeneratedReportAsset(name, data)) throw new Error("Unsupported packaged evidence carrier");
+        assertSecretFree(data, scanSecrets, "authenticated static report asset");
+      }
+      bytes += data.length;
+      if (bytes > 256 * 1024 * 1024) throw new Error("Complete packaged evidence exceeds allowance");
       records.push({ path: name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") });
     }
   }
@@ -151,7 +161,7 @@ export async function sealManualResultEvidence(context: ManualPrivateHandoff, se
       }
     } finally { await rm(validation, { recursive: true, force: true }); }
     records.sort((a, b) => a.path.localeCompare(b.path));
-    const receipt = { protocol: MANUAL_PRIVATE_PROTOCOL, complete: true, sourceBytes: bytes, files: records,
+    const receipt = { protocol: MANUAL_PRIVATE_PROTOCOL, treeKind, complete: true, sourceBytes: bytes, files: records,
       inventorySha256: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
     const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
     assertSecretFree(serialized, scanSecrets, "private packaged inventory");
