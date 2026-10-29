@@ -503,6 +503,11 @@ function retargetRunAttachPayload(
       provider.runtimeContext = structuredClone(runtimeContext);
     }
     payload.provider = provider;
+  } else if (provider.kind === "cursor_cloud" && currentInstructions !== undefined) {
+    provider.instructions = currentInstructions.context && runtimeContext !== undefined
+      ? retargetComposedInstructions(currentInstructions.text, currentInstructions.context, runtimeContext)
+      : currentInstructions.text;
+    payload.provider = provider;
   }
   if (authorizedTools !== null) payload.authorizedTools = authorizedTools;
   if (completionContract !== undefined) {
@@ -5253,7 +5258,7 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
       controlPlaneDirectory,
       "control-plane-state.json",
     );
-    const localProvider =
+    const supportsWarmRecovery =
       this.options.provider === undefined ||
       this.options.provider === "codex" ||
       this.options.provider === "opencode" ||
@@ -5262,6 +5267,8 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
       this.options.readRunnerState === undefined &&
       this.options.runnerStateDirectory === undefined &&
       this.options.runnerFilesystemRoot === undefined && !this.options.prepareLaunch;
+    const supportsColdRotation = supportsWarmRecovery ||
+      (this.options.provider === "cursor_cloud" && localStateOwner);
     const localRunnerStatePath = resolve(
       this.#root,
       "runner",
@@ -5281,7 +5288,7 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
         ? readControlPlaneState(controlPlaneDirectory)
         : null;
     } catch (error) {
-      if (localProvider && localStateOwner && !hasRunnerWarmBoundary) {
+      if (supportsColdRotation && localStateOwner && !hasRunnerWarmBoundary) {
         quarantineLocalRuntimeState(this.#root, error);
       }
       throw error;
@@ -5329,7 +5336,7 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
       // No malformed or unsupported transition is reinterpreted as legacy.
       if (
         (!localStateOwner && !this.options.readRunnerState) ||
-        !localProvider ||
+        !supportsWarmRecovery ||
         !controlPlaneState ||
         !candidateRunnerState ||
         (this.options.controlPlaneRegistration !== undefined &&
@@ -5400,7 +5407,7 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
       identity.itemId === desiredIdentity.itemId;
     let rotatedAuthority = false;
     if (controlPlaneState === null) {
-      if (!localProvider) {
+      if (!supportsColdRotation) {
         throw new Error("PRP provider resume state is unavailable");
       }
       const archivedState = latestArchivedControlPlaneState(
@@ -5438,7 +5445,7 @@ class DurablePrpCodexTransport implements CodexAppServerTransport {
       identity = desiredIdentity;
       rotatedAuthority = true;
     } else if (!exactAuthority && warmRecovery === null) {
-      if (!localProvider || controlPlaneState === null) {
+      if (!supportsColdRotation || controlPlaneState === null) {
         throw new Error("native_runner_prp_run_rotation_unavailable");
       }
       if (localStateOwner) {

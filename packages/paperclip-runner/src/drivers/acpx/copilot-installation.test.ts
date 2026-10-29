@@ -87,9 +87,23 @@ vi.mock("./installation-integrity.js", () => ({ verifyNativeAcpxInstallation: vi
 
 describe("Copilot build-owned installation", () => {
   it("admits the current profile with environment launch preparation", () => {
-    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(73);
+    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(74);
     expect(QUALIFIED_ACPX_PROFILES.copilot.qualificationStatus).toBeUndefined();
-    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:c17e9a5daa0af5a2e15f4236989ebd8285a134e8a23b8c8e3b4b434089251e13");
+    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:0a0430cf135aa1b795913e612a261274ee3a711ff061971c6677629da3258dcc");
+  });
+
+  it("preserves v73 while binding cold Cloud authority rotation in v74", async () => {
+    const bytes = readFileSync(new URL("../../../test/fixtures/copilot-profile-v73-identity.json", import.meta.url));
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe("7e6d7841267f1cbc4117ab9a3cea7c1fb0ffe043b63ff640e3aa97859bd4ebb6");
+    const prior = JSON.parse(bytes.toString("utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v74-identity.json", import.meta.url), "utf8"));
+    expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
+      "agentProfileVersion", "profileCompatibilitySourceSha256", "runtimeRequestBridgeSourceSha256",
+    ]);
+    expect(Object.keys(current.declaration).sort()).toEqual(Object.keys(prior.declaration).sort());
+    expect(isSupportedAcpxProfileVersion("copilot", 73)).toBe(true);
+    await expect(verifyCopilotInstallation({ ...QUALIFIED_ACPX_PROFILES.copilot,
+      agentProfileVersion: 73, commandDigest: prior.commandDigest })).rejects.toThrow("exact pinned");
   });
 
   it("preserves v72 while binding bounded Cloud terminal observation in v73", async () => {
