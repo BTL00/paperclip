@@ -1,3 +1,4 @@
+import { notifySkillVersionRetention } from "./skill-version-retention-notifications.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
 import { verifyFileManifest } from "./file-manifest-cache.js";
 import { skillPackageStorageEnabled, skillPackageStore, skillVersionFileMap, skillVersionMetadataColumns, withSkillPackageReadScope, type StoredSkillVersion } from "./skill-package-store.js";
@@ -3247,6 +3248,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
         await fs.rm(resolveRuntimeSkillMaterializedPath(companyId, skill), { recursive: true, force: true });
         await db.transaction(async tx => {
           await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+          await notifySkillVersionRetention(tx, companyId);
           await tx.delete(companySkills).where(eq(companySkills.id, skill.id));
         });
       });
@@ -3740,6 +3742,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     }
     const persist = async (tx: DbOrTransaction) => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+      await notifySkillVersionRetention(tx, companyId);
       await tx.execute(sql`
         select ${companySkills.id}
         from ${companySkills}
@@ -4061,6 +4064,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   async function cleanupFailedFork(companyId: string, sourceSkillId: string, forkSkillId: string, forkDir: string) {
     await db.transaction(async (tx) => {
       await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+      await notifySkillVersionRetention(tx, companyId);
       await tx
         .update(companySkills)
         .set({ currentVersionId: null, updatedAt: new Date() })
@@ -7391,6 +7395,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       ));
     for (const row of rows) {
       await db.transaction(async (tx) => {
+        await notifyDeliveryWork(tx, DELIVERY_QUEUES.agentTimers);
         await tx
           .update(issues)
           .set({ hiddenAt: now, updatedAt: now })
@@ -7478,6 +7483,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       try {
         return await db.transaction(async tx => {
           await notifyDeliveryWork(tx, DELIVERY_QUEUES.skillPackages);
+          if (initial.length) await notifySkillVersionRetention(tx, companyId);
           await beforeDelete?.(tx);
           const deleted: CompanySkill[] = [];
           for (const before of initial) {

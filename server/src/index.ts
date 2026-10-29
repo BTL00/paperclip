@@ -1,3 +1,4 @@
+import { registerSkillVersionRetentionWork } from "./services/skill-version-retention-work.js";
 import { registerDatabaseBackupWork } from "./services/database-backup-work.js";
 import { registerToolConnectionHealthWork } from "./services/tool-connection-health-work.js";
 import { approvalQueueSeedingService, registerApprovalQueueSeedingWork } from "./services/approval-queue-seeding-work.js";
@@ -26,8 +27,6 @@ import { runtimeAssetRetention } from "./services/native-runtime/runtime-asset-r
 import { skillPackageWork } from "./services/skill-package-work.js";
 import { skillSourceSyncService } from "./services/skill-source-sync.js";
 import {
-  SKILL_VERSION_RETENTION_INTERVAL_MS,
-  SKILL_VERSION_RETENTION_STARTUP_DELAY_MS,
   skillVersionRetentionService,
 } from "./services/skill-version-retention.js";
 import {
@@ -49,7 +48,7 @@ import { caseHandoffDeliveryService } from "./services/case-handoff-delivery.js"
 import { registerScheduledWork } from "./services/scheduled-work.js";
 import type { createDeliveryWorkCoordinator } from "./services/delivery-work-coordinator.js";
 import { registerTerminalWorkspaceWork, TERMINAL_WORKSPACE_RETRY_MS } from "./services/terminal-workspace-work.js";
-import { isIdleTaskDrainActive, beginIdleTrackedWork, trackIdleWork, registerTaskDrainExpiryWork } from "./services/task-admission.js";
+import { isIdleTaskDrainActive, readTaskDrain, beginIdleTrackedWork, trackIdleWork, registerTaskDrainExpiryWork } from "./services/task-admission.js";
 import { markIdleStartupComplete, registerIdleLocalWorkProbe } from "./services/idle-local-work.js";
 import { clearIdleBackupWakeRequired, idleBackupWakeMarker, markIdleBackupWakeRequired, verifyIdleDatabaseBackup } from "./services/idle-database-backup.js";
 import { cloudWarmStandbyServerOptions } from "./middleware/cloud-warm-standby.js";
@@ -1261,39 +1260,6 @@ async function startServerWithDatabaseTeardown(
     heartbeatSchedulerInterval?.unref?.();
   };
   const skillSourceSync = skillSourceSyncService(db as any);
-  // Materialized skill versions are disk caches of version rows. The sweep is
-  // single-flight, bounded per tick, and stops between removals on shutdown or
-  // idle drain. The first sweep runs after startup without delaying readiness.
-  const skillVersionRetention = skillVersionRetentionService(db as any, {
-    dryRun: config.skillVersionRetentionDryRun,
-    keepNewest: config.skillVersionRetentionKeepNewest,
-    graceMs: config.skillVersionRetentionGraceMinutes * 60 * 1000,
-    shouldContinue: () => !heartbeatSchedulerStopped && !isIdleTaskDrainActive() && !isWarmStandby(),
-  });
-  let skillVersionRetentionInFlight = false;
-  let skillVersionRetentionContinuation: ReturnType<typeof setTimeout> | undefined;
-  const sweepSkillVersionSnapshots = () => {
-    if (!config.skillVersionRetentionEnabled || skillVersionRetentionInFlight || isIdleTaskDrainActive() || heartbeatSchedulerStopped || isWarmStandby()) return;
-    skillVersionRetentionInFlight = true;
-    trackHeartbeatSchedulerWork(skillVersionRetention.tick()
-      .then((result) => {
-        if (result.checked > 0 || result.failed > 0 || Object.keys(result.skipped).length > 0) {
-          logger.info({ ...result, dryRun: config.skillVersionRetentionDryRun }, "skill version snapshot retention");
-        }
-        if (result.truncated && !heartbeatSchedulerStopped) {
-          skillVersionRetentionContinuation = setTimeout(sweepSkillVersionSnapshots, 1000);
-          skillVersionRetentionContinuation.unref?.();
-        }
-      })
-      .catch((err) => {
-        logger.error({ err }, "skill version snapshot retention failed");
-      })
-      .finally(() => { skillVersionRetentionInFlight = false; }));
-  };
-  const skillVersionRetentionInterval = setInterval(sweepSkillVersionSnapshots, SKILL_VERSION_RETENTION_INTERVAL_MS);
-  skillVersionRetentionInterval.unref?.();
-  const skillVersionRetentionStartup = setTimeout(sweepSkillVersionSnapshots, SKILL_VERSION_RETENTION_STARTUP_DELAY_MS);
-  skillVersionRetentionStartup.unref?.();
   const nativeHarnessBackupExpiration = nativeHarnessBackupExpirationService(db as any, {
     dryRun: config.nativeHarnessBackupExpirationDryRun,
     closedForDays: config.nativeHarnessBackupExpirationDays,
@@ -1380,6 +1346,14 @@ async function startServerWithDatabaseTeardown(
   server.on("close", () => { void taskDrainExpiryWork.stop(); });
   const executionSchedule = executionControlSchedule(db);
   const workspaceRecoveryRuntime = environmentRuntimeService(db, { pluginWorkerManager });
+  const skillVersionRetentionWorker = config.skillVersionRetentionEnabled
+    ? registerSkillVersionRetentionWork(deliveryWork, skillVersionRetentionService(db as any, {
+      dryRun: config.skillVersionRetentionDryRun,
+      keepNewest: config.skillVersionRetentionKeepNewest,
+      graceMs: config.skillVersionRetentionGraceMinutes * 60 * 1000,
+    }), () => !heartbeatSchedulerStopped && !isIdleTaskDrainActive() && !isWarmStandby())
+    : null;
+  if (skillVersionRetentionWorker) trackHeartbeatSchedulerWork(skillVersionRetentionWorker.ready);
   const workspaceRecoveryWork = registerWorkspaceRecoveryWork(db, deliveryWork, workspaceRecoveryRuntime,
     accountingHeartbeat.resumeRemoteStopComments, () => !heartbeatSchedulerStopped);
   registerExecutionControlWork(deliveryWork, [
@@ -1985,8 +1959,6 @@ async function startServerWithDatabaseTeardown(
           );
         }
 
-        scheduled.timers.wake();
-
         if (isIdleTaskDrainActive() || heartbeatSchedulerStopped) return;
         scheduleExternalObjectRefreshSweep(new Date());
 
@@ -2083,21 +2055,25 @@ async function startServerWithDatabaseTeardown(
       }));
     };
     const startHeartbeatScheduler = () => {
-      const scheduled = registerScheduledWork(deliveryWork, db, {
+      const scheduled = registerScheduledWork(deliveryWork, {
         retryMs: config.heartbeatSchedulerIntervalMs,
-        tickTimers: async () => {
-          if ((await heartbeat.resolveSchedulingSuppression()).suppressed) return;
-          const result = await heartbeat.tickTimers(new Date());
+        tickAgentTimers: async signal => {
+          const result = await heartbeat.tickAgentTimers(new Date(),
+            () => !signal.aborted && readTaskDrain(new Date()) === null && !isWarmStandby() && !heartbeatSchedulerStopped);
           if (result.enqueued > 0) logger.info({ ...result }, "heartbeat timer tick enqueued runs");
         },
         canRun: () => !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped,
+        nextAgentTimerAt: () => heartbeat.nextAgentTimerAt(),
+        nextIssueMonitorAt: () => heartbeat.nextIssueMonitorAt(),
+        tickIssueMonitors: signal => heartbeat.tickIssueMonitors(new Date(),
+          () => !signal.aborted && !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped),
         nextRoutineRunAt: () => routines.nextScheduledTriggerAt(),
         tickRoutines: signal => routines.tickScheduledTriggers(new Date(),
           () => !signal.aborted && !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped).then(result => {
           if (result.triggered > 0) logger.info({ ...result }, "routine scheduler tick enqueued runs");
         }),
       });
-      trackHeartbeatSchedulerWork(Promise.all([scheduled.timers.ready, scheduled.routines.ready]));
+      trackHeartbeatSchedulerWork(Promise.all([scheduled.timers.ready, scheduled.monitors.ready, scheduled.routines.ready]));
       startHeartbeatSchedulerInterval(createHeartbeatSchedulerTick(scheduled));
     };
     trackHeartbeatSchedulerWork(runStartupHousekeeping().then(() => {
@@ -2215,21 +2191,19 @@ async function startServerWithDatabaseTeardown(
   ) => {
     await systemdNotify(["--stopping", `--status=Stopping after ${signal}`]);
     heartbeatSchedulerStopped = true;
+    skillVersionRetentionWorker?.unsubscribe();
     await taskDrainExpiryWork.stop();
-    clearInterval(skillVersionRetentionInterval);
-    clearTimeout(skillVersionRetentionStartup);
-    clearTimeout(skillVersionRetentionContinuation);
     clearInterval(nativeHarnessBackupExpirationInterval);
     clearTimeout(nativeHarnessBackupExpirationStartup);
     clearTimeout(nativeHarnessBackupExpirationContinuation);
     unsubscribeNativeRunnerEvidence();
-    await skillVersionRetention.dispose();
     await skillSourceSync.stop();
     unsubscribeChatCompletions();
     unsubscribeNativeResponsePresentation?.();
     unsubscribeNativeWorkspaceFinalization?.();
     unsubscribeRetainedNativeSessionCleanup?.();
     await deliveryWork.stop();
+    await skillVersionRetentionWorker?.dispose();
     await workspaceRecoveryWork.stop();
     unregisterTerminalWorkspaceProbe?.();
     unsubscribeNativeWorkspaceSyncRetention?.();

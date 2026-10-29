@@ -1,3 +1,4 @@
+import { skillVersionRetentionService } from "../services/skill-version-retention.js";
 import { approvalQueueSeedingService } from "../services/approval-queue-seeding-work.js";
 import { joinRequestRetentionService } from "../services/join-request-retention.js";
 import { approvalRetentionService } from "../services/approval-retention.js";
@@ -154,7 +155,10 @@ const {
     sweepStaleIssueLocks: vi.fn(async () => ({ cleared: 0 })),
     sweepPendingCleanupLeases: vi.fn(async () => ({ swept: 0, destroyed: 0, capped: 0 })),
     sweepExpiredRuntimeStatuses: vi.fn(() => 0),
-    tickTimers: vi.fn(async () => ({ checked: 0, enqueued: 0, skipped: 0 })),
+    tickAgentTimers: vi.fn(async () => ({ checked: 0, enqueued: 0, skipped: 0 })),
+    nextAgentTimerAt: vi.fn(async () => null),
+    tickIssueMonitors: vi.fn(async () => ({ checked: 0, triggered: 0, skipped: 0 })),
+    nextIssueMonitorAt: vi.fn(async () => null),
   };
   const heartbeatServiceFactoryMock = vi.fn(() => heartbeatServiceMock);
   const issueThreadInteractionServiceMock = {
@@ -535,6 +539,13 @@ vi.mock("../board-claim.js", () => ({
   initializeBoardClaimChallenge: vi.fn(async () => undefined),
 }));
 
+vi.mock("../services/skill-version-retention.js", () => ({
+  skillVersionRetentionService: vi.fn(() => ({
+    listCompanies: vi.fn(async () => []), pruneCompany: vi.fn(async () => ({ checked: 0, truncated: false, nextRunAt: null })),
+    dispose: vi.fn(async () => {}), graceMs: 60 * 60_000,
+  })),
+}));
+
 vi.mock("../auth/better-auth.js", () => ({
   createBetterAuthHandler: vi.fn(() => undefined),
   createBetterAuthInstance: createBetterAuthInstanceMock,
@@ -569,6 +580,28 @@ describe("startServer feedback export wiring", () => {
     createBetterAuthInstanceMock.mockReturnValue({});
     deriveAuthTrustedOriginsMock.mockReturnValue([]);
     process.env.BETTER_AUTH_SECRET = "test-secret";
+  });
+
+  it.each([false, true])("registers skill cache retention only when enabled (%s)", async enabled => {
+    loadConfigMock.mockReturnValue(buildTestConfig({ skillVersionRetentionEnabled: enabled }));
+    await startServer(); await settleStartupHousekeeping();
+    expect(skillVersionRetentionService).toHaveBeenCalledTimes(enabled ? 1 : 0);
+    expect(deliveryWorkRegisterMock.mock.calls.filter(([queue]) => queue === DELIVERY_QUEUES.skillVersionRetention)).toHaveLength(enabled ? 1 : 0);
+  });
+
+  it("keeps held skill-cache reconstruction tracked without delaying readiness", async () => {
+    loadConfigMock.mockReturnValue(buildTestConfig({ skillVersionRetentionEnabled: true }));
+    const pending = Promise.withResolvers<Array<{ id: string }>>();
+    const list = vi.fn(() => pending.promise);
+    vi.mocked(skillVersionRetentionService).mockReturnValueOnce({ listCompanies: list,
+      pruneCompany: vi.fn(), dispose: vi.fn(async () => {}), graceMs: 60 * 60_000 } as never);
+    try {
+      await startServer(); await settleStartupHousekeeping();
+      expect(list).toHaveBeenCalledOnce(); expect(getStartupRecoveryState().phase).toBe("ready");
+      expect(idleWorkSnapshot().active).toBe(1);
+    } finally { pending.resolve([]); await settleStartupHousekeeping(); }
+    expect(idleWorkSnapshot().active).toBe(0);
+    expect(deliveryWorkErrors.filter(error => error.queue === DELIVERY_QUEUES.skillVersionRetention)).toEqual([]);
   });
 
   it.each([false, true])("registers response recovery and its shutdown subscription only when maintenance is enabled (%s)", async enabled => {
@@ -1168,7 +1201,9 @@ describe("startServer feedback export wiring", () => {
       await settleStartupHousekeeping();
 
       expect(heartbeatServiceMock.reapOrphanedRuns).not.toHaveBeenCalled();
-      expect(heartbeatServiceMock.tickTimers).not.toHaveBeenCalled();
+
+
+      expect(heartbeatServiceMock.tickAgentTimers).toHaveBeenCalledTimes(1);
       expect(environmentCustomImagesServiceMock.cleanupExpiredSetupSessions).toHaveBeenCalledTimes(1);
 
       expect(intervalCallback).not.toBeNull();
@@ -1176,7 +1211,7 @@ describe("startServer feedback export wiring", () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(heartbeatServiceMock.tickTimers).not.toHaveBeenCalled();
+      expect(heartbeatServiceMock.tickAgentTimers).toHaveBeenCalledTimes(1);
       expect(externalObjectsServiceMock.refreshDueObjectsForActiveCompanies).toHaveBeenCalledTimes(1);
       expect(issueThreadInteractionServiceMock.sweepMergedPullRequestConfirmations).toHaveBeenCalledTimes(1);
       expect(executionWorkspaceServiceMock.sweepTerminalWorkspaces).toHaveBeenCalledTimes(1);

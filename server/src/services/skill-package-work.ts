@@ -95,7 +95,7 @@ export function skillPackageWork(db: Db, storage?: StorageService) {
             for (const agent of await tx.select({ config: agents.adapterConfig }).from(agents).where(eq(agents.companyId, row.companyId))) {
               for (const entry of readPaperclipSkillSyncPreference(agent.config ?? {}).desiredSkillEntries) if (entry.versionId) pinned.add(entry.versionId);
             }
-            const active = await protectedVersions(tx as unknown as Db, row.companyId);
+            const { versions: active } = await protectedVersions(tx as unknown as Db, row.companyId);
             if (!active || referenced.some(version => active.has(version.id) || pinned.has(version.id))) return;
             signal.throwIfAborted();
             // Metadata/recipe remain. Triggered deletion receipts retain the old
