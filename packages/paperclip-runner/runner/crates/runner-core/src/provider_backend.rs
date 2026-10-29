@@ -5493,6 +5493,37 @@ mod tests {
     }
 
     #[test]
+    fn textless_opencode_transport_completion_does_not_claim_work_success() {
+        for message in [None, Some("   ".to_owned())] {
+            let mut state = opencode_result_state();
+            state.last_agent_message = message;
+
+            let events = terminal_events(&state, "turn.completed", None);
+
+            assert_eq!(events.len(), 2);
+            assert_eq!(events[0].event_type, "run.result.proposed");
+            let result = &events[0].payload;
+            assert_eq!(result["reportedWorkDisposition"], "needs_review");
+            assert_eq!(result["completionClaim"]["objectiveSatisfied"], false);
+            assert!(result["completionClaim"]["criteria"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|criterion| criterion["status"] == "unknown"
+                    && criterion["evidenceRefs"].as_array().unwrap().is_empty()));
+            assert!(result["evidence"].as_array().unwrap().is_empty());
+            assert!(!result["completionClaim"]["remainingWork"]
+                .as_array()
+                .unwrap()
+                .is_empty());
+            assert_eq!(events[1].event_type, "run.terminal");
+            assert_eq!(events[1].payload["turnTerminalState"], "completed");
+            assert_eq!(events[1].payload["runTerminalState"], "succeeded");
+            assert_eq!(events[1].payload["reportedWorkDisposition"], "needs_review");
+        }
+    }
+
+    #[test]
     fn opencode_terminal_fallback_uses_its_actual_provider_identity() {
         let mut state = CodexProviderState::new(
             CodexProviderConfig {
