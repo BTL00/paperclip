@@ -696,7 +696,7 @@ describe("runner API request boundary", () => {
     const input = { ...io(request), beforeDispatch: vi.fn(), readFile: vi.fn(), saveResponse: vi.fn() };
     await expect(executeRunnerApi({ ...mutation, responseText: {} }, context, input)).rejects.toMatchObject({
       status: 400,
-      message: "responseText requires a GET operation. This request was not sent. Remove responseText to submit this mutation.",
+      message: "responseText requires a GET operation. This request was not sent. For an otherwise permitted mutation, remove responseText.",
     });
     expect(request).not.toHaveBeenCalled();
     expect(input.beforeDispatch).not.toHaveBeenCalled();
@@ -709,12 +709,23 @@ describe("runner API request boundary", () => {
     }));
     const input = { ...io(request), saveResponse: vi.fn() };
     await expect(executeRunnerApi({ operationId: createProject, body: { name: "Once" }, responseText: {} }, context, input))
-      .rejects.toThrow("Remove responseText to submit this mutation.");
+      .rejects.toThrow("For an otherwise permitted mutation, remove responseText.");
     expect(request).not.toHaveBeenCalled();
     const result = await executeRunnerApi({ operationId: createProject, body: { name: "Once" } }, context, input);
     expect(result).toMatchObject({ ok: true, status: 201, data: { id: "project-a", name: "Once" } });
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Once" }) }));
+    expect(input.saveResponse).not.toHaveBeenCalled();
+  });
+  it("keeps mode-denied mutations denied after correcting their text window", async () => {
+    const request = vi.fn<typeof fetch>();
+    const input = { ...io(request), saveResponse: vi.fn() };
+    const denied = { ...context, workMode: "ask" };
+    await expect(executeRunnerApi({ operationId: createProject, body: { name: "Once" }, responseText: {} }, denied, input))
+      .rejects.toThrow("For an otherwise permitted mutation, remove responseText.");
+    await expect(executeRunnerApi({ operationId: createProject, body: { name: "Once" } }, denied, input))
+      .rejects.toMatchObject({ status: 403 });
+    expect(request).not.toHaveBeenCalled();
     expect(input.saveResponse).not.toHaveBeenCalled();
   });
   it("rejects binary, invalid UTF-8 and offsets that split text", async () => {
