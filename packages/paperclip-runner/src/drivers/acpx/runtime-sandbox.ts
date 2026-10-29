@@ -425,12 +425,13 @@ export async function prepareAcpxRuntimeSandbox(input: {
     const configuration = piProviderConfiguration(input.environment);
     if (configuration) await writePrivateFile(join(agentHomeDirectory, "models.json"), configuration.json);
   }
+  const claudeSettingsPath = join(preparedHome ? configDirectory : agentHomeDirectory, "settings.json");
   const initializeOwnedConfiguration = input.agent === "claude" ? async () => {
     // ACP otherwise rewrites exact IDs (including user-entered model IDs) to
     // picker aliases such as "sonnet". Its supported availableModels setting
     // preserves our requested ID through selection and model verification.
     await writePrivateFile(
-      join(agentHomeDirectory, "settings.json"),
+      claudeSettingsPath,
       `${JSON.stringify({
         model: input.binding.requestedModel,
         availableModels: [input.binding.requestedModel],
@@ -564,7 +565,7 @@ export async function prepareAcpxRuntimeSandbox(input: {
         }
       : {}),
     ...(input.agent === "claude"
-      ? { CLAUDE_CONFIG_DIR: agentHomeDirectory }
+      ? { CLAUDE_CONFIG_DIR: agentHomeDirectory, ...(preparedHome ? { PAPERCLIP_ACPX_CLAUDE_SETTINGS: claudeSettingsPath } : {}) }
       : {}),
     ...(input.agent === "codex"
       ? {
@@ -760,7 +761,7 @@ function isPersistableEnvironmentName(name: string): boolean {
       name,
     ) ||
     /^(?:HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME)$/.test(name) ||
-    /^(?:PAPERCLIP_ACPX_PROFILE|PAPERCLIP_ACPX_ISOLATED_CONTEXT)$/.test(name) ||
+    /^(?:PAPERCLIP_ACPX_PROFILE|PAPERCLIP_ACPX_ISOLATED_CONTEXT|PAPERCLIP_ACPX_CLAUDE_SETTINGS)$/.test(name) ||
     /^(?:PI_CODING_AGENT_DIR|PI_SKIP_VERSION_CHECK|PI_TELEMETRY)$/.test(name) ||
     /^(?:CURSOR_CONFIG_DIR|CURSOR_DATA_DIR|AGENT_CLI_CREDENTIAL_STORE|NO_OPEN_BROWSER|NODE_DISABLE_COMPILE_CACHE)$/.test(name) ||
     /^(?:COPILOT_HOME|COPILOT_CACHE_HOME|COPILOT_AUTO_UPDATE|COPILOT_ALLOW_ALL|COPILOT_DISABLE_TERMINAL_TITLE|NO_COLOR)$/.test(name) ||

@@ -383,6 +383,38 @@ describe("ACPX runtime host", () => {
     expect(openRuntime).not.toHaveBeenCalled();
   });
 
+  it("admits concurrent Claude sessions in one prepared home without sharing settings or lifetime ownership", async () => {
+    const first = await hostFixture(), second = await hostFixture();
+    second.options.normalizedSessionId = "normalized-session-2";
+    const profile = join(await realpath(first.root), "profile");
+    await mkdir(profile, { mode: 0o700 });
+    const native = '{"permissions":{"allow":["Bash"]},"agentOwned":true}';
+    await writeFile(join(profile, "settings.json"), native);
+    const environment = { HOME: first.root, PAPERCLIP_RUNNER_PREPARED_HARNESS_HOME: profile };
+    const opened: AcpxRuntimePortOpenOptions[] = [];
+    const openRuntime = vi.fn(async (options: AcpxRuntimePortOpenOptions) => {
+      opened.push(options);
+      return runtimePort({ getStatus: async () => ({ models: { currentModelId: "claude-sonnet-5" } }) });
+    });
+    const options = (fixture: typeof first) => ({ ...fixture.options, agent: "claude" as const,
+      model: "claude-sonnet-5", permissionMode: "approve-all" as const, environment });
+    const a = await AcpxRuntimeHost.open(options(first), first.dependencies({ openRuntime }));
+    let b: AcpxRuntimeHost | undefined;
+    try {
+      b = await AcpxRuntimeHost.open(options(second), second.dependencies({ openRuntime }));
+      const paths = opened.map(value => value.launchEnvironment.PAPERCLIP_ACPX_CLAUDE_SETTINGS!);
+      expect(paths[0]).not.toBe(paths[1]);
+      for (const value of opened) expect(value.launchEnvironment.CLAUDE_CONFIG_DIR).toBe(profile);
+      for (const path of paths) expect(JSON.parse(await readFile(path, "utf8")).model).toBe("claude-sonnet-5");
+      expect(await readFile(join(profile, "settings.json"), "utf8")).toBe(native);
+      await expect(AcpxRuntimeHost.open(options(first), first.dependencies({ openRuntime }))).rejects.toThrow("already has an active lease");
+      expect(openRuntime).toHaveBeenCalledTimes(2);
+    } finally {
+      await b?.close({ reason: "second session complete" });
+      await a.close({ reason: "first session complete" });
+    }
+  });
+
   it("leaves an active Claude owner's effort settings unchanged when a second opener loses the lifetime lease", async () => {
     const fixture = await hostFixture();
     let settingsPath = "";

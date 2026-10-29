@@ -111,12 +111,14 @@ describe("Codex ACPX runtime adapter", () => {
     await port.close({ reason: "test complete" });
   });
 
-  it("admits an exact Claude model through the real ACP without a user model allowlist", async () => {
+  it.each([false, true])("admits an exact Claude model through the real ACP (prepared home: %s)", async prepared => {
     const root = await mkdtemp(join(tmpdir(), "preconfigured-claude-model-"));
     const home = join(root, "home"), cwd = join(root, "workspace"), config = join(home, ".claude");
     await Promise.all([mkdir(config, { recursive: true }), mkdir(cwd)]);
-    const settings = JSON.stringify({ model: "claude-sonnet-5-5", permissions: { deny: ["Bash"] } });
+    const settings = JSON.stringify({ model: prepared ? "native-model" : "claude-sonnet-5-5", ...(prepared ? { availableModels: ["native-model"], effortLevel: "low" } : {}), permissions: { deny: ["Bash"] } });
     await writeFile(join(config, "settings.json"), settings);
+    const launchSettings = join(root, "claude-launch.json");
+    await writeFile(launchSettings, JSON.stringify({model: "claude-sonnet-5-5", availableModels: ["claude-sonnet-5-5"], effortLevel: "high"}));
     // Model validation can reach only this local fixture, never a provider.
     const api = createServer(async (request, response) => {
       for await (const _chunk of request) { /* drain validation input */ }
@@ -133,8 +135,10 @@ describe("Codex ACPX runtime adapter", () => {
     };
     const options = { ...openOptions(command), profile: resolveQualifiedAcpxProfile("claude", "claude-sonnet-5-5"),
       cwd, stateDirectory: join(root, "state"), permissionMode: "approve-all" as const,
+      ...(prepared ? {claudeEffort: "high" as const} : {}),
       launchEnvironment: { HOME: home, CLAUDE_CONFIG_DIR: config, PATH: "/usr/bin:/bin", TMPDIR: root,
-        PAPERCLIP_RUNNER_HOME_MODE: "preconfigured", ANTHROPIC_API_KEY: "local-fixture-only",
+        ...(prepared ? {PAPERCLIP_ACPX_ISOLATED_CONTEXT: "1", PAPERCLIP_ACPX_CLAUDE_SETTINGS: launchSettings}
+          : {PAPERCLIP_RUNNER_HOME_MODE: "preconfigured"}), ANTHROPIC_API_KEY: "local-fixture-only",
         ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
     };
     let port: Awaited<ReturnType<typeof openCodexAcpxRuntime>> | undefined;

@@ -833,11 +833,24 @@ changing the run's permission mode or enabling preconfigured-home behavior.
 configuration directory. The environment must publish the selected skills before
 admission; Runner does not copy or delete skills in this directory.
 On Unix, the directory must belong to the Runner user and use mode `0700`;
-the provider lifetime lease rejects group/world access or another owner.
+prepared-home validation rejects group/world access or another owner.
 
-Runner binds the home into recovery identity and uses its existing provider
-lifetime lease. After acquiring that lease, it replaces Core-owned Claude settings
-with the current launch settings. History remains in the account directory.
+Runner binds the home into recovery identity. Claude history and skills stay in
+that account directory. Core writes its launch settings to
+`<session-runtime>/acpx/<binding>/config/settings.json` and passes that file through
+the SDK's settings layer. Its provider lifetime lease belongs to the session
+runtime root, so an idle retained session does not block another session using
+the same account home. A second owner of the same session still fails admission.
+
+Native user settings remain active, as they do for a preconfigured Codex home.
+Core supplies its model, model selection list, effort (when configured), and
+Paperclip tool allow rules at launch. Claude merges native permission rules;
+native allows can avoid the Core permission callback, and native denies can
+block tools before that callback. Hooks and other native configuration can also
+affect execution. A prepared home is not an isolated configuration source.
+Future work may verify native settings and reject or conditionally repair
+properties that conflict with Core-owned launch controls if that need arises.
+
 Task control files remain in the session runtime directory. Separate directories
 under one OS user are not a credential isolation boundary.
 

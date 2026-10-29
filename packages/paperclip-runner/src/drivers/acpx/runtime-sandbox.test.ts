@@ -82,7 +82,7 @@ describe("ACPX runtime sandbox", () => {
     }
   });
 
-  it("reuses a prepared Claude home without importing old permission settings", async () => {
+  it("keeps native Claude settings separate from session-owned launch settings", async () => {
     const fixture = await sandboxFixture("claude");
     const home = await realpath(fixture.root);
     const profile = join(home, "profile");
@@ -100,14 +100,20 @@ describe("ACPX runtime sandbox", () => {
     expect(first.persistedEnvironment.CLAUDE_CONFIG_DIR).toBe(profile);
     expect(first.launchEnvironment.PAPERCLIP_ACPX_ISOLATED_CONTEXT).toBe("1");
     expect(first.protectedPaths).toContain(profile);
-    const settings = JSON.parse(await readFile(join(profile, "settings.json"), "utf8"));
-    expect(settings.agentOwned).toBeUndefined();
+    expect(await readFile(join(profile, "settings.json"), "utf8")).toBe('{"agentOwned":true}');
+    const settingsPath = join(first.configDirectory, "settings.json");
+    expect(first.launchEnvironment.PAPERCLIP_ACPX_CLAUDE_SETTINGS).toBe(settingsPath);
+    expect(first.persistedEnvironment.PAPERCLIP_ACPX_CLAUDE_SETTINGS).toBe(settingsPath);
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(settings.model).toBe(fixture.binding.requestedModel);
     expect(await readFile(join(profile, "skills", "SKILL.md"), "utf8")).toBe("Shared skills");
     const other = await sandboxFixture("claude");
     const second = await prepareAcpxRuntimeSandbox({ binding: other.binding, agent: "claude", environment });
     expect(second.agentHomeDirectory).toBe(profile);
     expect(second.root).not.toBe(first.root);
+    await second.initializeOwnedConfiguration!();
+    expect(second.launchEnvironment.PAPERCLIP_ACPX_CLAUDE_SETTINGS).not.toBe(settingsPath);
+    expect((await stat(settingsPath)).mode & 0o777).toBe(0o600);
     const conflicting = { ...environment, CLAUDE_CONFIG_DIR: "ignored-relative-path" };
     const overridden = await prepareAcpxRuntimeSandbox({ binding: other.binding, agent: "claude", environment: conflicting });
     expect(overridden.agentHomeDirectory).toBe(profile);

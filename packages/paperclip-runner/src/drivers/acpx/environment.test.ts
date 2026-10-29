@@ -6,6 +6,10 @@ afterEach(() => vi.unstubAllEnvs());
 import { ACPX_CREDENTIAL_BINDING_ENV, createAcpxCredentialBinding, createAcpxSidecarHostEnvironment, createSanitizedAcpxSpawnInput } from "./environment.js";
 
 describe("ACPX launch environment", () => {
+  it("rejects task-selected paths for Core-owned Claude launch settings", () => {
+    const environment = configuredEnvironmentProjection({ PAPERCLIP_ACPX_CLAUDE_SETTINGS: "/untrusted/settings.json" });
+    expect(createSanitizedAcpxSpawnInput(environment, "claude").env.PAPERCLIP_ACPX_CLAUDE_SETTINGS).toBeUndefined();
+  });
   it("does not inherit ambient prepared storage", () => {
     vi.stubEnv("PAPERCLIP_RUNNER_PREPARED_HARNESS_HOME", "/ambient/claude");
     vi.stubEnv("CLAUDE_CONFIG_DIR", "/ambient/claude");

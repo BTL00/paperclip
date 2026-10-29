@@ -72,6 +72,12 @@ server-selected runtime context.
 Policy: Environment management is instance administrator/board; permitted assignment
 uses agent/project policy.
 
+Prepared Claude storage preserves native user configuration. Session launch
+settings override Core-selected fields, but Claude merges permission rules;
+native allows can avoid Core's callback, and native denies can block tools
+before it. This is an execution-account trust boundary, not per-session
+configuration isolation. [Runner contract](../../packages/paperclip-runner/README.md#prepared-harness-storage).
+
 Evidence: `source-only` — [implementation](../../server/src/routes/environments.ts#L353)
 at the reviewed commit above.
 

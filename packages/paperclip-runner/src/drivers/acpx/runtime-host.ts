@@ -503,7 +503,8 @@ export class AcpxRuntimeHost {
           signal: options.signal,
           acquire: () =>
             acquireAcpxProviderLifetimeLease({
-              agentHomeDirectory: preconfigured ? sandbox.root : sandbox.agentHomeDirectory,
+              // Core owns session launch settings; Claude's history home may be shared.
+              agentHomeDirectory: preconfigured || options.agent === "claude" ? sandbox.root : sandbox.agentHomeDirectory,
             }),
           resource: "provider_lifetime",
           releaseLate: (lateLifetime) => lateLifetime.close(),

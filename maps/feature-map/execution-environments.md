@@ -34,6 +34,12 @@ or instance administrator.
 
 Choose the environment in agent/project/workspace configuration, then inspect the resulting task/run and workspace.
 
+Prepared Claude homes retain identity history, native settings, and installed
+skills. Core keeps launch settings and provider lifetime ownership in each
+session's runtime directory, so retained sessions can share the home. Native
+permission rules still participate; Core's permission callback does not see
+operations Claude already allows or denies. See the [Runner storage contract](../../packages/paperclip-runner/README.md#prepared-harness-storage).
+
 ## Driving it with Playwright and the Paperclip CLI
 
 Preconditions: follow the [baseline](./README.md#before-driving-a-journey). Use an owned disposable target and a supported provider plugin. Record provider, target identity, account, and spending constraints before a live remote run.
