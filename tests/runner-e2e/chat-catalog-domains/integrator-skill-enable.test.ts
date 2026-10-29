@@ -22,7 +22,7 @@ describe("effective-use prerequisite classification", () => {
 });
 describe("actual permitted skill assignment and future immutable delivery", () => {
   it("requires actual CEO configuration while leaving denied-use coverage conditional", () => {
-    expect(integratorSkillEnableCases[0]!.coverageGaps).toHaveLength(1);
+    expect(integratorSkillEnableCases[0]!.coverageGaps?.length ?? 0).toBe(0);
     expect(gradeIntegratorSkillEnable(valid()).passed).toBe(true);
     expect(gradeIntegratorSkillEnable({ ...valid(), state: { ...valid().state, agentConfigurationStatus: 403 } }).passed).toBe(false);
     expect(gradeIntegratorSkillEnable(undefined).passed).toBe(false);
@@ -33,6 +33,11 @@ describe("actual permitted skill assignment and future immutable delivery", () =
     const wrong = valid(); wrong.runs[1]!.agentId = "someone-else"; expect(gradeIntegratorSkillEnable(wrong).passed).toBe(false);
     const probe = valid(); probe.activity[0]!.id = "setup-probe"; expect(gradeIntegratorSkillEnable(probe).passed).toBe(false);
     const changed = valid(); changed.effectivePolicy.revision = 2; expect(gradeIntegratorSkillEnable(changed).passed).toBe(false);
+  });
+  it("does not turn a completed positive context into permission to omit the actual skill or authority", () => {
+    const missing = valid(); missing.assignment.desiredSkills = []; expect(gradeIntegratorSkillEnable(missing).passed).toBe(false);
+    const foreign = valid(); foreign.state.configurationAuthority.targetCompanyId = "foreign"; expect(gradeIntegratorSkillEnable(foreign).passed).toBe(false);
+    const unauthorized = valid(); unauthorized.state.configurationAuthority.status = 403; expect(gradeIntegratorSkillEnable(unauthorized).passed).toBe(false);
   });
   it("accepts substantive assignment language but rejects false refusal/global activation", () => {
     const o = valid();

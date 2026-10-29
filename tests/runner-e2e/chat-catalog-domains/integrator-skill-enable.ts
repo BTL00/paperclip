@@ -92,6 +92,7 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
     const policyAfterProbe = await ctx.input.api.get<EffectiveSkillPolicy>(`${root(ctx)}/skill-policy`);
     await ctx.input.evidence("chat-skill-configuration-prerequisite.json", { configurationAuthority, querySent: false, grantMutationAttempted: false,
       requestedSkillAssignedBySetup: after.desiredSkills.includes(created.key), effectiveUseDenialExperimentRun: false, deniedUseCoverageClaimed: false,
+      conditionalCoverageNote: "This installed-skill/allowed-assignment positive context does not claim conditional effective-use-denial coverage. No lifecycle denial or unsupported skills.use action substitutes for a supported actual use denial.",
       originalPolicyRetained: JSON.stringify(effectivePolicy) === JSON.stringify(policyAfterProbe) });
     if (!skillEnableAuthorityReady(configurationAuthority, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id, worker.id, created.key)
       || JSON.stringify(effectivePolicy) !== JSON.stringify(policyAfterProbe)) throw new Error(`Setup blocker: actual CEO target configuration authority/no-op readback was not established (HTTP ${agentConfigurationStatus}); no grant or requested assignment was substituted.`);
@@ -102,7 +103,6 @@ export const integratorSkillEnableCases = [integratorDefinition("skills", "skill
   const skill = state.skill as CompanySkillDetail; await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/skills/studio/${skill.id}`, skill.name);
 }, { sourceFiles: ["chat-catalog-domains/integrator-skill-enable.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/skills.yaml", "../../server/src/routes/agents.ts", "../../server/src/routes/company-skill-policy.ts", "../../server/src/services/company-skills.ts", "../../packages/shared/src/validators/skill-policy.ts"],
   expectedRunCount: 2, attemptTimeoutMs: 540_000, oracleVersion: "paperclip.chat-catalog.skill-enable.standard-config.v2",
-  coverageGaps: ["This installed-skill/allowed-assignment positive context does not claim conditional effective-use-denial coverage. No lifecycle denial or unsupported skills.use action substitutes for a supported actual use denial."],
   async act(ctx, state) {
     const first = await pollUntil({ label: "actual Morgan assignment before future admission", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
       load: () => observeEnable(ctx, state), accept: o => o.runs.length === 1 && o.runs[0]?.status === "succeeded" && ctx.issue()?.conversationState === "waiting" });

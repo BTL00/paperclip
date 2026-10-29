@@ -5058,9 +5058,6 @@
       "../../packages/shared/src/validators/skill-policy.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.skill-enable.standard-config.v2",
-    "coverageGaps": [
-      "This installed-skill/allowed-assignment positive context does not claim conditional effective-use-denial coverage. No lifecycle denial or unsupported skills.use action substitutes for a supported actual use denial."
-    ],
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
