@@ -1,4 +1,4 @@
-// Grok admission source identity: sha256:b13fecb395e1f269fc0f5efefa1ddf821f7ef2041a12e89389e5b5e407915fef
+// Grok admission source identity: sha256:a4100e2690bbf5f0f64dd62aea4004040dfbe75add52455d5e354e436678629c
 // This launcher is admitted by digest and receives a verified native executable.
 // Never resolve an executable through PATH or accept command-line overrides.
 const { isAbsolute, join } = require("node:path");

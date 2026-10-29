@@ -4,6 +4,18 @@ Product map: [runs-adapters](../feature-map/runs-adapters.md).
 
 Feature ID: `runs-adapters`.
 
+Scoped local Git author contract (`runs-adapters/runs`): an admitted execution
+with managed launchers can create a local commit without a GitHub grant. A
+private per-operation Git config supplies `Paperclip <noreply@paperclip.ing>`
+only as a default. Repository/command configuration and captured managed identity
+retain precedence. The default conveys no API, repository-network or credential
+authority; current run, company, trust and GitHub-grant checks stay in force.
+The [launcher controls](../../packages/adapter-utils/src/github-launcher.test.ts)
+exercise real Git with controlled broker responses; the
+[staging controls](../../packages/adapter-utils/src/github-launcher-environment.test.ts)
+exercise real local shells through a simulated sandbox transport. Neither
+qualifies live cloud execution or GitHub writes. No REST operation changes.
+
 Delegated native entries inherit the [native admission and work-mode limits](README.md#native-rest-transport).
 
 Review date: 2026-10-26. Source base: `a1f77821b9cd5c9c846fdf7a0fa5cc620ad2b6bb`; implementation: [#17737](https://github.com/paperclipai/paperclip/pull/17737).
@@ -64,7 +76,9 @@ for eligible agents.
 Scoped source-only evidence: [adapter discovery](../../server/src/routes/adapters.ts)
 reports supported runners/effective default for the selected company/environment;
 [selection policy](../../server/src/services/agent-runner-selection.ts) reads
-server-owned immutable sandbox facts without provisioning. New Codex defaults
+server-owned immutable sandbox facts without provisioning. Managed Cloud images
+skip saved qualification after company access checks; custom environments and
+active captured custom images retain the existing policy. New Codex defaults
 and explicit overrides follow the [shared runner contract](../../packages/shared/src/agent-runner.ts);
 Claude follows its qualified rollout described above. The board inventory does not grant a
 native agent an equivalent discovery binding. See
@@ -186,7 +200,8 @@ remain separate from live latency and permitted/denied agent acceptance.
 Scoped OpenCode assigned-tool source evidence: local and remote native sessions
 use the server-owned authenticated relay. The provider sees bounded
 `paperclip_search_assigned_tools` and `paperclip_call_assigned_tool` schemas,
-then uses pinned aliases. Search intersects fresh grants and work modes; calls
+then uses pinned aliases. Search describes its 1–20 page limit and default of 5
+in the tool and parameter descriptions. It intersects fresh grants and work modes; calls
 retain the run's original gateway policy, validation, approvals, revocation and
 audit path. Prompt arguments cannot select gateway authority. Assigned gateway
 launch credentials stay on the controller. Former direct-catalog OpenCode

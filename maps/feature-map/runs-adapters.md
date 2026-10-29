@@ -40,6 +40,17 @@ The agent header has one Run now action. Administrators can enable
 Capture raw provider traces under the agent configuration’s Debugging section
 for future runs. The header shows Raw tracing on while that setting is enabled.
 
+Managed Git launchers let agents save local commits without a GitHub connection
+or manual author setup. Verify a fresh checkout and a second shell in the same
+workspace: both commits should use `Paperclip <noreply@paperclip.ing>` when no
+identity is configured. Repository and command settings override this default;
+an eligible managed identity still takes precedence. Inspect stored commit
+metadata and confirm the default did not change repository or host configuration.
+Repeat with unavailable GitHub access; authenticated operations must still obey
+the existing credential checks. The [launcher controls](../../packages/adapter-utils/src/github-launcher.test.ts)
+and [real-shell staging controls](../../packages/adapter-utils/src/github-launcher-environment.test.ts)
+cover this local behavior, separately from live cloud execution and GitHub writes.
+
 For latency diagnosis with an operator OTLP endpoint, search the hashed run ID
 without restricting the root span name. Compare workspace preparation with its
 `workspace_<step>` intervals. Measure controller readiness separately through
@@ -201,7 +212,12 @@ an explicit Paperclip request must give target-qualification guidance. Begin the
 ordinary task to exercise the existing lazy environment path. This live journey
 remains separate from the resolver's source controls.
 
-For sandbox defaults, follow the [environment probe](./execution-environments.md#environment-settings)
+Managed Cloud images default to Paperclip Runner without a saved platform
+qualification. A platform snapshot update must not change that default or
+require a separate qualification request before Test. Disabled or overridden
+adapters still restrict availability, and actual runtime startup can still fail.
+
+For other sandbox defaults, follow the [environment probe](./execution-environments.md#environment-settings)
 recipe first. Discovery/creation read company-bound immutable-image evidence
 without allocating a target. A mutable image or snapshot name does not establish
 native compatibility. Then test the actual selected runtime with its selected
@@ -222,7 +238,9 @@ cover ordering, failure drain and credential projection; they do not qualify a
 live response-time target.
 For native OpenCode with assigned connections, inspect the provider tool surface
 on both local and sandbox execution. It should contain bounded assigned-tool
-search/call schemas. Discover an allowed tool, call its returned alias, revoke
+search/call schemas. Confirm the search description states the 1–20 page limit
+and default of 5. Follow `nextOffset` to inspect later pages.
+Discover an allowed tool, call its returned alias, revoke
 its grant, and confirm discovery and execution enforce that revocation. Repeat
 in planning/ask mode with a write tool and confirm denial. The controller must
 retain the assigned gateway URL and token. An older direct-catalog OpenCode

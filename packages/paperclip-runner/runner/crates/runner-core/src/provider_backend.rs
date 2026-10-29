@@ -3303,6 +3303,10 @@ impl CodexCommandExecutor {
             state.ambiguous_turn_start_pending = true;
         }
         self.save_state()?;
+        let run_id = self
+            .event_identity
+            .as_ref()
+            .map(|identity| identity.run_id.clone());
         let (
             start_result,
             completion_authority_retained,
@@ -3318,6 +3322,7 @@ impl CodexCommandExecutor {
                     reasoning_mode,
                 },
                 payload.get("effort"),
+                run_id.as_deref(),
             );
             (
                 result,

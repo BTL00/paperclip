@@ -9,12 +9,12 @@ export const QUALIFIED_ACPX_PROFILE_DATA = {
     "protocolVersion": 1,
     "acpxVersion": "0.13.1",
     "agent": "grok",
-    "agentProfileVersion": 8,
+    "agentProfileVersion": 13,
     "agentServerPackage": "builtin:grok-acp",
     "agentServerVersion": "1",
     "agentRuntimePackage": "native:grok",
     "agentRuntimeVersion": "1.0.13",
-    "commandDigest": "sha256:ab17a3e5cb0f9859487d9494d91b7a2f95c2bb2b0c652e5b2b5bd04294f14bf6",
+    "commandDigest": "sha256:6d0d1b4a4af7209df3102c48289d320eae518f0a02fc8b4ccd52a19a6c1c91b8",
     "permissionPolicy": "interactive"
   },
   "pi": {
@@ -22,12 +22,12 @@ export const QUALIFIED_ACPX_PROFILE_DATA = {
     "protocolVersion": 1,
     "acpxVersion": "0.13.1",
     "agent": "pi",
-    "agentProfileVersion": 30,
+    "agentProfileVersion": 34,
     "agentServerPackage": "pi-acp",
     "agentServerVersion": "0.0.33",
     "agentRuntimePackage": "@earendil-works/pi-coding-agent",
     "agentRuntimeVersion": "1.0.0",
-    "commandDigest": "sha256:4517ab123dd89140ef462fc1905ac7a16a0dfcbaf21d67299a3c62de29c08a4d",
+    "commandDigest": "sha256:ed4b32cc8fbf36309d38b3bd378f41f8e7b9e96a2405d275cc55e89042d94c7f",
     "permissionPolicy": "interactive"
   },
   "cursor": {
@@ -35,12 +35,12 @@ export const QUALIFIED_ACPX_PROFILE_DATA = {
     "protocolVersion": 1,
     "acpxVersion": "0.13.1",
     "agent": "cursor",
-    "agentProfileVersion": 15,
+    "agentProfileVersion": 16,
     "agentServerPackage": "cursor-agent",
     "agentServerVersion": "2026.09.26-dd393fe",
     "agentRuntimePackage": null,
     "agentRuntimeVersion": null,
-    "commandDigest": "sha256:ac8092119542c8fbe95dae18ba5ef4d3689803fec56b7d2735fa193eea42f59b",
+    "commandDigest": "sha256:759e7415fea8ed2b6b0e6f362b57652b8768835f9d1fdae4a94c1b5eb3669301",
     "permissionPolicy": "interactive"
   },
   "copilot": {
@@ -48,12 +48,12 @@ export const QUALIFIED_ACPX_PROFILE_DATA = {
     "protocolVersion": 1,
     "acpxVersion": "0.13.1",
     "agent": "copilot",
-    "agentProfileVersion": 74,
+    "agentProfileVersion": 82,
     "agentServerPackage": "@github/copilot",
     "agentServerVersion": "1.0.88",
     "agentRuntimePackage": null,
     "agentRuntimeVersion": null,
-    "commandDigest": "sha256:0a0430cf135aa1b795913e612a261274ee3a711ff061971c6677629da3258dcc",
+    "commandDigest": "sha256:6a3b94bc014c0d36d301dfcf139dc5bf0c0e3813bcfca8b634c40482f2e31563",
     "permissionPolicy": "interactive"
   },
   "claude": {
