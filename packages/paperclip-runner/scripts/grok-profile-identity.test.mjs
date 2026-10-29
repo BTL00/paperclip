@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,10 +46,12 @@ test("the generator cannot overwrite a versioned identity after source changes",
   const manifest = JSON.parse(readFileSync(join(root, prefix, "acpx-profiles.json"), "utf8"));
   const fixture = `${prefix}test/fixtures/grok-profile-v${GROK_PROFILE_VERSION}-identity.json`;
   const launcher = `${prefix}src/providers/grok/launcher.cjs`;
+  const kimiFixture = `${prefix}test/fixtures/kimi-profile-v${manifest.profiles.kimi.agentProfileVersion}-identity.json`;
+  const kimiIdentity = JSON.parse(readFileSync(join(root, kimiFixture), "utf8"));
   try {
-    for (const path of new Set([...GROK_PROFILE_SOURCE_FILES, ...[
+    for (const path of new Set([...GROK_PROFILE_SOURCE_FILES, ...Object.keys(kimiIdentity.declaration.sources).map(path => prefix + path), kimiFixture, ...[
       "acpx-profiles.json", "cursor-distributions.json", "cursor-contract.json", "package.json",
-      "scripts/grok-profile-identity.mjs", "scripts/generate-acpx-profiles.mjs",
+      "scripts/grok-profile-identity.mjs", "scripts/kimi-profile-identity.mjs", "scripts/generate-acpx-profiles.mjs",
       `test/fixtures/copilot-profile-v${manifest.profiles.copilot.agentProfileVersion}-identity.json`,
       `test-fixtures/pi-acp/profile-v${manifest.profiles.pi.agentProfileVersion}-identity.json`,
     ].map(path => prefix + path), fixture])) {
@@ -71,4 +74,24 @@ test("the generator cannot overwrite a versioned identity after source changes",
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }
+});
+
+test("profile 13 preserves retained historical candidate 12 while binding the merged runtime sources", () => {
+  const published = readFileSync(join(root, "packages/paperclip-runner/test/fixtures/grok-profile-v11-identity.json"));
+  assert.equal(createHash("sha256").update(published).digest("hex"), "1e9fc14d7f9978ee1fdfcb436f4cedca67a07c00551670157cf6658e7056e7f0");
+  const bytes = readFileSync(join(root, "packages/paperclip-runner/test/fixtures/grok-profile-v12-identity.json"));
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "4f3f208e83446e3ab64c74dc9f213472e5f828945c1972f55939b22c5c023578");
+  const prior = JSON.parse(bytes.toString("utf8"));
+  const current = JSON.parse(readFileSync(join(root, "packages/paperclip-runner/test/fixtures/grok-profile-v13-identity.json"), "utf8"));
+  assert.deepEqual(current, grokProfileIdentity(root));
+  assert.equal(current.declaration.agentProfileVersion, 13);
+  assert.notEqual(current.commandDigest, prior.commandDigest);
+  assert.deepEqual(Object.keys(current.declaration.sources).filter(path => current.declaration.sources[path] !== prior.declaration.sources[path]), [
+    "patches/acpx@0.13.1.patch",
+    "packages/paperclip-runner/src/drivers/acpx/runtime-host.ts",
+    "packages/paperclip-runner/src/drivers/preconfigured-home.ts",
+    "packages/paperclip-runner/src/drivers/acpx/runtime-sandbox.ts",
+    "packages/paperclip-runner/runner/crates/runner-core/src/acpx_provider_backend.rs",
+    "packages/paperclip-runner/runner/crates/runner-core/src/acpx_sidecar_transport.rs",
+  ]);
 });

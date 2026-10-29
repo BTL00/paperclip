@@ -20,7 +20,7 @@ pub(crate) fn acpx_release_profile(agent: &str) -> Option<AcpxReleaseProfile> {
             agent_runtime_package: Some("native:grok"),
             agent_runtime_version: Some("1.0.13"),
             command_digest:
-                "sha256:f43a6f5a583972cdcb422784969cd6a97654655b0f135f1cf178317909c404f8",
+                "sha256:c4beba5aff2708dbab58b00da718e112dc29b91159a4f9cf449104a5ef141a40",
             requires_provider_policy: false,
         },
         "pi" => AcpxReleaseProfile {
@@ -29,7 +29,7 @@ pub(crate) fn acpx_release_profile(agent: &str) -> Option<AcpxReleaseProfile> {
             agent_runtime_package: Some("@earendil-works/pi-coding-agent"),
             agent_runtime_version: Some("1.0.0"),
             command_digest:
-                "sha256:0260d5810e9247986800ad46c1f9b3511a5abd06cb8f142405d5caacbc3960fc",
+                "sha256:fe90b1a5175d141c1cdc2e820ac17f01c5a14ec01d9dc5a5d4cdc403955ad087",
             requires_provider_policy: true,
         },
         "cursor" => AcpxReleaseProfile {
@@ -47,7 +47,7 @@ pub(crate) fn acpx_release_profile(agent: &str) -> Option<AcpxReleaseProfile> {
             agent_runtime_package: None,
             agent_runtime_version: None,
             command_digest:
-                "sha256:7b8a6a31925256d225ea3d72fdcfd81b70a45c4b67d3eb0ee5073efff9ac8f8b",
+                "sha256:05b61b2440ed48cea14a58c7954aa4c27694f1ea815031bc211de2b2a6b99af9",
             requires_provider_policy: true,
         },
         "claude" => AcpxReleaseProfile {
@@ -67,6 +67,15 @@ pub(crate) fn acpx_release_profile(agent: &str) -> Option<AcpxReleaseProfile> {
             command_digest:
                 "sha256:443491f4e814501a5dc47347e4510e84faeec9c9382e2d4e53bfe69386d5aabc",
             requires_provider_policy: false,
+        },
+        "kimi" => AcpxReleaseProfile {
+            agent_server_package: "@moonshot-ai/kimi-code",
+            agent_server_version: "2.3.3",
+            agent_runtime_package: None,
+            agent_runtime_version: None,
+            command_digest:
+                "sha256:c42fa5361d53081a8bb497c35e1ee2f85e6c26d2e0d59fad14b93d16f810796b",
+            requires_provider_policy: true,
         },
         _ => return None,
     })
