@@ -4,6 +4,14 @@ import { copyBackCodexAuth } from "@paperclipai/adapter-codex-local/server";
 import { environmentTaskCredentialSchema, type PluginEnvironmentTaskCredential } from "@paperclipai/plugin-sdk";
 import { readLocalAiCredentialFile } from "../local-ai-credential-file.js";
 
+interface PreparedPluginRunnerCredentials {
+  githubBroker?: { url: string; token: string };
+  accountIdentity?: string;
+  credential?: PluginEnvironmentTaskCredential;
+  needsWriteback?: boolean;
+  onCredentials?: (snapshot: PluginEnvironmentTaskCredential) => Promise<void>;
+}
+
 /** Transfer only the selected account. Provider configuration stays at the dedicated provider boundary. */
 export async function preparePluginRunnerCredentials(input: {
   provider: string;
@@ -11,7 +19,7 @@ export async function preparePluginRunnerCredentials(input: {
   accountIdentity?: string;
   home?: string;
   environment: NodeJS.ProcessEnv;
-}) {
+}): Promise<PreparedPluginRunnerCredentials> {
   const github = input.environment.PAPERCLIP_GITHUB_BROKER_TOKEN ? { githubBroker: {
     url: input.environment.PAPERCLIP_GITHUB_BROKER_URL ?? "",
     token: input.environment.PAPERCLIP_GITHUB_BROKER_TOKEN,
