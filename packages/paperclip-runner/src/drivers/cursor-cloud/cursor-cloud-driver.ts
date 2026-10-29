@@ -27,6 +27,9 @@ const CURSOR_CLOUD_CONTROL_INSTRUCTIONS = [
   "For Paperclip control, do not search unrelated inherited dashboard MCP namespaces or wait for their authentication.",
   `When you need a human answer, use this server's offered request_human_input tool. Report completion with its offered ${PRP_COMPLETION_TOOL_NAME} tool, or a blocker with its offered ${PRP_BLOCK_TOOL_NAME} tool, following their schemas. Text alone does not submit a question, completion, or blocker.`,
 ].join("\n");
+type TurnAuthority = { generation: number; ownerRunId: string; turnId: string | null };
+type RemoteAuthority = TurnAuthority & { agentId: string; runId: string };
+type PendingAuthority = TurnAuthority & Pick<CursorCloudCheckpoint, "pendingOperation" | "requestedAgentId" | "idempotencyKey" | "agentId">;
 type CloudClient = Pick<CursorCloudClient, "createAgent" | "createRun" | "getAgent" | "getRun" | "cancelRun" | "streamRun" | "getUsage" | "listArtifacts" | "downloadArtifact">;
 
 export interface CursorCloudSessionHandle extends HarnessSession {
@@ -163,6 +166,7 @@ class CursorCloudSession implements CursorCloudSessionHandle {
   readonly #cancelTimeoutMs: number;
   #bridge: RunnerToolBridge | null = null;
   #closed = false;
+  #generation = 0;
   #stopping = false;
   #streamAbort: AbortController | null = null;
   #launch: Promise<void> | null = null;
@@ -191,13 +195,24 @@ class CursorCloudSession implements CursorCloudSessionHandle {
     const secured = await lstat(this.#options.relay.socketPath);
     if (!secured.isSocket() || secured.isSymbolicLink() || secured.ino !== socket.ino || secured.dev !== socket.dev || (secured.mode & 0o777) !== 0o600 || (process.getuid && secured.uid !== process.getuid())) throw new Error("Cursor Cloud bound relay socket changed while securing it");
   }
-  startRecovery(): void { if (active(this.#cp)) { this.#armDeadline(); this.#work = this.#recoverActive().catch(error => this.#unresolved(error)); } }
+  #authority(): TurnAuthority { return { generation: this.#generation, ownerRunId: this.#cp.ownerRunId, turnId: this.#cp.turnId }; }
+  #current(authority: TurnAuthority): boolean { return !this.#closed && authority.generation === this.#generation && authority.ownerRunId === this.#cp.ownerRunId && authority.turnId === this.#cp.turnId; }
+  #remote(authority: TurnAuthority): RemoteAuthority | null { return this.#current(authority) && this.#cp.agentId && this.#cp.runId ? { ...authority, agentId: this.#cp.agentId, runId: this.#cp.runId } : null; }
+  #pending(authority: TurnAuthority): PendingAuthority { return { ...authority, pendingOperation: this.#cp.pendingOperation, requestedAgentId: this.#cp.requestedAgentId, idempotencyKey: this.#cp.idempotencyKey, agentId: this.#cp.agentId }; }
+  #currentPending(authority: PendingAuthority): boolean { return this.#current(authority) && active(this.#cp) && authority.pendingOperation === this.#cp.pendingOperation && authority.requestedAgentId === this.#cp.requestedAgentId && authority.idempotencyKey === this.#cp.idempotencyKey && authority.agentId === this.#cp.agentId; }
+  #currentRemote(authority: RemoteAuthority): boolean { return this.#current(authority) && active(this.#cp) && authority.agentId === this.#cp.agentId && authority.runId === this.#cp.runId; }
+  #acceptRun(authority: RemoteAuthority, run: CursorCloudRun): boolean {
+    if (!this.#currentRemote(authority)) return false;
+    if (run.agentId !== authority.agentId || run.id !== authority.runId) throw new HarnessReconciliationError("Cursor Cloud response changed the confirmed Agent/Run identity");
+    return true;
+  }
+  startRecovery(): void { if (active(this.#cp)) { const authority = this.#authority(); this.#armDeadline(); this.#work = this.#recoverActive(authority).catch(error => this.#unresolved(error, authority)); } }
   ids() { return { driverSessionId: this.#cp.driverSessionId, providerSessionId: this.#cp.agentId, displayId: this.#cp.agentId ?? this.#cp.driverSessionId }; }
   events(): AsyncIterable<PrpEvent> { return this.#events.stream(); }
   turnControlCapabilities() { return { steering: false, queuedFollowUp: false }; }
   async attachRun(input: { runId: string }): Promise<void> {
     if (active(this.#cp) || this.#closed) throw new Error("Cursor Cloud cannot replace an active run binding");
-    this.#cp.ownerRunId = input.runId; await this.#store.write(this.#cp);
+    this.#generation += 1; this.#cp.ownerRunId = input.runId; await this.#store.write(this.#cp);
   }
   async startTurn(input: { message: NativeUserMessage; requestedCollaborationMode?: "default" | "plan" }): Promise<{ turnId: string; effectiveCollaborationMode: "default" }> {
     if (input.requestedCollaborationMode === "plan") throw new HarnessCapabilityUnavailableError("plan", "native Cloud plan decisions are unsupported");
@@ -214,110 +229,141 @@ class CursorCloudSession implements CursorCloudSessionHandle {
     this.#cp.requestedAgentId = first ? `bc-${randomUUID()}` : null; this.#cp.idempotencyKey = `paperclip-${randomUUID()}`;
     this.#cp.requestDigest = cursorCloudDigest(semanticCanonicalJson(request)); this.#cp.lastEventId = null; this.#cp.lastEventFingerprints = []; this.#cp.terminalStatus = null; this.#cp.acceptedCompletion = null; this.#cp.pendingTerminalDelivery = null;
     this.#cp.deadlineAt = Date.now() + (this.#options.config.timeoutMs ?? CURSOR_CLOUD_DEFAULT_TIMEOUT_MS);
+    this.#generation += 1;
+    const authority = this.#pending(this.#authority());
     this.#stopping = false; this.#stop = null;
-    await this.#store.write(this.#cp);
-    this.#emit("turn.started", { provider: "cursor_cloud", submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsAcknowledged: false });
-    this.#publishRemoteIdentity();
-    this.#armDeadline(); this.#streamAbort = new AbortController();
-    this.#launch = (async () => {
-      const options = { signal: this.#streamAbort!.signal, idempotencyKey: this.#cp.idempotencyKey! };
+    const streamAbort = new AbortController(); this.#streamAbort = streamAbort;
+    const persisted = this.#store.write(this.#cp);
+    const launch = (async () => {
+      await persisted;
+      if (!this.#currentPending(authority)) return;
+      const options = { signal: streamAbort.signal, idempotencyKey: authority.idempotencyKey! };
       const { schema: _schema, timeoutMs: _timeoutMs, ...cloudConfiguration } = this.#options.config;
       const response = first
-        ? await this.#client.createAgent({ ...cloudConfiguration, ...request, agentId: this.#cp.requestedAgentId! }, options)
-        : await this.#client.createRun(this.#cp.agentId!, request, options);
+        ? await this.#client.createAgent({ ...cloudConfiguration, ...request, agentId: authority.requestedAgentId! }, options)
+        : await this.#client.createRun(authority.agentId!, request, options);
+      if (!this.#currentPending(authority)) return;
+      if (response.run.agentId !== (first ? authority.requestedAgentId : authority.agentId)) throw new HarnessReconciliationError("Cursor Cloud create response changed the requested Agent identity");
       this.#cp.agentId = response.run.agentId; this.#cp.runId = response.run.id; this.#cp.pendingOperation = null; this.#cp.instructionsRevisionPending = false;
       if (!this.#stopping) this.#cp.phase = "running";
       await this.#store.write(this.#cp);
-      this.#publishRemoteIdentity();
+      if (this.#current(authority)) this.#publishRemoteIdentity();
     })();
-    this.#work = this.#launch.then(async () => { if (!this.#stopping) await this.#observe(); }, error => this.#unresolved(error, true)).catch(error => this.#unresolved(error));
+    this.#launch = launch;
+    this.#work = launch.then(async () => { const remote = this.#remote(authority); if (remote && !this.#stopping && active(this.#cp)) await this.#observe(remote); }, error => this.#unresolved(error, authority, authority)).catch(error => this.#unresolved(error, authority));
+    await persisted;
+    if (this.#current(authority) && active(this.#cp)) {
+      this.#emit("turn.started", { provider: "cursor_cloud", submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsAcknowledged: false });
+      this.#publishRemoteIdentity(); this.#armDeadline();
+    }
     return { turnId, effectiveCollaborationMode: "default" };
   }
   async interrupt(input: { turnId?: string; signal?: AbortSignal } = {}): Promise<void> {
     if (input.turnId && input.turnId !== this.#cp.turnId) throw new HarnessStaleTurnError(input.turnId);
     if (!active(this.#cp)) return;
-    this.#stop ??= this.#interrupt(input.signal).finally(() => { this.#stop = null; });
+    if (!this.#stop) {
+      const stop = this.#interrupt(this.#authority(), input.signal).finally(() => { if (this.#stop === stop) this.#stop = null; });
+      this.#stop = stop;
+    }
     return this.#stop;
   }
-  async #interrupt(signal?: AbortSignal): Promise<void> {
+  async #interrupt(authority: TurnAuthority, signal?: AbortSignal): Promise<void> {
+    const launch = this.#launch, streamAbort = this.#streamAbort;
     this.#stopping = true; this.#cp.phase = "stopping";
-    await this.#store.write(this.#cp); this.#streamAbort?.abort();
+    await this.#store.write(this.#cp);
+    if (!this.#current(authority) || !active(this.#cp)) return;
+    streamAbort?.abort();
     const abort = new AbortController();
     const cancelled = () => abort.abort();
     signal?.addEventListener("abort", cancelled, { once: true }); if (signal?.aborted) abort.abort();
     const timer = setTimeout(() => abort.abort(), this.#cancelTimeoutMs);
     try {
-      if (this.#launch) await withAbort(this.#launch.catch(() => {}), abort.signal);
-      await this.#resolvePending(abort.signal);
-      if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud pending create has no confirmed run");
-      let run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId, { signal: abort.signal });
+      if (launch) await withAbort(launch.catch(() => {}), abort.signal);
+      if (!this.#current(authority) || !active(this.#cp)) return;
+      await this.#resolvePending(authority, abort.signal);
+      if (!this.#current(authority) || !active(this.#cp)) return;
+      const remote = this.#remote(authority);
+      if (!remote) throw new HarnessReconciliationError("Cursor Cloud pending create has no confirmed run");
+      let run = await this.#client.getRun(remote.agentId, remote.runId, { signal: abort.signal });
+      if (!this.#acceptRun(remote, run)) return;
       if (isCursorCloudRunActive(run.status)) {
-        try { await this.#client.cancelRun(run.agentId, run.id, { signal: abort.signal }); }
+        try { await this.#client.cancelRun(remote.agentId, remote.runId, { signal: abort.signal }); }
         catch (error) { if (!(error instanceof CursorCloudClientError && error.providerCode === "run_not_cancellable")) throw error; }
+        if (!this.#currentRemote(remote)) return;
         do {
-          run = await this.#client.getRun(run.agentId, run.id, { signal: abort.signal });
+          run = await this.#client.getRun(remote.agentId, remote.runId, { signal: abort.signal });
+          if (!this.#acceptRun(remote, run)) return;
           if (!isCursorCloudRunActive(run.status)) break;
           await delay(100, undefined, { signal: abort.signal });
+          if (!this.#currentRemote(remote)) return;
         } while (!abort.signal.aborted);
       }
       if (isCursorCloudRunActive(run.status)) throw new Error("Remote work remains active");
-      await this.#settle(run, true);
-    } catch { throw new HarnessReconciliationError("Cursor Cloud Stop did not confirm remote terminal state; the run remains fenced"); }
+      await this.#settle(remote, run, true);
+    } catch { if (this.#current(authority) && active(this.#cp)) throw new HarnessReconciliationError("Cursor Cloud Stop did not confirm remote terminal state; the run remains fenced"); }
     finally { clearTimeout(timer); signal?.removeEventListener("abort", cancelled); }
   }
-  async #resolvePending(signal?: AbortSignal): Promise<void> {
-    if (this.#cp.pendingOperation === "create_agent") {
-      const agent = await this.#client.getAgent(this.#cp.requestedAgentId!, { signal });
-      if (!agent.latestRunId) throw new HarnessReconciliationError("Cursor Cloud pending create has no observable run");
+  async #resolvePending(authority: TurnAuthority, signal?: AbortSignal): Promise<void> {
+    if (!this.#current(authority) || !active(this.#cp)) return;
+    const pending = this.#pending(authority);
+    if (pending.pendingOperation === "create_agent") {
+      const agent = await this.#client.getAgent(pending.requestedAgentId!, { signal });
+      if (!this.#currentPending(pending)) return;
+      if (agent.id !== pending.requestedAgentId || !agent.latestRunId) throw new HarnessReconciliationError("Cursor Cloud pending create has no matching observable run");
       this.#cp.agentId = agent.id; this.#cp.runId = agent.latestRunId; this.#cp.pendingOperation = null; this.#cp.instructionsRevisionPending = false; await this.#store.write(this.#cp);
-    } else if (this.#cp.pendingOperation === "create_run") {
+    } else if (pending.pendingOperation === "create_run") {
       throw new HarnessReconciliationError("Cursor Cloud follow-up outcome is unknown; refusing duplicate create or unbound cancellation");
     }
   }
-  async #recoverActive(): Promise<void> {
-    this.#streamAbort = new AbortController();
-    const signal = this.#streamAbort.signal;
+  async #recoverActive(authority: TurnAuthority): Promise<void> {
+    const streamAbort = new AbortController(); this.#streamAbort = streamAbort;
+    const signal = streamAbort.signal;
     let run: CursorCloudRun | undefined;
-    for (let attempt = 0; !this.#closed && !this.#stopping && active(this.#cp); attempt += 1) {
+    let remote: RemoteAuthority | null = null;
+    for (let attempt = 0; this.#current(authority) && !this.#stopping && active(this.#cp); attempt += 1) {
       try {
-        await this.#resolvePending(signal);
-        if (!this.#cp.agentId || !this.#cp.runId) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
-        run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId, { signal });
+        await this.#resolvePending(authority, signal);
+        if (!this.#current(authority) || this.#stopping || signal.aborted || !active(this.#cp)) return;
+        remote = this.#remote(authority);
+        if (!remote) throw new HarnessReconciliationError("Cursor Cloud recovery is missing remote identity");
+        run = await this.#client.getRun(remote.agentId, remote.runId, { signal });
+        if (!this.#acceptRun(remote, run)) return;
         break;
       } catch (error) {
-        if (this.#closed || this.#stopping || signal.aborted) return;
+        if (!this.#current(authority) || this.#stopping || signal.aborted || !active(this.#cp)) return;
         if (!(error instanceof CursorCloudClientError && error.retryable)) throw error;
-        await this.#unresolved(error);
+        await this.#unresolved(error, authority);
         await delay(boundedPositive(this.#options.reconnectDelayMs, Math.min(250 * 2 ** attempt, 2_000)), undefined, { signal })
           .catch(error => { if (!signal.aborted) throw error; });
       }
     }
-    if (!run || this.#closed || this.#stopping) return;
+    if (!run || !remote || !this.#currentRemote(remote) || this.#stopping || signal.aborted) return;
     this.#emit("turn.started", { recovered: true, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsAcknowledged: false });
     this.#publishRemoteIdentity();
-    if (!isCursorCloudRunActive(run.status)) { await this.#settle(run, this.#cp.phase === "stopping"); return; }
-    if (this.#cp.phase === "stopping" || this.#cp.deadlineAt === null || this.#cp.deadlineAt <= Date.now()) { await this.interrupt(); return; }
-    await this.#observe();
+    if (!isCursorCloudRunActive(run.status)) { await this.#settle(remote, run, this.#cp.phase === "stopping"); return; }
+    if (this.#cp.phase === "stopping" || this.#cp.deadlineAt === null || this.#cp.deadlineAt <= Date.now()) { await this.interrupt({ turnId: remote.turnId! }); return; }
+    await this.#observe(remote);
   }
-  async #observe(): Promise<void> {
-    for (let attempt = 0; attempt < 4 && !this.#stopping && !this.#closed; attempt += 1) {
-      this.#streamAbort = new AbortController();
+  async #observe(authority: RemoteAuthority): Promise<void> {
+    for (let attempt = 0; attempt < 4 && this.#currentRemote(authority) && !this.#stopping; attempt += 1) {
+      const streamAbort = new AbortController(); this.#streamAbort = streamAbort;
       try {
-        for await (const event of this.#client.streamRun(this.#cp.agentId!, this.#cp.runId!, { signal: this.#streamAbort.signal, ...(this.#cp.lastEventId ? { lastEventId: this.#cp.lastEventId } : {}) })) {
-          if (this.#stopping || this.#closed || !active(this.#cp)) return;
+        for await (const event of this.#client.streamRun(authority.agentId, authority.runId, { signal: streamAbort.signal, ...(this.#cp.lastEventId ? { lastEventId: this.#cp.lastEventId } : {}) })) {
+          if (!this.#currentRemote(authority) || this.#stopping || streamAbort.signal.aborted) return;
           await this.#consume(event);
           if (event.event === "result" || event.event === "done") break;
         }
       } catch (error) {
-        if (this.#stopping || this.#closed) return;
+        if (!this.#currentRemote(authority) || this.#stopping || streamAbort.signal.aborted) return;
         if (error instanceof CursorCloudClientError && error.status === 410) this.#emit("harness.diagnostic", { code: "cursor_cloud_stream_expired", message: "Cursor Cloud stream retention expired; reconciling saved run state." });
         else if (attempt === 3) throw error;
       }
-      if (this.#stopping || this.#closed) return;
-      const run = await this.#client.getRun(this.#cp.agentId!, this.#cp.runId!);
-      if (!isCursorCloudRunActive(run.status)) { await this.#settle(run); return; }
+      if (!this.#currentRemote(authority) || this.#stopping || streamAbort.signal.aborted) return;
+      const run = await this.#client.getRun(authority.agentId, authority.runId);
+      if (!this.#acceptRun(authority, run) || this.#stopping || streamAbort.signal.aborted) return;
+      if (!isCursorCloudRunActive(run.status)) { await this.#settle(authority, run); return; }
       if (attempt === 3) throw new HarnessReconciliationError("Cursor Cloud stream ended while remote work remains active");
-      await delay(boundedPositive(this.#options.reconnectDelayMs, Math.min(250 * 2 ** attempt, 2_000)));
+      await delay(boundedPositive(this.#options.reconnectDelayMs, Math.min(250 * 2 ** attempt, 2_000)), undefined, { signal: streamAbort.signal });
     }
   }
   async #consume(event: CursorCloudSseEvent): Promise<void> {
@@ -340,8 +386,8 @@ class CursorCloudSession implements CursorCloudSessionHandle {
     }
     await this.#store.write(this.#cp);
   }
-  async #settle(run: CursorCloudRun, interrupted = false): Promise<void> {
-    if (!isCursorCloudRunActive(run.status) && active(this.#cp)) {
+  async #settle(authority: RemoteAuthority, run: CursorCloudRun, interrupted = false): Promise<void> {
+    if (this.#acceptRun(authority, run) && !isCursorCloudRunActive(run.status)) {
       const turnId = this.#cp.turnId!;
       this.#cp.phase = "terminal"; this.#cp.terminalStatus = run.status; this.#cp.pendingOperation = null; this.#cp.deadlineAt = null; this.#clearDeadline();
       const delivery: CursorCloudTerminalDelivery = { schema: "paperclip.cursor-cloud.terminal-delivery.v1", threadId: this.#cp.driverSessionId, turnId, providerRunId: run.id, receiptId: randomUUID(), status: run.status as CursorCloudTerminalDelivery["status"], interrupted: interrupted || run.status === "CANCELLED", result: run.result ? this.#redact(run.result) : null };
@@ -350,7 +396,7 @@ class CursorCloudSession implements CursorCloudSessionHandle {
       if (delivery.result) events.push(this.#event("item.completed", { kind: "agentMessage", text: delivery.result, channel: "final" }, "final", turnId));
       events.push(this.#event(delivery.interrupted ? "turn.interrupted" : run.status === "FINISHED" ? "turn.completed" : "turn.failed", { cursorCloudTerminalDelivery: delivery, providerStatus: run.status, remoteTerminalConfirmed: true, semanticCompletionAccepted: this.#cp.acceptedCompletion !== null, ...(run.status === "ERROR" || run.status === "EXPIRED" ? { error: { code: `cursor_cloud_${run.status.toLowerCase()}`, message: "Cursor Cloud run ended without successful provider completion." } } : {}) }, undefined, turnId));
       await this.#store.write(this.#cp);
-      for (const event of events) this.#publish(event);
+      if (this.#current(authority)) for (const event of events) this.#publish(event);
     }
   }
   async #dispatch(call: RunnerToolCall): Promise<unknown> {
@@ -386,7 +432,8 @@ class CursorCloudSession implements CursorCloudSessionHandle {
   }
   #armDeadline(): void {
     this.#clearDeadline();
-    this.#turnDeadline = setTimeout(() => { void this.interrupt().catch(error => this.#unresolved(error)); }, Math.max(0, (this.#cp.deadlineAt ?? 0) - Date.now()));
+    const authority = this.#authority();
+    this.#turnDeadline = setTimeout(() => { if (this.#current(authority) && active(this.#cp)) void this.interrupt({ turnId: authority.turnId! }).catch(error => this.#unresolved(error, authority)); }, Math.max(0, (this.#cp.deadlineAt ?? 0) - Date.now()));
     this.#turnDeadline.unref?.();
   }
   #clearDeadline(): void { if (this.#turnDeadline) clearTimeout(this.#turnDeadline); this.#turnDeadline = null; }
@@ -395,13 +442,13 @@ class CursorCloudSession implements CursorCloudSessionHandle {
     if (!agentId) return;
     this.#emit("harness.diagnostic", { code: "cursor_cloud_remote_identity", message: JSON.stringify({ schema: "paperclip.cursor-cloud.remote-identity.v1", provider: "cursor_cloud", agentId, runId: this.#cp.runId, ownerRunId: this.#cp.ownerRunId, normalizedSessionId: this.#cp.normalizedSessionId, phase: this.#cp.phase }) });
   }
-  async #unresolved(error: unknown, directMutationFailure = false): Promise<void> {
-    if (this.#closed) return;
-    if (directMutationFailure && !this.#stopping && this.#cp.phase === "creating" && error instanceof CursorCloudClientError
+  async #unresolved(error: unknown, authority: TurnAuthority, rejectedCreate?: PendingAuthority): Promise<void> {
+    if (!this.#current(authority) || !active(this.#cp)) return;
+    if (rejectedCreate && this.#currentPending(rejectedCreate) && !this.#stopping && this.#cp.phase === "creating" && error instanceof CursorCloudClientError
       && error.status !== undefined && [400, 401, 403, 404, 422].includes(error.status)) {
       this.#cp.phase = "idle"; this.#cp.pendingOperation = null; this.#cp.requestedAgentId = null; this.#cp.terminalStatus = "REJECTED"; this.#clearDeadline();
       await this.#store.write(this.#cp);
-      this.#emit("turn.failed", { error: { code: error.providerCode ?? "cursor_cloud_launch_rejected", message: "Cursor Cloud rejected the run before accepting provider work. Check the configured account, repository access and explicit model." }, remoteWorkAccepted: false });
+      if (this.#current(authority)) this.#emit("turn.failed", { error: { code: error.providerCode ?? "cursor_cloud_launch_rejected", message: "Cursor Cloud rejected the run before accepting provider work. Check the configured account, repository access and explicit model." }, remoteWorkAccepted: false });
       return;
     }
     this.#emit("harness.diagnostic", { code: "cursor_cloud_remote_state_unknown", message: "Cursor Cloud work could not be reconciled. Saved identity is retained; no replacement work was created. Stop or reconnect to reconcile it." });
@@ -436,8 +483,10 @@ class CursorCloudSession implements CursorCloudSessionHandle {
   }
   async read(): Promise<Record<string, unknown>> { return { provider: "cursor_cloud", agentId: this.#cp.agentId, runId: this.#cp.runId, turnId: this.#cp.turnId, phase: this.#cp.phase, providerStatus: this.#cp.terminalStatus, submittedModel: this.#options.model, effectiveModelAcknowledged: false, instructionsDigest: this.#cp.instructionsDigest, instructionsAcknowledged: false, semanticCompletionReceipt: this.#cp.acceptedCompletion, pendingTerminalDelivery: structuredClone(this.#cp.pendingTerminalDelivery) }; }
   async reconcile(): Promise<Record<string, unknown>> {
-    await this.#resolvePending();
-    if (this.#cp.agentId && this.#cp.runId) { const run = await this.#client.getRun(this.#cp.agentId, this.#cp.runId); if (!isCursorCloudRunActive(run.status)) await this.#settle(run); }
+    const authority = this.#authority();
+    await this.#resolvePending(authority);
+    const remote = this.#remote(authority);
+    if (remote && active(this.#cp)) { const run = await this.#client.getRun(remote.agentId, remote.runId); await this.#settle(remote, run); }
     return this.read();
   }
   async usage(): Promise<Record<string, unknown> | null> { return this.#cp.agentId ? { ...(await this.#client.getUsage(this.#cp.agentId, this.#cp.runId ? { runId: this.#cp.runId } : {})), cost: null, costUnavailable: true } : null; }
