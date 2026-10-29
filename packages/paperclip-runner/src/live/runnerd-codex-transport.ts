@@ -2103,6 +2103,7 @@ export type RetainedRunnerdMaintenanceEpochReceipt = {
 const retainedRunnerdCleanupProofs = new WeakMap<object, readonly number[]>();
 const retainedMaintenanceOperations = new Map<string, Set<Promise<unknown>>>();
 const activeMaintenanceRoots = new Set<string>();
+const maintenanceIdleWaiters = new Map<string, { promise: Promise<void>; resolve: () => void }>();
 
 /** No absence claim about an old child; only this controller's joined work. */
 export function retainedRunnerdMaintenanceIsIdle(directory: string): boolean {
@@ -2110,16 +2111,33 @@ export function retainedRunnerdMaintenanceIsIdle(directory: string): boolean {
   return !activeMaintenanceRoots.has(root) && !retainedMaintenanceOperations.has(root);
 }
 
+
+
+export function waitForRetainedRunnerdMaintenanceIdle(directory: string): Promise<void> {
+  const root = resolve(directory);
+  if (retainedRunnerdMaintenanceIsIdle(root)) return Promise.resolve();
+  const existing = maintenanceIdleWaiters.get(root);
+  if (existing) return existing.promise;
+  let release!: () => void;
+  const promise = new Promise<void>(done => { release = done; });
+  maintenanceIdleWaiters.set(root, { promise, resolve: release });
+  return promise;
+}
+
+function releaseMaintenanceIdleWaiters(root: string) {
+  if (!retainedRunnerdMaintenanceIsIdle(root)) return;
+  const waiting = maintenanceIdleWaiters.get(root);
+  maintenanceIdleWaiters.delete(root);
+  waiting?.resolve();
+}
+
 /** A timeout revokes cleanup authority, not ownership of an already-started
  * callback. Shutdown must join the original operations, including any that
  * another retained callback registers while the current snapshot settles. */
 export async function drainRetainedRunnerdMaintenanceOperations(): Promise<void> {
-  while (retainedMaintenanceOperations.size > 0) {
-    await Promise.allSettled(
-      [...retainedMaintenanceOperations.values()].flatMap((operations) => [
-        ...operations,
-      ]),
-    );
+  while (activeMaintenanceRoots.size > 0 || retainedMaintenanceOperations.size > 0) {
+    const roots = new Set([...activeMaintenanceRoots, ...retainedMaintenanceOperations.keys()]);
+    await Promise.all([...roots].map(waitForRetainedRunnerdMaintenanceIdle));
   }
 }
 
@@ -2366,6 +2384,7 @@ export async function settleRetainedRunnerdSession(
     return await settleRetainedRunnerdSessionOwned(input);
   } finally {
     activeMaintenanceRoots.delete(root);
+    releaseMaintenanceIdleWaiters(root);
   }
 }
 
@@ -2466,6 +2485,7 @@ async function settleRetainedRunnerdSessionOwned(
         retainedMaintenanceOperations.get(root) === retained
       )
         retainedMaintenanceOperations.delete(root);
+      releaseMaintenanceIdleWaiters(root);
     };
     void operation.then(released, released);
     let timer: ReturnType<typeof setTimeout> | undefined;

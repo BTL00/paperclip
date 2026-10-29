@@ -370,3 +370,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(unix)]
+pub mod runtime_notifications;
