@@ -59,13 +59,14 @@ qualification passes. Provider registration does not migrate legacy agents.
 | Exact model and instructions | local and Daytona | Profile9 installed native create/load/model acknowledgments passed on both platforms; final authenticated product matrix remains incomplete | partial |
 | Scoped tools and credentials | local and Daytona | Native v6 controlled peer, isolated installed runtime, and real local pending Write passed; no ambient credential fallback | partial |
 | Ordinary setup | local and Daytona | Save/reopen/Test/run/reconnect and assigned skill still required; isolated hosted target now requested | unattempted |
-| Useful task | local and Daytona | Profile7 passed exact reply, accepted finish, durable Done and cleanup; final profile9 useful-task cells remain | partial |
-| Human input and Stop | local and Daytona | Profile9 local pending native Write Stop passed all eight matchers, required report evidence and cleanup | partial |
-| Continuation and child loss | local and Daytona | Installed native load passed; actual local loss observer needs exact Darwin argv repair before fault injection | partial |
-| Installed distribution | macOS arm64 and Linux x64 | Profile9 eighteen public tarballs, fresh installed CLI setup, offline reuse and installed ACP smoke passed; native Linux image smoke/export passed, publication pending | partial |
+| Useful task | local and Daytona | Profile9 local exact reply, accepted completion, workspace bytes and downloaded artifact bytes passed; authenticated Daytona remains blocked | partial |
+| Human input and Stop | local and Daytona | Profile9 local Stop, native child loss, semantic answers and plan revision passed with durable decisions and cleanup; Daytona remains | partial |
+| Continuation and child loss | local and Daytona | All local restart, question recovery, native loss and Stop/follow-up cases passed; Daytona remains | partial |
+| Installed distribution | macOS arm64 and Linux x64 | Profile9 eighteen public tarballs, fresh installed CLI setup/offline reuse, immutable Linux image and native real-Daytona smoke passed | passed |
 | Regression and repository checks | candidate revision | Typecheck/build and both current PR CI suites passed; local full-suite failure and its separate successful three-case reproduction remain recorded | partial |
 
-Current totals: 0 fully passed, 7 partial, 1 unattempted of 8 gates.
+Current totals: 1 fully passed, 6 partial, 1 unattempted of 8 gates.
+These are profile9 results; a later promotion requires its own artifact checks.
 Each gate's detailed cells and attempts will be recorded before qualification;
 these grouped gates are not a substitute for per-environment passing evidence.
 
@@ -73,24 +74,28 @@ The explicit-only `kimi-qualification` Product E2E suite has 20 required cells:
 message-marker, plan-revise-accept, ask-question, structured-question-resume,
 structured-question-restart-resume, file-edit-validate, continuity-restart, and
 stop-new-resume, native pending-permission Stop, and native pending-permission worker loss, each on local and Daytona. Each has one required repetition and
-zero automatic paid retries. Profile9 local Stop passed at source `821256d6` in
-campaign `local-2026-10-29T14-46-04-979Z`, run
-`91557abb-b9c0-422d-af1e-f0e82e948e96`. The subsequent loss cell reached a real
-unanswered Write, then correctly refused to signal a target whose rendered
-process arguments failed its exact loader hash. Its failed grade is retained.
-The remaining eight local cells and ten Daytona cells have not passed. Earlier
-profile7 marker evidence retains its own identity. Assigned-skill behavior and
-ordinary setup remain separate requirements.
+zero automatic paid retries. All ten local cells passed with report packaging and
+cleanup. Stop retains source `821256d6`, campaign
+`local-2026-10-29T14-46-04-979Z`, run `91557abb-b9c0-422d-af1e-f0e82e948e96`.
+The other nine retain source `f7ac439e` and their individual campaigns between
+15:10 and 15:33 UTC. The qualification-only observer correction leaves all native
+runtime/profile/image inputs unchanged. It reads argc-bounded kernel argv while
+retaining exact compiled-loader hashes, sealed native bytes, inode, ancestry and
+run identity; a real compiled native/ACPX peer proved title mutation, excluded
+an environment canary, rejected foreign/ambiguous targets and retired the child.
+All ten original result hashes were independently checked. The four earlier local
+failures remain unchanged alongside their later diagnoses and cleanup receipts.
 
-The Darwin observer correction changes qualification code only. It retains the
-exact compiled launcher hash, sealed native bytes, inode, ancestry and run birth
-checks while reading only the kernel argument count and those arguments. Its
-real compiled Kimi/ACPX loopback proof includes native process-title mutation,
-environment-canary exclusion, missing/foreign/ambiguous target rejection and
-owned shutdown. Provider profile, patch and image inputs are unchanged, so the
-accepted Stop remains an original `821256d6` measurement. The corrected loss
-cell and eight remaining local cells require fresh attempts; no failed grade is
-rewritten or promoted by the controlled peer.
+Daytona has zero passing authenticated cells. Its first launch stopped at
+admission because two executable digests were missing; no task or sandbox was
+created. With the exact image Node/runnerd digests supplied, the first actual
+Stop cell failed before provider startup: setup Test could not reach the global
+Kimi catalog. Its failed/cleanup-failed grade is preserved. Six archived Test
+sandboxes were subsequently ownership-verified, deleted and checked absent404;
+that post-failure recovery does not change the original grade.
+
+Assigned-skill behavior and ordinary connect/save/reopen/Test/run/reconnect remain
+separate requirements, including the requested hosted test workspace.
 
 ## Current state
 
@@ -101,7 +106,7 @@ Pi34, Grok13 and Copilot81. Published master history takes precedence over
 conflicting unmerged candidate variants; original candidate bytes and commits
 remain on preserved backup refs.
 
-The foundation PR #18028 at `08a5516b` and product PR #18029 at `821256d6`
+The foundation PR #18028 at `08a5516b` and product PR #18029 at `f7ac439e`
 have fresh Greptile 5/5, no unresolved threads, and green CI. They remain draft
 because real acceptance is incomplete. Full typecheck and build passed. The
 local full test command failed three AI-connection cases after a first 15-second
@@ -129,8 +134,8 @@ Material local attempts remain distinct:
   33.8 seconds. The following provider-loss attempt reached an unanswered Write
   but refused fault injection: macOS `ps` renders loader bytes differently from
   the pinned argv. An unpaid real guarded-native probe reproduced that exact
-  hash divergence. The observer is being repaired to read only argc-bounded argv,
-  retaining exact byte hashes and rejecting ambiguous, foreign or changed owners.
+  hash divergence. The corrected observer reads argc-bounded argv with those exact byte and
+  ownership checks retained; the subsequent real loss cell passed.
 
 Profile9 distribution proof now covers eighteen actual public-layout tarballs,
 a clean scripts-disabled consumer, fresh installed CLI setup through the admitted
@@ -147,24 +152,54 @@ Image ID is `sha256:139869415cdd7c7cd2a59f21626b8bdbbe0088f17209abf8cdda4f6a80b9
 content identity is `4560ebf62a9640e43aff893b1a6dd497746eeb2787732818b62acd911cdb0b7b`.
 Create/load instruction acknowledgments and bounded EOF passed without prompts or
 credentials. Local collection verified the full archive, source, profile,
-closure, pack and daemon hashes. Candidate publication is in progress. No Daytona
-task has passed. All build failures are retained; the rejected IAM expansion
+closure, pack and daemon hashes. Its published immutable reference is
+`public.ecr.aws/q2k8x0v0/paperclip/kimi-qualification-eed3@sha256:bad9994dadf1a55743dabed3cd3f785210131938d4407c8b0ca92a30a922c177`.
+A real credential-free Daytona import/native smoke passed in 122.4 seconds on
+Linux x64 with 4 CPU, 4 GiB memory and 10 GiB disk, then its exact sandbox was
+deleted and checked404. It verified native create/load/model/instruction/EOF
+boundaries without a model prompt. No authenticated Daytona task has passed. All
+build failures are retained; the rejected IAM expansion
 was never applied and no operator/provider token was sent to CodeBuild.
 
 The user additionally requested hosted verification and confirmed an isolated
 workspace at `https://kimi.test.paperclip.app`. It was created through the normal
 Cloud UI under the existing authorized owner; the shared QA identity lease was
-left untouched. It is provisioning on a known baseline, not yet the Kimi build.
+left untouched. It is active and empty on verified Core
+`f8484a9f8d1f68e9534fee4f29e00e716dc680f4`, distribution `cloud-40777791731-1`,
+not the Kimi build. A singleton TEST campaign enabled Native Runner on only this
+workspace with matching applied/desired hashes; fleet defaults stayed unchanged.
 Use the maintained Core preview deployment for this unmerged branch, record its
 exact serving SHA/image, and qualify the Kimi user journey there. This does not
 certify the private Cloud UI composition. No production or fleet-default change
 is in scope.
 
-Critical path: finish the corrected local loss and remaining local cells; publish
-the verified immutable Linux image and run ten Daytona cells; then promote via a
-new immutable profile only after required qualification, verify affected final
-artifacts/image and ordinary setup/assigned skills, deploy the exact candidate to
-the isolated test workspace, complete its hosted journey, and finish the PR stack.
+The active remote blocker is now narrowed by independent controls. The same fresh
+selected credential verifies through the host catalog path, while the actual
+remote metadata helper returns `KIMI_PROVIDER_ERROR`. Installed helper/Node bytes,
+profile admission and key/model forwarding match the expected boundary. A fixed
+remote GET failed with `ECONNRESET` before HTTP, with sandbox blocking false and
+no allowlists. Credential-free controls also reset for example.com, including
+direct IPv4 curl, with no proxy variables present. All three diagnostic sandboxes
+were destroyed and checked404. No TLS protection was weakened, endpoint switched
+or inference attempted during those diagnostics.
+
+[Daytona's current network policy](https://www.daytona.io/docs/en/network-limits/)
+says Tier1/2 organization restrictions override sandbox settings. Its essential
+service list includes `*.kimi.com` and `*.moonshot.ai`, but not the selected
+account's official global `api.kimi.ai` endpoint. This is consistent with the
+observations, not a confirmed cause: this key cannot read its organization policy
+(HTTP401). It advertises only the public US target. The user was asked to confirm
+full egress or another suitable test credential, while the existing TEST Cloud
+provider setup is being checked. The global account must not be routed to the
+separate CN endpoint as a workaround.
+
+Critical path: establish legitimate Daytona egress to the global Kimi endpoint,
+then run ten authenticated Daytona cells. Only after native qualification should
+a new immutable profile promote ordinary admission/default packaging, with final
+installed artifact/image checks and ordinary setup/assigned skills. Deploy the
+exact candidate to the isolated test workspace, complete its hosted journey, and
+finish the PR stack. A promotion patch has been prepared and tested only in TEMP;
+it is not applied and does not count as qualification.
 
 ## Evidence and first divergences
 
@@ -225,7 +260,7 @@ is required (a generic client was rejected with HTTP403). The selected ID is nev
 substituted. The first release also disables native question and plan tools so
 only the promised semantic interaction path remains available.
 
-Current profile8 command digest:
+Historical profile8 command digest:
 `sha256:53c63af8722894e14d48ed55526f99fcd79e06c86ae1c7aa384ef7ee8c56efd4`.
 Native runtime patch v6 SHA256:
 `79980aa95c54f325a05cbdf883f74443705db28f3e412a1b5ae22929d939eb66`.
@@ -268,7 +303,7 @@ from text, tools, or HTTP response identifiers. The actual native Kimi/ACPX
 controlled peer passed this framing case alongside instructions, tool arguments,
 credential isolation, denial, typed failure, Stop, and native-worker loss.
 
-Current profile7 verification: 162 sidecar/projection/metadata/instruction tests,
+Historical profile7 verification: 162 sidecar/projection/metadata/instruction tests,
 144 driver/projection tests, and 18 Rust provider-state tests passed. TypeScript,
 Rust daemon staging, bundled entrypoints, and all three affected immutable
 profile checks passed. The archived installer passed fresh public downloads,
