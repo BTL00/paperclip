@@ -628,3 +628,15 @@ unknown outside heartbeat accounting, never zero. This candidate includes only
 the focused local native-probe prerequisite from core PR18103; all candidate
 outcomes are separate from frozen39e qualification. Source acceptance is not
 permission to run the unused initial.
+
+The isolated `onboarding.resume-wizard` native1017 candidate reloads the real
+nonsecret onboarding draft and retains its setup-held company, agent ID and
+original general role. It follows the visible **Finish setup** action, then
+enters the missing OpenRouter key only into the empty masked account field in
+the existing standalone private browser worker. The actual personal grant,
+agent installation, native local-target hello and hire must all refer to that
+same saved agent. It authors no chat or work turns; setup/probe usage remains
+unavailable outside heartbeat accounting, never zero. The candidate requires
+core PR18103 and is excluded from frozen-baseline qualification. It does not
+write draft storage, choose a legacy provider, or reuse new-company's empty-agent
+assumption; other wizard operations retain their existing behavior.
