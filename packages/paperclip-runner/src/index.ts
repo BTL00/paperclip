@@ -113,3 +113,5 @@ export { resolveGrokDisableWebSearch } from "./drivers/acpx/grok-web-search.js";
 export { CURSOR_CLOUD_DEFAULT_TIMEOUT_MS, parseNativeCursorCloudConfig, type NativeCursorCloudConfig } from "./contracts/cursor-cloud.js";
 
 export { CursorCloudClient, CursorCloudClientError, isCursorCloudRunActive } from "./drivers/cursor-cloud/cloud-client.js";
+
+export { archiveCursorCloudSessionCheckpoint } from "./drivers/cursor-cloud/checkpoint.js";
