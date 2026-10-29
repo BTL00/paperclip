@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { cardWorkFixture, successfulCardWorkFixture } from "./status-card-work-failure.test-fixtures.js";
 import { gradeIntegratorCards, integratorStatusCardsCases } from "./integrator-status-cards.js";
 function valid(id: string) {
   const creation = id === "status-cards.create-card"; const archive = id === "status-cards.archive-card";
   const card = { id: "card", companyId: "company", createdByAgentId: id === "status-cards.other-authors-card" ? "morgan" : "ceo", title: "Launch blockers", interestPrompt: "Launch's biggest blockers", agentId: "morgan", queries: [{ projectId: "project" }], fingerprint: { source: { status: "blocked" } }, refreshPolicy: { mode: "manual" }, archivedAt: archive ? "2026-10-26T12:00:00Z" : null, archivedByAgentId: archive ? "ceo" : null, summaryBody: "Payment approval blocks Launch.", lastGeneratedAt: "2026-10-26T11:00:00Z" };
   const update = { id: "update", kind: "full", status: "ok", runId: "worker-run", generationIssueId: "generation-task" };
   const summary = { id: "summary", body: card.summaryBody };
-  const source = { id: "source", title: "Payment approval blocks launch", status: "blocked" };
+  const source = { id: "source", companyId: "company", title: "Payment approval blocks launch", status: "blocked" };
   const result = { scenarioId: id, origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { project: { id: "project" }, worker: { id: "morgan" }, sourceTasks: [structuredClone(source)], ...(creation ? {} : { card: { ...card, archivedAt: null, archivedByAgentId: null }, originalUpdates: [structuredClone(update)], originalSummaries: [structuredClone(summary)], ...(archive ? { otherCard: { ...card, id: "other", interestPrompt: "Research blockers", archivedAt: null, archivedByAgentId: null } } : {}) }) },
     tasks: [source], projects: [], goals: [], comments: [], documents: [], revisions: [], humanQueries: [], links: ["/ACORN/status/card"],
     runs: [{ id: "source-run", agentId: "ceo", status: "succeeded" }, { id: "worker-run", agentId: "morgan", status: "succeeded" }],
@@ -29,10 +30,15 @@ function valid(id: string) {
     result.runs.push({ id: "new-worker-run", agentId: "morgan", status: "succeeded" });
     result.reply = `${first.reply}\nThe refreshed summary identifies mobile Safari checkout as the remaining blocker.`;
     const successful = structuredClone(result);
-    Object.assign(result.state, { successfulRefreshResult: successful, failedGenerationRunId: "failed-native", failedGenerationIssueId: "failure-task" });
-    Object.assign(result.cards[0]!, { state: "error", failureReason: "The generation failed", generatingIssueId: null });
-    result.updates.card.push(Object.assign({ ...update, id: "failed-update", status: "failed", runId: "failed-native", generationIssueId: "failure-task" }, { error: "Unavailable model" }));
-    result.runs.push(Object.assign({ id: "failed-native", agentId: "morgan", status: "failed" }, { runtimeMode: "native", contextSnapshot: { issueId: "failure-task" } }));
+    const work = cardWorkFixture();
+    const initialChecklist = successfulCardWorkFixture("worker-run", "generation-task", "update");
+    const successfulChecklist = successfulCardWorkFixture("new-worker-run", "refresh-task", "new-update");
+    Object.assign(result.state, { successfulRefreshResult: successful, failedGenerationRunId: "failed-native", failedGenerationIssueId: "failure-task", cardRecipe: work.evidence.recipe, initialChecklist: initialChecklist.evidence, successfulChecklist: successfulChecklist.evidence });
+    Object.assign(result.cards[0]!, work.card);
+    Object.assign(result.updates.card[0]!, initialChecklist.update); Object.assign(result.updates.card[1]!, successfulChecklist.update);
+    Object.assign((result.state as Record<string, unknown>).originalUpdates as object[], [initialChecklist.update]);
+    result.updates.card.push(work.update as unknown as typeof update);
+    Object.assign(result, { cardWork: work.evidence, runs: work.evidence.runs });
     result.reply += "\nThe latest generation failed; the prior successful summary was retained.";
 
   }
@@ -88,7 +94,7 @@ describe("saved card state and truthful generation controls", () => {
     const o = valid("status-cards.refresh-card");
     const missingError = structuredClone(o); Object.assign(missingError.cards[0]!, { state: "active", failureReason: null });
     expect(gradeIntegratorCards(missingError).passed).toBe(false);
-    const unrelated = structuredClone(o); Object.assign(unrelated.runs.at(-1)!, { contextSnapshot: { issueId: "unrelated-task" } });
+    const unrelated = structuredClone(o); Object.assign(unrelated.runs.find(run => run.id === "failed-native")!, { contextSnapshot: { issueId: "unrelated-task" } });
     expect(gradeIntegratorCards(unrelated).passed).toBe(false);
     const rewritten = structuredClone(o); rewritten.cards[0]!.summaryBody = "Replacement after failure";
     expect(gradeIntegratorCards(rewritten).passed).toBe(false);

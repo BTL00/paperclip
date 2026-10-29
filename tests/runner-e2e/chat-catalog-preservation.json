@@ -1,0 +1,107 @@
+{
+  "schema": "paperclip.chat-catalog-preservation/v1",
+  "productionBaseline": "39e811c9c5226979fce42e052a27cfb28301018a",
+  "canonicalEvalBase": "0098da56f4c10f3154ed4ed96b1404fdf7a021ca",
+  "scenarioCount": 244,
+  "lazyCatalogEntries": 242,
+  "standaloneFlows": [
+    "tasks.create-backlog",
+    "tasks.delegate-announcement"
+  ],
+  "purpose": "Eval source preservation only; no qualification, new attempt, budget reset or live admission.",
+  "components": [
+    {
+      "name": "SDK",
+      "sourceRevision": "9754e46d89bfa99e913efaf1769fe2d8b403fc4d"
+    },
+    {
+      "name": "overview-related",
+      "sourceRevision": "a62a023a5544ffcab98ee6624b0a583a6e8e6775"
+    },
+    {
+      "name": "status-card",
+      "sourceRevision": "97bcf2476d9f03bec70bec4ebd788e113fcc4425"
+    },
+    {
+      "name": "skills",
+      "sourceRevision": "bdca7305bf4c64fea033ae6ceec07927d2a754e2"
+    },
+    {
+      "name": "Ready2",
+      "sourceRevision": "819b7cf649c5551c32ba913509790ad16c1d5008"
+    },
+    {
+      "name": "repo",
+      "sourceRevision": "2a630b6b09efe4711dbbc42d0e0fc070067bbb17"
+    },
+    {
+      "name": "formal-model",
+      "sourceRevision": "687efafc61f841342c52b7d2a8c920b75c218d16"
+    },
+    {
+      "name": "formal-clock",
+      "sourceRevision": "f09af3cdebd58376d095d6f49d53aae80b635b6e"
+    },
+    {
+      "name": "new-company",
+      "sourceRevision": "6726c40f01342081557c265944ab8783f9ee82b4"
+    },
+    {
+      "name": "history-eval-only",
+      "sourceRevision": "2b84e38c15b10e10ef6c063984d375a14b307c4a"
+    },
+    {
+      "name": "ordinary-original-clock-multipart",
+      "sourceRevision": "73856cebe07cab32df42fdec7ff6ea7192cdd474"
+    },
+    {
+      "name": "new-company-original-clock",
+      "sourceRevision": "7c846a27a0b1ac1908d929209b60d7942f4246fb"
+    }
+  ],
+  "productionPrerequisites": [
+    {
+      "scenarioId": "onboarding.new-company",
+      "corePullRequest": 18103,
+      "reason": "Actual local OpenCode native authentication/hello probe, absent from frozen production baseline."
+    },
+    {
+      "scenarioId": "questions-and-approvals.formal-hire-revision",
+      "corePullRequest": 18105,
+      "reason": "Permission-qualified, truthful responseText pre-dispatch recovery guidance, absent from frozen production baseline."
+    },
+    {
+      "scenarioId": "routines.read-history",
+      "corePullRequest": 18033,
+      "reason": "Actual local-native task status must finalize public routine history; merged after the frozen production baseline."
+    }
+  ],
+  "coreChangesIncluded": false,
+  "candidateOutcomesQualifyFrozenBaseline": false,
+  "historicalResultsCarriedToThisHead": 0,
+  "knownUnqualifiedFixtureFindings": [
+    {
+      "scenarioIds": [
+        "plugins.configure-plugin",
+        "plugins.disable-plugin"
+      ],
+      "finding": "The preserved fixture sends a secret_ref object to an apiKey schema declared string with secret-ref format. The public validator requires the secure secret UUID string. These spent failures are retained; this preservation change does not repair or rerun them."
+    }
+  ],
+  "readinessLimits": {
+    "declaredUnsupportedFreshContext": [
+      "access.invite-teammate",
+      "access.manage-membership",
+      "activity.routine-audit",
+      "agents.restore-instructions",
+      "budgets-costs.subscription-fees"
+    ],
+    "currentProfileOrPublicCapabilityGaps": [
+      "assistant-connections.use-scoped-client",
+      "companies.configure-decision-model",
+      "steering.steer-active"
+    ],
+    "otherRequirements": "Official provider resources, selected credentials, authorized operators and actual remote targets still require their declared public prerequisites. Importability is not runtime readiness.",
+    "attempts": "All original raw grades, source fingerprints, ordinals, usage, billing, privacy and cleanup remain bound to their original measurements. Exhausted cases remain exhausted."
+  }
+}

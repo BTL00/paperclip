@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { RunnerApiHttpError } from "../api.js";
@@ -71,7 +72,7 @@ export const navigationBoundaryIdentityCases: readonly ChatCatalogCase[] = [
   }, gradeNavigationBoundary, {
     sourceFiles: sources, authentication: "human-session",
     async act(ctx, state) {
-      await waitForReply(ctx); const source = ctx.input.page.url(); const path = String(state.stalePath);
+      await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const source = ctx.input.page.url(); const path = String(state.stalePath);
       await ctx.input.page.goto(path, { waitUntil: "domcontentloaded" });
       await expect(ctx.input.page.getByText("Issue not found", { exact: true })).toBeVisible(); state.missingVisible = true;
       const actual = new URL(ctx.input.page.url()); state.stalePathPreserved = actual.pathname + actual.search === path;

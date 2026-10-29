@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { definition, externalObservation, observeExternal, root, checks } from "./external-support.js";
 import { probeAgentPermission, waitForReply } from "./identity-support.js";
@@ -23,7 +24,7 @@ export const gatewayExternalCases = [definition("gateways-profiles.create-gatewa
 }, gradeGatewayCreate, {
   sourceFiles: ["chat-catalog-domains/external-gateways-profiles.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "chat-scenarios/gateways-profiles.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx);
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx));
     const before = await ctx.input.api.get<{ gateways: Entity[] }>(`${root(ctx)}/tools/gateways`); state.gatewayCountBeforeHuman = before.gateways.length;
     if (before.gateways.length !== 0) throw new Error("Agent created a management endpoint before the human action");
     const source = ctx.input.page.url();

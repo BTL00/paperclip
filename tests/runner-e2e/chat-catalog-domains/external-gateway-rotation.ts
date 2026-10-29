@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { publicRotationMessages, rotationQuestionHandoff, type RotationPublicMessage, type RotationTarget } from "./external-gateway-handoff.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type { ToolMcpGatewayWithTokens, ToolMcpGatewayTokenCreated, ToolProfileWithDetails } from "../../../packages/shared/src/types/tool-access.js";
@@ -67,7 +68,7 @@ export const gatewayRotationExternalCases = [definition("gateways-profiles.rotat
 }, gradeGatewayRotation, {
   authentication: "human-session", sourceFiles: ["chat-catalog-domains/external-gateway-rotation.ts", "chat-catalog-domains/external-gateway-handoff.ts", "../../ui/src/components/AppsSidebar.tsx", "../../ui/src/components/IssueThreadInteractionCard.tsx", "../../ui/src/pages/apps/gateways/GatewaysList.tsx", "../../ui/src/pages/apps/gateways/GatewayDetail.tsx", "chat-catalog-domains/external-provider.ts", "chat-catalog-domains/external-secret-scan.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/external-private-browser.ts", "chat-catalog-domains/external-private-browser-worker.ts", "run-observations.ts", "chat-scenarios/gateways-profiles.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const fixture = fixtures.get(ctx)!, gateway = state.gateway as ToolMcpGatewayWithTokens;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const fixture = fixtures.get(ctx)!, gateway = state.gateway as ToolMcpGatewayWithTokens;
     const before = (await ctx.input.api.get<{ gateways: ToolMcpGatewayWithTokens[] }>(`${root(ctx)}/tools/gateways`)).gateways.find(row => row.id === gateway.id)!;
     state.noPrematureMutation = before.tokens.length === 2 && before.tokens.every(row => !row.revokedAt);
     const observation = await observeExternal(ctx, state);

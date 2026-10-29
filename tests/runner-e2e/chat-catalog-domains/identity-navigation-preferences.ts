@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { checks, entity, hasLink, project, task, verifyInternalResult } from "./internal-support.js";
 import { identityDefinition, identityObservation, waitForReply, probeAgentPermission } from "./identity-support.js";
@@ -73,7 +74,7 @@ export const navigationIdentityCases = [
     authentication: "human-session",
     sourceFiles: ["chat-catalog-domains/identity-navigation-preferences.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
     async act(ctx, state) {
-      await waitForReply(ctx); const source = ctx.input.page.url();
+      await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const source = ctx.input.page.url();
       await ctx.input.page.keyboard.press("ControlOrMeta+k");
       await ctx.input.page.getByPlaceholder("Search tasks, agents, projects...").fill("Launch status:backlog");
       await expect(ctx.input.page.getByRole("dialog").getByText(entity(state, "task").title!, { exact: true })).toBeVisible();

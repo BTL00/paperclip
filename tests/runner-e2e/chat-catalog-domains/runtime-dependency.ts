@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect, type Page } from "@playwright/test";
 import type { Issue } from "../../../packages/shared/src/types/issue.js";
 import type { HeartbeatRun } from "../../../packages/shared/src/types/heartbeat.js";
@@ -42,9 +43,9 @@ export const runtimeDependencyCases = [runtimeDefinition("task-coordination.bloc
   expectedHumanMessageCount: 2, expectedRunCount: 3, attemptTimeoutMs: 720_000,
   sourceFiles: ["chat-catalog-domains/runtime-dependency.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/task-coordination.yaml"],
   async act(ctx, state) {
-    await pollUntil({ label: "Saved dependency and canonical reply before human approval", deadlineAt: Date.now() + 150_000,
+    await pollUntil({ label: "Saved dependency and canonical reply before human approval", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 1 && v.runs[0]?.status === "succeeded" });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && v.source?.conversationState === "waiting" && v.runs.length === 1 && v.runs[0]?.status === "succeeded" });
     state.queryReply = (await observeRuntime(ctx, state)).reply;
     const source = ctx.input.page.url(), task = state.task as Entity, design = state.design as Entity, websiteRoot = `/api/issues/${task.id}`;
     state.waitingTask = await ctx.input.api.get<Issue>(websiteRoot);
@@ -68,9 +69,9 @@ export const runtimeDependencyCases = [runtimeDefinition("task-coordination.bloc
       await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/issues/${task.identifier ?? task.id}`, { waitUntil: "domcontentloaded" });
       await chooseStatus(ctx.input.page, "Todo");
     }
-    const result = await pollUntil({ label: "One ordinary Website admission after Design approval", deadlineAt: Date.now() + 240_000,
+    const result = await pollUntil({ label: "One ordinary Website admission after Design approval", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 240_000),
       load: async () => ({ runs: await ctx.allRuns(), task: await ctx.input.api.get<Issue>(websiteRoot) }),
-      accept: v => v.runs.length === 2 && v.runs.every(row => row.status === "succeeded") && v.task.status === "done",
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && v.runs.length === 2 && v.runs.every(row => row.status === "succeeded") && v.task.status === "done",
       reject: v => v.runs.length > 2 || v.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "Eligible Website admission failed or duplicated native work" : undefined });
     const worker = result.runs.find(row => row.agentId === (state.worker as Entity).id)!;
     const designActivity = await ctx.input.api.get<Entity[]>(`/api/issues/${design.id}/activity`);
@@ -79,10 +80,10 @@ export const runtimeDependencyCases = [runtimeDefinition("task-coordination.bloc
     state.workerAdmissionAfterApproval = !!approval && Date.parse(String(workerDetail.createdAt)) >= Date.parse(approval.createdAt ?? ""); state.websiteRunId = worker.id;
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
     const followup = `I approved Design ${design.identifier ?? design.id}. What is the actual result of Website ${task.identifier ?? task.id} now?`;
-    await sendChatMessage(ctx.input.page, followup);
-    const final = await pollUntil({ label: "Own native reply reporting actual post-approval Website outcome", deadlineAt: Date.now() + 150_000,
+    await sendChatMessage(ctx.input.page, followup, chatCatalogNativePhaseRemainingBudget(ctx));
+    const final = await pollUntil({ label: "Own native reply reporting actual post-approval Website outcome", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: v => v.source?.conversationState === "waiting" && v.runs.length === 3 && v.runs.every(row => row.status === "succeeded") });
+      accept: v => chatCatalogNativePhaseIsTimely(ctx) && v.source?.conversationState === "waiting" && v.runs.length === 3 && v.runs.every(row => row.status === "succeeded") });
     const run = final.runs.find(row => !result.runs.some(prior => prior.id === row.id))!, comments = await ctx.input.api.get<Entity[]>(`/api/issues/${ctx.issue()!.id}/comments?order=asc`);
     const human = comments.filter(row => !row.authorAgentId && row.body === followup), replies = comments.filter(row => row.authorAgentId === ctx.input.fixtures.agent.id && row.createdByRunId === run.id);
     const detail = await ctx.input.api.get<{ runnerProfileJson?: { nativeExecutionInput?: { task?: { prompt?: string } } } }>(`/api/heartbeat-runs/${run.id}`);

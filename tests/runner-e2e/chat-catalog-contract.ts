@@ -26,6 +26,20 @@ export interface ChatCatalogContext {
 /** These exact selected OpenCode/local journeys use the original flow clock for
  * native observation phases. Other cases/lanes keep their authored phase caps. */
 const originalClockExecutionIds = new Set([
+  "chat-features.runner-opencode.local.companies.export-company",
+  "chat-features.runner-opencode.local.projects.project-defaults",
+  "chat-features.runner-opencode.local.questions-and-approvals.ambiguous-yes",
+  "chat-features.runner-opencode.local.questions-and-approvals.review-plan",
+  "chat-features.runner-opencode.local.questions-and-approvals.necessary-question",
+  "chat-features.runner-opencode.local.task-coordination.block-on-design",
+  "chat-features.runner-opencode.local.gateways-profiles.rotate-token",
+  "chat-features.runner-opencode.local.gateways-profiles.create-gateway",
+  "chat-features.runner-opencode.local.workspaces.preview-service",
+  "chat-features.runner-opencode.local.assistant-connections.consent-read-only",
+  "chat-features.runner-opencode.local.navigation-preferences.quick-search",
+  "chat-features.runner-opencode.local.navigation-preferences.edit-profile",
+  "chat-features.runner-opencode.local.navigation-preferences.broken-link",
+  "chat-features.runner-opencode.local.projects.share-project",
   "chat-features.runner-opencode.local.access.cli-authorization",
   "chat-features.runner-opencode.local.access.other-company",
   "chat-features.runner-opencode.local.access.private-resource",

@@ -923,7 +923,7 @@ async function runAttempt(input: {
         });
       }
       await copyHealthHelloDetail(temporaryRoot, candidate.id, uploadDir, credentials);
-      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, credentials);
+      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, credentials, repositoryRoot);
       console.log(
         `${result.status === "passed" ? "PASS" : "FAIL"} ${candidate.id} attempt ${attempt} -> ${uploadDir}`,
       );
@@ -956,7 +956,7 @@ async function runAttempt(input: {
         schemaVersion: 1, executionId: candidate.id, originalResult: original,
         packaging: "failed; raw diagnostics retained privately", error: error instanceof Error ? error.message : String(error),
       }, attemptSecrets), null, 2)}\n`, { mode: 0o600 });
-      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, attemptSecrets).catch(() => {});
+      await copyRetainedSourceSdk(temporaryRoot, candidate.id, result.source?.sha ?? null, uploadDir, attemptSecrets, repositoryRoot).catch(() => {});
       if (rawCleanupResults.length < executions.length) rawCleanupResults.push({ cleanup: original.cleanup, synthetic: original === fallback, status: original.status });
       publishedResults.push(result); publishedResultPaths.set(candidate.id, resultPath);
     }

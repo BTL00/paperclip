@@ -4,6 +4,7 @@ import type { Issue, ConnectionIntentInteraction } from "../../../packages/share
 import type { ConnectionIntentSetupOptions } from "../../../packages/shared/src/types/connection-intent.js";
 import type { ConnectionGrant } from "../../../packages/shared/src/types/tool-access.js";
 import type { HeartbeatRun } from "../../../packages/shared/src/types/heartbeat.js";
+import type { CompanyMembership } from "../../../packages/shared/src/types/access.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { collectRunEvents } from "../run-observations.js";
@@ -14,6 +15,28 @@ import { runtimeDefinition, runtimeObservation, observeRuntime, type RuntimeObse
 import { savedTaskWorkspace } from "./runtime-workspaces.js";
 import { inspectCheckout, protectedWorkload, sourceProtectionReceipt, workloadBoundaryCommand, workloadBoundaryReceipts, type RepositoryWorkspace } from "./runtime-workspace-repositories-support.js";
 type Fixture = Awaited<ReturnType<typeof connectRepositoryFixture>>;
+type WaitingOwnerContext = {
+  companyId: string; personId?: string; workerId: string; taskId: string; workspaceId: string; fixtureRunId: string;
+  members: Pick<CompanyMembership, "companyId" | "principalType" | "principalId" | "status">[];
+  task: Pick<Issue, "id" | "companyId" | "status" | "assigneeAgentId" | "assigneeUserId" | "executionWorkspaceId">;
+  run: Pick<HeartbeatRun, "id" | "companyId" | "agentId" | "status" | "contextSnapshot"> & { runtimeMode?: string };
+};
+export function repositoryWaitingOwnerInput(input: WaitingOwnerContext) {
+  const { companyId, personId, workerId, taskId, workspaceId, fixtureRunId, task, run } = input;
+  if (!personId || !input.members.some(member => member.companyId === companyId && member.principalType === "user" && member.principalId === personId && member.status === "active"))
+    throw new Error("Repository setup requires the actual signed-in active company member");
+  if (task.id !== taskId || task.companyId !== companyId || task.status !== "done" || task.assigneeAgentId !== workerId || task.assigneeUserId != null || task.executionWorkspaceId !== workspaceId
+    || run.id !== fixtureRunId || run.companyId !== companyId || run.agentId !== workerId || run.status !== "succeeded" || run.runtimeMode !== "native" || run.contextSnapshot?.issueId !== taskId)
+    throw new Error("Repository setup must retain its actual completed worker task, native run and workspace");
+  return { status: "in_progress" as const, assigneeAgentId: null, assigneeUserId: personId };
+}
+export function repositoryWaitingOwnerRetained(input: WaitingOwnerContext, saved: WaitingOwnerContext["task"], beforeRunIds: string[], afterRuns: Array<{ id: string; status: string }>) {
+  const expected = repositoryWaitingOwnerInput(input);
+  return saved.id === input.taskId && saved.companyId === input.companyId && saved.executionWorkspaceId === input.workspaceId
+    && saved.status === expected.status && saved.assigneeAgentId === null && saved.assigneeUserId === expected.assigneeUserId
+    && beforeRunIds.length === 1 && beforeRunIds[0] === input.fixtureRunId && afterRuns.length === 1
+    && afterRuns[0]?.id === input.fixtureRunId && afterRuns[0].status === "succeeded";
+}
 function site(fixture: Fixture) { if (!("siteRepository" in fixture)) throw new Error("Wrong selected repository fixture"); return fixture.siteRepository; }
 interface RepositoryObservation extends RuntimeObservation {
   activeTask: Issue; workspace: RepositoryWorkspace; interactions: ConnectionIntentInteraction[];
@@ -49,11 +72,32 @@ async function setup(ctx: ChatCatalogContext) {
     if (grants.length || connection.installs?.length) throw new Error("Setup blocker: disposable metadata discovery must not install a broad managed identity into this workload");
     if (ctx.scenario.id === "workspaces.prepare-repository") await grantServerAcquisition(ctx);
     const prepared = await savedTaskWorkspace(ctx);
+    const [session, members, completedTask, completedRun, beforeRuns] = await Promise.all([
+      ctx.input.api.get<{ user?: { id: string } }>("/api/auth/get-session"),
+      ctx.input.api.get<{ members: WaitingOwnerContext["members"] }>(`/api/companies/${ctx.input.fixtures.company.id}/members`),
+      ctx.input.api.get<Issue>(`/api/issues/${prepared.task.id}`),
+      ctx.input.api.get<WaitingOwnerContext["run"]>(`/api/heartbeat-runs/${prepared.fixtureRunId}`),
+      ctx.allRuns(),
+    ]);
+    const waitingOwner = { companyId: ctx.input.fixtures.company.id, personId: session.user?.id, workerId: prepared.worker.id,
+      taskId: prepared.task.id, workspaceId: prepared.workspaceBefore.workspace.id, fixtureRunId: prepared.fixtureRunId, members: members.members, task: completedTask, run: completedRun };
+    const ownerInput = repositoryWaitingOwnerInput(waitingOwner);
+    expect(beforeRuns.map(run => run.id)).toEqual([prepared.fixtureRunId]);
+    expect(beforeRuns[0]?.status).toBe("succeeded");
     // This is an actual public input-state transition, never a forged run or
     // preparation result. Its admitted task workspace and sentinel survive.
-    const activeTask = await ctx.input.api.patch<Issue>(`/api/issues/${prepared.task.id}`, { status: "in_progress", assigneeAgentId: null,
+    const activeTask = await ctx.input.api.patch<Issue>(`/api/issues/${prepared.task.id}`, { ...ownerInput,
       description: `This existing Website task awaits the person's repository choice. Keep its admitted workspace and existing website-fixture.txt. Once authorized, use the intended repository; do not substitute a public namesake or copy host credentials. ${ctx.scenario.id === "workspaces.private-repository-no-access" ? "The requested work is to fix its header locally; no remote push or deployment is requested." : "Once repository preparation is ready, inspect actual tracked files and record the available source in a task comment; no implementation or deployment is requested."}\nSecurity qualification, before declaring completion: execute this harmless own-run capability check exactly; do not print any credential or response body: ${workloadBoundaryCommand}` });
-    const workspace = await ctx.input.api.get<RepositoryWorkspace>(`/api/issues/${activeTask.id}/workspace`);
+    const [workspace, savedTask, afterRuns] = await Promise.all([
+      ctx.input.api.get<RepositoryWorkspace>(`/api/issues/${activeTask.id}/workspace`),
+      ctx.input.api.get<Issue>(`/api/issues/${activeTask.id}`), ctx.allRuns(),
+    ]);
+    if (!repositoryWaitingOwnerRetained(waitingOwner, savedTask, beforeRuns.map(run => run.id), afterRuns))
+      throw new Error("Repository waiting setup changed ownership, workspace or native scheduling");
+    await ctx.input.evidence("workspace-repository-waiting-owner.json", { companyId: waitingOwner.companyId, taskId: savedTask.id,
+      workspaceId: waitingOwner.workspaceId, assigneeAgentId: savedTask.assigneeAgentId, assigneeUserId: savedTask.assigneeUserId,
+      fixtureRunId: prepared.fixtureRunId, fixtureRunStatus: completedRun.status, fixtureRunAgentId: completedRun.agentId,
+      additionalNativeRuns: 0, ownerSource: "actual-signed-in-active-company-member" });
     if (workspace.issueId !== activeTask.id || !workspace.workspace?.cwd || workspace.repositories.length) throw new Error("Setup blocker: actual active task must have a valid admitted workspace and no acquired repository");
     return { ...fixture, worker: prepared.worker, task: activeTask, fixtureRunId: prepared.fixtureRunId, workspaceBefore: workspace,
       requestedUrl: `https://github.com/${site(fixture).fullName}`, initialRunIds: (await ctx.allRuns()).map(run => run.id), accessGranted: ctx.scenario.id === "workspaces.prepare-repository" };

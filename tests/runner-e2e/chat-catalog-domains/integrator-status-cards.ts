@@ -4,12 +4,11 @@ import type { StatusCard, StatusCardUpdate, StatusCardSummaryRevision } from "..
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, task, sameTask, hasLink, type Entity, type InternalObservation } from "./internal-support.js";
-import { unavailableNativeModelFailure } from "./runtime-native-failure.js";
-import type { RuntimeAgent } from "./runtime-support.js";
+import { prepareCardChecklist, updateCardChecklistSource, observeCardChecklistSuccess, observeCardWork, failCardChecklist, genuineCardWorkFailure, genuineCardChecklistSuccess, cardAccountingReady, cleanupCardChecklist, type CardRecipe, type CardWorkEvidence } from "./status-card-work-failure.js";
 import { readAgentResource, cleanupIdentityProbes } from "./identity-support.js";
 import { fixtureWorker } from "./internal-definition.js";
 import { groundedStatement, integratorDefinition, inspectResult, resultHref, observeInternal } from "./integrator-support.js";
-interface CardsObservation extends InternalObservation { cards: StatusCard[]; updates: Record<string, StatusCardUpdate[]>; summaries: Record<string, StatusCardSummaryRevision[]>; cardsEnabled: boolean }
+interface CardsObservation extends InternalObservation { cards: StatusCard[]; updates: Record<string, StatusCardUpdate[]>; summaries: Record<string, StatusCardSummaryRevision[]>; cardsEnabled: boolean; cardWork?: CardWorkEvidence }
 const root = (ctx: ChatCatalogContext) => `/api/companies/${ctx.input.fixtures.company.id}`;
 async function observeCards(ctx: ChatCatalogContext, state: Record<string, unknown>): Promise<CardsObservation> {
   const base = await observeInternal(ctx, state); const api = ctx.input.api;
@@ -18,7 +17,9 @@ async function observeCards(ctx: ChatCatalogContext, state: Record<string, unkno
   const cards = await Promise.all(ids.map(id => api.get<StatusCard>(`/api/status-cards/${id}`)));
   const updates = Object.fromEntries(await Promise.all(ids.map(async id => [id, await api.get<StatusCardUpdate[]>(`/api/status-cards/${id}/updates`)])));
   const summaries = Object.fromEntries(await Promise.all(ids.map(async id => [id, await api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${id}/summary-revisions`)])));
-  return { ...base, cards, updates, summaries, cardsEnabled: settings.enableStatusCards };
+  const cardWork = ctx.scenario.id === "status-cards.refresh-card" && state.cardRecipe && typeof state.failedGenerationIssueId === "string"
+    ? await observeCardWork(ctx, state.cardRecipe as CardRecipe, state.failedGenerationIssueId) : undefined;
+  return { ...base, cards, updates, summaries, cardsEnabled: settings.enableStatusCards, ...(cardWork ? { cardWork } : {}) };
 }
 function cardsObservation(value: unknown): CardsObservation | undefined {
   const o = value as CardsObservation;
@@ -87,10 +88,18 @@ export function gradeIntegratorCards(value: unknown) {
     const finalReply = initial && successfulResult?.reply.startsWith(initial.reply) ? successfulResult.reply.slice(initial.reply.length) : "";
     c.add("actual-result-reported-after-generation", /mobile Safari/i.test(finalReply) && /\b(?:generated|refreshed|updated|summary|blocker)\b/i.test(finalReply)
       && !/\b(?:still waiting|not refreshed|refresh failed|could not refresh)\b/i.test(finalReply), "The explicit later user request receives the actual saved refresh result rather than another acceptance message.");
+    const recipe = o.state.cardRecipe as CardRecipe | undefined;
+    const initialUpdate = (o.state.originalUpdates as StatusCardUpdate[] | undefined)?.find(row => row.kind !== "compile" && row.status === "ok");
+    c.add("same-required-input-recipe-used-for-successes", !!before && !!recipe && !!initialUpdate && successful.length === 1
+      && genuineCardChecklistSuccess(before.id, recipe, initialUpdate, o.state.initialChecklist as CardWorkEvidence | undefined)
+      && genuineCardChecklistSuccess(before.id, recipe, successful[0]!, o.state.successfulChecklist as CardWorkEvidence | undefined), "Both real successful generations used the same saved required source-verification recipe and actual authorized current reads before the independent failure.");
     const failedRun = o.runs.find(run => run.id === o.state.failedGenerationRunId);
     const failureReply = successfulResult && o.reply.startsWith(successfulResult.reply) ? o.reply.slice(successfulResult.reply.length) : "";
     c.add("genuine-failed-generation-keeps-last-good-output", !!successfulResult && !!lastGood && !!card && card.state === "error" && !!card.failureReason && !card.generatingIssueId
-      && failed.length === 1 && failed[0]?.generationIssueId === o.state.failedGenerationIssueId && !!failed[0]?.error && failedRun?.status === "failed" && failedRun.runtimeMode === "native" && failedRun.contextSnapshot?.issueId === failed[0]?.generationIssueId
+      && failed.length === 1 && failed[0]?.generationIssueId === o.state.failedGenerationIssueId && !!failed[0]?.error && !!failedRun
+      && genuineCardWorkFailure(card, failed[0]!, failedRun.id, o.leadId, o.cardWork)
+      && !!o.cardWork && originals.some(source => sameTask(source, o.cardWork!.checklistSource))
+      && o.cardWork?.runs.length === 7 && o.runs.length === 7 && o.runs.every(run => run.status === "succeeded" && o.cardWork?.runs.some(actual => actual.id === run.id && actual.agentId === run.agentId && actual.companyId === run.companyId && actual.contextSnapshot?.issueId === run.contextSnapshot?.issueId))
       && card.summaryBody === lastGood.summaryBody && card.lastGeneratedAt === lastGood.lastGeneratedAt
       && JSON.stringify(o.summaries[card.id]) === JSON.stringify(successfulResult.summaries[card.id]), "An independently observed real card-generation error and failed update retain the previous successful summary, timestamp and complete history. A failed native row without card error does not qualify.");
     c.add("actual-generation-error-reported", /refresh|generation/i.test(failureReply) && /failed|error|could not|couldn't|did not finish/i.test(failureReply)
@@ -113,13 +122,13 @@ async function verifyCard(ctx: ChatCatalogContext, _state: Record<string, unknow
 }
 /** Author identity comes from a real revocable agent key. The compile and first
  * summary are produced by an actual admitted summarizer run, never fixture PUTs. */
-async function seedCard(ctx: ChatCatalogContext, authorId: string, summarizerId: string, projectId: string, projectName = "Launch") {
+async function seedCard(ctx: ChatCatalogContext, authorId: string, summarizerId: string, projectId: string, projectName = "Launch", interestPrompt?: string) {
   if (!ctx.input.privateSecrets) throw new Error("Card fixture author key needs private redaction");
   const key = await ctx.input.api.postSensitive<{ id: string; token: string }>(`/api/agents/${authorId}/keys`, { name: `card-prerequisite-${ctx.input.nonce}` });
   ctx.input.privateSecrets.push(key.token);
   try {
     const response = await fetch(new URL(`${root(ctx)}/status-cards`, ctx.input.api.baseURL), { method: "POST", redirect: "error", signal: AbortSignal.timeout(20_000),
-      headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify({ title: `${projectName} blockers`, interestPrompt: `Summarize the biggest blockers for ${projectName} project ${projectId}, citing actual source tasks.`, agentId: summarizerId, refreshPolicy: { mode: "manual" } }) });
+      headers: { Authorization: `Bearer ${key.token}`, "content-type": "application/json" }, body: JSON.stringify({ title: `${projectName} blockers`, interestPrompt: interestPrompt ?? `Summarize the biggest blockers for ${projectName} project ${projectId}, citing actual source tasks.`, agentId: summarizerId, refreshPolicy: { mode: "manual" } }) });
     if (!response.ok) { await response.body?.cancel(); throw new Error(`Card fixture public creation failed HTTP ${response.status}`); }
     const created = await response.json() as StatusCard;
     return await pollUntil({ label: "actual prerequisite card generation", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
@@ -154,8 +163,17 @@ function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<Chat
       // the ordinary shared flow applies the same policy before the human query.
       for (const scope of [{ scopeType: "company", scopeId: ctx.input.fixtures.company.id }, { scopeType: "agent", scopeId: worker.id }])
         await ctx.input.api.post(`${root(ctx)}/budgets/policies`, { ...scope, amount: 500, hardStopEnabled: true, isActive: true, unpricedUsagePolicy: "allow" });
-      const card = await seedCard(ctx, seed === "ceo" ? ctx.input.fixtures.agent.id : worker.id, worker.id, p.id);
-      await pollUntil({ label: "prerequisite summarizer native completion", deadlineAt: Date.now() + 45_000, load: () => ctx.allRuns(), accept: rows => rows.length === 1 && rows.every(row => row.status === "succeeded") });
+      const cardRecipe = id === "status-cards.refresh-card" ? await prepareCardChecklist(ctx, worker.id, p.id, t) : undefined;
+      const card = await seedCard(ctx, seed === "ceo" ? ctx.input.fixtures.agent.id : worker.id, worker.id, p.id, "Launch", cardRecipe?.interestPrompt);
+      const initialComplete = await pollUntil({ label: "prerequisite summarizer native completion", deadlineAt: Date.now() + 45_000,
+        load: async () => {
+          const runs = await ctx.allRuns();
+          const update = cardRecipe ? (await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`)).find(row => row.kind !== "compile" && row.status === "ok") : undefined;
+          const checklist = cardRecipe && update ? await observeCardChecklistSuccess(ctx, cardRecipe, update) : undefined;
+          return { runs, update, checklist };
+        }, accept: value => value.runs.length === 1 && value.runs.every(row => row.status === "succeeded") && (!cardRecipe || !!value.update && genuineCardChecklistSuccess(card.id, cardRecipe, value.update, value.checklist)) });
+      const initialChecklist = initialComplete.checklist;
+      if (initialChecklist) await ctx.input.evidence("chat-card-initial-required-checklist.json", initialChecklist);
       let otherCard: StatusCard | undefined; const sourceTasks = [t];
       if (id === "status-cards.archive-card") {
         const research = await project(ctx, "Research"); sourceTasks.push(await task(ctx, "Research follow-up", research.id));
@@ -166,13 +184,14 @@ function define(id: string, seed: "none" | "ceo" | "morgan", extra: Partial<Chat
         sourceTasks[0] = await ctx.input.api.patch<Entity>(`/api/issues/${t.id}`, id === "status-cards.explain-card"
           ? { status: "done", description: "The payment approval has been received; this blocker is resolved." }
           : refreshedBlockerTaskInput());
+        if (cardRecipe) updateCardChecklistSource(ctx, sourceTasks[0]!);
       }
       const factualContextAttachment = ["status-cards.explain-card", "status-cards.archive-card"].includes(id)
         ? await uploadFactualQueryAttachment(ctx, { filename: "selected-status-card.md", body: selectedStatusCardReference(card, sourceTasks, ctx.input.fixtures.company.issuePrefix) }) : undefined;
-      return { project: p, sourceTasks, worker, card, otherCard, factualContextAttachment, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
-    } catch (error) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous.enableStatusCards }); experiments.delete(ctx); throw error; }
+      return { project: p, sourceTasks, worker, card, otherCard, ...(cardRecipe ? { cardRecipe, initialChecklist } : {}), factualContextAttachment, originalUpdates: await ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${card.id}/updates`), originalSummaries: await ctx.input.api.get<StatusCardSummaryRevision[]>(`/api/status-cards/${card.id}/summary-revisions`) };
+    } catch (error) { try { await cleanupCardChecklist(ctx); } finally { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous.enableStatusCards }); experiments.delete(ctx); } throw error; }
   }, observeCards, gradeIntegratorCards, verifyCard, { expectedRunCount: 2, attemptTimeoutMs: 540_000, ...extra,
-    async cleanup(ctx) { await cleanupIdentityProbes(ctx); const previous = experiments.get(ctx); if (previous !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous }); experiments.delete(ctx); } } });
+    async cleanup(ctx) { try { await cleanupCardChecklist(ctx); } finally { await cleanupIdentityProbes(ctx); const previous = experiments.get(ctx); if (previous !== undefined) { await ctx.input.api.patch("/api/instance/settings/experimental", { enableStatusCards: previous }); experiments.delete(ctx); } } } });
 }
 export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
   define("status-cards.create-card", "none"),
@@ -198,8 +217,9 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
     },
   }),
   define("status-cards.refresh-card", "ceo", { expectedRunCount: 7, expectedHumanMessageCount: 4, attemptTimeoutMs: 1_200_000,
-    runPolicy: { kind: "terminal-counts", terminalStatusCounts: { failed: 1, succeeded: 6 } },
-    sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/runtime-native-failure.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
+    runPolicy: { kind: "terminal-counts", terminalStatusCounts: { succeeded: 7 } },
+    oracleVersion: "paperclip.chat-catalog.status-card.required-work-failure.v2",
+    sourceFiles: ["chat-catalog-domains/integrator-status-cards.ts", "chat-catalog-domains/status-card-work-failure.ts", "chat-catalog-domains/external-provider.ts", "chat-catalog-domains/runtime-support.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/integrator-support.ts", "chat-scenarios/status-cards.yaml"],
 
     async act(ctx, state) {
       const first = await pollUntil({ label: "initial actual refresh acknowledgement", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
@@ -211,30 +231,39 @@ export const integratorStatusCardsCases: readonly ChatCatalogCase[] = [
         load: () => observeCards(ctx, state), accept: o => { const card = o.cards.find(row => row.id === before.id); return !!card && card.lastGeneratedAt !== before.lastGeneratedAt && freshSummary(o, card) && o.runs.length === 3 && o.runs.every(run => run.status === "succeeded"); } });
       const { sendChatMessage } = await import("../chat-flow.js");
       await sendChatMessage(ctx.input.page, "What did the refresh actually produce?", chatCatalogNativePhaseRemainingBudget(ctx));
-      const succeeded = await pollUntil({ label: "successful generation actually reported before separate failure condition", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 4 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      const recipe = state.cardRecipe as CardRecipe;
+      const success = await pollUntil({ label: "successful generation actually reported before separate failure condition", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+        load: async () => {
+          const observed = await observeCards(ctx, state);
+          const update = (observed.updates[before.id] ?? []).find(row => row.kind !== "compile" && row.status === "ok" && !(state.originalUpdates as StatusCardUpdate[]).some(old => old.id === row.id));
+          return { observed, update, checklist: update ? await observeCardChecklistSuccess(ctx, recipe, update) : undefined };
+        }, accept: value => value.observed.runs.length === 4 && value.observed.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting"
+          && !!value.update && genuineCardChecklistSuccess(before.id, recipe, value.update, value.checklist)
+          && !!value.checklist && cardAccountingReady(ctx.input.fixtures.company.id, recipe.workerId, ctx.input.fixtures.agent.id, value.checklist.runs, value.checklist.overview) });
+      const succeeded = success.observed;
+      state.successfulChecklist = success.checklist;
       state.successfulRefreshResult = { ...succeeded, state: structuredClone(state) }; await ctx.input.evidence("chat-card-refresh-last-successful-result.json", state.successfulRefreshResult);
-      const worker = await ctx.input.api.get<RuntimeAgent>(`/api/agents/${(state.worker as Entity).id}`);
+      await ctx.input.evidence("chat-card-successful-required-checklist.json", success.checklist);
       const beforeFailureIds = new Set((succeeded.updates[before.id] ?? []).map(update => update.id));
-      // The helper scopes induction accounting to this one actual summarizer.
-      // The shared oracle still receives every company run, including both
-      // genuine CEO source turns; nothing is hidden from the declared bound.
-      const workerContext = { ...ctx, allRuns: async () => (await ctx.allRuns()).filter(run => run.agentId === worker.id) };
-      const failure = await unavailableNativeModelFailure(workerContext, worker, async () => {
-        await sendChatMessage(ctx.input.page, "Run another full refresh of that card now.", chatCatalogNativePhaseRemainingBudget(ctx));
-        const update = await pollUntil({ label: "explicit human full refresh creates actual generation attempt", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
-          load: () => ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${before.id}/updates`),
-          accept: updates => updates.some(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && !!row.generationIssueId) });
-        const generation = update.find(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && row.generationIssueId)!;
-        return { issueId: generation.generationIssueId! };
-      });
-      state.failedGenerationRunId = failure.failedRun.id; state.failedGenerationIssueId = failure.failedIssueId;
-      const observed = await observeCards(ctx, state); const actual = observed.cards.find(row => row.id === before.id);
-      const failedUpdates = observed.updates[before.id]?.filter(update => update.generationIssueId === failure.failedIssueId && update.status === "failed") ?? [];
-      const established = actual?.state === "error" && !actual.generatingIssueId && failedUpdates.length === 1;
-      await ctx.input.evidence("chat-card-generation-failure-outcome.json", { kind: "real-unavailable-model-invocation", nativeFailureObserved: true, failedRunId: failure.failedRun.id,
-        generationIssueId: failure.failedIssueId, cardId: before.id, observedCardState: actual?.state, observedGeneratingIssueId: actual?.generatingIssueId, failedUpdateIds: failedUpdates.map(update => update.id),
-        cardErrorObserved: established, expectedCardFailureOutcome: established ? "observed" : "not-observed-failing-product-outcome", taskOrCardStatusPatched: false, cancelledAsFailure: false });
-      await pollUntil({ label: "actual refresh source turn settled after failed generation", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 6 && o.runs.filter(run => run.status === "succeeded").length === 5 && o.runs.filter(run => run.status === "failed").length === 1 && ctx.issue()?.conversationState === "waiting" });
+      failCardChecklist(ctx);
+      await sendChatMessage(ctx.input.page, "Run another full refresh of that card now.", chatCatalogNativePhaseRemainingBudget(ctx));
+      const created = await pollUntil({ label: "explicit human full refresh creates actual generation attempt", deadlineAt: Date.now() + 180_000, intervalMs: 1000,
+        load: () => ctx.input.api.get<StatusCardUpdate[]>(`/api/status-cards/${before.id}/updates`),
+        accept: updates => updates.some(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && !!row.generationIssueId) });
+      const generation = created.find(row => !beforeFailureIds.has(row.id) && row.kind !== "compile" && row.generationIssueId)!;
+      state.failedGenerationIssueId = generation.generationIssueId!;
+      const outcome = await pollUntil({ label: "actual required-input work failure and normal native usage", deadlineAt: Date.now() + 150_000, intervalMs: 1000,
+        load: () => observeCards(ctx, state),
+        accept: o => {
+          const card = o.cards.find(row => row.id === before.id), update = o.updates[before.id]?.find(row => row.id === generation.id);
+          const run = o.cardWork?.runs.find(row => row.agentId === recipe.workerId && row.contextSnapshot?.issueId === generation.generationIssueId);
+          return !!card && !!update && !!run && card.state === "error" && !card.generatingIssueId && genuineCardWorkFailure(card, update, run.id, o.leadId, o.cardWork);
+        },
+        reject: o => o.cardWork?.runs.some(run => run.contextSnapshot?.issueId === generation.generationIssueId && ["failed", "cancelled", "timed_out"].includes(run.status)) ? "Card generation did not yield a normally completed provider turn; no work-failure substitution" : undefined });
+      state.failedGenerationRunId = outcome.cardWork!.runs.find(run => run.agentId === recipe.workerId && run.contextSnapshot?.issueId === generation.generationIssueId)!.id;
+      await ctx.input.evidence("chat-card-generation-failure-outcome.json", { ...outcome.cardWork, kind: "synthetic-required-current-source-unavailable", cardId: before.id,
+        updateId: generation.id, generationIssueId: generation.generationIssueId, taskOrCardStatusPatched: false, cancelledAsFailure: false, providerFailureSubstituted: false });
+      await pollUntil({ label: "actual refresh source turn settled after failed work", deadlineAt: Date.now() + 180_000, intervalMs: 1000, load: () => observeCards(ctx, state), accept: o => o.runs.length === 6 && o.runs.every(run => run.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
       await sendChatMessage(ctx.input.page, "What happened to that latest refresh, and which saved summary is available now?", chatCatalogNativePhaseRemainingBudget(ctx));
     },
   }),

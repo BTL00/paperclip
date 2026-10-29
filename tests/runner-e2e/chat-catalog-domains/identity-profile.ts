@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { checks } from "./internal-support.js";
@@ -39,7 +40,7 @@ export const profileIdentityCases: readonly ChatCatalogCase[] = [identityDefinit
   authentication: "human-session",
   sourceFiles: ["chat-catalog-domains/identity-profile.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/navigation-preferences.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); state.beforeHumanName = (await ctx.input.api.get<Session>("/api/auth/get-session")).user.name;
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); state.beforeHumanName = (await ctx.input.api.get<Session>("/api/auth/get-session")).user.name;
     state.agentWriteStatus = await probeAgentPermission(ctx, "/api/auth/profile", "PATCH", { name: "Alex Chen" });
     const source = ctx.input.page.url();
     await ctx.input.page.goto(`/${ctx.input.fixtures.company.issuePrefix}/company/settings/instance/profile`, { waitUntil: "domcontentloaded" });

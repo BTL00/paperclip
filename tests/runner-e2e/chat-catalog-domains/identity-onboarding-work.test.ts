@@ -5,10 +5,10 @@ import type { IdentityObservation } from "./identity-support.js";
 function base(scenarioId: string): IdentityObservation { return { scenarioId, origin: "http://fixture.invalid", companyId: "acorn", leadId: "ceo", company: { id: "acorn" }, companies: [], agents: [], tasks: [], projects: [], goals: [], interactions: [], documents: [], revisions: [], comments: [], links: [], runs: [], activity: [], reply: "", humanQueries: [], state: {} }; }
 function company() {
   const o = base("onboarding.new-company"); o.reply = "Use the company switcher to create an organization for your website business; finish the human onboarding wizard.";
-  o.state = { humanId: "alex", companyCountAfterReply: 1, wizard: { companyId: "new-company", firstAgentId: "new-ceo", firstAgentReady: true, hiredThroughWizard: true, actualHarness: "codex_local", hello: { checks: [{ code: "codex_hello_probe_passed" }] },
+  o.state = { humanId: "alex", companyCountAfterReply: 1, wizard: { companyId: "new-company", firstAgentId: "new-ceo", firstAgentReady: true, hiredThroughPublicSetup: true, actualHarness: "opencode_local", model: "openrouter/deepseek/deepseek-v4.1-flash-1017", noAgentBeforeRouteDeparture: true, savedSetupAgentId: "new-ceo", helloCount: 1, hireCount: 1, exactPublicGrantAndAgentInstall: true, hello: { checks: [{ code: "opencode_hello_probe_passed" }] },
     account: { ownership: "personal", ownerUserId: "alex", responsibleUserId: "alex" }, beforeCompanyIds: ["acorn"], afterCompanyIds: ["acorn", "new-company"], afterAgentIds: ["new-ceo"], draftContainsCredential: false, publicAgentContainsCredential: false, heartbeatRunIds: [] },
     newAgent: { id: "new-ceo", companyId: "new-company", role: "ceo", lifecycleState: "ready" }, humanRoleConfigurationStatus: 200, newCompanyOwnedByHuman: true,
-    oldAgentForeignReadStatus: 403, newAgentVisible: true, oldAgentStillSourceCompany: true, sourceMembershipsUnchanged: true }; return o;
+    oldAgentForeignReadStatus: 403, newAgentVisible: true, oldAgentStillSourceCompany: true, sourceMembershipsUnchanged: true, sourceAccountsUnchanged: true }; return o;
 }
 function website() {
   const o = base("onboarding.first-work"); const work = { id: "website", companyId: "acorn", title: "Acorn Notes website", description: "Website introducing Acorn Notes for science teams", status: "done", assigneeAgentId: "morgan" };

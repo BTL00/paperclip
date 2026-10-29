@@ -1,3 +1,4 @@
+import { withSdkCanaryPreFixture, captureSdkCanaryPreFixture } from "./sdk-canary-prefixture.js";
 import { withholdPrivateScreenshots } from "./screenshot-privacy.js";
 import { ordinaryChatCapture } from "./chat-screenshot-capture.js";
 import { checkSetupHealthCredential } from "./chat-setup-credential.js";
@@ -1022,7 +1023,11 @@ for (const execution of executions) {
       if (execution.suite.id === "daytona-git-streaming") {
         await setupGitStreamingWorkspace(workspacePath);
       }
-      fixtures = execution.task.flow === "first_task"
+      fixtures = await withSdkCanaryPreFixture({ execution, sourceRevision: resolveRunnerE2ESource().sha,
+        capture: () => captureSdkCanaryPreFixture({ execution, repositoryRoot: path.resolve(import.meta.dirname, "../.."), temporaryRoot,
+          sourceRevision: resolveRunnerE2ESource().sha, secrets }),
+        retain: proof => writeSanitizedJson(snapshotsDir, "sdk-canary-pre-fixture.json", proof, secrets),
+        fixtures: async () => execution.task.flow === "first_task"
         ? await setupFirstTaskFixtures({ page, api, execution, nonce, credentials, daytonaImage: process.env.PAPERCLIP_E2E_DAYTONA_IMAGE, deadlineAt: startedAtMs + deadlineMs, observe: value => { fixtures = value; }, onCompanyCreated })
         : await setupLiveFixtures({
         api,
@@ -1032,7 +1037,7 @@ for (const execution of executions) {
         credentials,
         daytonaImage: process.env.PAPERCLIP_E2E_DAYTONA_IMAGE,
         onCompanyCreated,
-      });
+      }) });
       await finishBudgetedEvalSetup({ executionId: execution.id, environmentId: execution.environment.id, agentId: fixtures.agent.id,
         companyId: fixtures.company.id, deadlineAt: startedAtMs + deadlineMs, api,
         observe: observations => writeSanitizedJson(snapshotsDir, "budgeted-setup.json", { observations }, secrets) });

@@ -1,3 +1,4 @@
+import { groundedOverviewBlocker, reportsRecordedTaskState } from "./recorded-work-claims.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { project, task, goal, putDocument, entity, observation, checks, hasLink, sameTask, type Entity } from "./internal-support.js";
 import { makeDefinition, retryDefinition, fixtureWorker } from "./internal-definition.js";
@@ -17,9 +18,10 @@ export function grade_activity(value: unknown) {
       const blocked = entity(o.state, "blockedTask"); const done = entity(o.state, "doneTask"); const worker = entity(o.state, "worker");
       const expected = [before, blocked, done].filter((row): row is Entity => !!row);
       c.add("actual-work-summary", expected.length === 3 && expected.every(row => sameTask(row, o.tasks.find(now => now.id === row.id)) && hasLink(o, "issues", row))
-        && /\b(?:active|in.progress|underway)\b/i.test(o.reply) && /\bblocked\b/i.test(o.reply) && /\b(?:completed|done|finished)\b/i.test(o.reply),
+        && !!before && reportsRecordedTaskState(o.reply, before, expected, "in_progress")
+        && reportsRecordedTaskState(o.reply, blocked, expected, "blocked") && reportsRecordedTaskState(o.reply, done, expected, "done"),
         "The overview links the actual active, blocked and completed work without changing its state.");
-      c.add("grounded-blocker", o.reply.includes(String(o.state.blocker)), "The summary describes the fixture's actual recorded blocker.");
+      c.add("grounded-blocker", groundedOverviewBlocker(o.reply, blocked, expected, o.state.blocker), "The blocked task carries the actual recorded reason and the answer grounds that reason in the same task without claiming it is resolved. Incidental fixture nonces are not a user requirement.");
       c.add("idle-is-not-broken", o.agents?.some(row => row.id === worker.id && row.status === "idle") === true
         && /\bMorgan\b[^.\n]*\b(?:idle|available|not currently working)\b/i.test(o.reply)
         && !/\bMorgan\b\s+(?:is|looks|appears)\s+(?:broken|failed|stuck)/i.test(o.reply),
@@ -107,7 +109,7 @@ function companyOverview(): ChatCatalogCase {
     await ctx.input.api.post(`/api/companies/${hiddenCompany.id}/issues`, { title: hiddenMarker, status: "blocked" });
     return { project: p, task: active, blockedTask, doneTask, worker, blocker, hiddenCompany, hiddenMarker };
   });
-  return { ...base, async verifySetup(ctx, state) {
+  return { ...base, oracleVersion: "paperclip.chat-catalog.activity-overview.grounded.v2", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/recorded-work-claims.ts"], async verifySetup(ctx, state) {
     const active = await ctx.input.api.get<Entity & { assigneeUserId: string | null }>(`/api/issues/${entity(state, "task").id}`);
     const worker = await ctx.input.api.get<Entity>(`/api/agents/${entity(state, "worker").id}`);
     const c = checks();

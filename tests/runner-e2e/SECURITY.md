@@ -588,3 +588,43 @@ evidence secret finding withholds all screenshots for that attempt. The launcher
 retains a closed withholding reason and removes public markers while preserving
 original private PNG bytes and hashes. Later cleanup labels and empty sanitized
 export scans cannot clear this decision; the publisher and gallery enforce it.
+
+
+### SDK canary compiled fingerprint admission
+
+The source-local `plugins.use-plugin-tool` canary verifies the existing startup
+build and private retention before any live fixture can create an agent or run
+its hello. The gate binds the authenticated 500 Git inputs and restored lock,
+compiler/helper identities, both target certificates and complete 1611-file
+compiled manifests. It preserves every privacy scan and raw observation.
+
+The normal case fingerprint is deferred until those genuine compiled bytes are
+available in that same real scenario startup. A complete non-null fingerprint
+and source closure must be retained privately before fixtures. The later normal
+definition must match it. Missing or changed proof fails before fixture/model
+work. A failed framework start still consumes that attempt; this gate adds no
+retry, diagnostic operation, allowance or grading exception. The other five SDK
+cases remain subject to their separate admission holds. Local declaration-only
+metadata carries null compiled digests and makes no runtime qualification claim.
+
+Preview-tool fixture discovery uses the installed manifest key for the board
+registry filter and verifies the returned database UUID and exact namespaced
+`preview` name. Enabled setup must expose exactly one tool. Disable verification
+requires the same selected record to be disabled and its actual key-filtered
+inventory to be empty; an enabled positive precedes that removal check. Agent
+discovery remains under its existing UUID-filtered authorized catalog. This
+identity correction does not release or rerun the exhausted SDK canary, change
+SDK/compiler/scanner behavior, or authorize the other five cases.
+
+The isolated `onboarding.new-company` native1017 candidate keeps its original
+source-company chat and ordinary human company creation. Only its credential
+setup runs in the existing standalone private child. It uses the real saved
+company's public `agents/new` route, same first-agent setup ID, personal
+OpenRouter account grant, exact local environment, native hello and public hire.
+No draft/localStorage write, legacy CLI fallback or source-company account
+substitution is allowed. Partial created connection IDs are retained privately
+for public cleanup before the new company is removed. Native probe usage stays
+unknown outside heartbeat accounting, never zero. This candidate includes only
+the focused local native-probe prerequisite from core PR18103; all candidate
+outcomes are separate from frozen39e qualification. Source acceptance is not
+permission to run the unused initial.

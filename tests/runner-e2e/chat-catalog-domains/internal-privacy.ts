@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
@@ -181,8 +182,8 @@ function shareProject(): ChatCatalogCase {
   return { ...base, authentication: "human-session", sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-privacy.ts", "chat-catalog-domains/identity-auth.ts"],
     async act(ctx, state) {
       if (!observer) throw new Error("Missing independent observer");
-      const first = await pollUntil({ label: "Existing private-project owner handoff", deadlineAt: Date.now() + 150_000,
-        load: () => observeInternal(ctx, state), accept: o => o.runs.length === 1 && o.runs.every(row => row.status === "succeeded")
+      const first = await pollUntil({ label: "Existing private-project owner handoff", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
+        load: () => observeInternal(ctx, state), accept: o => chatCatalogNativePhaseIsTimely(ctx) && o.runs.length === 1 && o.runs.every(row => row.status === "succeeded")
           && ctx.issue()?.conversationState === "waiting" });
       const p = entity(state, "project"); const protectedTask = entity(state, "protectedTask");
       const leadReadStatus = await agentStatus(ctx, first.leadId, `/api/projects/${p.id}`);

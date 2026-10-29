@@ -183,9 +183,10 @@
       "chat-catalog-domains/internal-definition.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/internal-activity.ts",
-      "chat-scenarios/activity.yaml"
+      "chat-scenarios/activity.yaml",
+      "chat-catalog-domains/recorded-work-claims.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.internal.v1",
+    "oracleVersion": "paperclip.chat-catalog.activity-overview.grounded.v2",
     "coverageGaps": [],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
@@ -1400,12 +1401,13 @@
     "scenarioId": "cases.related-work",
     "sourceFiles": [
       "chat-catalog-domains/integrator-case-related.ts",
+      "chat-catalog-domains/recorded-work-claims.ts",
       "chat-catalog-domains/integrator-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/internal-definition.ts",
       "chat-scenarios/cases.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.case-related.grounded.v2",
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
@@ -3136,6 +3138,7 @@
   {
     "scenarioId": "gateways-profiles.inspect-gateway-error",
     "sourceFiles": [
+      "chat-catalog-domains/gateway-public-receipt.ts",
       "chat-catalog-domains/external-gateway-error.ts",
       "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/external-support.ts",
@@ -3150,7 +3153,7 @@
       "../../ui/src/App.tsx",
       "chat-scenarios/gateways-profiles.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.external.v1",
+    "oracleVersion": "paperclip.chat-catalog.gateway-public-receipt.v2",
     "expectedRunCount": 3,
     "expectedHumanMessageCount": 1,
     "minimumRunCount": 3,
@@ -3688,11 +3691,13 @@
   },
   {
     "requiredCredentials": [
-      "OPENAI_API_KEY"
+      "OPENROUTER_API_KEY"
     ],
     "scenarioId": "onboarding.new-company",
     "sourceFiles": [
       "chat-catalog-domains/identity-new-company.ts",
+      "chat-catalog-domains/identity-new-company-native.ts",
+      "chat-catalog-domains/identity-new-company-native-proof.ts",
       "chat-catalog-domains/identity-wizard.ts",
       "chat-catalog-domains/identity-private-browser.ts",
       "chat-catalog-domains/identity-private-browser-worker.ts",
@@ -3767,6 +3772,7 @@
     "scenarioId": "plugins.configure-plugin",
     "sourceFiles": [
       "chat-catalog-domains/external-plugins.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -3789,6 +3795,7 @@
     "scenarioId": "plugins.disable-plugin",
     "sourceFiles": [
       "chat-catalog-domains/external-plugins.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -3833,6 +3840,7 @@
     "scenarioId": "plugins.use-plugin-tool",
     "sourceFiles": [
       "chat-catalog-domains/external-plugin-tool.ts",
+      "chat-catalog-domains/external-plugin-tool-identity.ts",
       "chat-catalog-domains/external-plugin-fixture.ts",
       "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-support.ts",
@@ -4169,11 +4177,12 @@
     "scenarioId": "questions-and-approvals.formal-hire-revision",
     "sourceFiles": [
       "chat-catalog-domains/identity-hire-revision.ts",
+      "chat-catalog-domains/identity-hire-model-choice.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-scenarios/questions-and-approvals.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.identity.v1",
+    "oracleVersion": "paperclip.chat-catalog.hire-revision.native1017.v2",
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
     "attemptTimeoutMs": 300000,
@@ -4631,13 +4640,15 @@
     "scenarioId": "routines.read-history",
     "sourceFiles": [
       "chat-catalog-domains/integrator-routine-history.ts",
-      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/routine-history-work-failure.ts",
+      "chat-catalog-domains/external-provider.ts",
+      "chat-catalog-domains/external-support.ts",
       "chat-catalog-domains/internal-definition.ts",
       "chat-catalog-domains/internal-support.ts",
       "chat-catalog-domains/integrator-support.ts",
       "chat-scenarios/routines.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.integrator.routine-work-failure.v2",
     "expectedRunCount": 3,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
@@ -4645,12 +4656,12 @@
     "runPolicy": {
       "kind": "terminal-counts",
       "terminalStatusCounts": {
-        "failed": 1,
-        "succeeded": 2
+        "succeeded": 3
       }
     },
     "modulePath": "./chat-catalog-domains/integrator-routine-history.js",
-    "exportName": "integratorRoutineHistoryCases"
+    "exportName": "integratorRoutineHistoryCases",
+    "authentication": "human-session"
   },
   {
     "scenarioId": "routines.run-now",
@@ -4725,9 +4736,10 @@
     "sourceFiles": [
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/runtime-runs-adapters.ts",
-      "chat-scenarios/runs-adapters.yaml"
+      "chat-scenarios/runs-adapters.yaml",
+      "chat-catalog-domains/model-option-catalog.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.runtime.v2",
+    "oracleVersion": "paperclip.chat-catalog.model-options.scoped-catalog.v3",
     "coverageGaps": [],
     "expectedRunCount": 1,
     "turnTimeoutMs": 120000,
@@ -5057,11 +5069,7 @@
       "../../server/src/services/company-skills.ts",
       "../../packages/shared/src/validators/skill-policy.ts"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
-    "coverageGaps": [
-      "Source-qualified prerequisite limitation: the supported membership permission route currently rejects agent principals, so agents:configure cannot be assumed from CEO/legacy hire authority. Actual grant/configuration HTTP probes must establish the runtime blocker or succeed before this scenario can run.",
-      "Unsupported effective-use context: reserved setup probes the actual unsupported use action plus every real lifecycle action under a denied policy and the actual still-permitted board assignment, restoring policy/assignment in finally. Source runtime version selection has no use-policy principal/action. These receipts establish a prerequisite limitation, never the required model refusal: effective-use-denial outcome remains unqualifiable until a supported actual use-denial contract exists."
-    ],
+    "oracleVersion": "paperclip.chat-catalog.skill-enable.standard-config.v2",
     "expectedRunCount": 2,
     "expectedHumanMessageCount": 1,
     "turnTimeoutMs": 120000,
@@ -5267,7 +5275,8 @@
     "scenarioId": "status-cards.refresh-card",
     "sourceFiles": [
       "chat-catalog-domains/integrator-status-cards.ts",
-      "chat-catalog-domains/runtime-native-failure.ts",
+      "chat-catalog-domains/status-card-work-failure.ts",
+      "chat-catalog-domains/external-provider.ts",
       "chat-catalog-domains/runtime-support.ts",
       "chat-catalog-domains/identity-support.ts",
       "chat-catalog-domains/internal-definition.ts",
@@ -5275,7 +5284,7 @@
       "chat-catalog-domains/integrator-support.ts",
       "chat-scenarios/status-cards.yaml"
     ],
-    "oracleVersion": "paperclip.chat-catalog.integrator.v1",
+    "oracleVersion": "paperclip.chat-catalog.status-card.required-work-failure.v2",
     "expectedRunCount": 7,
     "expectedHumanMessageCount": 4,
     "turnTimeoutMs": 120000,
@@ -5283,8 +5292,7 @@
     "runPolicy": {
       "kind": "terminal-counts",
       "terminalStatusCounts": {
-        "failed": 1,
-        "succeeded": 6
+        "succeeded": 7
       }
     },
     "modulePath": "./chat-catalog-domains/integrator-status-cards.js",

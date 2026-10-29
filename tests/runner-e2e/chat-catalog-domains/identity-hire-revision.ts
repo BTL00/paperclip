@@ -2,19 +2,24 @@ import { expect } from "@playwright/test";
 import type { Approval, ApprovalComment } from "../../../packages/shared/src/types/approval.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { checks, entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, observeIdentity, openStandingChat, waitForReply } from "./identity-support.js";
+import { identityDefinition, identityObservation, observeIdentity, openStandingChat, remainingIdentityObservationBudget, waitForReply } from "./identity-support.js";
+import { CHAT_OPENCODE_MODEL } from "../chat-runtime-profile.js";
+import { readHireModelChoice, validHireModelChoice } from "./identity-hire-model-choice.js";
 
 export function gradeHireRevision(value: unknown) {
   const c = checks(); const o = identityObservation(value); c.add("complete-formal-revision", !!o, "Actual governance proposal, catalog choice, saved history and attributed resubmission are required."); if (!o) return c.result();
   const approval = o.state.currentApproval as Approval | undefined; const original = o.state.originalApproval as Approval | undefined;
-  const adapter = approval?.payload.adapterConfig as { model?: string } | undefined;
+  const adapter = approval?.payload.adapterConfig as { model?: string; provider?: string } | undefined;
   c.add("same-unapproved-governed-hire", !!approval && approval.id === original?.id && approval.companyId === o.companyId && approval.type === "hire_agent"
     && approval.requestedByAgentId === o.leadId && approval.status === "pending" && approval.decidedByUserId === null && approval.decidedAt === null,
     "Revision returns the same actual hiring proposal to pending board review; it is never promoted to approved or a ready employee.");
   c.add("actual-board-selected-cheaper-choice", typeof o.state.cheaperModel === "string" && adapter?.model === o.state.cheaperModel
     && (original?.payload.adapterConfig as { model?: string } | undefined)?.model !== adapter?.model
-    && Array.isArray(o.state.eligibleModels) && o.state.eligibleModels.includes(adapter.model) && o.state.originalOtherFieldsPreserved === true,
-    "The real public adapter catalog contains the explicit board-selected lower-cost alternative, and only that proposed configuration changes; no rate is invented.");
+    && Array.isArray(o.state.eligibleModels) && o.state.eligibleModels.includes(adapter.model) && o.state.originalOtherFieldsPreserved === true
+    && approval?.payload.adapterType === "paperclip_runner" && adapter.provider === "opencode"
+    && validHireModelChoice(o.state.modelChoice) && o.state.modelChoice.cheaperModel === adapter.model && o.state.modelChoice.originalModel === o.state.originalModel
+    && (original?.payload.adapterConfig as { model?: string } | undefined)?.model === o.state.modelChoice.originalModel,
+    "The actual public catalog and official published text/cache rates prove the selected1017 configuration costs less across all published rate variants. Only the pending proposed model changes; no inference or realized savings is claimed for the original configuration.");
   const comments = o.state.approvalComments as ApprovalComment[] | undefined;
   c.add("inspectable-original-and-revised-history", !!comments?.some(comment => comment.id === o.state.originalHistoryCommentId && comment.authorUserId === o.state.humanId
     && comment.body.includes(String(o.state.originalModel)) && comment.body.includes(String(o.state.cheaperModel)))
@@ -30,10 +35,12 @@ export function gradeHireRevision(value: unknown) {
 export const hireRevisionIdentityCases: readonly ChatCatalogCase[] = [identityDefinition("questions-and-approvals.formal-hire-revision", async ctx => {
   const source = await openStandingChat(ctx); const { fixtures, execution, workspacePath, nonce } = ctx.input;
   const configuration = execution.profile.buildAgent({ environmentId: fixtures.environment.id, environmentFixtureId: execution.environment.id, workspacePath, secretRefs: fixtures.secretRefs, executionId: nonce });
-  const config = configuration.adapterConfig as Record<string, unknown>; const cheaperModel = "gpt-6-luna";
-  const originalModel = typeof config.model === "string" && config.model !== cheaperModel ? config.model : "gpt-6.1-sol";
-  const models = await ctx.input.api.get<Array<{ id: string }>>(`/api/companies/${fixtures.company.id}/adapters/${configuration.adapterType}/models?provider=codex&environmentId=${fixtures.environment.id}`);
-  if (![originalModel, cheaperModel].every(model => models.some(row => row.id === model))) throw new Error("Setup blocker: both the proposed and board-selected cheaper models must exist in the actual target adapter catalog");
+  const config = configuration.adapterConfig as Record<string, unknown>;
+  if (configuration.adapterType !== "paperclip_runner" || config.provider !== "opencode" || config.model !== CHAT_OPENCODE_MODEL) throw new Error("This hire-revision fixture requires the requested native OpenCode1017 profile");
+  const models = await ctx.input.api.get<Array<{ id: string }>>(`/api/companies/${fixtures.company.id}/adapters/opencode_local/models?provider=openrouter&environmentId=${fixtures.environment.id}`);
+  const modelChoice = await readHireModelChoice(models);
+  const { originalModel, cheaperModel } = modelChoice;
+  await ctx.input.evidence("identity-hire-model-choice.json", { ...modelChoice, originalConfigurationExecuted: false, publishedRateComparisonOnly: true });
   const session = await ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session");
   const originalApproval = await ctx.input.api.post<Approval>(`/api/companies/${fixtures.company.id}/approvals`, { type: "hire_agent", requestedByAgentId: fixtures.agent.id, issueIds: [source.id],
     payload: { ...configuration, name: `Launch researcher ${nonce}`, role: "researcher", reportsTo: fixtures.agent.id, adapterConfig: { ...config, model: originalModel } } });
@@ -43,11 +50,12 @@ export const hireRevisionIdentityCases: readonly ChatCatalogCase[] = [identityDe
   await expect.poll(async () => (await ctx.input.api.get<Approval>(`/api/approvals/${originalApproval.id}`)).status).toBe("revision_requested");
   await ctx.input.page.goto(url, { waitUntil: "domcontentloaded" });
   return { originalApproval, originalHistoryCommentId: history.id, originalModel, cheaperModel, humanId: session.user.id,
-    eligibleModels: models.map(row => row.id), beforeAgentCount: (await ctx.input.api.get<unknown[]>(`/api/companies/${fixtures.company.id}/agents`)).length };
+    eligibleModels: models.map(row => row.id), modelChoice, beforeAgentCount: (await ctx.input.api.get<unknown[]>(`/api/companies/${fixtures.company.id}/agents`)).length };
 }, gradeHireRevision, {
-  authentication: "human-session", sourceFiles: ["chat-catalog-domains/identity-hire-revision.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"],
+  authentication: "human-session", oracleVersion: "paperclip.chat-catalog.hire-revision.native1017.v2", sourceFiles: ["chat-catalog-domains/identity-hire-revision.ts", "chat-catalog-domains/identity-hire-model-choice.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const id = entity(state, "originalApproval").id; const source = ctx.input.page.url();
+    const originalDeadlineAt = ctx.observationDeadlineAt; remainingIdentityObservationBudget(ctx);
+    await waitForReply(ctx, originalDeadlineAt); const id = entity(state, "originalApproval").id; const source = ctx.input.page.url();
     const links = await ctx.input.page.locator('[id^="comment-"] a[href]').evaluateAll(rows => rows.map(row => row.getAttribute("href")!));
     const link = links.find(href => new URL(href, ctx.input.api.baseURL).pathname.endsWith(`/approvals/${id}`));
     if (!link) throw new Error("Actual pending revised proposal review link is missing");

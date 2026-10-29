@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogNativePhaseRemainingBudget } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { readFile, realpath, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -59,9 +60,9 @@ export const runtimePreviewCases = [runtimeDefinition("workspaces.preview-servic
   sourceFiles: ["chat-catalog-domains/runtime-preview.ts", "chat-catalog-domains/runtime-workspaces.ts", "chat-catalog-domains/runtime-support.ts", "chat-scenarios/workspaces.yaml"],
   expectedHumanMessageCount: 2, expectedRunCount: 3, attemptTimeoutMs: 720_000,
   async act(ctx, state) {
-    await pollUntil({ label: "Actual canonical preview service readiness", deadlineAt: Date.now() + 180_000,
+    await pollUntil({ label: "Actual canonical preview service readiness", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), workspace: await ctx.input.api.get<PreviewWorkspace>(`/api/execution-workspaces/${(state.workspace as Entity).id}`) }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 2 && value.runs.every(run => run.status === "succeeded")
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.length === 2 && value.runs.every(run => run.status === "succeeded")
         && value.workspace.runtimeServices?.some(service => service.status === "running" && service.healthStatus === "healthy") === true });
     const ws = await ctx.input.api.get<PreviewWorkspace>(`/api/execution-workspaces/${(state.workspace as Entity).id}`);
     const service = ws.runtimeServices?.find(row => row.serviceName === "Website preview" && row.status === "running")!;
@@ -80,10 +81,10 @@ export const runtimePreviewCases = [runtimeDefinition("workspaces.preview-servic
     const beforeRuns = (await ctx.allRuns()).map(run => run.id);
     const beforeOperations = (await ctx.input.api.get<WorkspaceOperation[]>(`/api/execution-workspaces/${ws.id}/workspace-operations`)).map(row => row.id);
     await writeFile(String(state.failureFlag), "Deliberate bounded owned process-start failure fixture", "utf8");
-    await sendChatMessage(ctx.input.page, "Restart that same website preview now and tell me whether it actually comes back. If startup fails, keep that failure visible and explain the next repair step; do not claim a working preview.");
-    const settled = await pollUntil({ label: "Explicit preview restart reports its genuine startup failure", deadlineAt: Date.now() + 180_000,
+    await sendChatMessage(ctx.input.page, "Restart that same website preview now and tell me whether it actually comes back. If startup fails, keep that failure visible and explain the next repair step; do not claim a working preview.", chatCatalogNativePhaseRemainingBudget(ctx));
+    const settled = await pollUntil({ label: "Explicit preview restart reports its genuine startup failure", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns(), operations: await ctx.input.api.get<WorkspaceOperation[]>(`/api/execution-workspaces/${ws.id}/workspace-operations`) }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.length === 3 && value.runs.every(run => run.status === "succeeded")
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.length === 3 && value.runs.every(run => run.status === "succeeded")
         && value.operations.some(row => !beforeOperations.includes(row.id) && row.status === "failed") });
     const ids = settled.runs.filter(run => !beforeRuns.includes(run.id)).map(run => run.id); state.failureRunIds = ids;
     state.failureOperation = settled.operations.find(row => !beforeOperations.includes(row.id) && row.status === "failed" && ids.includes(row.heartbeatRunId ?? ""));

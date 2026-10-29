@@ -304,11 +304,11 @@ function valid(scenario: string): InternalObservation {
       o.runs.push({ id: "final", companyId: "company", agentId: "ceo", status: "succeeded" }); Object.assign(o, { phaseReply: "Casey's newer offline research prototype edit is retained in history. I restored the selected revision 2 as current revision 7." }); break;
     }
     case "activity.company-overview": {
-      o.tasks[0] = { ...o.tasks[0]!, status: "in_progress" }; o.state.task = { ...o.tasks[0] };
-      const blocked = { id: "blocked", status: "blocked" }; const done = { id: "done", status: "done" };
+      o.tasks[0] = { ...o.tasks[0]!, identifier: "ACORN-1", status: "in_progress" }; o.state.task = { ...o.tasks[0] };
+      const blocked = { id: "blocked", identifier: "ACORN-2", title: "Accessibility review", status: "blocked", description: "Waiting for approved launch colors." }; const done = { id: "done", identifier: "ACORN-3", title: "Launch brief delivered", status: "done" };
       o.state.blockedTask = blocked; o.state.doneTask = done; o.tasks.push(blocked, done); o.state.worker = { id: "morgan" }; o.agents = [{ id: "morgan", status: "idle" }];
       o.state.blocker = "approved launch colors"; o.state.hiddenMarker = "hidden acquisition";
-      o.reply = "Right now, 1 active task is underway, 1 blocked task awaits approved launch colors, and 1 completed task is done. Morgan is idle.";
+      o.reply = "Right now, ACORN-1 Website task is underway (1 active task).\nACORN-2 Accessibility review is blocked, waiting for approved launch colors (1 blocked task).\nACORN-3 Launch brief delivered is done (1 completed task).\nMorgan is idle.";
       o.links.push("/ACORN/issues/blocked", "/ACORN/issues/done"); break;
     }
     case "activity.audit-change": {

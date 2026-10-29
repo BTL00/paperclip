@@ -1,3 +1,4 @@
+import { explicitlyUnrelatedWork, privateWorkUndisclosed, recordedTaskUnits, reportsRecordedCaseRole, reportsRecordedTaskState } from "./recorded-work-claims.js";
 import { expect } from "@playwright/test";
 import type { cases } from "../../../packages/db/src/schema/cases.js";
 import type { HandoffCaseResult } from "../../../packages/shared/src/case-handoffs.js";
@@ -25,14 +26,6 @@ function relatedObservation(value: unknown): RelatedObservation | undefined {
   const o = value as RelatedObservation;
   return observation(value) && !!o.caseDetail && Array.isArray(o.caseDetail.issueLinks) && !!o.reverseLinks && typeof o.deniedStatus === "number" ? o : undefined;
 }
-function reportsTaskState(reply: string, task: Entity, state: "done" | "backlog") {
-  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const names = [task.identifier, task.title].filter((name): name is string => !!name);
-  const subject = new RegExp(names.map(escape).join("|"), "i");
-  const yes = state === "done" ? /\b(?:done|completed|finished)\b/i : /\bbacklog\b/i;
-  const wrong = state === "done" ? /\b(?:not (?:done|completed|finished)|still (?:running|pending))\b/i : /\b(?:not (?:in )?backlog|done|completed|finished)\b/i;
-  return names.length > 0 && reply.split(/(?<=[.!?])\s+|\n+/).some(sentence => subject.test(sentence) && yes.test(sentence) && !wrong.test(sentence));
-}
 export function gradeIntegratorRelatedWork(value: unknown) {
   const c = checks(); const o = relatedObservation(value);
   c.add("actual-case-relationships-and-principal-denial", !!o, "Requires public case/issue relationship records and a real responding-principal access probe.");
@@ -44,14 +37,17 @@ export function gradeIntegratorRelatedWork(value: unknown) {
     && o.reverseLinks[primary.id]?.some(row => row.case.id === original.id && row.case.workIssueId === primary.id) && o.reverseLinks[linked.id]?.some(row => row.case.id === original.id && row.role === "reference"),
   "The actual original primary and explicitly linked follow-up retain supported forward and reverse case relationships.");
   c.add("accessible-work-state-and-links", !!primary && !!linked && hasLink(o, "issues", primary) && hasLink(o, "issues", linked)
-    && primary.status === "done" && linked.status === "backlog" && /\b(?:primary|main)\b/i.test(o.reply) && /\b(?:follow.up|linked|reference)\b/i.test(o.reply)
-    && reportsTaskState(o.reply, primary, "done") && reportsTaskState(o.reply, linked, "backlog")
+    && primary.status === "done" && linked.status === "backlog"
+    && reportsRecordedCaseRole(o.reply, primary, [primary, linked], "work") && reportsRecordedCaseRole(o.reply, linked, [primary, linked], "reference")
+    && reportsRecordedTaskState(o.reply, primary, [primary, linked], "done") && reportsRecordedTaskState(o.reply, linked, [primary, linked], "backlog")
     && !/\b(?:all (?:case )?work (?:is )?(?:done|complete)|follow.up (?:is )?(?:done|completed))\b/i.test(o.reply),
   "Chat links both actual tasks, distinguishes their roles, and preserves completed primary versus backlog follow-up rather than declaring all work done.");
   const unrelated = o.state.unrelated as Entity; const privateTask = o.state.privateTask as Entity;
   c.add("no-name-inference-or-private-disclosure", [403, 404].includes(o.deniedStatus) && !!unrelated && !!privateTask
-    && unrelated.id !== followup.id && !hasLink(o, "issues", unrelated) && !hasLink(o, "issues", privateTask)
-    && !o.reply.includes(String(o.state.privateMarker)) && !o.reply.includes(privateTask.title ?? "missing-private-title")
+    && unrelated.id !== followup.id && !hasLink(o, "issues", privateTask)
+    && (!hasLink(o, "issues", unrelated) && !recordedTaskUnits(o.reply, unrelated, [unrelated, ...[primary, linked].filter((row): row is Entity => !!row)]).length
+      || explicitlyUnrelatedWork(o.reply, unrelated, [unrelated, ...[primary, linked].filter((row): row is Entity => !!row)]))
+    && privateWorkUndisclosed(o.reply, o.links, privateTask, o.state.privateMarker)
     && !o.caseDetail.issueLinks.some(link => link.issueId === unrelated.id || link.issueId === privateTask.id),
   "The CEO's own genuine key cannot read the foreign private task; similar names do not create relationships or disclose inaccessible content.");
   c.add("read-only-case-and-work", o.caseDetail.handoffVersion === original.handoffVersion && o.caseDetail.status === original.status
@@ -111,6 +107,6 @@ export const integratorRelatedWorkCases = [integratorDefinition("cases", "cases.
   }
   await ctx.input.page.goto(source); await expect(ctx.input.page.getByTestId("task-chat-composer-input")).toBeVisible();
   await inspectResult(ctx, `/${ctx.input.fixtures.company.issuePrefix}/cases/${o.caseDetail.identifier}`, o.caseDetail.title);
-}, { sourceFiles: ["chat-catalog-domains/integrator-case-related.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"],
-  expectedRunCount: 2, attemptTimeoutMs: 540_000, cleanup,
+}, { sourceFiles: ["chat-catalog-domains/integrator-case-related.ts", "chat-catalog-domains/recorded-work-claims.ts", "chat-catalog-domains/integrator-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/internal-definition.ts", "chat-scenarios/cases.yaml"],
+  oracleVersion: "paperclip.chat-catalog.case-related.grounded.v2", expectedRunCount: 2, attemptTimeoutMs: 540_000, cleanup,
 })];

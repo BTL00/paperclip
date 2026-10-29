@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SKILL_POLICY_ACTIONS } from "../../../packages/shared/src/validators/skill-policy.js";
-import { gradeIntegratorSkillEnable, integratorSkillEnableCases, unsupportedUsePrerequisite } from "./integrator-skill-enable.js";
+import { gradeIntegratorSkillEnable, integratorSkillEnableCases, unsupportedUsePrerequisite, skillEnableAuthorityReady } from "./integrator-skill-enable.js";
 function valid() {
   const skill = { id: "skill", key: "company/accessibility-review", currentVersionId: "revision", markdown: "Check form labels" };
-  return { scenarioId: "skills.enable-for-agent", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { skill: structuredClone(skill), worker: { id: "morgan" }, futureTask: { id: "future" }, agentConfigurationStatus: 200, beforeActivityIds: ["setup-probe"], effectivePolicy: { revision: 1, rules: [] } },
+  return { scenarioId: "skills.enable-for-agent", origin: "https://fixture.test", companyId: "company", leadId: "ceo", state: { skill: structuredClone(skill), worker: { id: "morgan" }, futureTask: { id: "future" }, agentConfigurationStatus: 200, configurationAuthority: { companyId: "company", principalId: "ceo", targetId: "morgan", targetCompanyId: "company", status: 200, membership: { companyId: "company", principalType: "agent", principalId: "ceo", status: "active" }, grants: [{ permissionKey: "agents:configure", scope: null as unknown }], before: { supported: true, desiredSkills: [] as string[], desiredSkillEntries: [] }, after: { supported: true, desiredSkills: [] as string[], desiredSkillEntries: [] } }, beforeActivityIds: ["setup-probe"], effectivePolicy: { revision: 1, rules: [] } },
     tasks: [], projects: [], goals: [], comments: [], documents: [], revisions: [], humanQueries: [], links: [],
     runs: [{ id: "source", agentId: "ceo", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "chat" } }, { id: "future-run", agentId: "morgan", companyId: "company", runtimeMode: "native", status: "succeeded", contextSnapshot: { issueId: "future", skillVersions: { [skill.key]: "revision" } } }],
     skill, versions: [{ id: "revision", companyId: "company", companySkillId: "skill", fileInventory: [{ path: "SKILL.md", kind: "skill", content: skill.markdown }] }], assignment: { supported: true, desiredSkills: [skill.key], desiredSkillEntries: [{ key: skill.key, versionId: "revision" }] }, effectivePolicy: { revision: 1, rules: [] },
@@ -21,8 +21,8 @@ describe("effective-use prerequisite classification", () => {
   });
 });
 describe("actual permitted skill assignment and future immutable delivery", () => {
-  it("keeps unsupported grant/use-policy prerequisites partial, never an expected-refusal pass", () => {
-    expect(integratorSkillEnableCases[0]!.coverageGaps).toHaveLength(2);
+  it("requires actual CEO configuration while leaving denied-use coverage conditional", () => {
+    expect(integratorSkillEnableCases[0]!.coverageGaps?.length ?? 0).toBe(0);
     expect(gradeIntegratorSkillEnable(valid()).passed).toBe(true);
     expect(gradeIntegratorSkillEnable({ ...valid(), state: { ...valid().state, agentConfigurationStatus: 403 } }).passed).toBe(false);
     expect(gradeIntegratorSkillEnable(undefined).passed).toBe(false);
@@ -33,6 +33,11 @@ describe("actual permitted skill assignment and future immutable delivery", () =
     const wrong = valid(); wrong.runs[1]!.agentId = "someone-else"; expect(gradeIntegratorSkillEnable(wrong).passed).toBe(false);
     const probe = valid(); probe.activity[0]!.id = "setup-probe"; expect(gradeIntegratorSkillEnable(probe).passed).toBe(false);
     const changed = valid(); changed.effectivePolicy.revision = 2; expect(gradeIntegratorSkillEnable(changed).passed).toBe(false);
+  });
+  it("does not turn a completed positive context into permission to omit the actual skill or authority", () => {
+    const missing = valid(); missing.assignment.desiredSkills = []; expect(gradeIntegratorSkillEnable(missing).passed).toBe(false);
+    const foreign = valid(); foreign.state.configurationAuthority.targetCompanyId = "foreign"; expect(gradeIntegratorSkillEnable(foreign).passed).toBe(false);
+    const unauthorized = valid(); unauthorized.state.configurationAuthority.status = 403; expect(gradeIntegratorSkillEnable(unauthorized).passed).toBe(false);
   });
   it("accepts substantive assignment language but rejects false refusal/global activation", () => {
     const o = valid();
@@ -75,4 +80,32 @@ it.each([
  "The installed skill is ready for Morgan. No policy changes were needed.",
 ])("accepts natural current assignment and historical negation: %s", reply => {
  const o = valid(); o.reply = reply; expect(gradeIntegratorSkillEnable(o).passed).toBe(true);
+});
+
+describe("existing standard CEO authority and actual target no-op", () => {
+  for (const [field, value] of [["companyId", "foreign"], ["principalId", "board"], ["targetId", "other"], ["targetCompanyId", "foreign"], ["status", 403]] as const) it(`rejects mismatched authority ${field}`, () => {
+    const o = valid(); Object.assign(o.state.configurationAuthority, { [field]: value }); expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+  });
+  for (const [field, value] of [["principalType", "user"], ["principalId", "other"], ["companyId", "foreign"], ["status", "suspended"]] as const) it(`rejects mismatched membership ${field}`, () => {
+    const o = valid(); Object.assign(o.state.configurationAuthority.membership, { [field]: value }); expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+  });
+  it("does not infer configuration authority from hiring/job title or substitute setup assignment", () => {
+    const o = valid(); o.state.configurationAuthority.grants = [{ permissionKey: "agents:create", scope: null }]; expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+    const assigned = valid(); assigned.state.configurationAuthority.after.desiredSkills.push(assigned.skill.key); expect(gradeIntegratorSkillEnable(assigned).passed).toBe(false);
+    const changed = valid(); changed.state.configurationAuthority.after.desiredSkills.push("another-existing-skill"); expect(gradeIntegratorSkillEnable(changed).passed).toBe(false);
+  });
+  it("retains target scope as evidence while the real target-specific HTTP decision stays authoritative", () => {
+    const o = valid(); o.state.configurationAuthority.grants = [{ permissionKey: "agents:configure", scope: { agentIds: ["morgan"] } }];
+    expect(gradeIntegratorSkillEnable(o).passed).toBe(true);
+    o.state.configurationAuthority.status = 403; expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+  });
+  it("requires the actual immutable revision and rejects installation or policy substitution", () => {
+    const o = valid(); o.skill.markdown = "Replacement instructions"; expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+    const version = valid(); version.assignment.desiredSkillEntries[0]!.versionId = "wrong"; expect(gradeIntegratorSkillEnable(version).passed).toBe(false);
+    const policy = valid(); policy.activity.push({ ...policy.activity[0]!, id: "policy-write", action: "skill_policy.updated" }); expect(gradeIntegratorSkillEnable(policy).passed).toBe(false);
+  });
+  it("fails closed on missing no-op snapshots and a board-backed status alone", () => {
+    const o = valid(); Object.assign(o.state, { configurationAuthority: undefined }); expect(gradeIntegratorSkillEnable(o).passed).toBe(false);
+    expect(skillEnableAuthorityReady(undefined, "company", "ceo", "morgan", "skill")).toBe(false);
+  });
 });

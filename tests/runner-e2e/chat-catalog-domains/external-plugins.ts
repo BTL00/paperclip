@@ -5,6 +5,7 @@ import type { PluginRecord } from "../../../packages/shared/src/types/plugin.js"
 import { pollUntil } from "../api.js";
 import { definition, externalObservation, observeExternal, root, checks, verifyRenderedReply } from "./external-support.js";
 import { createPreviewFixture } from "./external-plugin-fixture.js";
+import { readPreviewToolInventory, PreviewToolRemovalPendingError } from "./external-plugin-tool-identity.js";
 import { waitForReply, probeAgentPermission } from "./identity-support.js";
 
 type Fixture = Awaited<ReturnType<typeof createPreviewFixture>>;
@@ -39,12 +40,16 @@ export function gradePluginManagement(value: unknown) {
 }
 export const pluginExternalCases = ["configure-plugin", "disable-plugin"].map(id => definition(`plugins.${id}`, async ctx => {
   const fixture = await createPreviewFixture(ctx); fixtures.set(ctx, fixture);
+  let installedId: string | undefined, secretId: string | undefined;
   try {
     const installed = await ctx.input.api.post<PluginRecord>("/api/plugins/install", { packageName: fixture.packageRoot, isLocalPath: true });
+    installedId = installed.id;
     const plugin = await pollUntil({ label: "disposable preview plugin activation", deadlineAt: Date.now() + 45_000,
       load: () => ctx.input.api.get<PluginRecord>(`/api/plugins/${installed.id}`), accept: row => row.status === "ready", reject: row => row.status === "error" ? "Synthetic plugin activation failed; details withheld" : undefined });
+    const toolsBefore = await readPreviewToolInventory(ctx.input.api, plugin, { id: installed.id, key: fixture.key, count: 1 });
     const value = `synthetic-preview-${randomBytes(24).toString("hex")}`; ctx.input.privateSecrets?.push(value);
     const secret = await ctx.input.api.postSensitive<{ id: string }>(`${root(ctx)}/secrets`, { name: "Preview fixture credential", key: "PREVIEW_FIXTURE_API_KEY", provider: "local_encrypted", value });
+    secretId = secret.id;
     if (id === "disable-plugin") await ctx.input.api.post(`/api/plugins/${plugin.id}/config`, { companyId: ctx.input.fixtures.company.id, configJson: { apiKey: { type: "secret_ref", secretId: secret.id, version: "latest" } } });
     const configBefore = await ctx.input.api.get<ConfigRecord | null>(`/api/plugins/${plugin.id}/config?companyId=${ctx.input.fixtures.company.id}`);
     const jobs = await ctx.input.api.get<Array<{ id: string }>>(`/api/plugins/${plugin.id}/jobs`);
@@ -54,11 +59,16 @@ export const pluginExternalCases = ["configure-plugin", "disable-plugin"].map(id
     await ctx.input.api.post(`${root(ctx)}/chats/${ctx.input.fixtures.agent.id}`); await ctx.refreshIssue();
     await ctx.input.api.patch(`/api/issues/${ctx.issue()!.id}`, { description: `Selected preview plugin: Website Preview Eval, key ${fixture.key}. ${id === "configure-plugin" ? "Its required preview credential has not been bound. The existing organization secret is named Preview fixture credential." : "It is active and contributes a scoped preview route and an annual managed refresh job."}` });
     return { pluginId: plugin.id, pluginKey: fixture.key, syntheticPlugin: true, pluginReadyBeforeQuery: plugin.status === "ready", secretId: secret.id,
-      configBefore, jobId: jobs[0]!.id, jobCountBefore: jobs.length, agentMutationStatus,
+      toolsBeforeCount: toolsBefore.length, previewToolName: toolsBefore[0]!.name, configBefore, jobId: jobs[0]!.id, jobCountBefore: jobs.length, agentMutationStatus,
       resultPath: `/${ctx.input.fixtures.company.issuePrefix}/company/settings/instance/plugins/${plugin.id}`, resultLabel: "Website Preview Eval" };
-  } catch (error) { fixtures.delete(ctx); await fixture.close(); throw error; }
+  } catch (error) {
+    fixtures.delete(ctx);
+    try { if (installedId) await ctx.input.api.delete(`/api/plugins/${installedId}`, { allowNotFound: true }); }
+    finally { try { if (secretId) await ctx.input.api.delete(`/api/secrets/${secretId}`, { allowNotFound: true }); } finally { await fixture.close(); } }
+    throw error;
+  }
 }, gradePluginManagement, {
-  sourceFiles: ["chat-catalog-domains/external-plugins.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/node_modules/tsx/dist/loader.mjs", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
+  sourceFiles: ["chat-catalog-domains/external-plugins.ts", "chat-catalog-domains/external-plugin-tool-identity.ts", "chat-catalog-domains/external-plugin-fixture.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "../../cli/node_modules/tsx/dist/loader.mjs", "../../cli/src/index.ts", "../../packages/plugins/create-paperclip-plugin/src/index.ts", "../../packages/plugins/sdk/src/index.ts", "../../packages/plugins/sdk/dist/index.js", "chat-scenarios/plugins.yaml"],
   async act(ctx, state) {
     await waitForReply(ctx);
     const before = await ctx.input.api.get<PluginRecord>(`/api/plugins/${state.pluginId}`);
@@ -80,7 +90,14 @@ export const pluginExternalCases = ["configure-plugin", "disable-plugin"].map(id
     } else {
       const row = ctx.input.page.locator("li").filter({ hasText: "Website Preview Eval" });
       await row.getByRole("button", { name: "Disable", exact: true }).click();
-      await pollUntil({ label: "human-disabled preview plugin", deadlineAt: Date.now() + 20_000, load: () => ctx.input.api.get<PluginRecord>(`/api/plugins/${state.pluginId}`), accept: row => row.status === "disabled" }); state.humanDisabled = true;
+      const fixture = fixtures.get(ctx); if (!fixture || typeof state.pluginId !== "string") throw new Error("Owned preview plugin identity is missing");
+      await pollUntil({ label: "human-disabled preview plugin and removed tool", deadlineAt: Date.now() + 20_000,
+        async load() {
+          const plugin = await ctx.input.api.get<PluginRecord>(`/api/plugins/${state.pluginId}`);
+          if (plugin.status !== "disabled") return { plugin, toolsRemoved: false };
+          try { await readPreviewToolInventory(ctx.input.api, plugin, { id: String(state.pluginId), key: fixture.key, count: 0 }); return { plugin, toolsRemoved: true }; }
+          catch (error) { if (error instanceof PreviewToolRemovalPendingError) return { plugin, toolsRemoved: false }; throw error; }
+        }, accept: row => row.plugin.status === "disabled" && row.toolsRemoved }); state.humanDisabled = true;
     }
     await ctx.input.page.goto(source, { waitUntil: "domcontentloaded" });
   },
@@ -91,7 +108,9 @@ export const pluginExternalCases = ["configure-plugin", "disable-plugin"].map(id
     if (id === "configure-plugin") state.configuredReadback = response.ok() && (await response.json()).configured === true;
     else {
       state.previewStatusAfter = response.status();
-      state.toolsAfterCount = (await ctx.input.api.get<unknown[]>(`/api/plugins/tools?pluginId=${state.pluginId}`)).length;
+      const fixture = fixtures.get(ctx); if (!fixture || typeof state.pluginId !== "string") throw new Error("Owned preview plugin identity is missing");
+      const tools = await readPreviewToolInventory(ctx.input.api, state.pluginAfter as PluginRecord, { id: state.pluginId, key: fixture.key, count: 0 });
+      state.toolsAfterCount = tools.length;
       const triggered = await ctx.input.api.request.post(`/api/plugins/${state.pluginId}/jobs/${state.jobId}/trigger`); state.disabledJobTriggerStatus = triggered.status();
       state.retainedConfigUnchanged = JSON.stringify((state.configAfter as ConfigRecord | null)?.configJson ?? null) === JSON.stringify((state.configBefore as ConfigRecord | null)?.configJson ?? null);
     }
