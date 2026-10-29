@@ -6246,24 +6246,43 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   ): Promise<T> {
     if (options.onlyKeys?.size === 0 || (!options.onlyKeys && options.selectionConfig && !options.includeLegacy
       && readPaperclipSkillSyncPreference(options.selectionConfig).desiredSkills.length === 0)) return consume([]);
-    // Installed repository versions are immutable and already discovered. Do
-    // not reconcile the entire library (bundled releases/folders/local paths)
-    // before every turn. This probe caches no authority or mutable selection.
+    // Probe only the selected metadata. Public selections avoid scanning
+    // unrelated source permissions; restricted selections still authorize now.
     const requested = options.onlyKeys ?? (options.selectionConfig && !options.includeLegacy
       ? new Set(readPaperclipSkillSyncPreference(options.selectionConfig).desiredSkills) : null);
-    const installed = requested?.size && visibility().canReadCompany(companyId) ? await db.select({
-      key: companySkills.key, sourceType: companySkills.sourceType, versionId: companySkills.currentVersionId, accessSourceId: companySkills.accessSourceId,
-    }).from(companySkills).where(and(eq(companySkills.companyId, companyId), inArray(companySkills.key, [...requested]))) : [];
-    const preparedRepositorySelection = requested && installed.length === requested.size
-      && installed.every(skill => skill.sourceType === "github" && skill.versionId);
-    if (!preparedRepositorySelection) await measureRunPhase("skills.inventory", () => ensureSkillInventoryCurrent(companyId));
+    const columns = { key: companySkills.key, slug: companySkills.slug, sourceLocator: companySkills.sourceLocator,
+      sourceKind: sql<string>`${companySkills.metadata}->>'sourceKind'`, accessSourceId: companySkills.accessSourceId };
+    let installed = requested?.size && visibility().canReadCompany(companyId) ? await db.select(columns)
+      .from(companySkills).where(and(eq(companySkills.companyId, companyId), inArray(companySkills.key, [...requested]))) : [];
+    if (requested && installed.some(skill => skill.accessSourceId !== null)) {
+      installed = await db.select(columns).from(companySkills).where(and(eq(companySkills.companyId, companyId),
+        inArray(companySkills.key, [...requested]), await visibility().condition(companyId)));
+    }
+    const preparedSelection = requested && installed.length === requested.size;
+    if (!preparedSelection) {
+      await measureRunPhase("skills.inventory", () => ensureSkillInventoryCurrent(companyId));
+    } else {
+      for (const skill of installed.filter(skill => skill.sourceKind === "paperclip_bundled")) {
+        const candidates = skill.key === ONBOARDING_FIRST_TASK_SKILL_KEY
+          ? [fileURLToPath(new URL("../onboarding-assets/first-task/skills/first-task/", import.meta.url))]
+          : resolveBundledSkillsRoot().map(root => path.join(root, skill.slug));
+        for (const directory of candidates) {
+          if (!(await fs.stat(path.join(directory, "SKILL.md")).catch(() => null))?.isFile()) continue;
+          if (normalizeSourceLocatorDirectory(skill.sourceLocator) !== path.resolve(directory)) {
+            const imported = await readLocalSkillImportFromDirectory(companyId, directory, { metadata: { sourceKind: "paperclip_bundled" } });
+            if (imported.key !== skill.key) throw new Error("Bundled runtime skill key changed");
+            await upsertImportedSkills(companyId, [imported], db, { includeFolderPath: false });
+          }
+          break;
+        }
+      }
+    }
     return withSkillPackageReadScope(db, () => withSkillVersionCacheLock(db, companyId, async () => {
-      // Canonical keys already resolved by the fresh probe avoid listing all
-      // unrelated library references. Scope is still enforced by the row query;
-      // a public-to-project change between the two reads fails closed.
-      const runtimeOptions = preparedRepositorySelection ? { ...options, onlyKeys: requested } : options;
+      // Recheck scope on the full row read: a public-to-project change between
+      // the probe and consumption must fail closed.
+      const runtimeOptions = preparedSelection ? { ...options, onlyKeys: requested } : options;
       const entries = await listRuntimeSkillEntriesLocked(companyId, runtimeOptions,
-        Boolean(preparedRepositorySelection && installed.every(skill => skill.accessSourceId === null)));
+        Boolean(preparedSelection && installed.every(skill => skill.accessSourceId === null)));
       return measureRunPhase("skills.consume", () => consume(entries));
     }));
   }

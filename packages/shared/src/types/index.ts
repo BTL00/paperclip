@@ -40,6 +40,9 @@ export type {
 } from "./summary-slot.js";
 export type {
   AttentionDecisionVerb,
+  DecisionHistoryItem,
+  DecisionHistoryQuery,
+  DecisionHistoryPage,
   AttentionDetailImage,
   AttentionFeed,
   AttentionItem,
@@ -730,6 +733,8 @@ export type {
   IssueExecutionMonitorPolicy,
   IssueExecutionMonitorState,
   IssueExecutionPolicy,
+  RequiredQualityReview,
+  QualityReviewBinding,
   IssueExecutionState,
   IssueExecutionStage,
   IssueExecutionStageParticipant,
@@ -768,6 +773,9 @@ export type {
   AskUserQuestionsAnswer,
   AskUserQuestionsResult,
   RequestConfirmationIssueDocumentTarget,
+  RequestConfirmationIssueAttachmentTarget,
+  ConversationTaskHandoff,
+  ConversationTaskHandoffPage,
   RequestConfirmationCustomTarget,
   RequestConfirmationTarget,
   RequestConfirmationPayload,

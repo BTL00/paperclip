@@ -1256,7 +1256,7 @@ transaction boundary.
 
 `company_skill_repository_snapshots` retains its identity and company/content-hash
 uniqueness. Despite its historical name, it can also hold editable skill packages.
-Migration 0404 (`0404_clumsy_leo.sql`) adds `storage` (archive/manifest receipts) and `upload` (a bounded
+Migration 0414 (`0414_sleepy_payback.sql`) adds `storage` (archive/manifest receipts) and `upload` (a bounded
 pending attempt). `file_inventory` remains the legacy payload, defaulting to `[]`.
 `company_skill_versions.package_snapshot_id` and `package_file_map` preserve the
 public version file inventory without storing its contents again. Existing repository
