@@ -654,30 +654,48 @@ fn terminal_events(
             && (event_type == "turn.completed"
                 || state.active_provider_result_fingerprint.is_some()));
     let cancelled = matches!(event_type, "turn.cancelled" | "turn.interrupted");
-    let disposition = match goal_status {
-        Some("blocked") => "blocked",
-        Some("paused" | "limited" | "usage_limited" | "budget_limited") => "yielded",
-        Some("complete") => "done",
-        _ => state
-            .active_provider_result_disposition
-            .as_deref()
-            .unwrap_or(if succeeded { "done" } else { "needs_review" }),
-    };
     let provider = state.config.provider.as_str();
+    // A successful transport turn is not evidence that textless work is done.
+    // Keep accepted semantic results and actual final text authoritative.
+    let unresolved_completion = provider == "opencode"
+        && succeeded
+        && state.active_provider_result_fingerprint.is_none()
+        && state
+            .last_agent_message
+            .as_deref()
+            .is_none_or(|message| message.trim().is_empty());
+    let work_succeeded = succeeded && !unresolved_completion;
+    let disposition = if unresolved_completion {
+        "needs_review"
+    } else {
+        match goal_status {
+            Some("blocked") => "blocked",
+            Some("paused" | "limited" | "usage_limited" | "budget_limited") => "yielded",
+            Some("complete") => "done",
+            _ => state
+                .active_provider_result_disposition
+                .as_deref()
+                .unwrap_or(if succeeded { "done" } else { "needs_review" }),
+        }
+    };
     let provider_name = if provider == "opencode" {
         "OpenCode"
     } else {
         "Codex"
     };
-    let summary = state.last_agent_message.clone().unwrap_or_else(|| {
-        if succeeded {
-            format!("{provider_name} completed the requested work.")
-        } else if cancelled {
-            format!("The {provider_name} run stopped before it completed.")
-        } else {
-            format!("The {provider_name} run failed before it completed.")
-        }
-    });
+    let summary = if unresolved_completion {
+        "The OpenCode turn completed without a final response or an accepted work result. Task completion is unverified.".to_owned()
+    } else {
+        state.last_agent_message.clone().unwrap_or_else(|| {
+            if succeeded {
+                format!("{provider_name} completed the requested work.")
+            } else if cancelled {
+                format!("The {provider_name} run stopped before it completed.")
+            } else {
+                format!("The {provider_name} run failed before it completed.")
+            }
+        })
+    };
     let evidence_ref = format!("provider:{provider}:agent-message");
     let criteria = contract
         .criterion_ids
@@ -685,8 +703,8 @@ fn terminal_events(
         .map(|criterion_id| {
             json!({
                 "criterionId": criterion_id,
-                "status": if succeeded { "satisfied" } else { "unknown" },
-                "evidenceRefs": if succeeded { vec![evidence_ref.as_str()] } else { Vec::<&str>::new() },
+                "status": if work_succeeded { "satisfied" } else { "unknown" },
+                "evidenceRefs": if work_succeeded { vec![evidence_ref.as_str()] } else { Vec::<&str>::new() },
             })
         })
         .collect::<Vec<_>>();
@@ -696,10 +714,12 @@ fn terminal_events(
         "summary": summary,
         "completionClaim": {
             "contractRevision": contract.revision,
-            "objectiveSatisfied": succeeded,
+            "objectiveSatisfied": work_succeeded,
             "criteria": criteria,
-            "remainingWork": if succeeded { Vec::<Value>::new() } else { vec![json!({
-                "description": if disposition == "yielded" {
+            "remainingWork": if work_succeeded { Vec::<Value>::new() } else { vec![json!({
+                "description": if unresolved_completion {
+                    "Determine the OpenCode work outcome before treating the task as complete.".to_owned()
+                } else if disposition == "yielded" {
                     "Resume the durable Codex goal when execution can continue.".to_owned()
                 } else if disposition == "blocked" {
                     "Resolve the blocker before resuming the durable Codex goal.".to_owned()
@@ -709,9 +729,9 @@ fn terminal_events(
                 "blocksCompletion": true,
             })] },
         },
-        "evidence": if succeeded { vec![json!({ "ref": evidence_ref })] } else { Vec::<Value>::new() },
+        "evidence": if work_succeeded { vec![json!({ "ref": evidence_ref })] } else { Vec::<Value>::new() },
         "verification": [],
-        "attentionRequests": if succeeded { Vec::<Value>::new() } else { vec![json!({
+        "attentionRequests": if work_succeeded || unresolved_completion { Vec::<Value>::new() } else { vec![json!({
             "kind": "review",
             "summary": format!("Review the stopped {provider_name} run before continuing."),
             "ownerClass": "human",
@@ -5512,6 +5532,11 @@ mod tests {
                 .all(|criterion| criterion["status"] == "unknown"
                     && criterion["evidenceRefs"].as_array().unwrap().is_empty()));
             assert!(result["evidence"].as_array().unwrap().is_empty());
+            assert!(result["attentionRequests"].as_array().unwrap().is_empty());
+            assert_eq!(
+                result["summary"],
+                "The OpenCode turn completed without a final response or an accepted work result. Task completion is unverified."
+            );
             assert!(!result["completionClaim"]["remainingWork"]
                 .as_array()
                 .unwrap()
@@ -5524,7 +5549,7 @@ mod tests {
     }
 
     #[test]
-    fn opencode_terminal_fallback_uses_its_actual_provider_identity() {
+    fn opencode_terminal_preserves_actual_final_text_and_provider_identity() {
         let mut state = CodexProviderState::new(
             CodexProviderConfig {
                 provider: "opencode".to_owned(),
@@ -5551,14 +5576,16 @@ mod tests {
             }),
             ProviderToolBridge::default(),
         );
-        state.last_agent_message = None;
+        state.last_agent_message = Some("Completed the requested change.".to_owned());
 
         let events = terminal_events(&state, "turn.completed", None);
 
         assert_eq!(
             events[0].payload["summary"],
-            "OpenCode completed the requested work."
+            "Completed the requested change."
         );
+        assert_eq!(events[0].payload["reportedWorkDisposition"], "done");
+        assert_eq!(events[0].payload["completionClaim"]["objectiveSatisfied"], true);
         assert_eq!(
             events[0].payload["evidence"][0]["ref"],
             "provider:opencode:agent-message"
