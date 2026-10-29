@@ -4,7 +4,7 @@ import type { Agent } from "../../../packages/shared/src/types/agent.js";
 import { finishNativeNewCompany, type NewCompanyNativeReceipt } from "./identity-new-company-native.js";
 import { NEW_COMPANY_NATIVE_MODEL } from "./identity-new-company-native-proof.js";
 import { checks, type Entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, observeIdentity, readAgentResource, waitForReply } from "./identity-support.js";
+import { identityDefinition, identityObservation, observeIdentity, readAgentResource, remainingIdentityObservationBudget, waitForReply } from "./identity-support.js";
 
 const companies = new WeakMap<ChatCatalogContext, string>();
 const connections = new WeakMap<ChatCatalogContext, Array<{ companyId: string; connectionId: string; grantId: string }>>();
@@ -37,11 +37,16 @@ export const newCompanyIdentityCases: readonly ChatCatalogCase[] = [identityDefi
   authentication: "human-session", requiredCredentials: ["OPENROUTER_API_KEY"], attemptTimeoutMs: 600_000,
   sourceFiles: ["chat-catalog-domains/identity-new-company.ts", "chat-catalog-domains/identity-new-company-native.ts", "chat-catalog-domains/identity-new-company-native-proof.ts", "chat-catalog-domains/identity-wizard.ts", "chat-catalog-domains/identity-private-browser.ts", "chat-catalog-domains/identity-private-browser-worker.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/onboarding.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); state.companyCountAfterReply = (await ctx.input.api.get<unknown[]>("/api/companies")).length;
+    remainingIdentityObservationBudget(ctx);
+    const originalDeadlineAt = ctx.observationDeadlineAt!;
+    await waitForReply(ctx, originalDeadlineAt);
+    remainingIdentityObservationBudget(ctx);
+    state.companyCountAfterReply = (await ctx.input.api.get<unknown[]>("/api/companies")).length;
     if (state.companyCountAfterReply !== 1) throw new Error("The source agent changed company identities before the human wizard");
+    remainingIdentityObservationBudget(ctx);
     const credential = ctx.input.privateInputs!.credentials.OPENROUTER_API_KEY!; ctx.input.privateSecrets!.push(credential); const source = ctx.input.page.url();
     const wizard = await finishNativeNewCompany({ page: ctx.input.page, origin: ctx.input.api.baseURL, companyName: `Acorn Website Business ${ctx.input.nonce}`, agentName: "Website business CEO", credential,
-      deadlineAt: Date.now() + 360_000, evidence: ctx.input.evidence, onCompany(id) { companies.set(ctx, id); },
+      deadlineAt: Math.min(originalDeadlineAt, Date.now() + 360_000), evidence: ctx.input.evidence, onCompany(id) { companies.set(ctx, id); },
       onConnection(companyId, connectionId, grantId) { connections.set(ctx, [...(connections.get(ctx) ?? []), { companyId, connectionId, grantId }]); } });
     state.wizard = wizard;
     // Retain the explicit authenticated human role configuration/readback.
