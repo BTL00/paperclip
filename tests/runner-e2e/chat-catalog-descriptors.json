@@ -3742,7 +3742,7 @@
   },
   {
     "requiredCredentials": [
-      "OPENAI_API_KEY"
+      "OPENROUTER_API_KEY"
     ],
     "scenarioId": "onboarding.resume-wizard",
     "sourceFiles": [
@@ -3755,7 +3755,10 @@
       "chat-catalog-domains/identity-boundary-contract.ts",
       "chat-catalog-domains/internal-support.ts",
       "installed-release.ts",
-      "chat-scenarios/onboarding.yaml"
+      "chat-scenarios/onboarding.yaml",
+      "chat-catalog-domains/identity-resume-wizard-native.ts",
+      "chat-catalog-domains/identity-resume-wizard-native-proof.ts",
+      "chat-catalog-domains/identity-new-company-native-proof.ts"
     ],
     "oracleVersion": "paperclip.chat-catalog.identity.v1",
     "expectedRunCount": 0,

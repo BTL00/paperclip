@@ -5,13 +5,16 @@ import { installedReleaseLaunch } from "../installed-release.js";
 import type { IdentityBoundaryCase, IdentityBoundaryContext } from "./identity-boundary-contract.js";
 import { createAuthenticatedPerson } from "./identity-auth.js";
 import { checks } from "./internal-support.js";
+import { finishNativeResumeWizard } from "./identity-resume-wizard-native.js";
+import { gradeResumedNativeWizard } from "./identity-resume-wizard-native-proof.js";
 import { finishIdentityWizard, type WizardReceipt } from "./identity-wizard.js";
 import { gradeEmptyInstallation, runEmptyInstallationBoundary, type EmptyInstallationReceipt } from "./identity-onboarding.js";
 
 interface BoundaryReceipt { wizard: WizardReceipt; installation?: EmptyInstallationReceipt; personId?: string; returnedPersonId?: string }
 type Person = Awaited<ReturnType<typeof createAuthenticatedPerson>>;
-const owned = new WeakMap<IdentityBoundaryContext, { person: Person; api: RunnerApi; companyId?: string }>();
+const owned = new WeakMap<IdentityBoundaryContext, { person: Person; api: RunnerApi; companyId?: string; connections: string[] }>();
 export function gradeWizardBoundary(value: unknown, scenarioId: string) {
+  if (scenarioId === "onboarding.resume-wizard") return gradeResumedNativeWizard(value);
   const c = checks(); const o = value as BoundaryReceipt | undefined; const w = o?.wizard;
   const expected = scenarioId === "onboarding.choose-first-runtime" ? "claude_local" : "codex_local";
   c.add("complete-public-wizard", !!w && typeof w.companyId === "string" && typeof w.firstAgentId === "string" && w.companyId !== w.firstAgentId
@@ -55,11 +58,11 @@ const sources = ["chat-catalog-domains/identity-wizard-boundaries.ts", "chat-cat
 export const wizardIdentityBoundaryCases: readonly IdentityBoundaryCase[] = ["onboarding.new-instance", "onboarding.choose-first-runtime", "onboarding.resume-wizard"].map(scenarioId => ({
   scenarioId, journeyKind: "browser-boundary", boundaryTarget: scenarioId === "onboarding.new-instance" ? "empty-installed-target" : "authenticated-harness",
   ...(scenarioId === "onboarding.new-instance" ? {} : { authentication: "human-session" as const }),
-  requiredCredentials: [scenarioId === "onboarding.choose-first-runtime" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"],
-  sourceFiles: sources, oracleVersion: "paperclip.chat-catalog.identity.v1", expectedRunCount: 0, expectedHumanMessageCount: 0, turnTimeoutMs: 180_000, attemptTimeoutMs: 600_000,
+  requiredCredentials: [scenarioId === "onboarding.resume-wizard" ? "OPENROUTER_API_KEY" : scenarioId === "onboarding.choose-first-runtime" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"],
+  sourceFiles: scenarioId === "onboarding.resume-wizard" ? [...sources, "chat-catalog-domains/identity-resume-wizard-native.ts", "chat-catalog-domains/identity-resume-wizard-native-proof.ts", "chat-catalog-domains/identity-new-company-native-proof.ts"] : sources, oracleVersion: "paperclip.chat-catalog.identity.v1", expectedRunCount: 0, expectedHumanMessageCount: 0, turnTimeoutMs: 180_000, attemptTimeoutMs: 600_000,
   grade: value => gradeWizardBoundary(value, scenarioId),
   async run(ctx) {
-    const credentialName = scenarioId === "onboarding.choose-first-runtime" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+    const credentialName = scenarioId === "onboarding.resume-wizard" ? "OPENROUTER_API_KEY" : scenarioId === "onboarding.choose-first-runtime" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
     const credential = ctx.credentials[credentialName];
     if (!credential) {
       await ctx.evidence("identity-wizard-setup-blocker.json", { scenarioId, missingCredentialName: credentialName, originalQuerySent: false, nativeHeartbeatRuns: 0 });
@@ -81,10 +84,22 @@ export const wizardIdentityBoundaryCases: readonly IdentityBoundaryCase[] = ["on
       return { installation, wizard } satisfies Partial<BoundaryReceipt>;
     }
     const person = await createAuthenticatedPerson({ api: ctx.api, browser, secrets: ctx.privateSecrets, name: "Alex" });
-    const api = new RunnerApi(person.context.request); person.bindApiSession(api); const resource = { person, api, companyId: undefined as string | undefined }; owned.set(ctx, resource);
+    const api = new RunnerApi(person.context.request); person.bindApiSession(api); const resource = { person, api, companyId: undefined as string | undefined, connections: [] as string[] }; owned.set(ctx, resource);
     await api.post("/api/bootstrap/claim"); const page = await person.context.newPage();
+    if (scenarioId === "onboarding.resume-wizard") {
+      const resumeWizard = await finishNativeResumeWizard({ page, origin: api.baseURL, credential, deadlineAt: ctx.deadlineAt,
+        companyName: `Acorn wizard ${ctx.nonce}`, agentName: "Morgan", evidence: ctx.evidence,
+        onCompany(id) { resource.companyId = id; ctx.observeResources({ companyId: id, runIds: [] }); },
+        onConnection(companyId, connectionId) {
+          if (companyId !== resource.companyId) throw new Error("Resume wizard connection belongs to another company");
+          if (!resource.connections.includes(connectionId)) resource.connections.push(connectionId);
+        } });
+      ctx.observeResources({ companyId: resumeWizard.companyId, agentId: resumeWizard.firstAgentId, runIds: resumeWizard.heartbeatRunIds });
+      const session = await api.get<{ user: { id: string } }>("/api/auth/get-session");
+      return { resumeWizard, personId: person.id, returnedPersonId: session.user.id };
+    }
     const wizard = await finishIdentityWizard({ page, origin: api.baseURL, credential, deadlineAt: ctx.deadlineAt, harness: scenarioId === "onboarding.choose-first-runtime" ? "claude_local" : "codex_local",
-      resume: scenarioId === "onboarding.resume-wizard", companyName: `Acorn wizard ${ctx.nonce}`, agentName: "Morgan", evidence: ctx.evidence,
+      companyName: `Acorn wizard ${ctx.nonce}`, agentName: "Morgan", evidence: ctx.evidence,
       onCompany(company) { resource.companyId = company.id; ctx.observeResources({ companyId: company.id, runIds: [] }); } });
     ctx.observeResources({ companyId: wizard.companyId, agentId: wizard.firstAgentId, runIds: wizard.heartbeatRunIds });
     const session = await api.get<{ user: { id: string } }>("/api/auth/get-session");
@@ -94,7 +109,8 @@ export const wizardIdentityBoundaryCases: readonly IdentityBoundaryCase[] = ["on
     // Empty-installation helper synchronously owns and removes its separate
     // process group/home/browser before returning, including on partial failure.
     const resource = owned.get(ctx); if (!resource) return;
-    try { if (resource.companyId) await resource.api.delete(`/api/companies/${resource.companyId}`, { allowNotFound: true }); }
-    finally { await resource.person.dispose(); owned.delete(ctx); }
+    try { for (const id of resource.connections) await resource.api.delete(`/api/tool-connections/${id}`, { allowNotFound: true }); }
+    finally { try { if (resource.companyId) await resource.api.delete(`/api/companies/${resource.companyId}`, { allowNotFound: true }); }
+    finally { await resource.person.dispose(); owned.delete(ctx); } }
   },
 }));
