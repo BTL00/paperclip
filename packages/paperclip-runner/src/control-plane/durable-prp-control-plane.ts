@@ -1715,6 +1715,7 @@ class AuthorityConnection {
   readonly wire: PrpWireConnection;
   #closed = false;
   #onClose: () => void;
+  #onJson: (value: unknown) => void;
 
   constructor(input: {
     wire: PrpWireConnection;
@@ -1723,8 +1724,12 @@ class AuthorityConnection {
   }) {
     this.wire = input.wire;
     this.#onClose = input.onClose;
-    this.wire.onJson(input.onJson);
+    this.#onJson = input.onJson;
+  }
+
+  start(): void {
     this.wire.onClose(() => this.#markClosed());
+    if (!this.#closed) this.wire.onJson(this.#onJson);
   }
 
   sendJson(value: unknown): void {
@@ -2558,6 +2563,9 @@ export class DurablePrpControlPlane {
       },
     });
     this.#connections.add(connection);
+    // A wire can synchronously deliver buffered data or close on subscription.
+    // Both callbacks must see the registered connection and its exact identity.
+    connection.start();
     return {
       isAuthenticated: () => connection.secureChannel !== null,
     };
@@ -3929,6 +3937,7 @@ const runnerExplicitProviderEnvironmentKeys = [
   "PAPERCLIP_NATIVE_RUNTIME_CONTEXT_PATH",
   "PAPERCLIP_RUNNER_EXTERNAL_SANDBOX",
   "PAPERCLIP_RUNNER_HOME_MODE",
+  "PAPERCLIP_RUNNER_PREPARED_HARNESS_HOME",
   "ACPX_CLAUDE_INCLUDE_USER_SETTINGS",
   "CLAUDE_CONFIG_DIR",
   "XDG_CONFIG_HOME",

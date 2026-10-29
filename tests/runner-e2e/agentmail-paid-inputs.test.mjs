@@ -37,6 +37,41 @@ for (const boundary of ["preparation", "inline", "paid token"]) test(`policy con
   assert.notEqual(changed, block);
   assert.throws(() => assertSelectedAllowlistAgreement(workflow.slice(0, start) + changed + workflow.slice(end)), /same exact two cases/);
 });
+function deliveryExpressions(source) {
+  const preparation = source.slice(source.indexOf("      - name: Prepare selected self-addressed"), source.indexOf("      - name: Run paid cell"));
+  const paid = source.slice(source.indexOf("      - name: Run paid cell"), source.indexOf("      - name: Remove selected AgentMail"));
+  return [preparation.match(/if: ([^\n]+)/)?.[1], paid.match(/PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN: \$\{\{ (.+) \}\}/)?.[1]];
+}
+function evaluateDelivery(expression, change = {}) {
+  assert.ok(expression, "Missing actual private delivery expression");
+  const values = { id: selected, route: "private", verification: "success", cadence: "", ...change };
+  return new Function("needs", "steps", "matrix", "secrets", "contains", "fromJSON", `return (${expression});`)(
+    { catalog: { outputs: { operations_cadence: values.cadence } } },
+    { manual_cell_route: { outputs: { route: values.route } }, manual_private_verified: { outcome: values.verification } },
+    { executionId: values.id }, { [tokenName]: "synthetic-token" }, (items, id) => items.includes(id), JSON.parse,
+  );
+}
+function assertPrivateDeliveryGates(source) {
+  for (const expression of deliveryExpressions(source)) {
+    for (const id of [selected, otherSelected]) assert.ok(evaluateDelivery(expression, { id }));
+    for (const change of [
+      { route: "actions" }, { route: "" }, { verification: "failure" }, { verification: "skipped" }, { verification: "" },
+      { id: selected.replace("outbound-email", "reply-to-email") }, { id: selected.replace("runner-opencode", "runner-codex") },
+      { id: selected.replace(".local.", ".daytona.") },
+    ]) assert.ok(!evaluateDelivery(expression, change), "Input and token delivery require the exact private verified cell");
+  }
+  assert.ok(!evaluateDelivery(deliveryExpressions(source)[0], { cadence: "daily" }));
+}
+test("actual preparation and paid-token expressions reject unverified storage and unrelated cells", () => {
+  assertPrivateDeliveryGates(workflow);
+});
+for (const boundary of ["preparation", "paid token"]) test(`actual ${boundary} control detects a removed storage-verification gate`, () => {
+  const start = workflow.indexOf(boundary === "preparation" ? "      - name: Prepare selected self-addressed" : "      - name: Run paid cell");
+  const end = workflow.indexOf(boundary === "preparation" ? "      - name: Run paid cell" : "      - name: Remove selected AgentMail", start);
+  const block = workflow.slice(start, end), changed = block.replace("steps.manual_private_verified.outcome == 'success' && ", "");
+  assert.notEqual(changed, block);
+  assert.throws(() => assertPrivateDeliveryGates(workflow.slice(0, start) + changed + workflow.slice(end)), /exact private verified cell/);
+});
 function fixture(change = () => {}, fault = "") {
   const directory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "agentmail-workflow-control-")); fs.chmodSync(directory, 0o700);
   const githubEnv = path.join(directory, "github-env"); fs.writeFileSync(githubEnv, "", { mode: 0o600 });
@@ -168,14 +203,16 @@ test("preparation cleanup failure stays private and failed instead of claiming r
     assert.equal(fs.statSync(path.join(f.directory, staged[0], "external-config.json")).mode & 0o777, 0o600);
   } finally { f.cleanup(); }
 });
-test("workflow keeps the protected gate, exact-two manual token scope and cleanup before uploads", () => {
-  assert.match(workflow, /environment:\n      name: runner-e2e-paid/);
-  const prepare = workflow.slice(workflow.indexOf("      - name: Prepare selected self-addressed"), workflow.indexOf("      - name: Run paid cell"));
-  assert.match(prepare, /operations_cadence == '' && contains\(fromJSON/);
-  const condition = prepare.split("\n").find(line => line.trim().startsWith("if:")); assert.ok(condition.includes(selected)); assert.ok(condition.includes(otherSelected)); assert.ok(!condition.includes("reply-to-email"));
-  const run = workflow.slice(workflow.indexOf("      - name: Run paid cell"), workflow.indexOf("      - name: Remove selected AgentMail"));
-  assert.match(run, /PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN: \$\{\{ contains\(fromJSON/);
-  assert.ok(run.includes(selected)); assert.ok(run.includes(otherSelected)); assert.ok(!run.includes("CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON:")); assert.ok(!run.includes("CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64:"));
-  assert.ok(workflow.indexOf("      - name: Remove selected AgentMail") < workflow.indexOf("      - name: Stage bounded campaign evidence"));
-  assert.match(workflow, /if: always\(\) && env.PAPERCLIP_CHAT_QA_INPUT_ROOT != ''/);
+test("workflow keeps private storage verification before inputs and cleanup before evidence", () => {
+  assert.match(workflow, /environment:\n      name: runner-e2e-private-paid/);
+  assertPrivateDeliveryGates(workflow);
+  const names = ["Verify restricted complete evidence storage before model or fixture secrets", "Prepare selected self-addressed AgentMail inputs", "Run paid cell", "Remove selected AgentMail private input files", "Stage bounded campaign evidence", "Upload nonprivate packaged cell evidence", "Retain complete approved manual originals with no public fallback"];
+  const positions = names.map(name => workflow.indexOf(`      - name: ${name}`));
+  assert.ok(positions.every(position => position >= 0), "Every actual authorization/input/evidence step must exist");
+  assert.ok(positions.every((position, index) => index === 0 || positions[index - 1] < position));
+  const prepare = workflow.slice(positions[1], positions[2]), paid = workflow.slice(positions[2], positions[3]);
+  assert.ok(prepare.includes("CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON: ${{ secrets.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON }}"));
+  assert.ok(prepare.includes("CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64: ${{ secrets.CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64 }}"));
+  assert.ok(!paid.includes("secrets.CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON") && !paid.includes("secrets.CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64"));
+  assert.match(workflow.slice(positions[3], positions[4]), /if: always\(\) && env.PAPERCLIP_CHAT_QA_INPUT_ROOT != ''/);
 });

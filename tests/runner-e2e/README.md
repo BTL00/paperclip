@@ -3064,51 +3064,39 @@ journals and their holds are not rewritten by changing future campaign policy.
 
 ### Selected self-addressed AgentMail inputs
 
-This is workflow delivery support for a separately reviewed target catalog. The
-default branch alone does not include these email cases or the selected private
-input loader, so it cannot select the two IDs. Its catalog gate rejects missing
-IDs before the paid job or secret delivery. This PR does not add that catalog.
+Manual private AWS cells can receive selected QA inputs only for these exact
+OpenCode/local execution IDs:
 
-The compatible published target is commit
-[`0098da56f4c10f3154ed4ed96b1404fdf7a021ca`](https://github.com/paperclipai/paperclip/commit/0098da56f4c10f3154ed4ed96b1404fdf7a021ca),
-on branch `codex/chat-released-fourteen`. That revision registers both IDs in
-`chat-catalog-descriptors.json`. Its `chat-private-inputs.ts` consumes the selected
-configuration path and fixed token reference. Its `chat-private-oracle.ts` reads
-the existing owned 0600, 32-byte key and commits the actual recipient. These
-contracts were checked against the published Git blobs and 52 synthetic
-private-input, oracle, query-binding, and email fixture controls. Those checks
-prove source compatibility, not real provider access or email delivery.
+- `chat-features.runner-opencode.local.chat-channels.outbound-email`
+- `chat-features.runner-opencode.local.recovery.unknown-email-outcome`
 
-Use a normal manual `target_branch` only after that branch resolves to an
-independently reviewed compatible source revision. Resolve and review its exact
-source, selectors, model and case budgets before paid approval. The published
-branch is not a substitute for that check and is not email-run admission. The
-source must keep the existing private loader, both real-provider fixtures and
-their owned cleanup hooks. A different target needs its own compatibility
-review. Do not merge an unrelated catalog change into this delivery PR.
+The existing `runner-e2e-private-paid` environment supplies only three named
+secrets: `PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN`,
+`CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON`, and
+`CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64`. The JSON contains only the disposable
+AgentMail provider, one inbox/resource, the fixed token reference, and exactly
+`inboxId`, `recipient`, `recipientAuthorization`, and `apiTokenEnv` prerequisites.
+Inbox and recipient must match, with `recipientAuthorization=self-addressed-only`.
+Reuse the original campaign commitment key: canonical base64 of exactly 32 bytes;
+never generate or substitute a key.
 
-The existing protected `runner-e2e-paid` job can stage private inputs only for
-`chat-features.runner-opencode.local.chat-channels.outbound-email` and
-`chat-features.runner-opencode.local.recovery.unknown-email-outcome`.
-The protected environment supplies `PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN`,
-`CHAT_CATALOG_AGENTMAIL_QA_CONFIG_JSON` (the selected AgentMail stanza only), and
-`CHAT_CATALOG_ORACLE_COMMITMENT_KEY_B64` (the existing campaign's 32-byte key,
-base64 encoded). The token must contain at least 12 printable ASCII characters
-with no spaces or control characters; preparation never trims or rewrites it.
-Missing or mismatched inputs fail before staging or provider
-access. The configuration must authorize exactly one disposable inbox as its own
-recipient with `recipientAuthorization: "self-addressed-only"`; this does not
-permit a distinct reviewer mailbox or other external recipients.
+Preparation runs after the exact private tuple and restricted storage verification,
+then immediately before the paid command. The three protected values are never
+printed or shell-interpolated. Configuration and key are staged in an owned 0700
+directory with 0600 files outside results and evidence; only path references enter
+`GITHUB_ENV`. Only the two selected paid commands receive the token. The existing
+selected-input loader writes its execution-bound 0600 envelope, scrubs child
+environment inputs, and registers secret roots. That envelope is a private file,
+not a new encrypted format; existing GitHub Secrets delivery and product encrypted
+credential storage remain unchanged. Always-run cleanup removes only the owned
+input directory before evidence staging or retention. Failure remains visible.
 
-Preparation writes the existing external-config and commitment-key path contracts
-to owned private temporary files (directory0700, files0600), outside result
-staging. It never generates a replacement commitment key. The ordinary selected
-private-input loader, query binding, recipient-scoped product tool policy,
-redaction and artifact scans remain mandatory. Cleanup removes the prepared
-files before evidence upload and refuses symlink or unrelated roots. Preparation
-and cleanup errors emit fixed messages without raw input or filesystem diagnostics.
-Do not print secret values or copy private input folders into reports. Preparation is not proof of external delivery or authority
-to admit a paid case; retain separate source/input review and finite campaign
-admission.
+`chat-channels.reply-to-email` receives no inputs: it requires a separately
+authorized distinct synthetic reviewer mailbox and sender credential. Self-mail
+permission does not authorize that setup. No other case, profile, environment,
+recurring campaign or external provider receives these AgentMail inputs.
 
-Offline workflow controls: `node --test tests/runner-e2e/agentmail-paid-inputs.test.mjs`.
+Secret transfer, deployment, exact run approval and actual provider/runtime
+qualification are separate prerequisites. This delivery change grants none.
+Run offline actual-script controls with:
+`node --test tests/runner-e2e/agentmail-paid-inputs.test.mjs`.

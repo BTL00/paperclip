@@ -1,3 +1,5 @@
+import { notifySkillVersionRetention } from "./skill-version-retention-notifications.js";
+import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
 import { ensureSkillCacheDirectory, touchSkillVersionCache, withSkillVersionCacheLock } from "./skill-version-cache.js";
 import { measureRunPhase } from "./execution-preparation-timing.js";
 import { verifyExistingBundledSkillRelease } from "./bundled-skill-release-validation.js";
@@ -3228,7 +3230,10 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
 
       await removeRuntimeSkillCache(resolveManagedSkillsRoot(companyId), skill.id, async () => {
         await fs.rm(resolveRuntimeSkillMaterializedPath(companyId, skill), { recursive: true, force: true });
-        await db.delete(companySkills).where(eq(companySkills.id, skill.id));
+        await db.transaction(async tx => {
+          await notifySkillVersionRetention(tx, companyId);
+          await tx.delete(companySkills).where(eq(companySkills.id, skill.id));
+        });
       });
     }
   }
@@ -3693,6 +3698,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
     );
     const previousVersion = options.fileInventory === undefined ? await getCurrentVersion(skill) : null;
     const persist = async (tx: DbOrTransaction) => {
+      await notifySkillVersionRetention(tx, companyId);
       await tx.execute(sql`
         select ${companySkills.id}
         from ${companySkills}
@@ -4002,6 +4008,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
 
   async function cleanupFailedFork(companyId: string, sourceSkillId: string, forkSkillId: string, forkDir: string) {
     await db.transaction(async (tx) => {
+      await notifySkillVersionRetention(tx, companyId);
       await tx
         .update(companySkills)
         .set({ currentVersionId: null, updatedAt: new Date() })
@@ -6185,7 +6192,32 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
   ): Promise<T> {
     if (options.onlyKeys?.size === 0 || (!options.onlyKeys && options.selectionConfig && !options.includeLegacy
       && readPaperclipSkillSyncPreference(options.selectionConfig).desiredSkills.length === 0)) return consume([]);
-    await measureRunPhase("skills.inventory", () => ensureSkillInventoryCurrent(companyId));
+    // Installed selections need current authorization, not a company-wide import on every turn.
+    const selected = options.onlyKeys ?? (options.selectionConfig && !options.includeLegacy
+      ? new Set(readPaperclipSkillSyncPreference(options.selectionConfig).desiredSkills) : null);
+    const installed = selected ? await db.select({ key:companySkills.key, slug:companySkills.slug,
+      sourceLocator:companySkills.sourceLocator,
+      sourceKind:sql<string>`${companySkills.metadata}->>'sourceKind'`,
+    }).from(companySkills).where(and(eq(companySkills.companyId,companyId),
+      inArray(companySkills.key,[...selected]),await visibility().condition(companyId))) : [];
+    if (!selected || installed.length !== selected.size) {
+      await measureRunPhase("skills.inventory", () => ensureSkillInventoryCurrent(companyId));
+    } else {
+      for (const skill of installed.filter(skill => skill.sourceKind === "paperclip_bundled")) {
+        const candidates = skill.key === ONBOARDING_FIRST_TASK_SKILL_KEY
+          ? [fileURLToPath(new URL("../onboarding-assets/first-task/skills/first-task/", import.meta.url))]
+          : resolveBundledSkillsRoot().map(root => path.join(root,skill.slug));
+        for (const directory of candidates) {
+          if (!(await fs.stat(path.join(directory,"SKILL.md")).catch(() => null))?.isFile()) continue;
+          if (normalizeSourceLocatorDirectory(skill.sourceLocator) !== path.resolve(directory)) {
+            const imported = await readLocalSkillImportFromDirectory(companyId,directory,{metadata:{sourceKind:"paperclip_bundled"}});
+            if (imported.key !== skill.key) throw new Error("Bundled runtime skill key changed");
+            await upsertImportedSkills(companyId,[imported],db,{includeFolderPath:false});
+          }
+          break;
+        }
+      }
+    }
     return withSkillVersionCacheLock(db, companyId, async () => {
       const entries = await listRuntimeSkillEntriesLocked(companyId, options);
       return measureRunPhase("skills.consume", () => consume(entries));
@@ -7280,6 +7312,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       ));
     for (const row of rows) {
       await db.transaction(async (tx) => {
+        await notifyDeliveryWork(tx, DELIVERY_QUEUES.agentTimers);
         await tx
           .update(issues)
           .set({ hiddenAt: now, updatedAt: now })
@@ -7366,6 +7399,7 @@ export function companySkillService(db: Db, options: { actor?: AuthorizationActo
       }
       try {
         return await db.transaction(async tx => {
+          if (initial.length) await notifySkillVersionRetention(tx, companyId);
           await beforeDelete?.(tx);
           const deleted: CompanySkill[] = [];
           for (const before of initial) {
