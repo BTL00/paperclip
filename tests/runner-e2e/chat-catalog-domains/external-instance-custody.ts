@@ -1,5 +1,6 @@
 import { writeFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import type {
@@ -86,6 +87,39 @@ export function custodyRoundtrip(
     )
   );
 }
+export interface PublicCustodyAgent {
+  id: string;
+  companyId: string;
+  lifecycleState: string;
+  lifecycleVersion?: number;
+  lifecycleError?: string | null;
+}
+export function publicResumeCustodyReceipt(input: {
+  companyId: string; agentId: string; paused: PublicCustodyAgent;
+  resumed: PublicCustodyAgent; ready: PublicCustodyAgent;
+  before: CustodyState; after: CustodyState;
+}): CustodyReceipt | undefined {
+  const { companyId, agentId, paused, resumed, ready, before, after } = input;
+  const sameAgent = (agent: PublicCustodyAgent) => agent?.id === agentId && agent.companyId === companyId && !agent.lifecycleError;
+  if (!sameAgent(paused) || !sameAgent(resumed) || !sameAgent(ready)
+    || paused.lifecycleState !== "paused" || !Number.isSafeInteger(paused.lifecycleVersion) || paused.lifecycleVersion! < 1 || !Number.isSafeInteger(paused.lifecycleVersion! + 2)) return;
+  const version = paused.lifecycleVersion! + 1;
+  if (!(resumed.lifecycleState === "resuming" && resumed.lifecycleVersion === version
+    || resumed.lifecycleState === "ready" && resumed.lifecycleVersion === version + 1)
+    || ready.lifecycleState !== "ready" || ready.lifecycleVersion !== version + 1
+    || before?.ownerAgentId !== agentId || after?.ownerAgentId !== agentId
+    || !Array.isArray(before.receipts) || !Array.isArray(after.receipts)
+    || !isDeepStrictEqual(after.receipts.slice(0, before.receipts.length), before.receipts)
+    || after.receipts.some(row => !row || row.companyId !== companyId)) return;
+  const priorOperations = new Set(before.receipts.map(row => row.operationId));
+  const receipts = after.receipts.filter(row => row.agentId === agentId && row.phase === "resuming" && !priorOperations.has(row.operationId));
+  if (!receipts.length || receipts.some(row => typeof row.operationId !== "string" || !row.operationId
+    || row.version !== version || row.hadOwnedSecret !== true || row.returnedOwnedSecret !== false)
+    || new Set(receipts.map(row => row.operationId)).size !== 1) return;
+  const receipt = receipts[0]!;
+  if (!custodyRoundtrip(after, companyId, agentId, receipt.operationId, receipt.version)) return;
+  return receipt;
+}
 /** Vetted synthetic plugin uses the supported lifecycle result, not a private
  * secret-service write. Its public receipt exposes identities and booleans only. */
 export async function createInstanceCustody(
@@ -106,12 +140,7 @@ export async function createInstanceCustody(
       deadlineAt: Date.now() + 90000,
       intervalMs: 500,
       load: () =>
-        ctx.input.api.get<{
-          id: string;
-          companyId: string;
-          lifecycleState: string;
-          lifecycleError?: string;
-        }>(`/api/agents/${agentId}`),
+        ctx.input.api.get<PublicCustodyAgent>(`/api/agents/${agentId}`),
       accept: (row) => row.lifecycleState === expected,
       reject: (row) =>
         row.lifecycleError
@@ -176,35 +205,31 @@ export async function createInstanceCustody(
     ownerAgentId = riley.id;
     await lifecycle(riley.id, "ready");
     await ctx.input.api.post(`/api/agents/${riley.id}/pause`);
-    await lifecycle(riley.id, "paused");
-    const resumed = await ctx.input.api.post<{
-      lifecycleOperation?: { id: string };
-      lifecycleVersion: number;
-    }>(`/api/agents/${riley.id}/resume`);
-    if (!resumed.lifecycleOperation?.id)
-      throw new Error(
-        "Actual public resume did not expose its operation identity",
-      );
-    await lifecycle(riley.id, "ready");
-    const state = await read();
-    if (
-      !custodyRoundtrip(
-        state,
-        ctx.input.fixtures.company.id,
-        riley.id,
-        resumed.lifecycleOperation.id,
-        resumed.lifecycleVersion,
-      )
-    )
-      throw new Error(
-        "Setup blocker: actual owner-scoped instance custody failed its public lifecycle roundtrip",
-      );
+    const paused = await lifecycle(riley.id, "paused");
+    const before = await read();
+    const resumeDeadlineAt = Date.now() + 90000;
+    const resumed = await ctx.input.api.post<PublicCustodyAgent>(`/api/agents/${riley.id}/resume`);
+    const observed = await pollUntil({
+      label: "owned custody public resume and real operation receipt",
+      deadlineAt: resumeDeadlineAt,
+      intervalMs: 500,
+      load: async () => {
+        const [ready, after] = await Promise.all([
+          ctx.input.api.get<PublicCustodyAgent>(`/api/agents/${riley.id}`), read(),
+        ]);
+        return { ready, after };
+      },
+      accept: ({ ready, after }) => Date.now() < resumeDeadlineAt && !!publicResumeCustodyReceipt({ companyId: ctx.input.fixtures.company.id, agentId: riley.id, paused, resumed, ready, before, after }),
+      reject: ({ ready }) => ready.lifecycleError ? "Owned custody resume failed; diagnostic withheld" : undefined,
+    });
+    const receipt = publicResumeCustodyReceipt({ companyId: ctx.input.fixtures.company.id, agentId: riley.id, paused, resumed, ...observed, before });
+    if (Date.now() >= resumeDeadlineAt || !receipt) throw new Error("Actual public resume custody receipt is missing, late or unqualified");
     await rm(seed, { force: true });
     return {
       pluginId: installed.id,
       rileyId: riley.id,
-      resumeOperationId: resumed.lifecycleOperation.id,
-      resumeVersion: resumed.lifecycleVersion,
+      resumeOperationId: receipt.operationId,
+      resumeVersion: receipt.version,
       seedRemoved: true as const,
       read,
       close,

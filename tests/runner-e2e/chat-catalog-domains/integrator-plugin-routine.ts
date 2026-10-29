@@ -2,13 +2,15 @@ import { writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import type { Issue, IssueComment } from "../../../packages/shared/src/types/issue.js";
 import type { PaperclipPluginManifestV1, PluginManagedRoutineResolution, PluginRecord } from "../../../packages/shared/src/types/plugin.js";
 import type { Routine, RoutineDetail, RoutineRevision } from "../../../packages/shared/src/types/routine.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { checks, observation, project, type Entity, type InternalObservation } from "./internal-support.js";
 import { fixtureWorker } from "./internal-definition.js";
-import { probeAgentPermission, cleanupIdentityProbes } from "./identity-support.js";
+import { probeAgentPermission, cleanupIdentityProbes, openStandingChat, readAgentResource } from "./identity-support.js";
 import { createPreviewFixture } from "./external-plugin-fixture.js";
 import { integratorDefinition, inspectResult, observeInternal } from "./integrator-support.js";
 const owned = new WeakMap<ChatCatalogContext, { fixture: Awaited<ReturnType<typeof createPreviewFixture>>; pluginId?: string }>();
@@ -32,18 +34,63 @@ export function gradeIntegratorPluginRoutine(value: unknown) {
     && o.managed.resourceKey === "daily-maintenance" && o.routine.managedByPlugin?.pluginId === o.plugin.id && o.routine.managedByPlugin.pluginKey === o.state.pluginKey
     && o.routine.managedByPlugin.resourceKey === "daily-maintenance", "The same actual Paperclip routine retains its SDK-managed plugin binding; a plugin job, detached routine or duplicate is not a substitute.");
   c.add("unsupported-definition-edits-unchanged", o.routine.title === original.title && o.routine.description === original.description && o.routine.assigneeAgentId === original.assigneeAgentId
-    && o.routine.status === original.status && JSON.stringify(o.routine.triggers) === JSON.stringify(original.triggers)
-    && JSON.stringify(o.routine.managedByPlugin?.defaultsJson) === JSON.stringify(original.managedByPlugin?.defaultsJson)
-    && JSON.stringify(o.routineRevisions) === JSON.stringify(o.state.originalRevisions) && JSON.stringify(o.config) === JSON.stringify(o.state.originalConfig),
+    && o.routine.status === original.status && isDeepStrictEqual(o.routine.triggers, original.triggers)
+    && isDeepStrictEqual(o.routine.managedByPlugin?.defaultsJson, original.managedByPlugin?.defaultsJson)
+    && isDeepStrictEqual(o.routineRevisions, o.state.originalRevisions) && isDeepStrictEqual(o.config, o.state.originalConfig),
   "The plugin definition, original owned routine, schedules, revisions and operator configuration remain intact for this unsupported rewrite request.");
   c.add("actual-limited-operator-control-contract", o.state.agentConfigStatus === 403 && o.state.agentRoutineStatus === 403
-    && JSON.stringify(o.plugin.manifestJson.instanceConfigSchema) === JSON.stringify(o.state.configSchema)
+    && isDeepStrictEqual(o.plugin.manifestJson.instanceConfigSchema, o.state.configSchema)
     && o.plugin.manifestJson.capabilities.includes("routines.managed") && o.plugin.manifestJson.routines?.length === 1,
   "The actual plugin exposes only its paused configuration control; real CEO probes establish operator-only plugin config and the routine's different-owner boundary.");
   c.add("truthful-plugin-customization-path", /\bplugin\b/i.test(o.reply) && /\b(?:managed|provided|owns?|ownership|definition|maintain(?:s|ed)?)\b/i.test(o.reply)
     && /\b(?:configuration|config|settings|source|package|plugin code)\b/i.test(o.reply) && /\b(?:human|operator|admin|maintainer)\b/i.test(o.reply) && !falsePluginRewrite(o.reply),
   "Chat explains plugin ownership and the authorized configuration/source path without claiming an unsupported rewrite or a detached replacement.");
   return c.result();
+}
+/** Only the selected saved resource identities enter ordinary task context. No
+ * policy answer, requested mutation, ownership explanation or human reply is seeded. */
+export function managedRoutineContext(companyId: string, issuePrefix: string, plugin: PluginRecord, routine: RoutineDetail): string {
+  if (!companyId || !/^[A-Za-z0-9_-]+$/.test(issuePrefix) || !plugin?.id || !plugin.manifestJson?.id
+    || !plugin.manifestJson.displayName || !routine?.id || !routine.title || routine.companyId !== companyId
+    || routine.managedByPlugin?.pluginId !== plugin.id || routine.managedByPlugin.pluginKey !== plugin.manifestJson.id
+    || routine.managedByPlugin.resourceKind !== "routine" || routine.managedByPlugin.resourceKey !== "daily-maintenance") {
+    throw new Error("Selected routine and installed plugin identities do not match");
+  }
+  return `Selected resources in this conversation:\n${JSON.stringify({
+    routine: { id: routine.id, title: routine.title, url: `/${issuePrefix}/routines/${routine.id}` },
+    plugin: { id: plugin.id, key: plugin.manifestJson.id, name: plugin.manifestJson.displayName, url: `/${issuePrefix}/plugins/${plugin.id}` },
+  }, null, 2)}`;
+}
+export async function prepareManagedRoutineContext(ctx: ChatCatalogContext, plugin: PluginRecord, routine: RoutineDetail) {
+  const company = ctx.input.fixtures.company;
+  const prefix = company.issuePrefix;
+  if (typeof prefix !== "string") throw new Error("Selected company has no public route prefix");
+  const description = managedRoutineContext(company.id, prefix, plugin, routine);
+  const standing = await openStandingChat(ctx);
+  const source = await ctx.input.api.get<Issue>(`/api/issues/${standing.id}`);
+  if (source.companyId !== company.id || source.assigneeAgentId !== ctx.input.fixtures.agent.id || source.description != null) {
+    throw new Error("Managed routine context requires the fresh CEO conversation");
+  }
+  const comments = () => ctx.input.api.get<IssueComment[]>(`/api/issues/${source.id}/comments`);
+  if ((await comments()).length !== 0 || (await ctx.allRuns()).length !== 0) throw new Error("Managed routine context must precede every chat message and work run");
+  await ctx.input.api.patch(`/api/issues/${source.id}`, { description });
+  const [visibleSource, visibleRoutine] = await Promise.all([
+    readAgentResource(ctx, `/api/issues/${source.id}`), readAgentResource(ctx, `/api/routines/${routine.id}`),
+  ]);
+  const readSource = visibleSource.data as Issue | undefined;
+  const readRoutine = visibleRoutine.data as RoutineDetail | undefined;
+  if (visibleSource.status !== 200 || readSource?.id !== source.id || readSource.companyId !== company.id
+    || readSource.assigneeAgentId !== ctx.input.fixtures.agent.id || readSource.description !== description
+    || visibleRoutine.status !== 200 || !readRoutine || managedRoutineContext(company.id, prefix, plugin, readRoutine) !== description
+    || !isDeepStrictEqual(readRoutine, routine)
+    || (await comments()).length !== 0 || (await ctx.allRuns()).length !== 0) {
+    throw new Error("CEO could not independently read the unchanged selected routine and source context before work");
+  }
+  await ctx.refreshIssue();
+  const receipt = { sourceId: source.id, companyId: company.id, ceoId: ctx.input.fixtures.agent.id, routineId: routine.id, pluginId: plugin.id,
+    descriptionSha256: createHash("sha256").update(description).digest("hex"), ceoSourceStatus: visibleSource.status, ceoRoutineStatus: visibleRoutine.status, prequeryComments: 0, prequeryRuns: 0 };
+  await ctx.input.evidence("chat-managed-routine-selected-context.json", receipt);
+  return receipt;
 }
 export const integratorPluginRoutineCases = [integratorDefinition("routines", "routines.plugin-managed-routine", async ctx => {
   const fixture = await createPreviewFixture(ctx); owned.set(ctx, { fixture });
@@ -68,7 +115,8 @@ export const integratorPluginRoutineCases = [integratorDefinition("routines", "r
     const routine = await ctx.input.api.get<RoutineDetail>(`/api/routines/${managed.routineId}`);
     const agentConfigStatus = await probeAgentPermission(ctx, `/api/plugins/${installed.id}/config`, "POST", { companyId: ctx.input.fixtures.company.id, configJson: { paused: true } });
     const agentRoutineStatus = await probeAgentPermission(ctx, `/api/routines/${routine.id}`, "PATCH", { description: routine.description });
-    return { project: p, worker: { id: worker.id }, pluginId: installed.id, pluginKey: fixture.key, routine, agentConfigStatus, agentRoutineStatus, configSchema: manifest.instanceConfigSchema,
+    const selectedContext = await prepareManagedRoutineContext(ctx, installed, routine);
+    return { selectedContext, project: p, worker: { id: worker.id }, pluginId: installed.id, pluginKey: fixture.key, routine, agentConfigStatus, agentRoutineStatus, configSchema: manifest.instanceConfigSchema,
       originalConfig: await ctx.input.api.get(`/api/plugins/${installed.id}/config?companyId=${ctx.input.fixtures.company.id}`), originalRevisions: await ctx.input.api.get<RoutineRevision[]>(`/api/routines/${routine.id}/revisions`) };
   } catch (error) { await cleanup(ctx); throw error; }
 }, observeManaged, gradeIntegratorPluginRoutine, async (ctx, state) => {

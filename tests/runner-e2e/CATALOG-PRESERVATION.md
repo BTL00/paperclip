@@ -19,6 +19,21 @@ The accepted original-deadline and multipart controls are included, as is the
 new-company successor's original phase deadline and remaining-time wizard clamp.
 Frozen queries, contexts, outcomes, turn/human counts and overall caps are retained.
 
+The accepted SDK2 overlay binds least-scope setup to the actual public Agent
+lifecycle/version and a new real plugin resume receipt within the existing
+90-second wait. Managed-routine setup identifies only its saved routine and
+plugin through ordinary conversation context and independent CEO readback;
+structural JSON comparisons ignore object key order while preserving all values,
+arrays, ownership and explanation checks. A pending question still fails the
+required outcome.
+
+The task prerequisite overlay binds two genuine ready owners to their completed
+public manual pauses, exact versions and holds before inventory seeding. It also
+adds the owned browser Origin to the existing human attachment upload, preserving
+the real board mutation guard and exact company/task/comment/byte checks. Neither
+overlay changes canonical messages, native/human counts, overall caps or an
+exhausted case's result. The production core fixes remain excluded.
+
 Readiness is separate from importability. Declared unsupported fresh contexts,
 public capability/profile gaps and external resource/authorization requirements
 remain explicit. The preserved plugin configure/disable fixture still has a known
@@ -29,6 +44,9 @@ the initial chat response; its later UI/configuration leg was not exercised, so
 the schema mismatch there is a source finding. Both spent raw failures remain
 unchanged and are not rerun by this consolidation. Other measured failures retain
 their actual interpretation.
+The legacy Projects manual-order surface required by sidebar-order is absent
+from both frozen-production layouts; this source does not revive it or inject a
+classic interface to manufacture the frozen context.
 
 Every historical result remains attached to its original source revision, full
 fingerprint, provider/model/build/database evidence, ordinal, usage, cost, privacy

@@ -31,3 +31,23 @@ describe("real plugin-managed routine rather than preview job", () => {
     expect(gradeIntegratorPluginRoutine({ ...o, reply: "I cannot change plugin code, but I detached and replaced its routine. An operator can inspect the configuration." }).passed).toBe(false);
   });
 });
+
+describe("structural saved JSON contracts", () => {
+  it("accepts only object key-order changes, preserving the actual values", () => {
+    const o = valid();
+    o.plugin.manifestJson.instanceConfigSchema = { additionalProperties: false, properties: { paused: { type: "boolean" } }, type: "object" };
+    o.routine.managedByPlugin.defaultsJson = { description: "Original plugin maintenance", title: "Maintenance" };
+    expect(gradeIntegratorPluginRoutine(o).passed).toBe(true);
+  });
+  it.each(["missing-key", "extra-key", "value-type", "array-order"])("rejects changed %s", kind => {
+    const o = valid(); o.plugin.manifestJson.instanceConfigSchema = structuredClone(o.plugin.manifestJson.instanceConfigSchema);
+    if (kind === "missing-key") delete (o.plugin.manifestJson.instanceConfigSchema as Record<string, unknown>).additionalProperties;
+    if (kind === "extra-key") Object.assign(o.plugin.manifestJson.instanceConfigSchema, { extra: true });
+    if (kind === "value-type") Object.assign(o.config.configJson, { paused: "true" });
+    if (kind === "array-order") { o.state.originalRevisions = [{ id: "one" }, { id: "two" }]; o.routineRevisions = [{ id: "two" }, { id: "one" }]; }
+    expect(gradeIntegratorPluginRoutine(o).passed).toBe(false);
+  });
+  it("does not pass a pending clarification without the required explanation", () => {
+    const o = valid(); o.reply = ""; expect(gradeIntegratorPluginRoutine(o).passed).toBe(false);
+  });
+});

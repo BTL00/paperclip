@@ -57,6 +57,14 @@
     {
       "name": "new-company-original-clock",
       "sourceRevision": "7c846a27a0b1ac1908d929209b60d7942f4246fb"
+    },
+    {
+      "name": "sdk-two-public-setup",
+      "sourceRevision": "8cb209e726237644f1312d2385da460083d0a035"
+    },
+    {
+      "name": "task-two-public-prerequisites",
+      "sourceRevision": "ef45d57ab8919854e7203ee789f6441db1470b87"
     }
   ],
   "productionPrerequisites": [
@@ -99,7 +107,8 @@
       "access.manage-membership",
       "activity.routine-audit",
       "agents.restore-instructions",
-      "budgets-costs.subscription-fees"
+      "budgets-costs.subscription-fees",
+      "navigation-preferences.sidebar-order"
     ],
     "currentProfileOrPublicCapabilityGaps": [
       "assistant-connections.use-scoped-client",
@@ -107,6 +116,26 @@
       "steering.steer-active"
     ],
     "otherRequirements": "Official provider resources, selected credentials, authorized operators and actual remote targets still require their declared public prerequisites. Importability is not runtime readiness.",
-    "attempts": "All original raw grades, source fingerprints, ordinals, usage, billing, privacy and cleanup remain bound to their original measurements. Exhausted cases remain exhausted."
+    "attempts": "All original raw grades, source fingerprints, ordinals, usage, billing, privacy and cleanup remain bound to their original measurements. Exhausted cases remain exhausted.",
+    "sidebarOrdering": "The frozen legacy Projects manual-order surface is absent from both current39e layouts. No injected classic UI, fabricated ordering or feature revival is included."
+  },
+  "preservationParentRevision": "063925683cd79590f3c5a9e32d741607b8096fbb",
+  "latestAcceptedEvalOnlyOverlays": {
+    "sdk-two-public-setup": {
+      "sourceRevision": "8cb209e726237644f1312d2385da460083d0a035",
+      "scenarioIds": [
+        "secrets.least-scope-delivery",
+        "routines.plugin-managed-routine"
+      ],
+      "contracts": "Actual public resume Agent/state/version plus new unique public plugin operation receipt inside unchanged90s; managed selected saved resource facts in ordinary source description/CEO readback and structural JSON equality only."
+    },
+    "task-two-public-prerequisites": {
+      "sourceRevision": "ef45d57ab8919854e7203ee789f6441db1470b87",
+      "scenarioIds": [
+        "tasks.organize-open-work",
+        "task-coordination.delegate-with-context"
+      ],
+      "contracts": "Actual ready-to-paused owners/version/manual holds with original deadline/no work; owned human browser Origin on original exact attachment upload with unchanged production guard."
+    }
   }
 }

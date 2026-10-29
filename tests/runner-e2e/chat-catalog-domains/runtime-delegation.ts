@@ -15,6 +15,15 @@ import { prepareRuntimeWorkerGate, releaseRuntimeWorker } from "./runtime-busy-w
 import { runtimeDefinition, runtimeObservation, observeRuntime, type RuntimeAgent } from "./runtime-support.js";
 const keys = new WeakMap<ChatCatalogContext, { id: string; token: string; workerId: string }>();
 const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
+export function launchBriefBrowserOrigin(apiBaseURL: string, browserURL: string, target: string, companyId: string, issueId: string) {
+  const api = new URL(apiBaseURL), browser = new URL(browserURL), upload = new URL(target, api);
+  const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if (!uuid.test(companyId) || !uuid.test(issueId) || !["http:", "https:"].includes(api.protocol)
+    || api.origin !== apiBaseURL || api.username || api.password || browser.username || browser.password
+    || browser.origin !== api.origin || upload.origin !== api.origin || upload.username || upload.password || upload.search || upload.hash
+    || upload.pathname !== `/api/companies/${companyId}/issues/${issueId}/attachments`) throw new Error("Human Launch brief upload escaped its owned browser and target");
+  return browser.origin;
+}
 export function hasLaunchHeadline(html: string) {
   const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
   return heading?.replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;|&#x0*a0;/gi, " ").replace(/\s+/g, " ").trim().toLowerCase() === "research without the busywork";
@@ -62,7 +71,9 @@ export const runtimeDelegationCases = [runtimeDefinition("task-coordination.dele
   const parent = await ctx.input.api.post<Entity>(`${root}/issues`, { title: "Launch", status: "backlog", description: "The CEO owns the launch. The attached human design brief defines the page; implementation should be delegated to Morgan when requested." });
   const briefComment = await ctx.input.api.post<Entity>(`/api/issues/${parent.id}/comments`, { body: "Approved design brief for later authorized implementation; no work is assigned yet." });
   const brief = `# Launch design\nHeadline: Research without the busywork\nUse semantic HTML, accessible labels and one primary signup action.\nReference: ${marker}\n`;
-  const uploaded = await ctx.input.page.request.post(`${root}/issues/${parent.id}/attachments`, { multipart: { issueCommentId: briefComment.id,
+  const uploadTarget = `${root}/issues/${parent.id}/attachments`;
+  const origin = launchBriefBrowserOrigin(ctx.input.api.baseURL, ctx.input.page.url(), uploadTarget, ctx.input.fixtures.company.id, parent.id);
+  const uploaded = await ctx.input.page.request.post(uploadTarget, { headers: { Origin: origin }, multipart: { issueCommentId: briefComment.id,
     file: { name: "design-brief.md", mimeType: "text/markdown", buffer: Buffer.from(brief) } } });
   if (uploaded.status() !== 201) { await uploaded.dispose(); throw new Error("Real human Launch brief upload did not succeed"); }
   const attachment = await uploaded.json() as ChatQueryAttachmentReceipt; await uploaded.dispose();
