@@ -19,7 +19,7 @@ import { describeError } from "../api/errors";
 import { loadStructuredDraft, saveStructuredDraft } from "../lib/composer-draft";
 import { copyTextToClipboard } from "../lib/clipboard";
 import { deriveDocumentRevisionState } from "../lib/document-revisions";
-import { parseDocumentAnnotationHash } from "../lib/document-annotation-hash";
+import { buildDocumentAnnotationHash, parseDocumentAnnotationHash } from "../lib/document-annotation-hash";
 import type { CompanyUserProfile } from "../lib/company-members";
 import { queryKeys } from "../lib/queryKeys";
 import { useDraftOwner } from "../hooks/useDraftOwner";
@@ -366,7 +366,7 @@ function AccountIssueDocumentsSection({
   const [handledRevisionHash, setHandledRevisionHash] = useState<{ target: string; latestRevisionId: string | null } | null>(null);
   const documentHashTarget = useMemo(() => parseDocumentAnnotationHash(location.hash), [location.hash]);
   const revisionTarget = documentHashTarget?.revisionId
-    ? `${documentHashTarget.documentKey}:${documentHashTarget.revisionId}` : null;
+    ? buildDocumentAnnotationHash({ ...documentHashTarget, image: undefined }) : null;
   const revisionsQueryDocumentKey = revisionMenuOpenKey ?? (documentHashTarget?.revisionId ? documentHashTarget.documentKey : null);
   const [diffViewKey, setDiffViewKey] = useState<string | null>(null);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

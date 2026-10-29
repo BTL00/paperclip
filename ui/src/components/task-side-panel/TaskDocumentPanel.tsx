@@ -10,18 +10,19 @@ import { QueryErrorState, useQueryView } from "@/components/QueryView";
 import { queryKeys } from "@/lib/queryKeys";
 import { documentDisplayTitle } from "@/lib/issue-artifacts";
 import { useLocation } from "@/lib/router";
-import { parseDocumentAnnotationHash } from "@/lib/document-annotation-hash";
 
 export function TaskDocumentPanel({
   issueId,
   documentKey,
   initialDocument,
   revisionId,
+  documentIssueId,
 }: {
   issueId: string;
   documentKey: string;
   initialDocument?: IssueDocument;
   revisionId?: string;
+  documentIssueId?: string;
 }) {
   const location = useLocation();
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(false);
@@ -104,7 +105,7 @@ export function TaskDocumentPanel({
           panelPlacement="popover"
         >
           <DocumentMarkdownBody documentKey={document.key} revisionId={revisionId}
-            documentIssueId={parseDocumentAnnotationHash(location.hash)?.documentIssueId}>
+            documentIssueId={documentIssueId}>
             {document.body}
           </DocumentMarkdownBody>
         </IssueDocumentAnnotations>

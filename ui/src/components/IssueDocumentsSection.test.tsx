@@ -338,6 +338,13 @@ describe("IssueDocumentsSection", () => {
     expect(latest).toBeTruthy();
     await act(async () => latest!.click());
     expect(container.textContent).toContain("Newer unreviewed text");
+    mockLocation.hash = "#document-plan&revision=revision-3&interaction=review-2&image=2";
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><IssueDocumentsSection issue={createIssue()} canDeleteDocuments={false} /></QueryClientProvider>));
+    expect(container.textContent).toContain("Exact reviewed text");
+    expect(container.textContent).not.toContain("Newer unreviewed text");
+    mockLocation.hash = "#document-plan&revision=revision-3&interaction=review-2&image=3";
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><IssueDocumentsSection issue={createIssue()} canDeleteDocuments={false} /></QueryClientProvider>));
+    expect(container.textContent).toContain("Exact reviewed text");
     await act(async () => root.unmount());
     scroll.mockRestore();
     queryClient.clear();

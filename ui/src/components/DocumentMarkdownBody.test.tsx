@@ -79,6 +79,15 @@ describe("document image gallery", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("opens a saved owner after the URL has changed to another document", async () => {
+    await render("#document-local&documentIssue=wrong-owner", body, "old", "owner");
+    await click('[aria-label="Open image: First"]');
+    expect(dialog()?.textContent).toContain("1 / 3");
+    expect(container.querySelector("output")?.textContent).toContain("#document-report&revision=old&documentIssue=owner&image=1");
+    await key("ArrowRight");
+    expect(container.querySelector("output")?.textContent).toContain("documentIssue=owner&image=2");
+  });
+
   it.each(["#document-other&image=1", "#document-report&image=100", "#document-report&image=0", "#document-report&revision=old&image=1"])("does not open an unavailable image target: %s", async (hash) => {
     await render(hash);
     expect(dialog()).toBeNull();

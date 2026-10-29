@@ -99,10 +99,33 @@ for (const mode of ["desktop", "mobile", "classic"] as const) {
       await gallery.click({ position: { x: 5, y: 180 } });
       await expect(gallery).toBeHidden();
       await expect(page).toHaveURL(new RegExp(`revision=${saved.latestRevisionId}`));
+      if (mode === "classic") {
+        await page.getByRole("button", { name: "Return to latest", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "New revision", exact: true })).toBeVisible();
+        await page.goto(`${taskPath}#document-design&revision=${saved.latestRevisionId}&interaction=another-review&image=1`);
+        await expect(gallery).toContainText("1 / 3");
+        await gallery.getByRole("button", { name: "Close", exact: true }).click();
+      }
       await page.goto(`${taskPath}#document-design&image=100`);
       await page.reload();
       await expect(page.getByRole("heading", { name: "New revision", exact: true })).toBeVisible();
       await expect(gallery).toBeHidden();
+      if (mode === "desktop") {
+        const owner = await json(await request.post(`/api/companies/${company.id}/issues`, { data: { title: "Document owner", status: "backlog" } }));
+        const owned = await json(await request.put(`/api/issues/${owner.id}/documents/design`, { data: { title: "Owned review", body: saved.body, format: "markdown" } }));
+        await page.goto(`${taskPath}#document-design&viewer=full&revision=${owned.latestRevisionId}&documentIssue=${owner.id}&image=2`);
+        await expect(gallery).toContainText("2 / 3");
+        await gallery.getByRole("button", { name: "Close", exact: true }).click();
+        await json(await request.put(`/api/issues/${issue.id}/documents/local-images`, { data: { title: "Local images", body: saved.body, format: "markdown" } }));
+        await page.goto(`${taskPath}#document-local-images&viewer=full`);
+        await page.getByRole("button", { name: "Open image: Plan the work", exact: true }).click();
+        await gallery.getByRole("button", { name: "Close", exact: true }).click();
+        await page.locator(`[role="tab"][data-side-panel-tab-target="document:${owner.id}:design:${owned.latestRevisionId}"]`).click();
+        await page.getByRole("button", { name: "Open image: Plan the work", exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`documentIssue=${owner.id}`));
+        await page.reload();
+        await expect(gallery).toContainText("1 / 3");
+      }
     } finally {
       await request.patch("/api/instance/settings/experimental", { data: { enableClassicTaskInterface: settings.enableClassicTaskInterface } });
     }

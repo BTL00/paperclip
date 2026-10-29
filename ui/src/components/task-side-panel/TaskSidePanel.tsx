@@ -850,6 +850,7 @@ function TaskSidePanelForScope({
         issueId={activeTab.payload.documentIssueId ?? issue.id}
         documentKey={activeTab.payload.documentKey}
         revisionId={activeTab.payload.revisionId}
+        documentIssueId={activeTab.payload.documentIssueId}
         initialDocument={!activeTab.payload.documentIssueId || activeTab.payload.documentIssueId === issue.id ? documentByKey.get(activeTab.payload.documentKey) : undefined}
       />
     );
