@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agents, companies, createDb, environments, heartbeatRuns, issues, projects, projectWorkspaces, plugins, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS, type Db } from "@paperclipai/db";
+import { agents, companies, createDb, environments, heartbeatRuns, issues, projects, projectWorkspaces, plugins, builtInManagedResources, environmentLeases, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS, type Db } from "@paperclipai/db";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../../__tests__/helpers/embedded-postgres.js";
@@ -15,6 +15,7 @@ import { nativeRuntimeContextFixture } from "../native-runtime/runtime-context.t
 import { selectHeartbeatEnvironment, type HeartbeatEnvironmentSelectionInput } from "./environment-selection.js";
 import { environmentRuntimeService } from "../environment-runtime.js";
 import type { PluginWorkerManager } from "../plugin-worker-manager.js";
+import { environmentRunOrchestrator } from "../environment-run-orchestrator.js";
 
 const restoration = vi.hoisted(() => ({ removed: false }));
 vi.mock("../git-workspace-restoration.js", async importOriginal => {
@@ -134,6 +135,56 @@ describe.skipIf(!support.supported)("heartbeat environment selection boundary", 
     expect(result.requestedShouldReuseExisting).toBe(true);
     expect(input.task.issueRef!.executionWorkspaceId).toBe(newer.id);
     expect(result.persistedNativeExecutionInput?.binding.executionWorkspaceId).toBe(original.id);
+  });
+
+  it("recovers on the admitted lease's environment after project and agent defaults change", async () => {
+    const { input, workspace, recover } = await fixture();
+    const saved = await workspace();
+    recover(saved.id);
+    const original = await input.services.environmentsSvc.ensureLocalEnvironment(input.agent.companyId);
+    const lease = await environmentService(db).acquireLease({ companyId: input.agent.companyId, environmentId: original.id,
+      heartbeatRunId: input.run.id, issueId: input.task.issueId, executionWorkspaceId: saved.id, metadata: { agentId: input.agent.id } });
+    input.run.contextSnapshot = { paperclipEnvironment: { id: original.id, leaseId: lease.id } };
+    const [changed] = await db.insert(environments).values({ name: "New project computer", driver: "sandbox", status: "active", config: { provider: "daytona", disk: 30 } }).returning();
+    input.policy.taskProjectEnvironmentId = changed.id;
+    input.agent.defaultEnvironmentId = changed.id;
+
+    const result = await selectHeartbeatEnvironment(db, input);
+
+    expect(result.selectedEnvironmentId).toBe(original.id);
+    expect(result.persistedNativeExecutionInput?.binding.executionWorkspaceId).toBe(saved.id);
+  });
+
+  it.each(["missing", "other_run"])("rejects a %s admitted environment lease without adopting the project's target", async state => {
+    const { input, workspace, recover } = await fixture();
+    recover((await workspace()).id);
+    const original = await input.services.environmentsSvc.ensureLocalEnvironment(input.agent.companyId);
+    const leaseId = state === "missing" ? randomUUID() : (await environmentService(db).acquireLease({
+      companyId: input.agent.companyId, environmentId: original.id, heartbeatRunId: null, issueId: input.task.issueId,
+      metadata: { agentId: input.agent.id },
+    })).id;
+    input.run.contextSnapshot = { paperclipEnvironment: { id: original.id, leaseId } };
+    input.policy.taskProjectEnvironmentId = original.id;
+    await expect(selectHeartbeatEnvironment(db, input)).rejects.toThrow("Cannot restore the admitted execution environment");
+  });
+
+  it("denies a foreign-company project environment at run admission before acquiring a lease", async () => {
+    const { input } = await fixture();
+    const [other] = await db.insert(companies).values({ name: "Environment owner", issuePrefix: "OWNER" }).returning();
+    const [sandbox] = await db.insert(environments).values({ name: "Other company's computer", driver: "sandbox", status: "active",
+      config: { provider: "daytona", image: "test/unused", disk: 30 } }).returning();
+    await db.insert(builtInManagedResources).values({ companyId: other.id, bundleKey: "managed-environment", resourceKind: "environment",
+      resourceKey: "managed-sandbox", resourceId: sandbox.id, stockVersion: "1", stockHash: "fixture" });
+    input.policy.taskProjectEnvironmentId = sandbox.id;
+    const selected = await selectHeartbeatEnvironment(db, input);
+    const acquireRunLease = vi.fn();
+    const orchestrator = environmentRunOrchestrator(db, { environmentRuntime: { acquireRunLease } as never });
+    await expect(orchestrator.acquireForRun({ companyId: input.agent.companyId, selectedEnvironmentId: selected.selectedEnvironmentId,
+      localEnvironmentId: selected.localEnvironment.id, agentId: input.agent.id, issueId: input.task.issueId,
+      heartbeatRunId: input.run.id, persistedExecutionWorkspace: null, executionWorkspaceSettings: null, adapterType: "process" }))
+      .rejects.toMatchObject({ status: 403, details: { code: "environment_company_mismatch" } });
+    expect(acquireRunLease).not.toHaveBeenCalled();
+    expect(await db.select().from(environmentLeases).where(eq(environmentLeases.heartbeatRunId, input.run.id))).toEqual([]);
   });
 
   it("selects the saved execution workspace without inspecting live Git delivery state", async () => {

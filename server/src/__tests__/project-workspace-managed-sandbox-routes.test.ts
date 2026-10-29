@@ -30,6 +30,7 @@ const mockSecretService = vi.hoisted(() => ({
 }));
 const mockEnvironmentService = vi.hoisted(() => ({
   getById: vi.fn(),
+  listBoundCompanyIds: vi.fn(),
 }));
 const mockInstanceSettingsService = vi.hoisted(() => ({
   getExperimental: vi.fn(),
@@ -216,6 +217,7 @@ describe("project workspace host-path floor", () => {
     mockProjectService.listWorkspaces.mockResolvedValue([buildWorkspace()]);
     mockSecretService.normalizeEnvBindingsForPersistence.mockImplementation(async (_companyId, env) => env);
     setManagedSandboxOnly(false);
+    mockEnvironmentService.listBoundCompanyIds.mockResolvedValue([]);
   });
 
   it("accepts a Daytona project environment without enabling checkout isolation", async () => {
@@ -247,6 +249,41 @@ describe("project workspace host-path floor", () => {
     const res = await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId: null } });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(mockEnvironmentService.getById).not.toHaveBeenCalled();
+  });
+
+  it("requires workspace-write authority to change a project environment", async () => {
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    mockAccessService.decide.mockImplementation(async input => ({ allowed: input.action !== "project:write_workspace", explanation: "Workspace write permission required." }));
+    mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona" } });
+    const app = await createApp();
+    await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId } }).expect(403);
+    expect(mockProjectService.update).not.toHaveBeenCalled();
+  });
+
+  it.each([null, { enabled: false }, { enabled: false, environmentId: null }])("requires write authority when policy replacement clears an environment (%j)", async executionWorkspacePolicy => {
+    mockProjectService.getById.mockResolvedValue(buildProject({ executionWorkspacePolicy: { enabled: false, environmentId: "11111111-1111-4111-8111-111111111111" } }));
+    mockAccessService.decide.mockImplementation(async input => ({ allowed: input.action !== "project:write_workspace", explanation: "Workspace write permission required." }));
+    const app = await createApp();
+    await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy }).expect(403);
+    expect(mockProjectService.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a project environment bound only to another company", async () => {
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona" } });
+    mockEnvironmentService.listBoundCompanyIds.mockResolvedValue(["other-company"]);
+    const app = await createApp();
+    await request(app).patch("/api/projects/project-1").send({ executionWorkspacePolicy: { enabled: false, environmentId } }).expect(403);
+    expect(mockProjectService.update).not.toHaveBeenCalled();
+  });
+
+  it("requires write authority to create a project with an environment", async () => {
+    const environmentId = "11111111-1111-4111-8111-111111111111";
+    mockAccessService.decide.mockImplementation(async input => ({ allowed: input.action !== "project:write_workspace", explanation: "Workspace write permission required." }));
+    mockEnvironmentService.getById.mockResolvedValue({ id: environmentId, driver: "sandbox", status: "active", config: { provider: "daytona" } });
+    const app = await createApp();
+    await request(app).post("/api/companies/company-1/projects").send({ name: "Project", executionWorkspacePolicy: { enabled: false, environmentId } }).expect(403);
+    expect(mockProjectService.create).not.toHaveBeenCalled();
   });
 
   it("creates a project workspace with a cwd when the policy is off", async () => {

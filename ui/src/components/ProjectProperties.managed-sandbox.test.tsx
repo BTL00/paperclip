@@ -203,6 +203,18 @@ describe("ProjectProperties project environment", () => {
     } });
   });
 
+  it("preserves enabled checkout defaults inherited from a storage provider", () => {
+    const project = makeProject(makeCodebase());
+    project.executionWorkspacePolicy = null;
+    project.workspaceProvider = { source: "default", pluginId: "storage", displayName: "Storage", providers: [],
+      effectivePolicy: { enabled: true, storageProviderPluginId: "storage", defaultMode: "isolated_workspace" }, error: null };
+    const save = vi.fn();
+    render(project, { enableEnvironments: true }, [coding], save);
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Project environment"]')!;
+    act(() => { select.value = coding.id; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(save).toHaveBeenCalledWith("execution_workspace_environment", { executionWorkspacePolicy: { enabled: true, environmentId: coding.id } });
+  });
+
   it("shows an unavailable saved environment instead of displaying inheritance", () => {
     const project = makeProject(makeCodebase());
     project.executionWorkspacePolicy = { enabled: false, environmentId: "removed-env" };

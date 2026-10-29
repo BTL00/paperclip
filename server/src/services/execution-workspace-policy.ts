@@ -275,6 +275,7 @@ export function selectEnvironmentExecutionWorkspaceSettings(
 }
 
 export type ExecutionWorkspaceEnvironmentSource =
+  | "run"
   | "issue"
   | "project"
   | "agent"

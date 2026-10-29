@@ -750,7 +750,7 @@ export function ProjectProperties({ project, repositories, onUpdate, onFieldUpda
               value={executionWorkspaceEnvironmentId}
               onChange={(event) => commitField("execution_workspace_environment", {
                 executionWorkspacePolicy: {
-                  enabled: false,
+                  enabled: executionWorkspacesEnabled,
                   ...storedExecutionWorkspacePolicy,
                   environmentId: event.target.value || null,
                 },
@@ -768,7 +768,7 @@ export function ProjectProperties({ project, repositories, onUpdate, onFieldUpda
             </select>
             <p className="text-xs text-muted-foreground">
               Tasks in this project use this environment ahead of agent and instance defaults.
-              Explicit trust restrictions still apply. Existing runs keep their admitted environment.
+              Explicit trust restrictions still apply. Existing runs keep their current environment.
             </p>
             {projectEnvironmentUnavailable ? (
               <p role="alert" className="text-xs text-destructive">Choose an available environment or inherit the default.</p>

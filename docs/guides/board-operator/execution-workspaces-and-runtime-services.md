@@ -20,6 +20,10 @@ With Environments enabled, open a project's Configuration tab and choose its
 without a codebase and without isolated checkouts. **Inherit agent / instance
 default** clears the project choice.
 
+Changing or clearing that choice requires the project's workspace-write
+authority. A target bound to another company cannot be selected or acquired.
+Global environments remain available to companies on the instance.
+
 The selection order is an explicit low-trust task sandbox, the task's project,
 the agent default, the instance default, then Local. Managed-sandbox-only and
 forced Kubernetes restrictions still apply. Personal external-assistant
@@ -40,7 +44,9 @@ project-specific sizing.
 
 Configuration changes affect later run placement and new sandbox acquisition.
 They do not resize an existing sandbox or move a running process. Existing
-recovery and lease identity checks remain in force.
+native recovery restores the environment from its admitted lease and validates
+the company, run, task and agent binding before reconnecting. A missing or
+mismatched recorded lease cannot be replaced by a new project choice.
 
 ### Workspace commands
 

@@ -19,6 +19,7 @@ import { freshWorkspaceSchema } from "@paperclipai/plugin-sdk";
 import { environmentLeases, type Db } from "@paperclipai/db";
 import { and, eq } from "drizzle-orm";
 import { remoteExecutionHasStopped } from "./remote-execution-termination.js";
+import { assertEnvironmentCompanyBinding } from "./environment-selection.js";
 import type {
   Environment,
   EnvironmentLease,
@@ -198,6 +199,8 @@ export function environmentRunOrchestrator(
       });
     }
 
+    await assertEnvironmentCompanyBinding(environmentsSvc, input.companyId, environment.id);
+
     return environment;
   }
 
@@ -323,6 +326,7 @@ export function environmentRunOrchestrator(
       executionWorkspaceSettings: input.executionWorkspaceSettings,
       runnerTaskProjectIds: input.runnerTaskProjectIds,
       adapterType: input.adapterType ?? null,
+      assertCompanyBinding: true,
     };
     let leaseRecord: EnvironmentRuntimeLeaseRecord;
     if (input.reattachRemoteLease) {

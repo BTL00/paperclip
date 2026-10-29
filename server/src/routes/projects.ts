@@ -117,6 +117,7 @@ export function projectRoutes(db: Db) {
     if (environmentId === undefined || environmentId === null) return;
     await assertEnvironmentSelectionForCompany(environmentsSvc, companyId, environmentId, {
       allowedDrivers: ["local", "ssh", "sandbox"],
+      requireCompanyBinding: true,
     });
   }
 
@@ -172,7 +173,7 @@ export function projectRoutes(db: Db) {
     return false;
   }
 
-  async function assertProjectWorkspaceWriteAllowed(req: Request, res: Response, project: { id: string; companyId: string }) {
+  async function assertProjectWorkspaceWriteAllowed(req: Request, res: Response, project: { id?: string; companyId: string }) {
     const assigneeAgentId = req.actor.type === "agent" ? req.actor.agentId ?? null : null;
     const decision = await access.decide({ actor: req.actor, action: "project:write_workspace",
       resource: { type: "issue", companyId: project.companyId, projectId: project.id, assigneeAgentId },
@@ -389,6 +390,8 @@ export function projectRoutes(db: Db) {
     projectData.privacyOwnerUserId = req.actor.type === "board" ? req.actor.userId ?? null : req.actor.type === "agent" ? req.actor.onBehalfOfUserId ?? null : null;
     const runContext = req.actor.type === "agent" && req.actor.source === "agent_jwt" && req.actor.runId
       ? await projectToolContext(db, req.actor, true) : null;
+    if (readProjectPolicyEnvironmentId(projectData.executionWorkspacePolicy)
+      && !(await assertProjectWorkspaceWriteAllowed(req, res, { companyId }))) return;
     await assertProjectEnvironmentSelection(
       companyId,
       readProjectPolicyEnvironmentId(projectData.executionWorkspacePolicy),
@@ -504,6 +507,10 @@ export function projectRoutes(db: Db) {
     if (!existing) return;
     if (!(await assertProjectReadAllowed(req, res, existing))) return;
     const body = { ...req.body };
+    if (body.executionWorkspacePolicy !== undefined
+      && (readProjectPolicyEnvironmentId(body.executionWorkspacePolicy) ?? null)
+        !== (readProjectPolicyEnvironmentId(existing.executionWorkspacePolicy) ?? null)
+      && !(await assertProjectWorkspaceWriteAllowed(req, res, existing))) return;
     if (body.visibility !== undefined) {
       if (!(await assertCanManageProjectPrivacy(req, res, existing))) return;
     }

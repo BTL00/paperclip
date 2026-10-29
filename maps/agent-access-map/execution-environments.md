@@ -173,11 +173,15 @@ remaining operations before qualifying the whole capability.
 Gaps: Choosing among permitted targets differs from creating/configuring host targets;
 test authorized and denied selection.
 
-Project environment defaults use the existing protected project update and
-`executionWorkspacePolicy.environmentId`; this adds no environment-management
+Project environment defaults use `executionWorkspacePolicy.environmentId`.
+Changing or clearing the choice requires `project:write_workspace`
+(`tasks:assign` authority), including a whole-policy replacement or project
+creation with a selected target. This adds no environment-management
 permission. Task project placement overrides agent and instance defaults even
 without isolated checkouts. Low-trust and instance restrictions still govern
-execution, and the runtime rechecks target availability and company bindings.
+execution. Save and run admission check company bindings; lease creation checks
+them again under the environment row lock. Native recovery uses its owned
+admitted lease rather than a changed project default.
 Source coverage includes the project selection resolver and assembled heartbeat
 tests; live agent assignment permissions require their own permitted/denied
 identity evidence.

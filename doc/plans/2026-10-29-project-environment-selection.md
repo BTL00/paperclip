@@ -58,10 +58,20 @@ public fixtures and the PR description.
   coverage pass. The process cases cover disabled/enabled checkout policy,
   another project's files, and clearing to agent inheritance on a new task.
 - Repository typecheck, build, map, module boundary and UI token checks pass.
-  The full test suite is running.
+  A full local test attempt was stopped after the branch rebase to avoid
+  claiming mixed-revision proof. Comprehensive validation runs in current-head CI.
 - A live 30 GiB create reached Daytona and was rejected by the credential's
   organization-level 10 GiB per-sandbox cap. A read confirmed no allocation was
   left behind. This does not establish that the user's hosted instance has the
   same Daytona account or limit. Live 30 GiB qualification remains blocked by
   that external cap; the configured-resource tests use a simulated SDK boundary.
-- The browser save/reload walkthrough and PR review remain in progress.
+- The actual browser save/reload/clear walkthrough passed with isolation off;
+  independent API reads confirmed the saved and cleared states.
+- PR: https://github.com/paperclipai/paperclip/pull/18176.
+- Review regressions reproduced eight failures, then passed after preserving
+  inherited checkout settings, restoring admitted environment leases, requiring
+  project workspace-write authority and checking company bindings. Expanded
+  runtime, lease, route and UI integration checks pass (293 tests); native-session
+  controls pass (977 tests). Route guard fixtures now model the required permission
+  and company-binding lookup and pass all seven cases. Typecheck and build pass
+  again after the review fixes.
