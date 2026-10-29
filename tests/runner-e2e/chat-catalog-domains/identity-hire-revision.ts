@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { Approval, ApprovalComment } from "../../../packages/shared/src/types/approval.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
 import { checks, entity } from "./internal-support.js";
-import { identityDefinition, identityObservation, observeIdentity, openStandingChat, waitForReply } from "./identity-support.js";
+import { identityDefinition, identityObservation, observeIdentity, openStandingChat, remainingIdentityObservationBudget, waitForReply } from "./identity-support.js";
 import { CHAT_OPENCODE_MODEL } from "../chat-runtime-profile.js";
 import { readHireModelChoice, validHireModelChoice } from "./identity-hire-model-choice.js";
 
@@ -54,7 +54,8 @@ export const hireRevisionIdentityCases: readonly ChatCatalogCase[] = [identityDe
 }, gradeHireRevision, {
   authentication: "human-session", oracleVersion: "paperclip.chat-catalog.hire-revision.native1017.v2", sourceFiles: ["chat-catalog-domains/identity-hire-revision.ts", "chat-catalog-domains/identity-hire-model-choice.ts", "chat-catalog-domains/identity-support.ts", "chat-catalog-domains/internal-support.ts", "chat-scenarios/questions-and-approvals.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const id = entity(state, "originalApproval").id; const source = ctx.input.page.url();
+    const originalDeadlineAt = ctx.observationDeadlineAt; remainingIdentityObservationBudget(ctx);
+    await waitForReply(ctx, originalDeadlineAt); const id = entity(state, "originalApproval").id; const source = ctx.input.page.url();
     const links = await ctx.input.page.locator('[id^="comment-"] a[href]').evaluateAll(rows => rows.map(row => row.getAttribute("href")!));
     const link = links.find(href => new URL(href, ctx.input.api.baseURL).pathname.endsWith(`/approvals/${id}`));
     if (!link) throw new Error("Actual pending revised proposal review link is missing");
