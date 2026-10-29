@@ -132,7 +132,7 @@ export async function runKimiLifecycleFlow(input: {
     await expect(card).toHaveCount(1); await expect(card.getByText(`Change file: ${target}`, { exact: true })).toBeVisible();
     await expect(card.getByRole("button", { name: "Deny", exact: true })).toBeEnabled();
     await expect(card.getByRole("button", { name: "Allow once", exact: true })).toBeEnabled();
-    await input.capture("kimi-native-write-pending", "Actual native Kimi Write permission remains unanswered", "kimi-native-write-pending.png");
+    await input.capture("kimi-native-write-pending", "Actual native Kimi Write permission remains unanswered", "tool-review-pending.png");
     if (remote) {
       pendingSnapshot = await fixture!.snapshot("pending-native-write");
       check("remote-pending-no-effect", !nativeRemoteDeniedSample(pendingSnapshot, baseline!, target, "pending").exists, "Remote native Write is pending without an effect");
@@ -177,7 +177,7 @@ export async function runKimiLifecycleFlow(input: {
     await expect(card.getByRole("button", { name: "Deny", exact: true })).toHaveCount(0);
     readKimiLifecycleSettlement({ ...await load(), ...completed });
     check("no-replacement-run-or-false-completion", runs.length === 1 && issue.status === (branch === "stop" ? "in_progress" : "blocked"), "One unfinished task retains the original terminal; no automatic follow-up or completed mutation");
-    await input.capture("kimi-native-write-ended", "Ended native Write is no longer answerable", "kimi-native-write-ended.png");
+    await input.capture("final-state", "Ended native Write is no longer answerable", "final-state.png");
     await input.evidence("api-state.json", { issue, run: runs[0], runs, runEvents: events, runEventsByRun: [{ runId: runs[0]!.id, events }], checks, completed });
     return { issue, runs, checks };
   } finally { await input.evidence("kimi-native-lifecycle-checks.json", { issue, runs, samples, checks, completed }); }
