@@ -11,6 +11,32 @@ const selected = "chat-features.runner-opencode.local.chat-channels.outbound-ema
 const otherSelected = "chat-features.runner-opencode.local.recovery.unknown-email-outcome";
 const failure = "Selected AgentMail private input preparation failed; details withheld\n";
 const cleanupFailure = "Selected AgentMail private input cleanup failed; details withheld\n";
+function assertSelectedAllowlistAgreement(source) {
+  const preparation = source.slice(source.indexOf("      - name: Prepare selected self-addressed"), source.indexOf("      - name: Run paid cell"));
+  const paid = source.slice(source.indexOf("      - name: Run paid cell"), source.indexOf("      - name: Remove selected AgentMail"));
+  const expressions = [
+    preparation.match(/if: [^\n]*fromJSON\('([^']+)'\)/)?.[1],
+    preparation.match(/const allowed = new Set\((\[[^\n]+\])\);/)?.[1],
+    paid.match(/PAPERCLIP_CHAT_EVAL_AGENTMAIL_API_TOKEN: [^\n]*fromJSON\('([^']+)'\)/)?.[1],
+  ];
+  for (const expression of expressions) {
+    assert.ok(expression, "Missing selected AgentMail allowlist boundary");
+    assert.deepEqual(JSON.parse(expression), [selected, otherSelected], "AgentMail input and token delivery scopes must remain the same exact two cases");
+  }
+}
+test("actual preparation, inline validation and paid token allowlists agree exactly", () => {
+  assertSelectedAllowlistAgreement(workflow);
+});
+for (const boundary of ["preparation", "inline", "paid token"]) test(`policy control rejects ${boundary} allowlist drift`, () => {
+  const start = workflow.indexOf(boundary === "paid token" ? "      - name: Run paid cell" : "      - name: Prepare selected self-addressed");
+  const end = workflow.indexOf(boundary === "paid token" ? "      - name: Remove selected AgentMail" : "      - name: Run paid cell", start);
+  const block = workflow.slice(start, end);
+  const changed = boundary === "inline"
+    ? block.replace(/(const allowed = new Set\()\[[^\n]+\](\);)/, `$1${JSON.stringify([selected, otherSelected, selected.replace("outbound-email", "reply-to-email")])}$2`)
+    : block.replace(/fromJSON\('[^']+'\)/, `fromJSON('${JSON.stringify([selected, otherSelected, selected.replace("outbound-email", "reply-to-email")])}')`);
+  assert.notEqual(changed, block);
+  assert.throws(() => assertSelectedAllowlistAgreement(workflow.slice(0, start) + changed + workflow.slice(end)), /same exact two cases/);
+});
 function fixture(change = () => {}, fault = "") {
   const directory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "agentmail-workflow-control-")); fs.chmodSync(directory, 0o700);
   const githubEnv = path.join(directory, "github-env"); fs.writeFileSync(githubEnv, "", { mode: 0o600 });
