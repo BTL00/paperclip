@@ -112,7 +112,11 @@ let manualEvidenceFailure: Error | undefined;
 /** Reuse the existing durable case registry, including registrations made after
  * the worker starts. Failure must stop sealing, never certify only env roots. */
 export function refreshManualEvidenceRoots(registry: string | undefined, temporaryRoot: string, roots: string[], retained: Set<string>) {
-  if (registry) roots.splice(0, roots.length, ...normalizedSecrets([...roots, ...readPrivateDiagnosticSecrets(registry, temporaryRoot)]));
+  const registered = registry ? readPrivateDiagnosticSecrets(registry, temporaryRoot) : [];
+  // Reloading the worker carrier must not discard a root already observed by
+  // this attempt. The original scan/sealer needs the same accumulated set as
+  // the final result sealer, even if a valid carrier regresses or is absent.
+  roots.splice(0, roots.length, ...normalizedSecrets([...retained, ...roots, ...registered]));
   for (const root of roots) retained.add(root);
 }
 const activeProcessGroups = new Set<number>();

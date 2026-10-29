@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile, readFile, rm, realpath, chmod } from "node:f
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { stagePrivateDiagnostics, trackedPrivateSecrets } from "./private-diagnostics.js";
+import { stagePrivateDiagnostics, trackedPrivateSecrets, readPrivateDiagnosticSecrets } from "./private-diagnostics.js";
 import { sealStandardOriginalEvidence, sealManualResultEvidence, preserveOriginalFrameworkResult, type ManualPrivateHandoff } from "./manual-private-handoff.js";
 import { MANUAL_PRIVATE_EXECUTIONS, MANUAL_PRIVATE_PROTOCOL, manualCellKind } from "./manual-private-retention.js";
 import { packageEvidence } from "./evidence.js";
@@ -80,6 +80,34 @@ it.each(["raw", "base64", "path"])("actual durable late-root registration stops 
   await writeFile(path.join(f.source, "snapshots", name), JSON.stringify({ value: kind === "raw" ? late : kind === "base64" ? Buffer.from(late).toString("base64") : "closed" }));
   const scanDir = path.join(f.temporary, "scan"), evidence = await packageEvidence({ privateDir: f.source, uploadDir: scanDir, secrets: roots, expectPassScreenshot: false });
   await expect(sealStandardOriginalEvidence({ context: f.context, executionId: id, source: f.source, evidence, secrets: [...retained], expectPassScreenshot: false })).rejects.toThrow();
+});
+it("a valid regressed registry cannot erase an initial root from original evidence scans or seals", async () => {
+  const f = await fixture(), target = await launcher(["--list", "--id", id]);
+  const attempt = path.join(f.temporary, "attempt"); await mkdir(path.join(attempt, "selected-private-inputs"), { recursive: true, mode: 0o700 });
+  const initial = "synthetic-registered-initial-root-1234567890", roots = [initial], retained = new Set<string>();
+  const registry = stagePrivateDiagnostics(attempt, [id], roots);
+  target.refreshManualEvidenceRoots(registry, attempt, roots, retained);
+  // Reproduce the actual post-worker reload with a valid owner-only carrier.
+  // The normal writer is append-only; this synthetic regression checks that the
+  // consumer cannot certify originals with fewer roots than it already knew.
+  await writeFile(registry, JSON.stringify({ version: 1, executionIds: [id], secrets: [] }));
+  roots.splice(0, roots.length, ...readPrivateDiagnosticSecrets(registry, attempt));
+  target.refreshManualEvidenceRoots(registry, attempt, roots, retained);
+  await writeFile(path.join(f.source, "snapshots/state.json"), JSON.stringify({ apiKey: initial }));
+  const scan = path.join(f.temporary, "scan"), evidence = await packageEvidence({ privateDir: f.source, uploadDir: scan, secrets: roots, expectPassScreenshot: false });
+  // A sanitized derivative alone cannot certify its unchanged raw original.
+  expect(JSON.parse(await readFile(path.join(scan, "snapshots/state.json"), "utf8")).apiKey).toBe("[REDACTED]");
+  expect(retained.has(initial)).toBe(true);
+  await expect(sealStandardOriginalEvidence({ context: f.context, executionId: id, source: f.source, evidence, secrets: roots, expectPassScreenshot: false })).rejects.toThrow();
+  expect(roots).toContain(initial);
+});
+it("retains accumulated roots even when no registry is available", async () => {
+  const f = await fixture(), target = await launcher(["--list", "--id", id]);
+  const initial = "synthetic-retained-only-root-1234567890", current = "synthetic-current-root-9876543210";
+  const roots = [current], retained = new Set([initial]);
+  target.refreshManualEvidenceRoots(undefined, f.temporary, roots, retained);
+  expect(new Set(roots)).toEqual(new Set([initial, current]));
+  expect(retained).toEqual(new Set([initial, current]));
 });
 it("an invalid staged registry throws without certifying a smaller root set", async () => {
   const f = await fixture(); const target = await launcher(["--list", "--id", id]);
