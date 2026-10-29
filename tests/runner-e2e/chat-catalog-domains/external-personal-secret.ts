@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { randomBytes } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -178,6 +179,34 @@ export function gradePersonalSecret(value: unknown) {
   );
   return c.result();
 }
+interface PublishingWorker extends Entity {
+  adapterConfig: Record<string, unknown>; lifecycleState: string; lifecycleError?: string | null; lifecycleHolds: string[]; lifecycleVersion: number;
+}
+/** Complete the existing setup before installing the deliberately missing personal binding. */
+export async function configurePersonalPublishingReference(ctx: ChatCatalogContext, worker: Entity, definition: { id: string; key: string; companyId: string }) {
+  const companyId = ctx.input.fixtures.company.id;
+  if (ctx.scenario.id !== "secrets.personal-secret" || !worker.id || worker.companyId !== companyId || definition.companyId !== companyId || definition.key !== "PERSONAL_PUBLISHING_KEY" || !definition.id)
+    throw new Error("Personal publishing setup requires the actual same-company worker and definition");
+  const deadlineAt = Math.min(ctx.observationDeadlineAt ?? Number.NaN, Date.now() + 45_000);
+  const budget = () => { if (!Number.isFinite(deadlineAt) || Date.now() >= deadlineAt) throw new Error("Original personal publishing setup budget exhausted"); };
+  const read = async () => {
+    budget(); const row = await ctx.input.api.get<PublishingWorker>(`/api/agents/${worker.id}`); budget();
+    if (row.id !== worker.id || row.companyId !== companyId || row.name !== "Morgan") throw new Error("Personal publishing worker identity changed");
+    return row;
+  };
+  const ready = (row: PublishingWorker) => row.lifecycleState === "ready" && ["idle", "active"].includes(row.status ?? "")
+    && Number.isInteger(row.lifecycleVersion) && row.lifecycleVersion > 0 && !row.lifecycleError && Array.isArray(row.lifecycleHolds) && row.lifecycleHolds.length === 0;
+  const before = await pollUntil({ label: "existing Morgan personal publishing setup", deadlineAt, intervalMs: 500, load: read, accept: ready,
+    reject: row => row.lifecycleError ? "Existing Morgan setup failed; details withheld" : undefined, retryOnError: () => false });
+  const reference = { type: "user_secret_ref", key: definition.key, version: "latest", required: true, allowMissingOverride: false };
+  const adapterConfig = { ...before.adapterConfig, env: { ...(before.adapterConfig.env as Record<string, unknown>), PUBLISHING_API_KEY: reference } };
+  budget(); await ctx.input.api.patch(`/api/agents/${worker.id}`, { adapterConfig }); budget();
+  const after = await read();
+  if (!ready(after) || after.lifecycleVersion !== before.lifecycleVersion || !isDeepStrictEqual(after.adapterConfig, adapterConfig))
+    throw new Error("Personal publishing reference did not preserve actual ready worker/configuration");
+  await ctx.input.evidence("personal-publishing-worker-ready-before-required-binding.json", { companyId, workerId: worker.id,
+    lifecycleVersion: after.lifecycleVersion, existingSetupReadyBeforeBinding: true, requiredReferenceReadBack: true, noAdditionalProbeOrResume: true });
+}
 export const personalSecretExternalCases = [
   definition(
     "secrets.personal-secret",
@@ -234,25 +263,8 @@ export const personalSecretExternalCases = [
           throw new Error(
             "Personal publishing definition must initially lack the current person's value",
           );
-        const morgan = await identityWorker(ctx),
-          agent = await ctx.input.api.get<{
-            adapterConfig: Record<string, unknown>;
-          }>(`/api/agents/${morgan.id}`);
-        await ctx.input.api.patch(`/api/agents/${morgan.id}`, {
-          adapterConfig: {
-            ...agent.adapterConfig,
-            env: {
-              ...(agent.adapterConfig.env as Record<string, unknown>),
-              PUBLISHING_API_KEY: {
-                type: "user_secret_ref",
-                key: definition.key,
-                version: "latest",
-                required: true,
-                allowMissingOverride: false,
-              },
-            },
-          },
-        });
+        const morgan = await identityWorker(ctx);
+        await configurePersonalPublishingReference(ctx, morgan, definition);
         endpoint = await secretTestEndpoint(
           ctx,
           morgan.id,

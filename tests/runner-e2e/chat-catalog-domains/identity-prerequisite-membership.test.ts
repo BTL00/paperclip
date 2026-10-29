@@ -39,7 +39,7 @@ it.each(["operator", "viewer"] as const)("establishes only the real public %s pr
   expect(receipt).toMatchObject({ userId: "person", companyId: "company", role, beforeStatus: 403, companyReadStatus: 200, instanceAdminReadStatus: 403 });
   expect(f.evidence).toHaveBeenCalledOnce(); expect([...f.reads, ...f.writes.map(row => row.route)]).not.toEqual(expect.arrayContaining([expect.stringContaining("invites")]));
 });
-it.each(["access.invite-teammate", "access.manage-membership", "activity.agent-feedback", "unknown"])("does not substitute public membership for unapproved/invitation journey %s", async scenarioId => {
+it.each(["access.invite-teammate", "access.manage-membership", "activity.find-runs", "unknown"])("does not substitute public membership for unapproved/invitation journey %s", async scenarioId => {
   const f = fixture(); Object.assign(f.ctx.scenario, { id: scenarioId }); f.ctx.input.execution.id = `chat-features.runner-opencode.local.${scenarioId}`;
   await expect(enrollPrerequisitePerson(f.ctx, f.person)).rejects.toThrow("not admitted"); expect(f.api.get).not.toHaveBeenCalled(); expect(f.writes).toHaveLength(0);
 });
@@ -75,6 +75,6 @@ it("a slow public access write cannot reset the original clock or start role/gra
   await expect(enrollPrerequisitePerson(f.ctx, f.person)).rejects.toThrow("budget"); expect(f.writes).toHaveLength(1); expect(f.api.patchSensitive).not.toHaveBeenCalled(); expect(f.evidence).not.toHaveBeenCalled();
 });
 it("the closed allowlist contains no access/invitation scenarios", () => {
-  expect(prerequisiteMembershipScenarioIds).toHaveLength(20);
+  expect(prerequisiteMembershipScenarioIds).toHaveLength(22);
   expect(prerequisiteMembershipScenarioIds.some(id => id.startsWith("access."))).toBe(false);
 });

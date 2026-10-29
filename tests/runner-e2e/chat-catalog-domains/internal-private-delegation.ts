@@ -1,11 +1,11 @@
 import { expect } from "@playwright/test";
-import type { ChatCatalogCase } from "../chat-catalog-contract.js";
+import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { openStandingChat } from "./identity-support.js";
 import { agentStatus, cleanupPrivacyProbes, mainPerson, observerPerson, personRead } from "./internal-privacy.js";
 import { checks, entity, hasLink, observation, observeInternal, project, putDocument, type Entity, type InternalObservation } from "./internal-support.js";
 
-interface PrivateTask extends Entity { visibility?: string; privacyRootIssueId?: string | null; conversationAgentId?: string | null }
+interface PrivateTask extends Entity { conversationUserId?: string; createdByUserId?: string; responsibleUserId?: string; visibility?: string; privacyRootIssueId?: string | null; conversationAgentId?: string | null }
 interface PrivateDelegationObservation extends InternalObservation {
   sourcePrivate: boolean; projectPrivate: boolean; leadProjectStatus: number; workerProjectStatus: number; workerTaskStatus?: number;
   observerCompanyStatus: number; observerTaskStatus?: number; observerSourceStatus: number; observerProjectsStatus: number;
@@ -35,6 +35,34 @@ export function gradePrivateDelegation(value: unknown) {
     "Actual worker execution belongs to the private work task instead of the standing conversation.");
   return c.result();
 }
+/** Put only the existing private conversation into its already-authorized project. */
+export async function bindAuthorizedPrivateSource(ctx: ChatCatalogContext, sourceId: string, project: Entity, worker: Entity, ownerId: string, observer: Awaited<ReturnType<typeof observerPerson>>) {
+  const companyId = ctx.input.fixtures.company.id, leadId = ctx.input.fixtures.agent.id;
+  if (ctx.scenario.id !== "tasks.private-task" || !sourceId || !ownerId || observer.id === ownerId || project.companyId !== companyId || worker.companyId !== companyId)
+    throw new Error("Private source setup requires the actual distinct same-company identities");
+  const budget = () => { if (!Number.isFinite(ctx.observationDeadlineAt) || Date.now() >= ctx.observationDeadlineAt!) throw new Error("Original private source setup budget exhausted"); };
+  budget();
+  const [session, before, target] = await Promise.all([ctx.input.api.get<{ user: { id: string } }>("/api/auth/get-session"),
+    ctx.input.api.get<PrivateTask>(`/api/issues/${sourceId}`), ctx.input.api.get<PrivateTask>(`/api/projects/${project.id}`)]);
+  budget();
+  const owns = (source: PrivateTask) => source.id === sourceId && source.companyId === companyId && source.createdByUserId === ownerId
+    && source.responsibleUserId === ownerId && source.conversationUserId === ownerId && source.conversationAgentId === leadId && source.assigneeAgentId === leadId;
+  if (session.user.id !== ownerId || !owns(before) || target.id !== project.id || target.companyId !== companyId || target.visibility !== "private")
+    throw new Error("Public private-source owner, session or target differs from the frozen context");
+  await ctx.input.api.patch(`/api/issues/${sourceId}`, { projectId: project.id, visibility: "private" }); budget();
+  const [after, leadSource, leadProject, workerProject, companyRead, sourceRead, projectRead] = await Promise.all([
+    ctx.input.api.get<PrivateTask>(`/api/issues/${sourceId}`), agentStatus(ctx, leadId, `/api/issues/${sourceId}`),
+    agentStatus(ctx, leadId, `/api/projects/${project.id}`), agentStatus(ctx, worker.id, `/api/projects/${project.id}`),
+    personRead(observer, `/api/companies/${companyId}`), personRead(observer, `/api/issues/${sourceId}`), personRead(observer, `/api/projects/${project.id}`)]);
+  budget();
+  if (!owns(after) || after.projectId !== project.id || after.visibility !== "private" || after.title !== before.title || after.description !== before.description
+    || leadSource !== 200 || leadProject !== 200 || workerProject !== 200 || companyRead.status !== 200
+    || ![403,404].includes(sourceRead.status) || ![403,404].includes(projectRead.status))
+    throw new Error("Actual private-source binding failed its owner/agent/unrelated-reader proof");
+  await ctx.input.evidence("private-conversation-authorized-project-binding.json", { companyId, sourceId, projectId: project.id, ownerId, leadId, workerId: worker.id,
+    actualOwnerSession: true, leadSourceStatus: leadSource, leadProjectStatus: leadProject, workerProjectStatus: workerProject,
+    unrelatedCompanyStatus: companyRead.status, unrelatedSourceStatus: sourceRead.status, unrelatedProjectStatus: projectRead.status, noDelegatedResultPreseeded: true });
+}
 function privateDelegation(): ChatCatalogCase {
   let observer: Awaited<ReturnType<typeof observerPerson>> | undefined;
   const base = makeDefinition("tasks.private-task", async ctx => {
@@ -44,8 +72,7 @@ function privateDelegation(): ChatCatalogCase {
     for (const agentId of [ctx.input.fixtures.agent.id, worker.id])
       await ctx.input.api.post(`/api/projects/${p.id}/access-members`, { subjectType: "agent", subjectId: agentId });
     const source = await openStandingChat(ctx);
-    const current = await ctx.input.api.get<PrivateTask>(`/api/issues/${source.id}`);
-    if (current.visibility !== "private") await ctx.input.api.patch(`/api/issues/${source.id}`, { visibility: "private" });
+    await bindAuthorizedPrivateSource(ctx, source.id, p, worker, ownerId, observer);
     await putDocument(ctx, source.id, `# Confidential launch brief\n${confidentialMarker}. Keep the announcement inside Private Launch and its authorized team.\n`);
     return { project: p, worker, ownerId, observerId: observer.id, sourceId: source.id, confidentialMarker };
   }, gradePrivateDelegation);

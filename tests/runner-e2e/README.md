@@ -386,9 +386,12 @@ The browser creates and assigns the task; fixtures use public APIs. The
 `accept-while-running` case additionally holds the committed card’s creation
 response in the test server until browser acceptance, to exercise real overlap.
 
-The launcher always sets `PAPERCLIP_ANNOUNCEMENTS_ENABLED=false` for its isolated
-instances so announcement panels do not obscure screenshot evidence. No shell
-or workflow configuration is needed, including for Daytona cells.
+The launcher sets `PAPERCLIP_ANNOUNCEMENTS_ENABLED=false` for isolated instances
+so unrelated announcement panels do not obscure screenshot evidence. The single
+explicit native OpenCode `navigation-preferences.dismiss-announcement` cell
+instead enables the actual default HTTPS Paperclip publication feed; ambient
+switches or alternate feed URLs cannot supply its prerequisite. Mixed selections
+remain disabled. No shell or workflow configuration is needed.
 
 ## Pi controls (explicit only)
 

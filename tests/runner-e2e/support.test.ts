@@ -247,8 +247,8 @@ describe("runner E2E provider environment", () => {
     }
   });
 
-  it("disables announcements through the server boundary for every runner cell", () => {
-    for (const execution of runnerMatrix) {
+  it("disables announcements through the server boundary for every unrelated runner cell", () => {
+    for (const execution of runnerMatrix.filter(row => row.id !== "chat-features.runner-opencode.local.navigation-preferences.dismiss-announcement")) {
       const source = { PAPERCLIP_ANNOUNCEMENTS_ENABLED: "true" };
       const env = buildRunnerE2EProcessEnvironment(source, [execution]);
       expect(buildPaperclipServerEnvironment(env).PAPERCLIP_ANNOUNCEMENTS_ENABLED).toBe("false");

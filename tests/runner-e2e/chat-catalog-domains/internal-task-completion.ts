@@ -1,17 +1,19 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { expect } from "@playwright/test";
-import type { ChatCatalogCase } from "../chat-catalog-contract.js";
+import type { ChatCatalogCase, ChatCatalogContext } from "../chat-catalog-contract.js";
 import { pollUntil } from "../api.js";
 import { createAuthenticatedPerson, enrollPrerequisitePerson } from "./identity-auth.js";
 import { fixtureWorker, makeDefinition } from "./internal-definition.js";
 import { checks, entity, observation, observeInternal, project, sameTask, task, type Entity, type InternalObservation } from "./internal-support.js";
 
 interface ReviewTask extends Entity {
+  assigneeUserId?: string | null;
   reviewPolicy?: string;
-  executionPolicy?: { stages: Array<{ id: string; type: string; participants: Array<{ type: string; userId?: string; agentId?: string }> }> };
-  executionState?: { status: string; currentStageId: string; currentStageType: string; currentParticipant?: { type: string; userId?: string; agentId?: string }; completedStageIds?: string[] };
+  executionPolicy?: { stages: Array<{ id: string; type: string; participants: Array<{ type: string; userId?: string | null; agentId?: string | null }> }> };
+  executionState?: { status: string; currentStageId: string; currentStageType: string; currentParticipant?: { type: string; userId?: string | null; agentId?: string | null }; completedStageIds?: string[] };
 }
-interface Delivery extends Entity { sha256: string; originatingRunId?: string; originalFilename?: string; contentPath?: string }
+interface Delivery extends Entity { byteSize?: number; sha256: string; originatingRunId?: string; originalFilename?: string; contentPath?: string }
 interface CompletionObservation extends InternalObservation {
   reviewTask: ReviewTask; attachments: Delivery[]; downloaded: Array<{ id: string; sha256: string; body: string }>;
   interactions: Array<Entity & { kind: string; status: string; resolvedByAgentId?: string }>;
@@ -45,6 +47,57 @@ export function gradeCompletionGate(value: unknown) {
     "The response distinguishes delivered implementation from the outstanding independent review and accepted completion.");
   return c.result();
 }
+/** Establish the frozen pending human review only after an actual attributed implementation. */
+export async function prepareDeliveredHumanReview(ctx: ChatCatalogContext, original: ReviewTask, worker: Entity, reviewerId: string) {
+  const companyId = ctx.input.fixtures.company.id;
+  if (ctx.scenario.id !== "tasks.completion-with-gate" || original.companyId !== companyId || worker.companyId !== companyId
+    || !original.id || !worker.id || !reviewerId || [worker.id, ctx.input.fixtures.agent.id].includes(reviewerId))
+    throw new Error("Independent completion context requires actual same-company identities");
+  const deadlineAt = Math.min(ctx.observationDeadlineAt ?? Number.NaN, Date.now() + 240_000);
+  const budget = () => { if (!Number.isFinite(deadlineAt) || Date.now() >= deadlineAt) throw new Error("Original implementation/review setup budget exhausted"); };
+  const read = async () => {
+    budget();
+    const [task, runs, attachments] = await Promise.all([ctx.input.api.get<ReviewTask>(`/api/issues/${original.id}`), ctx.allRuns(), ctx.input.api.get<Delivery[]>(`/api/issues/${original.id}/attachments`)]);
+    budget(); return { task, runs, attachments };
+  };
+  const saved = await pollUntil({ label: "Real prior Morgan implementation awaiting independent review", deadlineAt, load: read, retryOnError: () => false,
+    accept: value => value.task.status === "in_review" && value.runs.length === 1 && value.runs[0]?.agentId === worker.id && value.runs[0]?.status === "succeeded",
+    reject: value => value.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "Prerequisite Morgan implementation did not complete; retain actual setup evidence" : undefined });
+  const run = saved.runs[0]!, current = saved.task, policy = current.executionPolicy;
+  const reported = run.resultJson?.nativeResult as { reportedWorkDisposition?: string } | undefined;
+  const stage = policy?.stages[0];
+  if (current.id !== original.id || current.companyId !== companyId || current.projectId !== original.projectId || current.reviewPolicy !== "human_only" || !isDeepStrictEqual(policy, original.executionPolicy)
+    || !stage?.id || policy?.stages.length !== 1 || stage.type !== "review" || stage.participants.length !== 1
+    || stage.participants[0]?.type !== "user" || stage.participants[0].userId !== reviewerId
+    || run.companyId !== companyId || run.runtimeMode !== "native" || run.contextSnapshot?.issueId !== current.id || reported?.reportedWorkDisposition !== "needs_review")
+    throw new Error("Real implementation/human review identity or policy differs from the frozen prerequisite");
+  const candidates = saved.attachments.filter(file => file.issueId === current.id && file.companyId === companyId && file.createdByAgentId === worker.id
+    && file.originatingRunId === run.id && /\.html?$/i.test(file.originalFilename ?? ""));
+  if (!candidates.length || candidates.length > 3) throw new Error("Real attributed prerequisite HTML delivery is missing or unbounded");
+  const downloads = [];
+  for (const file of candidates) {
+    if (!Number.isInteger(file.byteSize) || file.byteSize! < 1 || file.byteSize! > 1_048_576 || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("Prerequisite delivery metadata is invalid");
+    budget(); const bytes = await ctx.input.api.getAttachmentContent(file.id); budget();
+    if (bytes.byteLength !== file.byteSize || createHash("sha256").update(bytes).digest("hex") !== file.sha256 || !/<html\b/i.test(Buffer.from(bytes).toString("utf8")) || !/<body\b/i.test(Buffer.from(bytes).toString("utf8")))
+      throw new Error("Actual prerequisite HTML bytes do not match their attributed public receipt");
+    downloads.push({ id: file.id, sha256: file.sha256, byteSize: bytes.byteLength });
+  }
+  const pending = (task: ReviewTask) => task.status === "in_review" && task.executionState?.status === "pending"
+    && task.executionState.currentStageId === stage.id && task.executionState.currentStageType === "review"
+    && task.executionState.currentParticipant?.type === "user" && task.executionState.currentParticipant.userId === reviewerId
+    && task.assigneeUserId === reviewerId && task.assigneeAgentId == null && (task.executionState.completedStageIds?.length ?? 0) === 0;
+  if (!pending(current)) {
+    if (current.executionState != null || current.assigneeAgentId !== worker.id) throw new Error("Existing review state cannot be replaced by fixture setup");
+    budget(); await ctx.input.api.patch(`/api/issues/${current.id}`, { status: "in_review", reviewRequest: { instructions: "Review the delivered website.html implementation and record your independent human decision." } }); budget();
+  }
+  const final = await read();
+  if (!pending(final.task) || !isDeepStrictEqual(final.task.executionPolicy, policy) || final.task.reviewPolicy !== "human_only"
+    || !sameTask(current, final.task, ["assigneeAgentId"]) || final.task.id !== current.id || final.task.companyId !== companyId || final.runs.length !== 1 || final.runs[0]?.id !== run.id || final.runs[0]?.status !== "succeeded")
+    throw new Error("Public human review request did not retain the same policy and zero extra agent reviewer runs");
+  await ctx.input.evidence("chat-catalog-prior-morgan-delivery-review.json", { task: final.task, runIds: [run.id], attachments: final.attachments, independentlyDownloaded: downloads,
+    typedWorkDisposition: "needs_review", publicSameStatusHumanReviewRequest: !pending(current), extraAgentReviewRuns: 0 });
+  return final.task;
+}
 function completionGate(): ChatCatalogCase {
   let reviewer: Awaited<ReturnType<typeof createAuthenticatedPerson>> | undefined;
   const base = makeDefinition("tasks.completion-with-gate", async ctx => {
@@ -59,15 +112,8 @@ function completionGate(): ChatCatalogCase {
     const t = await task(ctx, "Website task", p.id, { status: "todo", assigneeAgentId: worker.id, reviewPolicy: "human_only",
       executionPolicy: { mode: "normal", commentRequired: true, stages: [{ type: "review", participants: [{ type: "user", userId: reviewer.id }] }] },
       description: "Build a minimal static HTML website for Acorn Notes with a semantic heading, a short product paragraph and a signup link. Upload the actual website.html bytes to this task as a deliverable using the supported artifact path. Submit the implementation for the configured independent human review after verification; do not approve your own implementation." });
-    const saved = await pollUntil({ label: "Real prior Morgan implementation awaiting independent review", deadlineAt: Date.now() + 240_000,
-      load: async () => ({ task: await ctx.input.api.get<ReviewTask>(`/api/issues/${t.id}`), runs: await ctx.allRuns(), attachments: await ctx.input.api.get<Delivery[]>(`/api/issues/${t.id}/attachments`) }),
-      accept: value => value.task.status === "in_review" && value.task.executionState?.status === "pending"
-        && value.task.executionState.currentParticipant?.userId === reviewer!.id
-        && value.runs.length === 1 && value.runs[0]?.agentId === worker.id && value.runs[0]?.status === "succeeded"
-        && value.attachments.some(file => file.createdByAgentId === worker.id && file.originatingRunId === value.runs[0]?.id),
-      reject: value => value.runs.some(row => ["failed", "cancelled", "timed_out"].includes(row.status)) ? "Prerequisite Morgan implementation did not complete; retain actual setup evidence" : undefined });
-    await ctx.input.evidence("chat-catalog-prior-morgan-delivery-review.json", { task: saved.task, runIds: saved.runs.map(row => row.id), attachments: saved.attachments });
-    return { project: p, task: saved.task, worker, reviewerId: reviewer.id };
+    const saved = await prepareDeliveredHumanReview(ctx, t, worker, reviewer.id);
+    return { project: p, task: saved, worker, reviewerId: reviewer.id };
   }, gradeCompletionGate);
   return { ...base, authentication: "human-session", expectedRunCount: 2, minimumRunCount: 2, attemptTimeoutMs: 540_000,
     sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-task-completion.ts", "chat-catalog-domains/identity-auth.ts"],

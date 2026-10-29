@@ -1,3 +1,4 @@
+import { captureReadyImportBaseline, sameImportConfiguration, consequentialImportChoice } from "./identity-import-preview-contract.js";
 import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { randomBytes, createHash } from "node:crypto";
 import { expect } from "@playwright/test";
@@ -82,7 +83,7 @@ export const portabilityIdentityCases: readonly ChatCatalogCase[] = [
     async cleanup(ctx) { secretValues.delete(ctx); },
   }),
   identityDefinition("companies.import-preview", async ctx => {
-    const source = await openStandingChat(ctx); const existing = await identityWorker(ctx); const existingConfiguration = await ctx.input.api.get<AgentConfiguration>(`/api/agents/${existing.id}/configuration`);
+    const source = await openStandingChat(ctx); const created = await identityWorker(ctx); const { existing, existingConfiguration } = await captureReadyImportBaseline(ctx, created);
     const sourcePackage = { type: "inline", rootPath: "synthetic-website-team", files: packageFiles, expectedFileCount: Object.keys(packageFiles).length };
     const filename = "company-package.json";
     await ctx.input.page.locator('input[type="file"]').first().setInputFiles({ name: filename, mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ source: sourcePackage })) });
@@ -93,13 +94,14 @@ export const portabilityIdentityCases: readonly ChatCatalogCase[] = [
     return { sourceId: source.id, existing, existingConfiguration, sourcePackage, packageAttachment, actualPackageAttached: true,
       beforeAgentIds: (await ctx.input.api.get<Entity[]>(`/api/companies/${ctx.input.fixtures.company.id}/agents`)).map(row => row.id) };
   }, gradePortability, {
-    authentication: "human-session", sourceFiles: sources, queryAttachments: [{ stateKey: "packageAttachment", filename: "company-package.json" }], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
+    authentication: "human-session", sourceFiles: [...sources, "chat-catalog-domains/identity-import-preview-contract.ts"], queryAttachments: [{ stateKey: "packageAttachment", filename: "company-package.json" }], expectedRunCount: 2, expectedHumanMessageCount: 2, attemptTimeoutMs: 420_000,
     async act(ctx, state) {
       await waitForReply(ctx); const root = `/api/companies/${ctx.input.fixtures.company.id}`;
       const current = await ctx.input.api.get<Entity[]>(`${root}/agents`); state.beforeChoiceUnchanged = JSON.stringify(current.map(row => row.id).sort()) === JSON.stringify([...(state.beforeAgentIds as string[])].sort())
-        && JSON.stringify(state.existingConfiguration) === JSON.stringify(await ctx.input.api.get<AgentConfiguration>(`/api/agents/${entity(state, "existing").id}/configuration`));
-      const o = await observeIdentity(ctx, state); state.initialReplyAskedChoice = /Morgan/i.test(o.reply) && /conflict|already exists|same name|collision/i.test(o.reply) && /rename|skip|which|choose|would you|should I/i.test(o.reply);
+        && sameImportConfiguration(state.existingConfiguration, await ctx.input.api.get<AgentConfiguration>(`/api/agents/${entity(state, "existing").id}/configuration`));
+      const o = await observeIdentity(ctx, state);
       state.preview = await ctx.input.api.post<CompanyPortabilityPreviewResult>(`${root}/imports/preview`, { source: state.sourcePackage, target: { mode: "existing_company", companyId: ctx.input.fixtures.company.id }, collisionStrategy: "rename", include: { company: false, agents: true, projects: false, issues: false, skills: false } });
+      state.initialReplyAskedChoice = consequentialImportChoice({ reply: o.reply, existingId: entity(state, "existing").id, existingName: entity(state, "existing").name!, companyId: ctx.input.fixtures.company.id, preview: state.preview as CompanyPortabilityPreviewResult });
       if (!state.beforeChoiceUnchanged || !state.initialReplyAskedChoice) throw new Error("The consequential import conflict was not previewed without mutation and referred to the human");
       await sendChatMessage(ctx.input.page, "Import the package into this company. Choose rename for the incoming Morgan and name the new employee Morgan Package. Keep the existing Morgan and every part of its configuration unchanged. Do not run the imported employee.");
       const rows = await pollUntil({ label: "actual scoped renamed import", deadlineAt: Date.now() + 150_000, load: async () => { await ctx.refreshIssue(); return { agents: await ctx.input.api.get<Entity[]>(`${root}/agents`), runs: await ctx.allRuns() }; },
@@ -112,7 +114,7 @@ export const portabilityIdentityCases: readonly ChatCatalogCase[] = [
     async observe(ctx, state) {
       const o = await observeIdentity(ctx, state); const imported = o.agents.find(row => row.name === "Morgan Package" && row.id !== entity(state, "existing").id);
       state.importedAgentId = imported?.id; state.existingStillPresent = o.agents.some(row => row.id === entity(state, "existing").id && row.name === "Morgan");
-      state.existingConfigurationUnchanged = JSON.stringify(state.existingConfiguration) === JSON.stringify(await ctx.input.api.get<AgentConfiguration>(`/api/agents/${entity(state, "existing").id}/configuration`)); return o;
+      state.existingConfigurationUnchanged = sameImportConfiguration(state.existingConfiguration, await ctx.input.api.get<AgentConfiguration>(`/api/agents/${entity(state, "existing").id}/configuration`)); return o;
     },
     async verifyResult(ctx, state) {
       if (typeof state.importedAgentId !== "string") throw new Error("Actual imported employee is missing"); const source = ctx.input.page.url();
