@@ -148,7 +148,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -345,7 +345,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -528,7 +528,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -585,7 +585,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -859,7 +859,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -1111,7 +1111,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -1236,7 +1236,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -1451,7 +1451,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
@@ -1607,7 +1607,7 @@ jobs:
           pnpm run test:e2e $specs
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: playwright-report-${{ matrix.shard_index }}
@@ -1619,7 +1619,7 @@ jobs:
       - name: Upload CI profile timings
         continue-on-error: true
         if: always() && env.PAPERCLIP_CI_PROFILE == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-profile-${{ github.run_attempt }}-${{ github.job }}-${{ strategy.job-index || 0 }}
           path: .ci-profile/*.ndjson
