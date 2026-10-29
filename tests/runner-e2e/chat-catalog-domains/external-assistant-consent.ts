@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { expect } from "@playwright/test";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
@@ -47,7 +48,7 @@ export const assistantConsentExternalCases = [definition("assistant-connections.
   authentication: "human-session",
   sourceFiles: ["chat-catalog-domains/external-assistant-consent.ts", "chat-catalog-domains/external-assistant-connections.ts", "chat-catalog-domains/identity-auth.ts", "chat-catalog-domains/external-support.ts", "chat-catalog-domains/internal-support.ts", "chat-catalog-domains/identity-support.ts", "public-mcp-client.ts", "chat-scenarios/assistant-connections.yaml"],
   async act(ctx, state) {
-    await waitForReply(ctx); const viewer = people.get(ctx); if (!viewer || !ctx.input.privateSecrets) throw new Error("Viewer consent fixture missing");
+    await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); const viewer = people.get(ctx); if (!viewer || !ctx.input.privateSecrets) throw new Error("Viewer consent fixture missing");
     const page = await viewer.context.newPage();
     try {
       async function signedInPerson() { const response = await page.context().request.get(`${ctx.input.api.baseURL}/api/auth/get-session`); if (!response.ok()) throw new Error("Viewer browser session check failed"); return (await response.json() as { user: { id: string } }).user.id; }

@@ -1,3 +1,4 @@
+import { chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { randomBytes, createHash } from "node:crypto";
 import { expect } from "@playwright/test";
 import { readZipArchive } from "../../../packages/shared/src/portability-zip.js";
@@ -62,7 +63,7 @@ export const portabilityIdentityCases: readonly ChatCatalogCase[] = [
   }, gradePortability, {
     authentication: "human-session", sourceFiles: sources,
     async act(ctx, state) {
-      await waitForReply(ctx); state.agentExportPermissionStatus = await probeAgentPermission(ctx, `/api/companies/${ctx.input.fixtures.company.id}/exports/preview`, "POST", { include: { company: true, agents: true, projects: true, skills: true, issues: false } });
+      await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx)); state.agentExportPermissionStatus = await probeAgentPermission(ctx, `/api/companies/${ctx.input.fixtures.company.id}/exports/preview`, "POST", { include: { company: true, agents: true, projects: true, skills: true, issues: false } });
       const attachments = await ctx.input.api.get<IssueAttachment[]>(`/api/issues/${ctx.issue()!.id}/attachments`);
       const attachment = attachments.find(row => /\.(?:zip|json)$/i.test(row.originalFilename ?? "") && row.createdByAgentId === ctx.input.fixtures.agent.id);
       if (!attachment || attachment.byteSize > 16_777_216) throw new Error("The CEO did not deliver an actual bounded company package download");

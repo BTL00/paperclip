@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { CHAT_NATIVE_TIMEOUT_POLICY } from "../chat-native-timeout-policy.js";
 import { expect } from "@playwright/test";
 import { createHash } from "node:crypto";
@@ -103,12 +104,12 @@ function defaults(): ChatCatalogCase {
       return gradeProjectDefaultsSetup({ lead, future, held, task: t, runs, activeRunId: String(state.activeRunId), gateCalls: gate?.calls ?? [] }); },
     sourceFiles: [...base.sourceFiles, "chat-catalog-domains/internal-project-defaults.ts", "chat-catalog-domains/internal-run-brief.ts", "../e2e/fetch-allowed-port.ts", "run-observations.ts"],
     async act(ctx, state) {
-      const settled = await pollUntil({ label: "Canonical project-defaults turn settles", deadlineAt: Date.now() + 150000, load: () => observeInternal(ctx, state),
-        accept: o => o.runs.some(row => row.agentId === o.leadId && row.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
+      const settled = await pollUntil({ label: "Canonical project-defaults turn settles", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150000), load: () => observeInternal(ctx, state),
+        accept: o => chatCatalogNativePhaseIsTimely(ctx) && o.runs.some(row => row.agentId === o.leadId && row.status === "succeeded") && ctx.issue()?.conversationState === "waiting" });
       state.defaultsReply = settled.reply;
       state.futureTask = await task(ctx, "Verify inherited Launch defaults", entity(state, "project").id, { status: "todo", assigneeAgentId: entity(state, "futureWorker").id,
         description: "Use the current saved project/task context to report which project checklist applies to this new work and the associated goal. Do not change project defaults or any other task. Complete after recording your factual findings, including if no defaults or goal are present." });
-      await pollUntil({ label: "Actual new native task reads inherited project context", deadlineAt: Date.now() + 180000, load: () => ctx.allRuns(), accept: rows => rows.length === 3 && rows.some(row => row.agentId === entity(state, "futureWorker").id && row.status === "succeeded") });
+      await pollUntil({ label: "Actual new native task reads inherited project context", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180000), load: () => ctx.allRuns(), accept: rows => chatCatalogNativePhaseIsTimely(ctx) && rows.length === 3 && rows.some(row => row.agentId === entity(state, "futureWorker").id && row.status === "succeeded") });
     },
     async observe(ctx, state): Promise<DefaultsObservation> { const o = await observeInternal(ctx, state); const run = state.futureTask ? o.runs.find(row => row.agentId === entity(state, "futureWorker").id && (row.contextSnapshot?.issueId === entity(state, "futureTask").id || row.contextSnapshot?.taskId === entity(state, "futureTask").id)) : undefined;
       const events = run ? await collectRunEvents((after, limit) => ctx.input.api.get(`/api/heartbeat-runs/${run.id}/events?afterSeq=${after}&limit=${limit}`)) : [];

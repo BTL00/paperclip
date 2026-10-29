@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely, chatCatalogOriginalPhaseDeadline } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
 import { pollUntil } from "../api.js";
@@ -187,8 +188,8 @@ export const questionIdentityCases = [
       return c.result();
     },
     async act(ctx, state) {
-      const pending = await pollUntil({ label: "agent-created product-name question", deadlineAt: Date.now() + 150_000,
-        load: () => cards(ctx), accept: rows => rows.some(row => row.kind === "ask_user_questions" && row.status === "pending") });
+      const pending = await pollUntil({ label: "agent-created product-name question", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 150_000),
+        load: () => cards(ctx), accept: rows => chatCatalogNativePhaseIsTimely(ctx) && rows.some(row => row.kind === "ask_user_questions" && row.status === "pending") });
       const original = pending.find(row => row.kind === "ask_user_questions" && row.status === "pending")!;
       state.original = original;
       await expect(ctx.input.page.getByTestId("task-chat-composer-takeover")).toContainText(/product|name/i);
@@ -204,8 +205,19 @@ export const questionIdentityCases = [
       const row = ctx.input.page.locator(`[id=${JSON.stringify(`interaction-${entity(state, "original").id}`)}]`);
       await row.click();
       const form = ctx.input.page.getByTestId("task-chat-composer-takeover");
-      await form.getByRole("button", { name: "Next", exact: true }).click();
-      state.validationObserved = await form.getByText(/required|choose|select an option/i).first().isVisible();
+      const original = entity(state, "original") as Interaction;
+      const firstQuestion = original.payload.questionSet?.questions[0];
+      if (!firstQuestion?.required) throw new Error("Multipart first question must retain its saved required contract");
+      const before = (await cards(ctx)).find(card => card.id === original.id);
+      await expect(form.getByText(firstQuestion.prompt, { exact: true })).toBeVisible();
+      const next = form.getByRole("button", { name: "Next", exact: true });
+      await expect(next).toBeDisabled();
+      const after = (await cards(ctx)).find(card => card.id === original.id);
+      await expect(form.getByText(firstQuestion.prompt, { exact: true })).toBeVisible();
+      state.validationObserved = await next.isDisabled() && before?.status === "pending" && after?.status === "pending"
+        && !before.result && !after.result && JSON.stringify(before.payload) === JSON.stringify(original.payload)
+        && JSON.stringify(after.payload) === JSON.stringify(original.payload);
+      if (!state.validationObserved) throw new Error("Required multipart question advanced or changed before an answer");
       await form.getByRole("radio", { name: "Researchers", exact: true }).click();
       await form.getByRole("button", { name: "Next", exact: true }).click();
       await form.getByRole("button", { name: "Back", exact: true }).click();
@@ -255,7 +267,7 @@ export const questionIdentityCases = [
     await ctx.input.page.reload({ waitUntil: "domcontentloaded" }); return { proposals };
   }, gradeQuestions, {
     async act(ctx, state) {
-      await waitForReply(ctx);
+      await waitForReply(ctx, chatCatalogOriginalPhaseDeadline(ctx));
       // Only after the canonical ambiguity response, exercise the additional
       // stale/expired variant against a real document and its public revisions.
       const source = ctx.issue()!; const old = await putDocument(ctx, source.id, "Old welcome note: publish immediately.");

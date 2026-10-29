@@ -1,3 +1,4 @@
+import { chatCatalogNativePhaseDeadline, chatCatalogNativePhaseIsTimely } from "../chat-catalog-contract.js";
 import { expect } from "@playwright/test";
 import { createIssueThreadInteractionSchema } from "../../../packages/shared/src/validators/issue.js";
 import type { ChatCatalogCase } from "../chat-catalog-contract.js";
@@ -62,9 +63,9 @@ export const planReviewIdentityCases: readonly ChatCatalogCase[] = ["questions-a
   sourceFiles: sources, authentication: "human-session", expectedRunCount: 3, minimumRunCount: scenarioId.endsWith("review-plan") ? 2 : 1, attemptTimeoutMs: 600_000,
   runPolicy: { kind: "source-settled-with-active-work", maximumActiveWorkerRuns: 1 },
   async act(ctx, state) {
-    await pollUntil({ label: "Plan decision source settled", deadlineAt: Date.now() + 180_000,
+    await pollUntil({ label: "Plan decision source settled", deadlineAt: chatCatalogNativePhaseDeadline(ctx, Date.now() + 180_000),
       load: async () => { await ctx.refreshIssue(); return { source: ctx.issue(), runs: await ctx.allRuns() }; },
-      accept: value => value.source?.conversationState === "waiting" && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).length === 1
+      accept: value => chatCatalogNativePhaseIsTimely(ctx) && value.source?.conversationState === "waiting" && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).length === 1
         && value.runs.filter(run => run.agentId === ctx.input.fixtures.agent.id).every(run => run.status === "succeeded") });
     const original = entity(state, "original");
     if (scenarioId.endsWith("reject-and-revise")) {
