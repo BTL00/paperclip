@@ -103,7 +103,7 @@ describe.skipIf(!support.supported)("heartbeat environment selection boundary", 
       version: "1.0.0", apiVersion: 1, status: "ready", manifestJson: {
         id: "test.daytona-provider", apiVersion: 1, version: "1.0.0", displayName: "Daytona", description: "Placement fixture",
         author: "Paperclip", categories: ["automation"], capabilities: ["environment.drivers.register"], entrypoints: { worker: "dist/worker.js" },
-        environmentDrivers: [{ driverKey: "daytona", kind: "sandbox_provider", displayName: "Daytona", configSchema: { type: "object" } }],
+        environmentDrivers: [{ driverKey: "daytona", kind: "sandbox_provider", displayName: "Daytona", defaultAcquireTimeoutMs: 300_000, configSchema: { type: "object" } }],
       } }).returning();
     const call = vi.fn(async (_id: string, method: string) => {
       if (method === "environmentAcquireLease") return { providerLeaseId: "owned-daytona-sandbox", metadata: { remoteCwd: "/workspace" } };
