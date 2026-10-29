@@ -1623,6 +1623,55 @@ describe("IssueDetail", () => {
     expect(container.textContent).toContain(exit === "save" ? "Retained title draft" : issue.title);
   });
 
+  it("retires an early title edit when navigating to a cached task with preferences still pending", async () => {
+    inlineEditorFixture.real = true;
+    coordinatorPreference.loaded = false;
+    const first = createIssue();
+    const second = createIssue({ id: "issue-2", identifier: "PAP-2", title: "Cached second task" });
+    mockIssuesApi.get.mockImplementation(async (id) => id === "PAP-2" ? second : first);
+    mockIssuesApi.update.mockReset();
+    mockAuthApi.getSession.mockResolvedValue({ user: { id: "pending-route-user" } });
+    queryClient.setQueryData(queryKeys.auth.session, { user: { id: "pending-route-user" } });
+    queryClient.setQueryData(queryKeys.issues.detail("PAP-2"), second);
+    queryClient.setQueryData([...queryKeys.issues.detail("PAP-2"), "core"], second);
+    queryClient.setQueryData(["issues", "history-expanded", "PAP-2"], true);
+    const type = (input: HTMLTextAreaElement, value: string) => {
+      const previous = input.value;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, value);
+      (input as HTMLTextAreaElement & { _valueTracker?: { setValue(value: string): void } })._valueTracker?.setValue(previous);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    await act(async () => renderIssueView());
+    await waitForAssertion(() => expect(container.querySelector('[data-testid="issue-detail-header"] h2')).not.toBeNull());
+    await act(async () => (container.querySelector('[data-testid="issue-detail-header"] h2') as HTMLElement).click());
+    const firstInput = container.querySelector<HTMLTextAreaElement>('[data-testid="issue-detail-header"] textarea')!;
+    await act(async () => type(firstInput, "Only the first task's draft"));
+    mockRouteParams.issueId = "PAP-2";
+    mockLocation.pathname = "/issues/PAP-2";
+    await act(async () => renderIssueView());
+    expect(firstInput.isConnected, "the cached destination must retire the first task's editor").toBe(false);
+    expect(container.querySelector('[data-testid="issue-detail-header"] textarea')).toBeNull();
+    const secondHeading = container.querySelector<HTMLElement>('[data-testid="issue-detail-header"] h2')!;
+    expect(secondHeading.textContent).toBe(second.title);
+    await act(async () => secondHeading.click());
+    const secondInput = container.querySelector<HTMLTextAreaElement>('[data-testid="issue-detail-header"] textarea')!;
+    expect(secondInput.value).toBe(second.title);
+    await act(async () => type(secondInput, "Only the second task's draft"));
+    coordinatorPreference.loaded = true;
+    await act(async () => renderIssueView());
+    expect(container.querySelector('[data-testid="issue-detail-header"] textarea')).toBe(secondInput);
+    expect(document.activeElement).toBe(secondInput);
+    expect(secondInput.value).toBe("Only the second task's draft");
+    expect(mockIssueChatThreadRender).not.toHaveBeenCalled();
+    await act(async () => { secondInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await waitForAssertion(() => expect(mockIssueChatThreadRender).toHaveBeenCalled());
+    expect(container.textContent).toContain(second.title);
+    expect(container.textContent).not.toContain("Only the first task's draft");
+    expect(localStorage.getItem("paperclip:inline-draft:v2:pending-route-user:issue:issue-1:title")).toContain("Only the first task's draft");
+    expect(localStorage.getItem("paperclip:inline-draft:v2:pending-route-user:issue:issue-2:title")).toBeNull();
+    expect(mockIssuesApi.update).not.toHaveBeenCalled();
+  });
+
   it("uses Coordinator task presentation and panel scope without changing the Classic preference", async () => {
     coordinatorPreference.enabled = true;
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({

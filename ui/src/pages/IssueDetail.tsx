@@ -7289,6 +7289,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
           // The account-bound title editor can retain input before the first
           // session lookup. Presentation-specific controls still wait below.
           <InlineEditor
+            key={issue.id}
             value={issue.title}
             onSave={(title) => updateIssue.mutateAsync({ title })}
             onEditingChange={handleLoadingTitleEditingChange}
