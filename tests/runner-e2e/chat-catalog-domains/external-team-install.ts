@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { normalizeAgentPermissions } from "../../../server/src/lib/agent-permissions.js";
 import type { ChatCatalogContext } from "../chat-catalog-contract.js";
 import { CHAT_OPENCODE_MODEL, CHAT_OPENCODE_PROFILE } from "../chat-runtime-profile.js";
 import type { SecretReference } from "../types.js";
@@ -35,6 +37,24 @@ export interface TeamResourceSnapshot {
   projects: Resource[];
   routines: Resource[];
   installed: InstalledCatalogTeam[];
+}
+export function teamInstallerPermissionPayload(actor: Pick<Agent, "id" | "companyId" | "role" | "permissions">, companyId: string, leadId: string) {
+  if (actor.id !== leadId || actor.companyId !== companyId || actor.role !== "ceo"
+    || actor.permissions != null && (typeof actor.permissions !== "object" || Array.isArray(actor.permissions))) {
+    throw new Error("Team installer permission setup requires the actual same-company CEO");
+  }
+  const present = Object.prototype.hasOwnProperty.call(actor.permissions ?? {}, "canAssignTasks");
+  const stored = actor.permissions?.canAssignTasks;
+  if (present && typeof stored !== "boolean") throw new Error("Stored team installer assignment permission is malformed");
+  return { canCreateAgents: true, canAssignTasks: present ? stored as boolean : false };
+}
+/** Match the actual public service's stored-permission merge/normalizer. The
+ * assignment flag does not widen effective authority for the same genuine CEO. */
+export function teamInstallerPermissionsRetained(before: Pick<Agent, "id" | "companyId" | "role" | "permissions">,
+  after: Pick<Agent, "id" | "companyId" | "role" | "permissions">, companyId: string, leadId: string) {
+  const payload = teamInstallerPermissionPayload(before, companyId, leadId);
+  return after.id === leadId && after.companyId === companyId && after.role === "ceo"
+    && isDeepStrictEqual(after.permissions, normalizeAgentPermissions({ ...before.permissions, ...payload }));
 }
 export function catalogTeamProvenance(agent: Agent) {
   return (
@@ -277,9 +297,11 @@ export const teamInstallExternalCases = [
         throw new Error(
           "Setup blocker: real compatible Product Engineering team catalog package is unavailable",
         );
+      const beforePermissions = await ctx.input.api.get<Agent>(`/api/agents/${ctx.input.fixtures.agent.id}`);
+      const permissionPayload = teamInstallerPermissionPayload(beforePermissions, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id);
       await ctx.input.api.patch(
         `/api/agents/${ctx.input.fixtures.agent.id}/permissions`,
-        { canCreateAgents: true },
+        permissionPayload,
       );
       await ctx.input.api.patch(root(ctx), {
         requireBoardApprovalForNewAgents: false,
@@ -288,12 +310,19 @@ export const teamInstallExternalCases = [
         `/api/agents/${ctx.input.fixtures.agent.id}`,
       );
       if (
-        actor.lifecycleState !== "ready" ||
-        actor.permissions?.canCreateAgents !== true
+        !teamInstallerPermissionsRetained(beforePermissions, actor, ctx.input.fixtures.company.id, ctx.input.fixtures.agent.id) ||
+        actor.lifecycleState !== "ready"
       )
         throw new Error(
           "Setup blocker: actual selected installer actor lacks a ready account or creation authority",
         );
+      await ctx.input.evidence("chat-team-install-permission-setup.json", {
+        companyId: actor.companyId, actorId: actor.id, role: actor.role,
+        originalAssignmentFlagPresent: Object.prototype.hasOwnProperty.call(beforePermissions.permissions ?? {}, "canAssignTasks"),
+        preservedAssignmentFlag: permissionPayload.canAssignTasks, creationAuthorityReadBack: true,
+        allOtherNormalizedStoredPermissionsUnchanged: true,
+        effectiveAssignmentRetainedByUnchangedCeoRole: true,
+      });
       const selectedRuntime = selectedTeamInstallRuntime(ctx, actor);
       const adapterOverrides = teamInstallOverrides(team, selectedRuntime);
       const conditional = await prepareTeamConditions(ctx, team);
